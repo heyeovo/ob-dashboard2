@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface Bucket {
   id: string
@@ -63,7 +64,7 @@ const DATE_PRESETS: { key: DatePreset; label: string }[] = [
 ]
 
 const isFeel = (b: Bucket) =>
-  (b.domain ?? []).includes('feel') || (b.tags ?? []).includes('feel')
+  b.type === 'feel' || (b.domain ?? []).includes('feel') || (b.tags ?? []).includes('feel')
 
 function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
   switch (f) {
@@ -128,7 +129,7 @@ function groupByDate(buckets: Bucket[]) {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'timeline' | 'grid'>('timeline')
-  
+  const router = useRouter()
   const [buckets, setBuckets] = useState<Bucket[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -150,6 +151,7 @@ export default function Home() {
 
   const [gridViewMode, setGridViewMode] = useState<'list' | 'card'>('list')
   const [sortByImportance, setSortByImportance] = useState(false)
+  const [sortByScore, setSortByScore] = useState(true)   // 默认按权重排序
 
   const fetchBuckets = () =>
     fetch('/api/buckets').then(r => r.json()).then(data => setBuckets(data))
@@ -239,7 +241,7 @@ export default function Home() {
   const displayed = baseList.filter(b =>
     matchesQuickFilter(b, quickFilter) &&
     matchesDateFilter(b, datePreset, customStart, customEnd) &&
-    (!activeTag || (b.tags ?? []).includes(activeTag))
+    (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag)))
   )
 
   const grouped = useMemo(() => groupByDate(displayed), [displayed])
@@ -258,16 +260,25 @@ export default function Home() {
       className="bg-white rounded-xl p-5 hover:shadow-md cursor-pointer border border-[#E8E6E1] hover:border-[#D97757]/30 transition-all duration-200 group w-full"
     >
       <div className="flex items-start justify-between mb-3 gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           {b.pinned && <span className="text-[#D97757] text-sm flex-shrink-0">★</span>}
-          <span className="font-semibold text-[#3A3836] text-base truncate group-hover:text-[#D97757] transition-colors">{b.name}</span>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="font-semibold text-[#3A3836] text-base truncate group-hover:text-[#D97757] transition-colors">
+            {b.name}
+          </span>
+          {/* 状态标签移至标题右侧 */}
           {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-2 py-0.5 rounded-full font-medium">feel</span>}
-          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-2 py-0.5 rounded-full">归档</span>}
+          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-2 py-0.5 rounded-full">已归档</span>}
           {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-2 py-0.5 rounded-full">已消化</span>}
-          <span className="text-xs text-[#A8A49D] font-medium">{Number(b.importance) > 0 ? `imp ${Number(b.importance)}` : '—'}</span>
         </div>
+<div className="flex items-center gap-2 flex-shrink-0">
+  <span className="text-xs text-[#A8A49D] font-medium">
+    imp {Number(b.importance) > 0 ? Number(b.importance) : '—'}
+  </span>
+  <span className="text-xs text-[#A8A49D]">|</span>
+  <span className="text-xs text-[#D97757] font-medium">
+    score {b.score != null ? b.score.toFixed(1) : '—'}
+  </span>
+</div>
       </div>
       <p className="text-sm text-[#6C6965] line-clamp-2 mb-4 leading-relaxed">{b.content_preview}</p>
       <div className="flex flex-wrap gap-1.5">
@@ -286,9 +297,12 @@ export default function Home() {
 
   const GridSection = ({ title, items }: { title: string, items: Bucket[] }) => {
     if (items.length === 0) return null;
-    const sortedItems = sortByImportance
-      ? [...items].sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0))
-      : items;
+    let sortedItems = [...items];
+    if (sortByScore) {
+      sortedItems.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    } else if (sortByImportance) {
+      sortedItems.sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0));
+    }
     return (
       <div className="mb-10">
         <div className="flex items-center gap-3 mb-5">
@@ -342,6 +356,11 @@ export default function Home() {
             className={`cursor-pointer transition-colors ${activeTab === 'grid' ? 'text-[#3A3836] border-b-2 border-[#D97757] h-full flex items-center' : 'hover:text-[#3A3836] h-full flex items-center'}`}>
             记忆格
           </span>
+          <span 
+  onClick={() => router.push('/review')} 
+  className="cursor-pointer transition-colors hover:text-[#3A3836] h-full flex items-center">
+  审阅
+</span>
           <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto">配置</span>
         </div>
       </nav>
@@ -412,7 +431,15 @@ export default function Home() {
                     {gridViewMode === 'list' ? '⧉ 卡片' : '☰ 列表'}
                   </button>
                   <button
-                    onClick={() => setSortByImportance(!sortByImportance)}
+                    onClick={() => { setSortByScore(!sortByScore); if (!sortByScore) setSortByImportance(false); }}
+                    className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                      sortByScore ? 'bg-[#D97757] border-[#D97757] text-white' : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                    }`}
+                  >
+                    ↓ 权重
+                  </button>
+                  <button
+                    onClick={() => { setSortByImportance(!sortByImportance); if (!sortByImportance) setSortByScore(false); }}
                     className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
                       sortByImportance
                         ? 'bg-[#D97757] border-[#D97757] text-white'
@@ -426,9 +453,20 @@ export default function Home() {
             </div>
           </div>
 
-          {activeTab === 'grid' && topTags.length > 0 && (
+          {/* 分类标签栏，新增 feel 固定分类 */}
+          {activeTab === 'grid' && (
             <div className="flex gap-2 mt-4 pt-4 border-t border-[#F0EFEB] overflow-x-auto no-scrollbar items-center">
               <span className="text-xs text-[#A8A49D] font-medium mr-1 flex-shrink-0">分类</span>
+              <button
+                onClick={() => setActiveTag(activeTag === 'feel' ? null : 'feel')}
+                className={`flex-shrink-0 text-xs px-3 py-1 rounded-md transition-all ${
+                  activeTag === 'feel'
+                    ? 'bg-[#D97757] text-white font-medium shadow-sm'
+                    : 'text-[#8A8681] hover:bg-[#F4F2EC] hover:text-[#5B5854]'
+                }`}
+              >
+                feel
+              </button>
               {topTags.map(t => (
                 <button key={t} onClick={() => setActiveTag(activeTag === t ? null : t)}
                   className={`flex-shrink-0 text-xs px-3 py-1 rounded-md transition-all ${
@@ -519,8 +557,9 @@ export default function Home() {
                       {selected.metadata.pinned && <span className="text-[#D97757] text-xl">★</span>}
                       <h2 className="text-2xl font-bold text-[#2B2927] leading-tight">{selected.metadata.name}</h2>
                     </div>
-                    <div className="text-sm text-[#8A8681]">
-                      {new Date(selected.metadata.created).toLocaleString('zh-CN')}
+                    <div className="text-sm text-[#8A8681] space-y-1">
+                      <div>创建: {new Date(selected.metadata.created).toLocaleString('zh-CN')}</div>
+                      <div>修改: {new Date(selected.metadata.last_active).toLocaleString('zh-CN')}</div>
                     </div>
                   </div>
                   <button onClick={() => { setSelected(null); setEditing(false) }}
@@ -580,6 +619,22 @@ export default function Home() {
                     }`}>
                     {selected.metadata.digested ? '取消消化' : '标记消化'}
                   </button>
+                  
+                  <div className="flex items-center gap-2 bg-white border border-[#E8E6E1] px-3 py-1.5 rounded-lg">
+                    <span className="text-xs text-[#8A8681]">IMP:</span>
+                    <input 
+                      type="number" min="0" max="10"
+                      className="w-10 text-sm font-bold text-[#D97757] outline-none"
+                      defaultValue={selected.metadata.importance}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value);
+                        if (!isNaN(val) && val !== selected.metadata.importance) {
+                          traceOp(selected.id, { importance: val });
+                        }
+                      }}
+                    />
+                  </div>
+
                   <div className="flex-1"></div>
                   <button disabled={operating}
                     onClick={() => {
