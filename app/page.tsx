@@ -57,9 +57,9 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'all', label: '全部时间' },
-  { key: '7d', label: '近 7 天' },
-  { key: '30d', label: '近 30 天' },
-  { key: '90d', label: '近 3 个月' },
+  { key: '7d', label: '近7天' },
+  { key: '30d', label: '近30天' },
+  { key: '90d', label: '近3月' },
   { key: 'custom', label: '自定义' },
 ]
 
@@ -70,7 +70,7 @@ function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
   switch (f) {
     case 'all': return true
     case 'pinned': return b.pinned
-    case 'important': return Number(b.importance) >= 7
+    case 'important': return Number(b.importance) >= 7 && !b.pinned
     case 'feel': return isFeel(b)
     case 'digested': return !!b.digested
     case 'resolved': return b.resolved
@@ -148,15 +148,27 @@ export default function Home() {
   const [saving, setSaving] = useState(false)
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
-
+  const [showAdd, setShowAdd] = useState(false)
+  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5 })
+  const [adding, setAdding] = useState(false)
   const [gridViewMode, setGridViewMode] = useState<'list' | 'card'>('list')
-  const [sortByImportance, setSortByImportance] = useState(false)
-  const [sortByScore, setSortByScore] = useState(true)   // 默认按权重排序
+const [sortBy, setSortBy] = useState<'score' | 'importance' | 'created'>('score')
+const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({})
+  const [categories, setCategories] = useState<string[]>([])
+  const [activeCategory, setActiveCategory] = useState<string>('')
 
   const fetchBuckets = () =>
     fetch('/api/buckets').then(r => r.json()).then(data => setBuckets(data))
 
   useEffect(() => { fetchBuckets().then(() => setLoading(false)) }, [])
+
+  useEffect(() => {
+    fetch('/api/review-status').then(r => r.json()).then(data => {
+      setCategoryMap(data.categoryMap ?? {})
+      setCategories(data.categories ?? [])
+    })
+  }, [])
 
   useEffect(() => {
     setQuickFilter('all')
@@ -241,7 +253,8 @@ export default function Home() {
   const displayed = baseList.filter(b =>
     matchesQuickFilter(b, quickFilter) &&
     matchesDateFilter(b, datePreset, customStart, customEnd) &&
-    (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag)))
+    (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag))) &&
+    (activeCategory === '' || categoryMap[b.id] === activeCategory)
   )
 
   const grouped = useMemo(() => groupByDate(displayed), [displayed])
@@ -257,78 +270,91 @@ export default function Home() {
   const BucketCard = ({ b }: { b: Bucket }) => (
     <div
       onClick={() => openBucket(b.id)}
-      className="bg-white rounded-xl p-5 hover:shadow-md cursor-pointer border border-[#E8E6E1] hover:border-[#D97757]/30 transition-all duration-200 group w-full"
+      className="bg-white rounded-xl p-4 sm:p-5 hover:shadow-md cursor-pointer border border-[#E8E6E1] hover:border-[#D97757]/30 transition-all duration-200 group w-full"
     >
-      <div className="flex items-start justify-between mb-3 gap-3">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
-          {b.pinned && <span className="text-[#D97757] text-sm flex-shrink-0">★</span>}
-          <span className="font-semibold text-[#3A3836] text-base truncate group-hover:text-[#D97757] transition-colors">
+      <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
+          {b.pinned && <span className="text-[#D97757] text-xs sm:text-sm flex-shrink-0">★</span>}
+          <span className="font-semibold text-[#3A3836] text-sm sm:text-base truncate group-hover:text-[#D97757] transition-colors">
             {b.name}
           </span>
-          {/* 状态标签移至标题右侧 */}
-          {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-2 py-0.5 rounded-full font-medium">feel</span>}
-          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-2 py-0.5 rounded-full">已归档</span>}
-          {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-2 py-0.5 rounded-full">已消化</span>}
+          {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-1.5 py-0.5 rounded-full font-medium">feel</span>}
+          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
+          {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
         </div>
-<div className="flex items-center gap-2 flex-shrink-0">
-  <span className="text-xs text-[#A8A49D] font-medium">
-    imp {Number(b.importance) > 0 ? Number(b.importance) : '—'}
-  </span>
-  <span className="text-xs text-[#A8A49D]">|</span>
-  <span className="text-xs text-[#D97757] font-medium">
-    score {b.score != null ? b.score.toFixed(1) : '—'}
-  </span>
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 text-xs sm:text-sm">
+          <span className="text-[#A8A49D] font-medium">
+            imp {Number(b.importance) > 0 ? Number(b.importance) : '—'}
+          </span>
+          <span className="text-[#A8A49D]">|</span>
+          <span className="text-[#D97757] font-medium">
+            score {b.score != null ? b.score.toFixed(1) : '—'}
+          </span>
+        </div>
+      </div>
+      <p className="text-xs sm:text-sm text-[#6C6965] line-clamp-2 mb-3 sm:mb-4 leading-relaxed">{b.content_preview}</p>
+    <div className="flex items-end justify-between gap-2">
+  <div className="flex flex-wrap gap-1.5">
+    {/* 这里原封不动放你原来的标签代码 */}
+    {(b.domain ?? []).map(d => (
+      <span key={d} className="text-xs bg-[#F4F2EC] px-2 py-1 rounded-md text-[#5B5854]">{d}</span>
+    ))}
+    {(b.tags ?? []).slice(0, 3).map(t => (
+      <span key={t} className="text-xs border border-[#E8E6E1] px-2 py-1 rounded-md text-[#8A8681]">{t}</span>
+    ))}
+    {(b.tags ?? []).length > 3 && (
+      <span className="text-xs text-[#A8A49D] py-1 px-1">+{(b.tags ?? []).length - 3}</span>
+    )}
+  </div>
+  {b.last_active && (
+    <span className="text-xs text-[#A8A49D] flex-shrink-0">
+      {new Date(b.last_active).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+    </span>
+  )}
 </div>
-      </div>
-      <p className="text-sm text-[#6C6965] line-clamp-2 mb-4 leading-relaxed">{b.content_preview}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {(b.domain ?? []).map(d => (
-          <span key={d} className="text-xs bg-[#F4F2EC] px-2 py-1 rounded-md text-[#5B5854]">{d}</span>
-        ))}
-        {(b.tags ?? []).slice(0, 3).map(t => (
-          <span key={t} className="text-xs border border-[#E8E6E1] px-2 py-1 rounded-md text-[#8A8681]">{t}</span>
-        ))}
-        {(b.tags ?? []).length > 3 && (
-          <span className="text-xs text-[#A8A49D] py-1 px-1">+{(b.tags ?? []).length - 3}</span>
-        )}
-      </div>
     </div>
   )
 
+
   const GridSection = ({ title, items }: { title: string, items: Bucket[] }) => {
-    if (items.length === 0) return null;
-    let sortedItems = [...items];
-    if (sortByScore) {
-      sortedItems.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-    } else if (sortByImportance) {
-      sortedItems.sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0));
+  if (items.length === 0) return null;
+  let sortedItems = [...items];
+  sortedItems.sort((a, b) => {
+    let result = 0;
+    if (sortBy === 'score') {
+      result = (b.score ?? 0) - (a.score ?? 0);
+    } else if (sortBy === 'importance') {
+      result = (b.importance ?? 0) - (a.importance ?? 0);
+    } else if (sortBy === 'created') {
+      result = new Date(b.created).getTime() - new Date(a.created).getTime();
     }
-    return (
-      <div className="mb-10">
-        <div className="flex items-center gap-3 mb-5">
-          <span className="text-base font-semibold text-[#3A3836] italic">{title}</span>
+    return sortOrder === 'desc' ? result : -result;
+  });
+  return (  <div className="mb-8 sm:mb-10">
+        <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
+          <span className="text-sm sm:text-base font-semibold text-[#3A3836] italic">{title}</span>
           <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">{sortedItems.length} 条</span>
           <div className="flex-1 h-px bg-[#E8E6E1]"></div>
         </div>
         {gridViewMode === 'list' ? (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {sortedItems.map(b => <BucketCard key={b.id} b={b} />)}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
             {sortedItems.map(b => <BucketCard key={b.id} b={b} />)}
           </div>
         )}
-      </div>
-    )
-  }
+          </div>
+  )
+}
 
   const statusCounts = useMemo(() => {
     const list = searchResults ?? buckets
     return {
       all: list.length,
       pinned: list.filter(b => b.pinned).length,
-      important: list.filter(b => Number(b.importance) >= 7).length,
+      important: list.filter(b => Number(b.importance) >= 7 && !b.pinned).length,
       feel: list.filter(b => isFeel(b)).length,
       digested: list.filter(b => !!b.digested).length,
       resolved: list.filter(b => b.resolved).length,
@@ -341,62 +367,72 @@ export default function Home() {
     <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans selection:bg-[#D97757] selection:text-white pb-20">
       
       <nav className="border-b border-[#E8E6E1] bg-white/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center gap-8 text-sm font-medium text-[#8A8681]">
-          <span className="text-[#3A3836] font-semibold flex items-center gap-2 mr-4">
-            <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[#D97757] to-[#E8A58F]"></div>
-            Ombre Brain
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[#8A8681]">
+          <span className="text-[#3A3836] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-br from-[#D97757] to-[#E8A58F]"></div>
+            <span className="hidden sm:inline">Ombre Brain</span>
           </span>
           <span 
             onClick={() => setActiveTab('timeline')} 
-            className={`cursor-pointer transition-colors ${activeTab === 'timeline' ? 'text-[#3A3836] border-b-2 border-[#D97757] h-full flex items-center' : 'hover:text-[#3A3836] h-full flex items-center'}`}>
+            className={`cursor-pointer transition-colors whitespace-nowrap ${activeTab === 'timeline' ? 'text-[#3A3836] border-b-2 border-[#D97757] h-full flex items-center' : 'hover:text-[#3A3836] h-full flex items-center'}`}>
             时间线
           </span>
           <span 
             onClick={() => setActiveTab('grid')} 
-            className={`cursor-pointer transition-colors ${activeTab === 'grid' ? 'text-[#3A3836] border-b-2 border-[#D97757] h-full flex items-center' : 'hover:text-[#3A3836] h-full flex items-center'}`}>
+            className={`cursor-pointer transition-colors whitespace-nowrap ${activeTab === 'grid' ? 'text-[#3A3836] border-b-2 border-[#D97757] h-full flex items-center' : 'hover:text-[#3A3836] h-full flex items-center'}`}>
             记忆格
           </span>
           <span 
-  onClick={() => router.push('/review')} 
-  className="cursor-pointer transition-colors hover:text-[#3A3836] h-full flex items-center">
-  审阅
-</span>
-          <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto">配置</span>
+            onClick={() => router.push('/review')} 
+            className="cursor-pointer transition-colors hover:text-[#3A3836] h-full flex items-center whitespace-nowrap">
+            审阅
+          </span>
+          <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-6 pt-10">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
         
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-[#2B2927] mb-3">
-            {activeTab === 'timeline' ? '时间线' : '记忆格'}
-          </h1>
-          <p className="text-[#8A8681] text-sm">
-            {activeTab === 'timeline' 
-              ? `沿时间回溯，当前展示 ${displayed.length} 条记录` 
-              : `分类整理与检索 · ${buckets.length} 格`}
-          </p>
-        </div>
+        <div className="hidden md:block mb-6 sm:mb-8">
+  <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[#2B2927] mb-2 sm:mb-3">
+    {activeTab === 'timeline' ? '时间线' : '记忆格'}
+  </h1>
+  <p className="text-[#8A8681] text-xs sm:text-sm">
+    {activeTab === 'timeline' 
+      ? `沿时间回溯，当前展示 ${displayed.length} 条记录` 
+      : `分类整理与检索 · ${buckets.length} 格`}
+  </p>
+</div>
 
-        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-4 shadow-sm mb-8">
+        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-3 sm:p-4 shadow-sm mb-6 sm:mb-8">
           <div className="relative w-full mb-4">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A8A49D]">🔍</span>
+  <svg 
+    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A8A49D]"
+    viewBox="0 0 20 20" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="1.8"
+    strokeLinecap="round"
+  >
+    <circle cx="8.5" cy="8.5" r="6" />
+    <path d="M13.5 13.5L18 18" />
+  </svg>
             <input
-              className="w-full bg-[#F9F8F6] border border-transparent rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-[#D97757] focus:ring-2 focus:ring-[#D97757]/10 transition-all placeholder-[#A8A49D]"
+              className="w-full bg-[#F9F8F6] border border-transparent rounded-xl pl-8 sm:pl-9 pr-3 sm:pr-4 py-2 sm:py-2.5 text-sm outline-none focus:bg-white focus:border-[#D97757] focus:ring-2 focus:ring-[#D97757]/10 transition-all placeholder-[#A8A49D]"
               placeholder="搜索记忆、标签或内容..."
               value={search}
               onChange={e => doSearch(e.target.value)}
             />
           </div>
 
-          <div className="w-full h-px bg-[#F0EFEB] mb-4"></div>
+          <div className="w-full h-px bg-[#F0EFEB] mb-3 sm:mb-4"></div>
 
-          <div className="flex flex-wrap items-center gap-y-3 gap-x-6">
-            <div className="flex gap-2 overflow-x-auto no-scrollbar">
-              <span className="text-xs text-[#A8A49D] font-medium self-center mr-1">状态</span>
+          <div className="flex flex-wrap items-center gap-y-2 sm:gap-y-3 gap-x-3 sm:gap-x-6">
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+              <span className="text-xs text-[#A8A49D] font-medium self-center mr-0.5 sm:mr-1 hidden sm:inline">状态</span>
               {QUICK_FILTERS.map(f => (
                 <button key={f.key} onClick={() => setQuickFilter(f.key)}
-                  className={`flex-shrink-0 text-xs px-3.5 py-1.5 rounded-full transition-all border ${
+                  className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border ${
                     quickFilter === f.key 
                       ? 'bg-[#3A3836] border-[#3A3836] text-white' 
                       : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:border-[#C4C1BC] hover:bg-[#F9F8F6]'
@@ -406,60 +442,79 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="text-xs text-[#A8A49D] font-medium">时间</span>
-              <select className="bg-white rounded-lg px-3 py-1.5 text-xs outline-none text-[#5B5854] border border-[#E8E6E1] focus:border-[#D97757] hover:border-[#C4C1BC] cursor-pointer transition-colors"
+            {categories.length > 0 && (
+              <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+                <span className="text-xs text-[#A8A49D] font-medium self-center mr-0.5 sm:mr-1 hidden sm:inline">分类</span>
+                <button onClick={() => setActiveCategory('')}
+                  className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border ${activeCategory === '' ? 'bg-[#3A3836] border-[#3A3836] text-white' : 'bg-white border-[#E8E6E1] text-[#6C6965]'}`}>
+                  全部
+                </button>
+                {categories.map(c => (
+                  <button key={c} onClick={() => setActiveCategory(c)}
+                    className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border ${activeCategory === c ? 'bg-[#3A3836] border-[#3A3836] text-white' : 'bg-white border-[#E8E6E1] text-[#6C6965]'}`}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+              <span className="text-xs text-[#A8A49D] font-medium hidden sm:inline">时间</span>
+              <select className="bg-white rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-xs outline-none text-[#5B5854] border border-[#E8E6E1] focus:border-[#D97757] hover:border-[#C4C1BC] cursor-pointer transition-colors"
                 value={datePreset} onChange={e => setDatePreset(e.target.value as DatePreset)}>
                 {DATE_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
               </select>
               {datePreset === 'custom' && (
                 <div className="flex items-center gap-1">
                   <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                    className="bg-white rounded-lg px-2 py-1.5 text-xs outline-none text-[#5B5854] border border-[#E8E6E1]" />
+                    className="bg-white rounded-lg px-1.5 sm:px-2 py-1 sm:py-1.5 text-xs outline-none text-[#5B5854] border border-[#E8E6E1]" />
                   <span className="text-[#A8A49D] text-xs">-</span>
                   <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                    className="bg-white rounded-lg px-2 py-1.5 text-xs outline-none text-[#5B5854] border border-[#E8E6E1]" />
+                    className="bg-white rounded-lg px-1.5 sm:px-2 py-1 sm:py-1.5 text-xs outline-none text-[#5B5854] border border-[#E8E6E1]" />
                 </div>
               )}
-              {activeTab === 'grid' && (
-                <>
-                  <div className="w-px h-4 bg-[#E8E6E1] ml-1 mr-1"></div>
-                  <button
-                    onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[#E8E6E1] bg-white text-[#6C6965] hover:bg-[#F9F8F6] transition-colors"
-                  >
-                    {gridViewMode === 'list' ? '⧉ 卡片' : '☰ 列表'}
-                  </button>
-                  <button
-                    onClick={() => { setSortByScore(!sortByScore); if (!sortByScore) setSortByImportance(false); }}
-                    className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-                      sortByScore ? 'bg-[#D97757] border-[#D97757] text-white' : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
-                    }`}
-                  >
-                    ↓ 权重
-                  </button>
-                  <button
-                    onClick={() => { setSortByImportance(!sortByImportance); if (!sortByImportance) setSortByScore(false); }}
-                    className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-                      sortByImportance
-                        ? 'bg-[#D97757] border-[#D97757] text-white'
-                        : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
-                    }`}
-                  >
-                    ↓ 重要度
-                  </button>
-                </>
-              )}
+ {activeTab === 'grid' && (
+  <>
+    <div className="w-px h-4 bg-[#E8E6E1] ml-0.5 mr-0.5 sm:ml-1 sm:mr-1"></div>
+    <button
+      onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
+      className="text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border border-[#E8E6E1] bg-white text-[#6C6965] hover:bg-[#F9F8F6] transition-colors"
+    >
+      {gridViewMode === 'list' ? '⧉' : '☰'}
+    </button>
+
+    {/* 排序字段下拉 */}
+    <select
+      value={sortBy}
+      onChange={(e) => setSortBy(e.target.value as any)}
+      className="text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border border-[#E8E6E1] bg-white text-[#6C6965] outline-none focus:border-[#D97757] cursor-pointer"
+    >
+      <option value="score">权重</option>
+      <option value="importance">重要度</option>
+      <option value="created">时间</option>
+    </select>
+
+    {/* 升降序切换 */}
+    <button
+      onClick={() => setSortOrder(order => order === 'desc' ? 'asc' : 'desc')}
+      className={`text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md border transition-colors ${
+        sortOrder === 'desc' ? 'bg-[#D97757] border-[#D97757] text-white' : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+      }`}
+    >
+      {sortOrder === 'desc' ? '↓降序' : '↑升序'}
+    </button>
+  </>
+)}
             </div>
           </div>
 
-          {/* 分类标签栏，新增 feel 固定分类 */}
+          {/* 分类标签栏 */}
           {activeTab === 'grid' && (
-            <div className="flex gap-2 mt-4 pt-4 border-t border-[#F0EFEB] overflow-x-auto no-scrollbar items-center">
-              <span className="text-xs text-[#A8A49D] font-medium mr-1 flex-shrink-0">分类</span>
+            <div className="flex gap-1.5 sm:gap-2 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-[#F0EFEB] overflow-x-auto no-scrollbar items-center">
+              <span className="text-xs text-[#A8A49D] font-medium mr-0.5 sm:mr-1 flex-shrink-0 hidden sm:inline">分类</span>
               <button
                 onClick={() => setActiveTag(activeTag === 'feel' ? null : 'feel')}
-                className={`flex-shrink-0 text-xs px-3 py-1 rounded-md transition-all ${
+                className={`flex-shrink-0 text-xs px-2.5 sm:px-3 py-1 rounded-md transition-all ${
                   activeTag === 'feel'
                     ? 'bg-[#D97757] text-white font-medium shadow-sm'
                     : 'text-[#8A8681] hover:bg-[#F4F2EC] hover:text-[#5B5854]'
@@ -469,7 +524,7 @@ export default function Home() {
               </button>
               {topTags.map(t => (
                 <button key={t} onClick={() => setActiveTag(activeTag === t ? null : t)}
-                  className={`flex-shrink-0 text-xs px-3 py-1 rounded-md transition-all ${
+                  className={`flex-shrink-0 text-xs px-2.5 sm:px-3 py-1 rounded-md transition-all ${
                     activeTag === t 
                       ? 'bg-[#D97757] text-white font-medium shadow-sm' 
                       : 'text-[#8A8681] hover:bg-[#F4F2EC] hover:text-[#5B5854]'
@@ -482,29 +537,29 @@ export default function Home() {
         </div>
 
         {activeTab === 'timeline' ? (
-          <div className="space-y-8 w-full">
+          <div className="space-y-6 sm:space-y-8 w-full">
             {grouped.map(({ date, items }) => {
               const expanded = expandedDates.has(date)
               const isSearching = search.trim().length > 0
               const shown = (expanded || isSearching) ? items : items.slice(0, 3)
               const rest = items.length - 3
               return (
-                <div key={date} className="relative pl-4">
+                <div key={date} className="relative pl-3 sm:pl-4">
                   <div className="absolute left-0 top-2 bottom-0 w-px bg-[#E8E6E1]"></div>
                   <div className="absolute left-[-3px] top-2.5 w-1.5 h-1.5 rounded-full bg-[#D97757]"></div>
                   
-                  <div className="flex items-center gap-3 mb-4 ml-4">
-                    <span className="text-sm font-semibold text-[#3A3836]">{formatDateGroup(date)}</span>
-                    <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">{items.length} 条</span>
+                  <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4 ml-3 sm:ml-4">
+                    <span className="text-xs sm:text-sm font-semibold text-[#3A3836]">{formatDateGroup(date)}</span>
+                    <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-1.5 sm:px-2 py-0.5 rounded-md">{items.length} 条</span>
                   </div>
                   
-                  <div className="space-y-3 ml-4">
+                  <div className="space-y-2 sm:space-y-3 ml-3 sm:ml-4">
                     {shown.map(b => <BucketCard key={b.id} b={b} />)}
                   </div>
                   
                   {!isSearching && rest > 0 && (
                     <button onClick={() => toggleDate(date)}
-                      className="mt-4 ml-4 text-xs font-medium text-[#D97757] hover:text-[#B65D40] transition-colors flex items-center gap-1">
+                      className="mt-3 sm:mt-4 ml-3 sm:ml-4 text-xs font-medium text-[#D97757] hover:text-[#B65D40] transition-colors flex items-center gap-1">
                       {expanded ? '↑ 收起内容' : `↓ 展开剩余 ${rest} 条`}
                     </button>
                   )}
@@ -544,57 +599,57 @@ export default function Home() {
           onClick={() => { setSelected(null); setEditing(false) }}>
           <div className="absolute inset-0 bg-[#3A3836]/20 backdrop-blur-sm transition-opacity" />
           
-          <div className="relative bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl transform transition-transform"
+          <div className="relative bg-white w-full sm:max-w-2xl h-full overflow-y-auto shadow-2xl transform transition-transform"
             onClick={e => e.stopPropagation()}>
             
             {detailLoading ? (
               <div className="flex items-center justify-center h-full text-[#A8A49D]">读取中...</div>
             ) : selected && (
-              <div className="p-8">
-                <div className="flex items-start justify-between mb-8 pb-6 border-b border-[#F0EFEB]">
+              <div className="p-4 sm:p-8">
+                <div className="flex items-start justify-between mb-6 sm:mb-8 pb-4 sm:pb-6 border-b border-[#F0EFEB]">
                   <div className="pr-4">
                     <div className="flex items-center gap-2 mb-2">
-                      {selected.metadata.pinned && <span className="text-[#D97757] text-xl">★</span>}
-                      <h2 className="text-2xl font-bold text-[#2B2927] leading-tight">{selected.metadata.name}</h2>
+                      {selected.metadata.pinned && <span className="text-[#D97757] text-lg sm:text-xl">★</span>}
+                      <h2 className="text-xl sm:text-2xl font-bold text-[#2B2927] leading-tight">{selected.metadata.name}</h2>
                     </div>
-                    <div className="text-sm text-[#8A8681] space-y-1">
+                    <div className="text-xs sm:text-sm text-[#8A8681] space-y-1">
                       <div>创建: {new Date(selected.metadata.created).toLocaleString('zh-CN')}</div>
                       <div>修改: {new Date(selected.metadata.last_active).toLocaleString('zh-CN')}</div>
                     </div>
                   </div>
                   <button onClick={() => { setSelected(null); setEditing(false) }}
-                    className="text-[#A8A49D] hover:text-[#3A3836] p-2 bg-[#F9F8F6] hover:bg-[#F0EFEB] rounded-full transition-colors flex-shrink-0">
+                    className="text-[#A8A49D] hover:text-[#3A3836] p-1.5 sm:p-2 bg-[#F9F8F6] hover:bg-[#F0EFEB] rounded-full transition-colors flex-shrink-0">
                     ✕
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
                   {[
                     { label: '重要度', value: `${selected.metadata.importance}/10` },
                     { label: '权重分', value: selected.score?.toFixed(1) ?? '—' },
                     { label: '激活次数', value: String(selected.metadata.activation_count ?? '—') },
                     { label: '状态', value: selected.metadata.resolved ? '已归档' : '活跃中' },
                   ].map(item => (
-                    <div key={item.label} className="bg-[#F9F8F6] rounded-xl p-3 border border-[#F0EFEB]">
+                    <div key={item.label} className="bg-[#F9F8F6] rounded-xl p-2 sm:p-3 border border-[#F0EFEB]">
                       <div className="text-xs text-[#8A8681] mb-1">{item.label}</div>
                       <div className="text-sm font-semibold text-[#3A3836]">{item.value}</div>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex flex-wrap gap-2 mb-8">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-6 sm:mb-8">
                   {(selected.metadata.domain ?? []).map(d => (
-                    <span key={d} className="text-xs bg-[#EFECE6] px-3 py-1.5 rounded-md text-[#5B5854] font-medium">{d}</span>
+                    <span key={d} className="text-xs bg-[#EFECE6] px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[#5B5854] font-medium">{d}</span>
                   ))}
                   {(selected.metadata.tags ?? []).map(t => (
-                    <span key={t} className="text-xs border border-[#E8E6E1] px-3 py-1.5 rounded-md text-[#6C6965]">{t}</span>
+                    <span key={t} className="text-xs border border-[#E8E6E1] px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-[#6C6965]">{t}</span>
                   ))}
                 </div>
 
-                <div className="flex flex-wrap gap-3 mb-8 bg-[#FDFCFB] p-4 rounded-xl border border-[#F0EFEB]">
+                <div className="flex flex-wrap gap-2 sm:gap-3 mb-6 sm:mb-8 bg-[#FDFCFB] p-3 sm:p-4 rounded-xl border border-[#F0EFEB]">
                   <button disabled={operating}
                     onClick={() => traceOp(selected.id, { pinned: selected.metadata.pinned ? 0 : 1 })}
-                    className={`text-sm px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                    className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                       selected.metadata.pinned
                         ? 'bg-[#FDF0ED] text-[#D97757] hover:bg-[#FCE2DC]'
                         : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
@@ -603,7 +658,7 @@ export default function Home() {
                   </button>
                   <button disabled={operating}
                     onClick={() => traceOp(selected.id, { resolved: selected.metadata.resolved ? 0 : 1 })}
-                    className={`text-sm px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                    className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                       selected.metadata.resolved
                         ? 'bg-[#EAF5E9] text-[#478B4A] hover:bg-[#DBEEDB]'
                         : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
@@ -612,7 +667,7 @@ export default function Home() {
                   </button>
                   <button disabled={operating}
                     onClick={() => traceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 })}
-                    className={`text-sm px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                    className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                       selected.metadata.digested
                         ? 'bg-[#EAF5E9] text-[#478B4A] hover:bg-[#DBEEDB]'
                         : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
@@ -620,11 +675,11 @@ export default function Home() {
                     {selected.metadata.digested ? '取消消化' : '标记消化'}
                   </button>
                   
-                  <div className="flex items-center gap-2 bg-white border border-[#E8E6E1] px-3 py-1.5 rounded-lg">
+                  <div className="flex items-center gap-1.5 sm:gap-2 bg-white border border-[#E8E6E1] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg">
                     <span className="text-xs text-[#8A8681]">IMP:</span>
                     <input 
                       type="number" min="0" max="10"
-                      className="w-10 text-sm font-bold text-[#D97757] outline-none"
+                      className="w-8 sm:w-10 text-sm font-bold text-[#D97757] outline-none"
                       defaultValue={selected.metadata.importance}
                       onBlur={(e) => {
                         const val = parseInt(e.target.value);
@@ -642,22 +697,22 @@ export default function Home() {
                         traceOp(selected.id, { delete: true }).then(() => setSelected(null))
                       }
                     }}
-                    className="text-sm px-4 py-2 rounded-lg font-medium text-[#C64B45] hover:bg-[#FDF1F0] transition-colors disabled:opacity-50">
+                    className="text-xs sm:text-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg font-medium text-[#C64B45] hover:bg-[#FDF1F0] transition-colors disabled:opacity-50">
                     抹除
                   </button>
                 </div>
 
                 <div className="mb-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-[#2B2927]">内容核心</h3>
+                  <div className="flex items-center justify-between mb-3 sm:mb-4">
+                    <h3 className="text-base sm:text-lg font-semibold text-[#2B2927]">内容核心</h3>
                     {!editing ? (
                       <button onClick={() => { setEditing(true); setEditContent(selected.content) }}
-                        className="text-sm text-[#D97757] hover:text-[#B65D40] font-medium transition-colors">编辑</button>
+                        className="text-xs sm:text-sm text-[#D97757] hover:text-[#B65D40] font-medium transition-colors">编辑</button>
                     ) : (
-                      <div className="flex gap-3">
-                        <button onClick={() => setEditing(false)} className="text-sm text-[#8A8681] hover:text-[#3A3836]">取消</button>
+                      <div className="flex gap-2 sm:gap-3">
+                        <button onClick={() => setEditing(false)} className="text-xs sm:text-sm text-[#8A8681] hover:text-[#3A3836]">取消</button>
                         <button onClick={saveEdit} disabled={saving}
-                          className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg hover:bg-[#C46445] transition-colors disabled:opacity-50 shadow-sm">
+                          className="text-xs sm:text-sm bg-[#D97757] text-white px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg hover:bg-[#C46445] transition-colors disabled:opacity-50 shadow-sm">
                           {saving ? '保存中...' : '保存更改'}
                         </button>
                       </div>
@@ -665,21 +720,21 @@ export default function Home() {
                   </div>
                   
                   {editing ? (
-                    <textarea className="w-full bg-[#FDFCFB] border border-[#E8E6E1] rounded-xl p-5 text-[#3A3836] text-base leading-relaxed resize-none outline-none focus:ring-2 focus:ring-[#D97757]/20 focus:border-[#D97757] shadow-inner"
-                      rows={18} value={editContent} onChange={e => setEditContent(e.target.value)} />
+                    <textarea className="w-full bg-[#FDFCFB] border border-[#E8E6E1] rounded-xl p-4 sm:p-5 text-sm sm:text-base text-[#3A3836] leading-relaxed resize-none outline-none focus:ring-2 focus:ring-[#D97757]/20 focus:border-[#D97757] shadow-inner"
+                      rows={14} value={editContent} onChange={e => setEditContent(e.target.value)} />
                   ) : (
-                    <div className="bg-[#FDFCFB] border border-[#E8E6E1] rounded-xl p-6 text-[#3A3836] text-base leading-loose whitespace-pre-wrap shadow-sm">
+                    <div className="bg-[#FDFCFB] border border-[#E8E6E1] rounded-xl p-4 sm:p-6 text-sm sm:text-base text-[#3A3836] leading-loose whitespace-pre-wrap shadow-sm">
                       {selected.content}
                     </div>
                   )}
                 </div>
 
-                <div className="mt-12 flex justify-center">
-                  <div className="flex items-center gap-3 px-4 py-2 bg-[#F9F8F6] rounded-full cursor-pointer hover:bg-[#F0EFEB] transition-colors group"
+                <div className="mt-8 sm:mt-12 flex justify-center">
+                  <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-1.5 sm:py-2 bg-[#F9F8F6] rounded-full cursor-pointer hover:bg-[#F0EFEB] transition-colors group"
                     onClick={copyId}>
                     <span className="text-xs text-[#A8A49D]">索引:</span>
                     <span className="text-xs text-[#8A8681] font-mono group-hover:text-[#3A3836] transition-colors">{selected.id}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full transition-colors ${copied ? 'bg-[#D97757] text-white' : 'bg-white border border-[#E8E6E1] text-[#A8A49D]'}`}>
+                    <span className={`text-xs px-1.5 sm:px-2 py-0.5 rounded-full transition-colors ${copied ? 'bg-[#D97757] text-white' : 'bg-white border border-[#E8E6E1] text-[#A8A49D]'}`}>
                       {copied ? '✓ 已复制' : '复制'}
                     </span>
                   </div>
@@ -690,7 +745,82 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* 悬浮加号 */}
+      <button
+        onClick={() => setShowAdd(true)}
+        className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#D97757] text-white text-xl sm:text-2xl shadow-lg hover:bg-[#C86645] transition-colors flex items-center justify-center z-50">
+        +
+      </button>
+
+      {/* 新增弹窗 */}
+      {showAdd && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center px-4"
+          onClick={() => setShowAdd(false)}>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-lg shadow-xl"
+            onClick={e => e.stopPropagation()}>
+            <h3 className="text-[#3A3836] font-semibold mb-3 sm:mb-4">新增记忆</h3>
+
+            <input
+              placeholder="标题（可选）"
+              value={addForm.title}
+              onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))}
+              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-1.5 sm:py-2 text-sm text-[#3A3836] mb-2 sm:mb-3 focus:outline-none focus:border-[#D97757]"
+            />
+
+            <textarea
+              placeholder="内容…"
+              value={addForm.content}
+              onChange={e => setAddForm(f => ({ ...f, content: e.target.value }))}
+              rows={5}
+              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-1.5 sm:py-2 text-sm text-[#3A3836] mb-2 sm:mb-3 resize-none focus:outline-none focus:border-[#D97757]"
+            />
+
+            <input
+              placeholder="标签（逗号分隔，如：恋爱,日常）"
+              value={addForm.tags}
+              onChange={e => setAddForm(f => ({ ...f, tags: e.target.value }))}
+              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-1.5 sm:py-2 text-sm text-[#3A3836] mb-2 sm:mb-3 focus:outline-none focus:border-[#D97757]"
+            />
+
+            <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-5">
+              <span className="text-xs sm:text-sm text-[#8A8681]">重要度</span>
+              <input
+                type="range" min={1} max={10}
+                value={addForm.importance}
+                onChange={e => setAddForm(f => ({ ...f, importance: Number(e.target.value) }))}
+                className="flex-1 accent-[#D97757]"
+              />
+              <span className="text-xs sm:text-sm text-[#3A3836] w-4">{addForm.importance}</span>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAdd(false)}
+                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-[#8A8681] hover:text-[#3A3836]">取消</button>
+              <button
+                disabled={!addForm.content.trim() || adding}
+                onClick={async () => {
+                  setAdding(true)
+                  await fetch('/api/add-bucket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      ...addForm,
+                      content: addForm.title ? `${addForm.title}\n${addForm.content}` : addForm.content
+                    })
+                  })
+                  setAdding(false)
+                  setShowAdd(false)
+                  setAddForm({ title: '', content: '', tags: '', importance: 5 })
+                  const res = await fetch('/api/buckets')
+                  setBuckets(await res.json())
+                }}
+                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-[#D97757] text-white rounded-lg disabled:opacity-40 hover:bg-[#C86645] transition-colors">
+                {adding ? '存入中…' : '存入记忆'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
