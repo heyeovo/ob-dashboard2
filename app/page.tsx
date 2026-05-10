@@ -155,7 +155,7 @@ function ReviewSection({
   categoryMap: Record<string, string>
   setCategoryMap: (v: Record<string, string>) => void
   categories: string[]
-  setCategories: (v: string[]) => void
+  setCategories: React.Dispatch<React.SetStateAction<string[]>>
   onRefresh: () => void
 }) {
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
