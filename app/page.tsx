@@ -226,11 +226,11 @@ function ReviewSection({
     setCategoryMap(newMap)
 
     const body: Record<string, unknown> = { statesBucketId, targetId, category }
-    if (isNew && category) {
-      const cat = category
-      body.newCategory = cat
-      setCategories(prev => prev.includes(cat) ? prev : [...prev, cat])
-    }
+  if (isNew && category) {
+  const cat: string = category
+  body.newCategory = cat
+  setCategories(prev => prev.includes(cat) ? prev : [...prev, cat])
+}
     await fetch('/api/review-status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
