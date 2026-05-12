@@ -2,7 +2,9 @@ const BASE_URL = process.env.OMBRE_BASE_URL!
 const SESSION = process.env.OMBRE_SESSION!
 
 const headers = {
-  Cookie: `ombre_session=${SESSION}`,
+  // 放弃 Cookie，改用 Bearer Token
+  'Authorization': `Bearer ${SESSION}`, 
+  'Content-Type': 'application/json',
 }
 
 export async function getBuckets() {
