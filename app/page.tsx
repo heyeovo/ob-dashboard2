@@ -117,10 +117,14 @@ function formatDateGroup(dateStr: string) {
 }
 
 function getTopTags(buckets: Bucket[], n = 10): string[] {
-  const freq = new Map<string, number>()
+  if (!Array.isArray(buckets)) return [];
+  const freq = new Map<string, number>();
   for (const b of buckets)
-    for (const t of b.tags ?? []) freq.set(t, (freq.get(t) ?? 0) + 1)
-  return Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, n).map(([t]) => t)
+    for (const t of b.tags ?? []) freq.set(t, (freq.get(t) ?? 0) + 1);
+  return Array.from(freq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([t]) => t);
 }
 
 function groupByDate(buckets: Bucket[]) {
@@ -171,13 +175,26 @@ function ReviewSection({
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/review-status').then(r => r.json()).then(data => {
+useEffect(() => {
+  const raw = localStorage.getItem('review_state')
+  if (raw) {
+    try {
+      const data = JSON.parse(raw)
       setStatusMap(data.statusMap ?? {})
-      setStatesBucketId(data.bucketId ?? '')
-      setLoading(false)
-    })
-  }, [])
+      setCategoryMap(data.categoryMap ?? {})
+      setCategories(data.categories ?? [])
+    } catch {}
+  }
+  setLoading(false)
+}, [])
+
+const saveLocal = useCallback((sm: Record<string, string>, cm: Record<string, string>, cats: string[]) => {
+  localStorage.setItem('review_state', JSON.stringify({
+    statusMap: sm,
+    categoryMap: cm,
+    categories: cats,
+  }));
+}, []);
 
   const today = new Date().toISOString().slice(0, 10)
   const queue = buckets.filter(b => {
@@ -203,40 +220,34 @@ function ReviewSection({
     fetch(`/api/bucket/${b.id}`).then(r => r.json()).then(setFullBucket)
   }, [current, filter, timeFilter, statusMap])
 
-  const updateStatus = useCallback(async (targetId: string, status: Status) => {
+const updateStatus = useCallback(async (targetId: string, status: Status) => {
     setSavingStatus(true)
     const newMap = { ...statusMap }
     if (status === null) delete newMap[targetId]
     else newMap[targetId] = status
     setStatusMap(newMap)
+    saveLocal(newMap, categoryMap, categories)   // ← 新加这一行
 
-    await fetch('/api/review-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ statesBucketId, targetId, status }),
-    })
     setSavingStatus(false)
     if (filter !== '全部') setCurrent(c => Math.max(0, Math.min(c, queue.length - 2)))
-  }, [statusMap, statesBucketId, filter, queue.length])
+}, [statusMap, categoryMap, categories, saveLocal, filter, queue.length])
 
-  const updateCategory = useCallback(async (targetId: string, category: string | null, isNew = false) => {
+ const updateCategory = useCallback(async (targetId: string, category: string | null, isNew = false) => {
     const newMap = { ...categoryMap }
     if (category === null) delete newMap[targetId]
     else newMap[targetId] = category
     setCategoryMap(newMap)
 
-    const body: Record<string, unknown> = { statesBucketId, targetId, category }
-  if (isNew && category) {
-  const cat: string = category
-  body.newCategory = cat
-  setCategories(prev => prev.includes(cat) ? prev : [...prev, cat])
-}
-    await fetch('/api/review-status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-  }, [categoryMap, statesBucketId, setCategoryMap, setCategories])
+    let newCategories = [...categories]
+    if (isNew && category && !newCategories.includes(category)) {
+      newCategories.push(category)
+      setCategories(newCategories)
+    }
+    
+    saveLocal(statusMap, newMap, newCategories)   // ← 新加
+    
+    // 原来的 fetch 全部删除，不需要了
+}, [categoryMap, categories, statusMap, saveLocal, setCategoryMap, setCategories])
 
   const getContent = (b: ReviewBucket | null) => {
     if (!b) return ''
@@ -479,17 +490,24 @@ export default function Home() {
   const [categories, setCategories] = useState<string[]>([])
   const [activeCategory, setActiveCategory] = useState<string>('')
 
-  const fetchBuckets = useCallback(() =>
-    fetch('/api/buckets').then(r => r.json()).then(data => setBuckets(data)), [])
+ const fetchBuckets = useCallback(() =>
+  fetch('/api/buckets')
+    .then(r => r.json())
+    .then(data => setBuckets(Array.isArray(data) ? data : []))
+, []);
 
   useEffect(() => { fetchBuckets().then(() => setLoading(false)) }, [])
 
-  useEffect(() => {
-    fetch('/api/review-status').then(r => r.json()).then(data => {
+useEffect(() => {
+  const raw = localStorage.getItem('review_state')
+  if (raw) {
+    try {
+      const data = JSON.parse(raw)
       setCategoryMap(data.categoryMap ?? {})
       setCategories(data.categories ?? [])
-    })
-  }, [])
+    } catch {}
+  }
+}, [])
 
   useEffect(() => {
     setQuickFilter('all')

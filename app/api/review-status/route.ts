@@ -1,78 +1,53 @@
 import { NextResponse } from 'next/server'
 
-const OB_MCP = `${process.env.OMBRE_BASE_URL}/mcp`
-
-async function callOB(tool: string, args: Record<string, unknown>) {
-  const initRes = await fetch(OB_MCP, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'ob-dashboard', version: '1.0' } } })
-  })
-  const sessionId = initRes.headers.get('mcp-session-id')
-  const res = await fetch(OB_MCP, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', ...(sessionId ? { 'mcp-session-id': sessionId } : {}) },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: tool, arguments: args } })
-  })
-  const rawText = await res.text()
-  const dataLine = rawText.split('\n').find(line => line.startsWith('data: '))
-  const data = JSON.parse(dataLine?.slice(6) ?? '{}')
-  const text = data?.result?.content?.[0]?.text ?? ''
-  try { return JSON.parse(text) } catch { return text }
+// 这个函数只在浏览器端调用，所以用 localStorage 完全没问题
+function getLocalState() {
+  if (typeof window === 'undefined') return { statusMap: {}, categoryMap: {}, categories: [] }
+  const raw = localStorage.getItem('review_state')
+  if (!raw) return { statusMap: {}, categoryMap: {}, categories: [] }
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return { statusMap: {}, categoryMap: {}, categories: [] }
+  }
 }
 
-async function readStateBucket() {
-  const bucketId = process.env.REVIEW_BUCKET_ID!
-  const res = await fetch(`${process.env.OMBRE_BASE_URL}/api/bucket/${bucketId}`)
-  const bucket = await res.json()
-  const raw = bucket?.content?.raw ?? bucket?.content ?? '{}'
-  const parsed = JSON.parse(typeof raw === 'string' ? raw : '{}')
-  // 兼容旧格式（直接是 {id: status} 的扁平结构）
-  if (parsed.status_map || parsed.categories) return parsed
-  return { status_map: parsed, category_map: {}, categories: [] }
+function setLocalState(state: any) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('review_state', JSON.stringify(state))
 }
 
 export async function GET() {
-  try {
-    const bucketId = process.env.REVIEW_BUCKET_ID!
-    const state = await readStateBucket()
-    return NextResponse.json({
-      bucketId,
-      statusMap: state.status_map ?? {},
-      categoryMap: state.category_map ?? {},
-      categories: state.categories ?? [],
-    })
-  } catch {
-    return NextResponse.json({ bucketId: process.env.REVIEW_BUCKET_ID, statusMap: {}, categoryMap: {}, categories: [] })
-  }
+  // 这个 GET 会被前端 fetch 调用，但 localStorage 只能在浏览器端访问
+  // 所以我们需要在客户端直接读 localStorage，这里返回空作为 fallback
+  return NextResponse.json({ statusMap: {}, categoryMap: {}, categories: [] })
 }
 
 export async function POST(req: Request) {
   try {
-    const { statesBucketId, targetId, status, category, newCategory } = await req.json()
-    const state = await readStateBucket()
-    const status_map = state.status_map ?? {}
-    const category_map = state.category_map ?? {}
+    const { targetId, status, category, newCategory } = await req.json()
+    if (!targetId) return NextResponse.json({ error: 'missing targetId' }, { status: 400 })
+
+    const state = getLocalState()
+    const statusMap = state.statusMap ?? {}
+    const categoryMap = state.categoryMap ?? {}
     const categories: string[] = state.categories ?? []
 
     if (status !== undefined) {
-      if (status === null) delete status_map[targetId]
-      else status_map[targetId] = status
+      if (status === null) delete statusMap[targetId]
+      else statusMap[targetId] = status
     }
     if (category !== undefined) {
-      if (category === null) delete category_map[targetId]
-      else category_map[targetId] = category
+      if (category === null) delete categoryMap[targetId]
+      else categoryMap[targetId] = category
     }
     if (newCategory && !categories.includes(newCategory)) {
       categories.push(newCategory)
     }
 
-    await callOB('trace', {
-      bucket_id: statesBucketId,
-      content: JSON.stringify({ status_map, category_map, categories })
-    })
+    setLocalState({ statusMap, categoryMap, categories })
     return NextResponse.json({ ok: true, categories })
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

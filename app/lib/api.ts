@@ -1,5 +1,5 @@
-const BASE_URL = process.env.NEXT_PUBLIC_OMBRE_BASE_URL!;
-const PASSWORD = process.env.NEXT_PUBLIC_OMBRE_SESSION!;
+const BASE_URL = process.env.OMBRE_BASE_URL || process.env.NEXT_PUBLIC_OMBRE_BASE_URL!;
+const PASSWORD = process.env.OMBRE_SESSION || process.env.NEXT_PUBLIC_OMBRE_SESSION!;
 
 // 自动登录并获取 Cookie
 async function getSessionCookie(): Promise<string> {
@@ -44,3 +44,4 @@ export async function searchBuckets(q: string) {
     if (!res.ok) throw new Error('Failed to search');
     return res.json();
 }
+

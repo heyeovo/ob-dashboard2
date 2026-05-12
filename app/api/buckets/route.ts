@@ -5,7 +5,8 @@ export async function GET() {
   try {
     const data = await getBuckets()
     return NextResponse.json(data)
-  } catch (e) {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 })
+  } catch (e: any) {
+    console.error('/api/buckets error:', e.message)
+    return NextResponse.json({ error: e.message || 'Unknown' }, { status: 500 })
   }
 }

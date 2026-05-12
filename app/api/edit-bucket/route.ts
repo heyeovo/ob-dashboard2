@@ -16,7 +16,7 @@ async function getMcpSession() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { id, content, pinned, resolved, digested, tags, delete: del } = body
+  const { id, content, pinned, resolved, digested, tags, importance, delete: del } = body
 
   if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
 
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
   if (resolved !== undefined) args.resolved = resolved
   if (digested !== undefined) args.digested = digested
   if (tags !== undefined) args.tags = tags
+  if (importance !== undefined) args.importance = importance  // ← 新增
   if (del !== undefined) args.delete = del
 
   const res = await fetch(MCP_URL, {
