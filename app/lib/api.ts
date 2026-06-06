@@ -38,19 +38,10 @@ export async function getBucket(id: string) {
 
 export async function searchBuckets(q: string, includeArchived: boolean = false) {
     const cookie = await getSessionCookie();
-    const res = await fetch(`${BASE_URL}/api/tools/call`, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Cookie': cookie 
-        },
-        body: JSON.stringify({
-            name: "breath",
-            arguments: {
-                query: q,
-                include_archived: includeArchived // 传给后端
-            }
-        }),
+    const url = `${BASE_URL}/api/search?q=${encodeURIComponent(q)}${includeArchived ? "&include_archive=true" : ""}`;
+    const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Cookie': cookie }
     });
     
     if (!res.ok) throw new Error('Failed to search');

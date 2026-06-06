@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 
 // ==================== 类型定义 ====================
 interface Bucket {
@@ -515,7 +515,7 @@ useEffect(() => {
   }, [activeTab])
 
   const doSearch = async (q: string) => {
-    setSearch(q)
+
     if (!q.trim()) { setSearchResults(null); return }
     setSearchLoading(true)
     setQuickFilter('all')
@@ -524,7 +524,7 @@ useEffect(() => {
     setCustomStart('')
     setCustomEnd('')
     try {
-      const raw = await fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.json())
+      const raw = await fetch(`/api/search?q=${encodeURIComponent(q)}&include_archive=true`).then(r => r.json())
       const arr = Array.isArray(raw) ? raw : []
       const enriched = arr.map((item: any) => {
         const local = buckets.find(b => b.id === item.id)
@@ -540,6 +540,7 @@ useEffect(() => {
           content_preview: item.content_preview ?? local?.content_preview ?? '',
         }
       })
+      console.log('search results:', enriched)
       setSearchResults(enriched)
     } catch (e) {
       console.error(e)
@@ -687,6 +688,8 @@ useEffect(() => {
     )
   }
 
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
   const statusCounts = useMemo(() => {
     const list = searchResults ?? buckets
     return {
@@ -761,7 +764,18 @@ useEffect(() => {
                   className="w-full bg-[#F9F8F6] border border-transparent rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-[#D97757] focus:ring-2 focus:ring-[#D97757]/10 transition-all placeholder-[#A8A49D]"
                   placeholder="搜索记忆、标签或内容..."
                   value={search}
-                  onChange={e => doSearch(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value
+                    setSearch(val)
+                    clearTimeout(searchTimerRef.current)
+                    if (!val.trim()) {
+                      setSearchResults(null)   // 立即清空，不等 debounce
+                      return
+                    }
+                    searchTimerRef.current = setTimeout(() => {
+                      doSearch(val)
+                    }, 300)
+                }}
                 />
               </div>
               <div className="w-full h-px bg-[#F0EFEB] mb-3 sm:mb-4"></div>
