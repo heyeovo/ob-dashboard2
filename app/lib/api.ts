@@ -36,11 +36,23 @@ export async function getBucket(id: string) {
     return res.json();
 }
 
-export async function searchBuckets(q: string) {
+export async function searchBuckets(q: string, includeArchived: boolean = false) {
     const cookie = await getSessionCookie();
-    const res = await fetch(`${BASE_URL}/api/search?q=${encodeURIComponent(q)}`, {
-        headers: { 'Cookie': cookie },
+    const res = await fetch(`${BASE_URL}/api/tools/call`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Cookie': cookie 
+        },
+        body: JSON.stringify({
+            name: "breath",
+            arguments: {
+                query: q,
+                include_archived: includeArchived // 传给后端
+            }
+        }),
     });
+    
     if (!res.ok) throw new Error('Failed to search');
     return res.json();
 }
