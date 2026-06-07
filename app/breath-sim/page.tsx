@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
+import BucketDetailDrawer from '../components/BucketDetailDrawer'
 
 interface BucketScore {
   id: string; name: string; domain: string[]; type: string
@@ -12,6 +13,27 @@ interface BucketScore {
 interface DebugResult {
   query: string; weights: Record<string, number>; threshold: number
   total_candidates: number; passed_count: number; results: BucketScore[]
+}
+
+interface BucketDetail {
+  id: string
+  content: string
+  score: number
+  metadata: {
+    name: string
+    domain: string[]
+    tags: string[]
+    valence: number
+    arousal: number
+    importance: number
+    pinned: boolean
+    resolved: boolean
+    digested?: boolean
+    type: string
+    created: string
+    last_active: string
+    activation_count?: number
+  }
 }
 
 const BAR_COLORS = {
@@ -39,6 +61,60 @@ export default function BreathSimPage() {
   const [arousal, setArousal] = useState('')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<DebugResult | null>(null)
+  const [selected, setSelected] = useState<BucketDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [operating, setOperating] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const openBucket = async (id: string) => {
+    setDetailLoading(true)
+    setSelected(null)
+    try {
+      const res = await fetch(`/api/bucket/${id}`)
+      const data = await res.json()
+      setSelected(data)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const traceOp = async (id: string, args: Record<string, unknown>) => {
+    setOperating(true)
+    try {
+      await fetch('/api/edit-bucket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...args }),
+      })
+      const updated = await fetch(`/api/bucket/${id}`).then(r => r.json())
+      setSelected(updated)
+    } finally {
+      setOperating(false)
+    }
+  }
+
+  const saveEdit = async () => {
+    if (!selected) return
+    setSaving(true)
+    await fetch('/api/edit-bucket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selected.id, content: editContent }),
+    })
+    setSaving(false)
+    setEditing(false)
+    openBucket(selected.id)
+  }
+
+  const copyId = () => {
+    if (!selected) return
+    navigator.clipboard.writeText(selected.id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   const simulate = async () => {
     setLoading(true)
@@ -161,8 +237,13 @@ export default function BreathSimPage() {
         {data && (
           <div className="space-y-3">
             {data.results.map((b, i) => (
-              <div key={b.id}
-                className={`bg-white border rounded-xl px-4 py-3 sm:px-5 sm:py-4 ${b.passed_threshold ? 'border-[#E8E6E1]' : 'border-[#F0EFEB] opacity-55'}`}>
+              <div
+                key={b.id}
+                onClick={() => openBucket(b.id)}
+                className={`bg-white border rounded-xl px-4 py-3 sm:px-5 sm:py-4 cursor-pointer hover:shadow-sm transition-shadow ${
+                  b.passed_threshold ? 'border-[#E8E6E1]' : 'border-[#F0EFEB] opacity-55'
+                }`}
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs text-[#A8A49D] w-6 flex-shrink-0">{String(i + 1).padStart(2, '0')}</span>
                   {b.pinned && <span className="text-[#D97757] text-sm flex-shrink-0">★</span>}
@@ -187,6 +268,21 @@ export default function BreathSimPage() {
           </div>
         )}
       </main>
+      <BucketDetailDrawer
+        selected={selected}
+        detailLoading={detailLoading}
+        editing={editing}
+        editContent={editContent}
+        saving={saving}
+        operating={operating}
+        copied={copied}
+        onClose={() => { setSelected(null); setEditing(false) }}
+        onStartEdit={(content) => { setEditing(true); setEditContent(content) }}
+        onCancelEdit={() => setEditing(false)}
+        onSaveEdit={saveEdit}
+        onTraceOp={traceOp}
+        onCopyId={copyId}
+      />
     </div>
   )
 }
