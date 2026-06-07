@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     if (arousal) params.set('arousal', arousal)
 
     const res = await fetch(`${BASE_URL}/api/breath-debug?${params}`, {
-      headers: { Cookie: cookie }
+      headers: { Cookie: cookie },
     })
     const data = await res.json()
     return NextResponse.json(data)

@@ -41,7 +41,9 @@ export default function BreathSimPage() {
       if (valence) p.set('valence', valence)
       if (arousal) p.set('arousal', arousal)
       const res = await fetch(`/api/breath-debug?${p}`)
-      setData(await res.json())
+      const json = await res.json()
+      if (json.error) { console.error('后端错误:', json.error); setData(null); return }
+      setData(json)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -60,7 +62,7 @@ export default function BreathSimPage() {
           ['②', '候选池', `${data?.total_candidates ?? '—'} 桶`],
           ['③', '四维评分', 'topic · emotion · time · imp'],
           ['④', '阈值过滤', `${data?.threshold ?? 50} → ${data?.passed_count ?? '—'} 通过`],
-          ['⑤', '排序', `top ${data?.results.length ?? 'N'}`],
+          ['⑤', '排序', `top ${data?.results?.length ?? 'N'}`],
         ].map(([n, title, sub], i) => (
           <div key={i} className="flex items-center gap-1 flex-shrink-0">
             <div className="bg-white border border-[#E8E6E1] rounded-xl px-3 py-2 text-center min-w-[90px]">
@@ -100,7 +102,7 @@ export default function BreathSimPage() {
       {/* 权重摘要 */}
       {data && (
         <div className="text-xs text-[#8A8681] mb-3 px-1">
-          权重：topic×{data.weights.topic} · emotion×{data.weights.emotion} · time×{data.weights.time} · imp×{data.weights.importance}
+          权重：topic×{data.weights?.topic} · emotion×{data.weights?.emotion} · time×{data.weights?.time} · imp×{data.weights?.importance}
           　｜　阈值 {data.threshold}　｜　候选 {data.total_candidates} → 通过 {data.passed_count}
         </div>
       )}

@@ -47,4 +47,3 @@ export async function searchBuckets(q: string, includeArchived: boolean = false)
     if (!res.ok) throw new Error('Failed to search');
     return res.json();
 }
-
