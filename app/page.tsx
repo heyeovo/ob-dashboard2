@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react' 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -464,7 +465,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
 }
 
 // ==================== 主页组件 ====================
-export default function Home() {
+function HomeClient() {
  
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -1205,5 +1206,13 @@ useEffect(() => {
         </div>
       )}
     </div>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">加载中...</div>}>
+      <HomeClient />
+    </Suspense>
   )
 }
