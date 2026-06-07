@@ -57,7 +57,7 @@ export default function BreathSimPage() {
   return (
     <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans pb-20">
 
-      {/* 顶部导航 —— 与主页一致的多页面切换样式 */}
+      {/* 顶部导航 */}
       <nav className="border-b border-[#E8E6E1] bg-white/50 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[#8A8681]">
           <Link href="/" className="text-[#3A3836] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4">
@@ -80,10 +80,10 @@ export default function BreathSimPage() {
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
 
         {/* 流程图 */}
-        <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1 max-w-full">
           {[
             ['①', '输入', 'query / valence / arousal'],
             ['②', '候选池', `${data?.total_candidates ?? '—'} 桶`],
@@ -101,36 +101,59 @@ export default function BreathSimPage() {
           ))}
         </div>
 
-        {/* 输入区 */}
-        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-4 sm:p-5 mb-6 flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-44">
+        {/* 输入区：移动端一行显示，左右间距对称 */}
+        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-3 sm:p-5 mb-6 flex flex-row flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[80px]">
             <div className="text-xs text-[#A8A49D] mb-1">Query</div>
-            <input value={query} onChange={e => setQuery(e.target.value)}
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && simulate()}
               placeholder="搜索关键词…"
-              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]" />
+              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]"
+            />
           </div>
-          <div className="w-28">
-            <div className="text-xs text-[#A8A49D] mb-1">Valence 0~1</div>
-            <input value={valence} onChange={e => setValence(e.target.value)} placeholder="—"
-              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]" />
+          <div className="w-16 sm:w-20">
+            <div className="text-xs text-[#A8A49D] mb-1">Valence</div>
+            <input
+              value={valence}
+              onChange={e => setValence(e.target.value)}
+              placeholder="0~1"
+              className="w-full border border-[#E8E6E1] rounded-lg px-2 py-2 text-sm outline-none focus:border-[#D97757]"
+            />
           </div>
-          <div className="w-28">
-            <div className="text-xs text-[#A8A49D] mb-1">Arousal 0~1</div>
-            <input value={arousal} onChange={e => setArousal(e.target.value)} placeholder="—"
-              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]" />
+          <div className="w-16 sm:w-20">
+            <div className="text-xs text-[#A8A49D] mb-1">Arousal</div>
+            <input
+              value={arousal}
+              onChange={e => setArousal(e.target.value)}
+              placeholder="0~1"
+              className="w-full border border-[#E8E6E1] rounded-lg px-2 py-2 text-sm outline-none focus:border-[#D97757]"
+            />
           </div>
-          <button onClick={simulate} disabled={loading}
-            className="bg-[#D97757] text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-[#C86645] disabled:opacity-50 transition-colors">
+          <button
+            onClick={simulate}
+            disabled={loading}
+            className="bg-[#D97757] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#C86645] disabled:opacity-50 transition-colors flex-shrink-0"
+          >
             {loading ? '模拟中…' : '模拟 Breath'}
           </button>
         </div>
 
-        {/* 权重摘要 */}
+        {/* 权重摘要：增加上下间距 */}
         {data && (
-          <div className="text-sm text-[#8A8681] mb-5 px-1">
-            权重：topic×{data.weights?.topic} · emotion×{data.weights?.emotion} · time×{data.weights?.time} · imp×{data.weights?.importance}
-            　｜　阈值 {data.threshold}　｜　候选 {data.total_candidates} → 通过 {data.passed_count}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[#8A8681] my-5 px-1">
+            <span>权重：<span className="text-[#6C6965]">topic×{data.weights?.topic}</span></span>
+            <span className="hidden sm:inline text-[#D0CEC9]">·</span>
+            <span className="text-[#6C6965]">emotion×{data.weights?.emotion}</span>
+            <span className="hidden sm:inline text-[#D0CEC9]">·</span>
+            <span className="text-[#6C6965]">time×{data.weights?.time}</span>
+            <span className="hidden sm:inline text-[#D0CEC9]">·</span>
+            <span className="text-[#6C6965]">imp×{data.weights?.importance}</span>
+            <span className="mx-1 text-[#D0CEC9]">|</span>
+            <span>阈值 <span className="text-[#3A3836]">{data.threshold}</span></span>
+            <span className="mx-1 text-[#D0CEC9]">|</span>
+            <span>候选 <span className="text-[#3A3836]">{data.total_candidates}</span> → 通过 <span className="text-[#D97757]">{data.passed_count}</span></span>
           </div>
         )}
 
@@ -154,7 +177,6 @@ export default function BreathSimPage() {
                     {b.normalized.toFixed(1)}
                   </span>
                 </div>
-                {/* 四维网格：小屏两列，大屏四列，保证换行 */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                   {(['topic', 'emotion', 'time', 'importance'] as const).map(k => (
                     <ScoreBar key={k} label={k} score={b.scores[k]} weight={b.weights[k]} color={BAR_COLORS[k]} />
