@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import Link from 'next/link'
 
 // ==================== 类型定义 ====================
 interface Bucket {
@@ -726,7 +727,7 @@ useEffect(() => {
               {tab === 'timeline' ? '时间线' : tab === 'grid' ? '记忆格' : '审阅'}
             </span>
           ))}
-          <a href="/breath-sim" className="text-xs text-[#A8A49D] hover:text-[#D97757] transition-colors whitespace-nowrap ml-2 sm:ml-3">模拟 Breath</a>
+          <Link href="/breath-sim" className="text-xs text-[#A8A49D] hover:text-[#D97757] transition-colors whitespace-nowrap ml-2 sm:ml-3">模拟 Breath</Link>
           <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>
       </nav>
@@ -1025,7 +1026,18 @@ useEffect(() => {
         {selected.metadata.digested ? '已消化' : '消 化'}
       </button>
       <button disabled={operating}
-        onClick={() => {/* 归档接口后面补 */}}
+        onClick={async () => {
+          if (operating) return
+          setOperating(true)
+          try {
+            const res = await fetch(`/api/archive/${selected.id}`, { method: 'POST' })
+            const data = await res.json()
+            if (data.ok) {
+              setBuckets(prev => prev.filter(b => b.id !== selected.id))
+              setSelected(null)
+            }
+          } finally { setOperating(false) }
+        }}
         className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
           selected.metadata.type === 'archived'
             ? 'bg-[#F4F2EC] text-[#8A8681]'
@@ -1034,7 +1046,13 @@ useEffect(() => {
         {selected.metadata.type === 'archived' ? '已归档' : '归 档'}
       </button>
       <button disabled={operating}
-        onClick={() => {/* 轻触接口后面补 */}}
+        onClick={async () => {
+          if (operating) return
+          setOperating(true)
+          try {
+            await fetch(`/api/touch/${selected.id}`, { method: 'POST' })
+          } finally { setOperating(false) }
+        }}
         className="text-xs py-2 rounded-lg font-medium bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] transition-colors disabled:opacity-50">
         轻 触
       </button>
