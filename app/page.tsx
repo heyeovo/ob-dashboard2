@@ -58,7 +58,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: 'important', label: '重要' },
   { key: 'feel', label: 'feel' },
   { key: 'digested', label: '已消化' },
-  { key: 'resolved', label: '已归档' },
+  { key: 'resolved', label: '已解决' },
 ]
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -726,6 +726,7 @@ useEffect(() => {
               {tab === 'timeline' ? '时间线' : tab === 'grid' ? '记忆格' : '审阅'}
             </span>
           ))}
+          <a href="/breath-sim" className="text-xs text-[#A8A49D] hover:text-[#D97757] transition-colors whitespace-nowrap ml-2 sm:ml-3">模拟 Breath</a>
           <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>
       </nav>
@@ -912,7 +913,7 @@ useEffect(() => {
                   <>
                     <GridSection title="★ 钉选记忆" items={displayed.filter(b => b.pinned)} />
                     <GridSection title="♦ 重要 (imp ≥ 7)" items={displayed.filter(b => !b.pinned && Number(b.importance) >= 7 && !b.resolved && !b.digested)} />
-                    <GridSection title="已归档" items={displayed.filter(b => !b.pinned && b.resolved)} />
+                    <GridSection title="已解决" items={displayed.filter(b => !b.pinned && b.resolved)} />
                     <GridSection title="已消化" items={displayed.filter(b => !b.pinned && !b.resolved && b.digested)} />
                     <GridSection title="其他记忆" items={displayed.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested)} />
                   </>
@@ -954,25 +955,35 @@ useEffect(() => {
         className="text-[#A8A49D] hover:text-[#3A3836] p-1.5 bg-[#F9F8F6] rounded-full">✕</button>
     </div>
 
-    {/* 信息胶囊行：四个等宽小方块 */}
-    <div className="grid grid-cols-4 gap-2 mb-4">
-      <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-        <div className="text-[10px] text-[#8A8681] mb-0.5">重要度</div>
-        <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.importance}/10</div>
-      </div>
-      <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-        <div className="text-[10px] text-[#8A8681] mb-0.5">权重</div>
-        <div className="text-sm font-semibold text-[#3A3836]">{selected.score?.toFixed(2) ?? '—'}</div>
-      </div>
-      <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-        <div className="text-[10px] text-[#8A8681] mb-0.5">激活</div>
-        <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.activation_count ?? '—'}</div>
-      </div>
-      <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-        <div className="text-[10px] text-[#8A8681] mb-0.5">状态</div>
-        <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.resolved ? '已归档' : '活跃中'}</div>
+    {/* 信息胶囊行：两行3列 */}
+  <div className="grid grid-cols-3 gap-2 mb-4">
+    <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+      <div className="text-[10px] text-[#8A8681] mb-0.5">重要度</div>
+      <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.importance}/10</div>
+    </div>
+    <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+      <div className="text-[10px] text-[#8A8681] mb-0.5">权重</div>
+      <div className="text-sm font-semibold text-[#3A3836]">{selected.score?.toFixed(2) ?? '—'}</div>
+    </div>
+    <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+      <div className="text-[10px] text-[#8A8681] mb-0.5">激活</div>
+      <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.activation_count ?? '—'}</div>
+    </div>
+    <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+      <div className="text-[10px] text-[#8A8681] mb-0.5">效价 V</div>
+      <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
+    </div>
+    <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+      <div className="text-[10px] text-[#8A8681] mb-0.5">唤醒 A</div>
+      <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
+    </div>
+    <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+      <div className="text-[10px] text-[#8A8681] mb-0.5">类型</div>
+      <div className="text-sm font-semibold text-[#3A3836]">
+        {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}
       </div>
     </div>
+  </div>
 
     {/* 标签 */}
     <div className="flex flex-wrap gap-1.5 mb-4">
@@ -984,8 +995,8 @@ useEffect(() => {
       ))}
     </div>
 
-    {/* 操作按钮组：四个等宽按钮，位于标签下方 */}
-    <div className="grid grid-cols-4 gap-2 mb-6">
+    {/* 操作按钮组：两行3列 */}
+    <div className="grid grid-cols-3 gap-2 mb-6">
       <button disabled={operating}
         onClick={() => traceOp(selected.id, { pinned: selected.metadata.pinned ? 0 : 1 })}
         className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
@@ -1002,7 +1013,7 @@ useEffect(() => {
             ? 'bg-[#EAF5E9] text-[#478B4A]'
             : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
         }`}>
-        {selected.metadata.resolved ? '已归档' : '归 档'}
+        {selected.metadata.resolved ? '已解决' : '解 决'}
       </button>
       <button disabled={operating}
         onClick={() => traceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 })}
@@ -1013,29 +1024,43 @@ useEffect(() => {
         }`}>
         {selected.metadata.digested ? '已消化' : '消 化'}
       </button>
-    <div className="bg-white border border-[#E8E6E1] rounded-lg flex items-center justify-center gap-1 px-2 py-2">
-  <span className="text-[10px] text-[#8A8681]">IMP</span>
-  <input 
-    key={selected?.id + '-' + selected?.metadata?.importance}
-    type="number" min="0" max="10"
-    className="w-10 text-sm font-bold text-[#D97757] outline-none text-center"
-    defaultValue={selected?.metadata?.importance ?? ''}
-    disabled={operating}
-    onBlur={async (e) => {
-      const val = parseInt(e.target.value);
-      if (!selected || isNaN(val) || val === selected.metadata.importance) return;
-      setOperating(true);
-      await fetch('/api/edit-bucket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: selected.id, importance: val }),
-      });
-      const updated = await fetch(`/api/bucket/${selected.id}`).then(r => r.json());
-      setSelected(updated);
-      setOperating(false);
-    }}
-  />
-</div>
+      <button disabled={operating}
+        onClick={() => {/* 归档接口后面补 */}}
+        className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+          selected.metadata.type === 'archived'
+            ? 'bg-[#F4F2EC] text-[#8A8681]'
+            : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+        }`}>
+        {selected.metadata.type === 'archived' ? '已归档' : '归 档'}
+      </button>
+      <button disabled={operating}
+        onClick={() => {/* 轻触接口后面补 */}}
+        className="text-xs py-2 rounded-lg font-medium bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] transition-colors disabled:opacity-50">
+        轻 触
+      </button>
+      <div className="bg-white border border-[#E8E6E1] rounded-lg flex items-center justify-center gap-1 px-2 py-2">
+        <span className="text-[10px] text-[#8A8681]">IMP</span>
+        <input
+          key={selected?.id + '-' + selected?.metadata?.importance}
+          type="number" min="0" max="10"
+          className="w-10 text-sm font-bold text-[#D97757] outline-none text-center"
+          defaultValue={selected?.metadata?.importance ?? ''}
+          disabled={operating}
+          onBlur={async (e) => {
+            const val = parseInt(e.target.value)
+            if (!selected || isNaN(val) || val === selected.metadata.importance) return
+            setOperating(true)
+            await fetch('/api/edit-bucket', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: selected.id, importance: val }),
+            })
+            const updated = await fetch(`/api/bucket/${selected.id}`).then(r => r.json())
+            setSelected(updated)
+            setOperating(false)
+          }}
+        />
+      </div>
     </div>
 
     {/* 内容区 */}
