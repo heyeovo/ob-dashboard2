@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 // ==================== 类型定义 ====================
 interface Bucket {
@@ -44,7 +45,7 @@ interface BucketDetail {
   }
 }
 
-type QuickFilter = 'all' | 'pinned' | 'important' | 'feel' | 'digested' | 'resolved'
+type QuickFilter = 'all' | 'pinned' | 'important' | 'feel' | 'digested' | 'resolved' | 'other'
 type DatePreset = 'all' | '7d' | '30d' | '90d' | 'custom'
 type Status = '已精修' | '存疑' | null
 
@@ -60,6 +61,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: 'feel', label: 'feel' },
   { key: 'digested', label: '已消化' },
   { key: 'resolved', label: '已解决' },
+  { key: 'other', label: '其他记忆' },
 ]
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -81,6 +83,7 @@ function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
     case 'feel': return isFeel(b)
     case 'digested': return !!b.digested
     case 'resolved': return b.resolved
+    case 'other': return !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b)
   }
 }
 
@@ -462,9 +465,29 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
 
 // ==================== 主页组件 ====================
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'timeline' | 'grid' | 'review'>('timeline')
-  const [buckets, setBuckets] = useState<Bucket[]>([])
-  const [loading, setLoading] = useState(true)
+ 
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  // 从 URL 直接读取 tab，默认 timeline
+  const activeTab = (searchParams.get('tab') as 'timeline' | 'grid' | 'review') || 'timeline'
+  // 从 sessionStorage 恢复缓存，避免重新挂载时白屏
+  const [buckets, setBuckets] = useState<Bucket[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('ombra_buckets')
+        return cached ? JSON.parse(cached) : []
+      } catch { /* 忽略解析错误 */ }
+    }
+    return []
+  })
+  const [loading, setLoading] = useState(() => {
+    // 如果已有缓存数据，就不再显示 loading 状态
+    if (typeof window !== 'undefined') {
+      return !sessionStorage.getItem('ombra_buckets')
+    }
+    return true
+  })
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Bucket[] | null>(null)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -491,10 +514,14 @@ export default function Home() {
   const [categories, setCategories] = useState<string[]>([])
   const [activeCategory, setActiveCategory] = useState<string>('')
 
- const fetchBuckets = useCallback(() =>
+  const fetchBuckets = useCallback(() =>
   fetch('/api/buckets')
     .then(r => r.json())
-    .then(data => setBuckets(Array.isArray(data) ? data : []))
+    .then(data => {
+      const arr = Array.isArray(data) ? data : []
+      try { sessionStorage.setItem('ombra_buckets', JSON.stringify(arr)) } catch {}
+      setBuckets(arr)
+    })
 , []);
 
   useEffect(() => { fetchBuckets().then(() => setLoading(false)) }, [])
@@ -624,7 +651,7 @@ useEffect(() => {
             {b.name}
           </span>
           {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-1.5 py-0.5 rounded-full font-medium">feel</span>}
-          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
+          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已解决</span>}
           {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
         </div>
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 text-xs sm:text-sm">
@@ -700,10 +727,11 @@ useEffect(() => {
       feel: list.filter(b => isFeel(b)).length,
       digested: list.filter(b => !!b.digested).length,
       resolved: list.filter(b => b.resolved).length,
+      other: list.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b)).length,
     }
   }, [searchResults, buckets])
 
-  if (loading) return <div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">读取中...</div>
+  if (loading && buckets.length === 0) return <div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">读取中...</div>
 
   return (
     <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans selection:bg-[#D97757] selection:text-white pb-20">
@@ -720,14 +748,19 @@ useEffect(() => {
             <span className="text-xs sm:text-sm">Ombre Brain</span>
           </span>
           {(['timeline', 'grid', 'review'] as const).map(tab => (
-            <span key={tab} onClick={() => setActiveTab(tab)}
+              <span
+              key={tab}
+              onClick={() => router.replace(`/?tab=${tab}`, { scroll: false })}
               className={`cursor-pointer transition-colors h-full flex items-center whitespace-nowrap ${
                 activeTab === tab ? 'text-[#3A3836] border-b-2 border-[#D97757]' : 'hover:text-[#3A3836]'
-              }`}>
+              }`}
+            >
               {tab === 'timeline' ? '时间线' : tab === 'grid' ? '记忆格' : '审阅'}
             </span>
           ))}
-          <Link href="/breath-sim" className="text-xs text-[#A8A49D] hover:text-[#D97757] transition-colors whitespace-nowrap ml-2 sm:ml-3">模拟 Breath</Link>
+          <Link href="/breath-sim" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            模拟 Breath
+          </Link>
           <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>
       </nav>
@@ -914,9 +947,10 @@ useEffect(() => {
                   <>
                     <GridSection title="★ 钉选记忆" items={displayed.filter(b => b.pinned)} />
                     <GridSection title="♦ 重要 (imp ≥ 7)" items={displayed.filter(b => !b.pinned && Number(b.importance) >= 7 && !b.resolved && !b.digested)} />
+                    <GridSection title="feel" items={displayed.filter(b => !b.pinned && isFeel(b) && !b.resolved && !b.digested)} />
                     <GridSection title="已解决" items={displayed.filter(b => !b.pinned && b.resolved)} />
                     <GridSection title="已消化" items={displayed.filter(b => !b.pinned && !b.resolved && b.digested)} />
-                    <GridSection title="其他记忆" items={displayed.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested)} />
+                    <GridSection title="其他记忆" items={displayed.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b))} />
                   </>
                 ) : (
                   <GridSection title={QUICK_FILTERS.find(f => f.key === quickFilter)?.label || ''} items={displayed} />

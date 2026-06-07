@@ -23,12 +23,12 @@ const BAR_COLORS = {
 
 function ScoreBar({ label, score, weight, color }: { label: string; score: number; weight: number; color: string }) {
   return (
-    <div className="flex items-center gap-1">
-      <span className="text-[9px] text-[#B0ACA6] whitespace-nowrap">{label}×{weight}</span>
-      <div className="w-10 bg-[#EEEAE4] rounded-full h-1.5 flex-shrink-0">
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="text-xs text-[#8A8681] whitespace-nowrap">{label}×{weight}</span>
+      <div className="flex-1 bg-[#EEEAE4] rounded-full h-1.5 min-w-[2rem]">
         <div className="h-1.5 rounded-full" style={{ width: `${Math.min(score * 100, 100)}%`, backgroundColor: color }} />
       </div>
-      <span className="text-[9px] text-[#8A8681] tabular-nums">{score.toFixed(2)}</span>
+      <span className="text-xs text-[#6C6965] tabular-nums w-10 text-right">{score.toFixed(2)}</span>
     </div>
   )
 }
@@ -55,16 +55,35 @@ export default function BreathSimPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0]">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+    <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans pb-20">
 
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/" prefetch className="text-[#A8A49D] hover:text-[#D97757] text-sm transition-colors">← 返回</Link>
-          <h1 className="text-lg font-semibold text-[#3A3836]">模拟 Breath</h1>
+      {/* 顶部导航 —— 与主页一致的多页面切换样式 */}
+      <nav className="border-b border-[#E8E6E1] bg-white/50 backdrop-blur-md sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[#8A8681]">
+          <Link href="/" className="text-[#3A3836] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-br from-[#D97757] to-[#E8A58F]"></div>
+            <span className="text-xs sm:text-sm">Ombre Brain</span>
+          </Link>
+          <Link href="/?tab=timeline" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            时间线
+          </Link>
+          <Link href="/?tab=grid" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            记忆格
+          </Link>
+          <Link href="/?tab=review" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            审阅
+          </Link>
+          <span className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap text-[#3A3836] border-b-2 border-[#D97757]">
+            模拟 Breath
+          </span>
+          <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>
+      </nav>
+
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
         {/* 流程图 */}
-        <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1">
           {[
             ['①', '输入', 'query / valence / arousal'],
             ['②', '候选池', `${data?.total_candidates ?? '—'} 桶`],
@@ -74,30 +93,30 @@ export default function BreathSimPage() {
           ].map(([n, title, sub], i) => (
             <div key={i} className="flex items-center gap-1 flex-shrink-0">
               <div className="bg-white border border-[#E8E6E1] rounded-xl px-3 py-2 text-center min-w-[90px]">
-                <div className="text-[10px] text-[#A8A49D]">{n} {title}</div>
-                <div className="text-[10px] text-[#6C6965] mt-0.5">{sub}</div>
+                <div className="text-xs text-[#A8A49D]">{n} {title}</div>
+                <div className="text-xs text-[#6C6965] mt-0.5">{sub}</div>
               </div>
-              {i < 4 && <span className="text-[#D0CEC9] text-xs">→</span>}
+              {i < 4 && <span className="text-[#D0CEC9] text-sm">→</span>}
             </div>
           ))}
         </div>
 
         {/* 输入区 */}
-        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-4 mb-4 flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-36">
-            <div className="text-[10px] text-[#A8A49D] mb-1">Query</div>
+        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-4 sm:p-5 mb-6 flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-44">
+            <div className="text-xs text-[#A8A49D] mb-1">Query</div>
             <input value={query} onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && simulate()}
               placeholder="搜索关键词…"
               className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]" />
           </div>
-          <div className="w-24">
-            <div className="text-[10px] text-[#A8A49D] mb-1">Valence 0~1</div>
+          <div className="w-28">
+            <div className="text-xs text-[#A8A49D] mb-1">Valence 0~1</div>
             <input value={valence} onChange={e => setValence(e.target.value)} placeholder="—"
               className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]" />
           </div>
-          <div className="w-24">
-            <div className="text-[10px] text-[#A8A49D] mb-1">Arousal 0~1</div>
+          <div className="w-28">
+            <div className="text-xs text-[#A8A49D] mb-1">Arousal 0~1</div>
             <input value={arousal} onChange={e => setArousal(e.target.value)} placeholder="—"
               className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#D97757]" />
           </div>
@@ -109,7 +128,7 @@ export default function BreathSimPage() {
 
         {/* 权重摘要 */}
         {data && (
-          <div className="text-xs text-[#8A8681] mb-3 px-1">
+          <div className="text-sm text-[#8A8681] mb-5 px-1">
             权重：topic×{data.weights?.topic} · emotion×{data.weights?.emotion} · time×{data.weights?.time} · imp×{data.weights?.importance}
             　｜　阈值 {data.threshold}　｜　候选 {data.total_candidates} → 通过 {data.passed_count}
           </div>
@@ -117,26 +136,26 @@ export default function BreathSimPage() {
 
         {/* 结果列表 */}
         {data && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {data.results.map((b, i) => (
               <div key={b.id}
-                className={`bg-white border rounded-xl px-4 py-3 ${b.passed_threshold ? 'border-[#E8E6E1]' : 'border-[#F0EFEB] opacity-55'}`}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[10px] text-[#A8A49D] w-5 flex-shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                  {b.pinned && <span className="text-[#D97757] text-xs flex-shrink-0">★</span>}
+                className={`bg-white border rounded-xl px-4 py-3 sm:px-5 sm:py-4 ${b.passed_threshold ? 'border-[#E8E6E1]' : 'border-[#F0EFEB] opacity-55'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-[#A8A49D] w-6 flex-shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                  {b.pinned && <span className="text-[#D97757] text-sm flex-shrink-0">★</span>}
                   <span className="text-sm font-medium text-[#3A3836] flex-1 truncate">{b.name}</span>
                   {b.vector_score > 0 && (
-                    <span className="text-[10px] bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full flex-shrink-0">
+                    <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full flex-shrink-0">
                       vec {b.vector_score.toFixed(2)}
                     </span>
                   )}
-                  {!b.passed_threshold && <span className="text-[10px] text-[#A8A49D] flex-shrink-0">未过阈值</span>}
+                  {!b.passed_threshold && <span className="text-xs text-[#A8A49D] flex-shrink-0">未过阈值</span>}
                   <span className={`text-sm font-bold ml-1 flex-shrink-0 ${b.passed_threshold ? 'text-[#D97757]' : 'text-[#A8A49D]'}`}>
                     {b.normalized.toFixed(1)}
                   </span>
                 </div>
-                {/* 四个维度并排，自动折行 */}
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {/* 四维网格：小屏两列，大屏四列，保证换行 */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                   {(['topic', 'emotion', 'time', 'importance'] as const).map(k => (
                     <ScoreBar key={k} label={k} score={b.scores[k]} weight={b.weights[k]} color={BAR_COLORS[k]} />
                   ))}
@@ -145,7 +164,7 @@ export default function BreathSimPage() {
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }
