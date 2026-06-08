@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const BASE_URL = process.env.OMBRE_BASE_URL || process.env.NEXT_PUBLIC_OMBRE_BASE_URL!
 const PASSWORD = process.env.OMBRE_SESSION || process.env.NEXT_PUBLIC_OMBRE_SESSION!
 
-async function getSessionCookie(): Promise<string> {
+async function getSessionCookie() {
   const res = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -15,25 +15,28 @@ async function getSessionCookie(): Promise<string> {
   return cookie
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const q = searchParams.get('q') || ''
-  const valence = searchParams.get('valence') || ''
-  const arousal = searchParams.get('arousal') || ''
-  const threshold = searchParams.get('threshold') || ''
-
+export async function GET() {
   try {
     const cookie = await getSessionCookie()
-    const params = new URLSearchParams({ q })
-    if (valence) params.set('valence', valence)
-    if (arousal) params.set('arousal', arousal)
-    if (threshold) params.set('threshold', threshold)
-
-    const res = await fetch(`${BASE_URL}/api/breath-debug?${params}`, {
+    const res = await fetch(`${BASE_URL}/api/prompts`, {
       headers: { Cookie: cookie },
     })
-    const data = await res.json()
-    return NextResponse.json(data)
+    return NextResponse.json(await res.json())
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const cookie = await getSessionCookie()
+    const res = await fetch(`${BASE_URL}/api/prompts`, {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    return NextResponse.json(await res.json())
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

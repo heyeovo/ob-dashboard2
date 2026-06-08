@@ -518,18 +518,19 @@ function HomeClient() {
 , []);
 
   useEffect(() => {
-    // 客户端优先恢复缓存（避免白屏）
-    const cached = sessionStorage.getItem('ombra_buckets')
-    if (cached) {
-      try {
+    // 1. 客户端优先从 sessionStorage 恢复缓存（不参与 SSR，避免 hydration 不一致）
+    try {
+      const cached = sessionStorage.getItem('ombra_buckets')
+      if (cached) {
         const arr = JSON.parse(cached)
         if (Array.isArray(arr) && arr.length > 0) {
           setBuckets(arr)
           setLoading(false)
         }
-      } catch {}
-    }
-    // 后台拉取最新数据
+      }
+    } catch {}
+
+    // 2. 后台拉取最新数据
     fetchBuckets().then(() => setLoading(false))
   }, [])
 
@@ -771,6 +772,9 @@ function HomeClient() {
           ))}
           <Link href="/breath-sim" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
             模拟 Breath
+          </Link>
+          <Link href="/prompts" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            权重配置
           </Link>
           <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>

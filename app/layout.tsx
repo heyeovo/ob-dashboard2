@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,18 +15,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "小言&小羊的家",
   description: "New Ombre Brain",
-  manifest: "/manifest.json",               // ← 添加 manifest
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "小言&小羊的家",                 // ← apple-mobile-web-app-title
-    statusBarStyle: "black-translucent",   // ← 状态栏样式
+    title: "小言&小羊的家",
+    statusBarStyle: "black-translucent",
   },
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    viewportFit: "cover",                  // ← 覆盖全屏（刘海屏适配）
-  },
-};
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+}
 
 export default function RootLayout({
   children,

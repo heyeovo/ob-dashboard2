@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 
@@ -68,6 +68,7 @@ export default function BreathSimPage() {
   const [saving, setSaving] = useState(false)
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [threshold, setThreshold] = useState(55)
 
   const openBucket = async (id: string) => {
     setDetailLoading(true)
@@ -122,6 +123,7 @@ export default function BreathSimPage() {
       const p = new URLSearchParams({ q: query })
       if (valence) p.set('valence', valence)
       if (arousal) p.set('arousal', arousal)
+      p.set('threshold', threshold.toString())
       const res = await fetch(`/api/breath-debug?${p}`)
       const json = await res.json()
       if (json.error) { console.error('后端错误:', json.error); setData(null); return }
@@ -129,6 +131,13 @@ export default function BreathSimPage() {
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
+
+  useEffect(() => {
+  fetch('/api/config')
+    .then(r => r.json())
+    .then(d => { if (d.fuzzy_threshold) setThreshold(d.fuzzy_threshold) })
+    .catch(() => {})
+}, [])
 
   return (
     <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans pb-20">
@@ -152,6 +161,9 @@ export default function BreathSimPage() {
           <span className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap text-[#3A3836] border-b-2 border-[#D97757]">
             模拟 Breath
           </span>
+          <Link href="/prompts" className="hover:text-[#3A3836] cursor-pointer transition-colors h-full flex items-center whitespace-nowrap">
+            权重配置
+          </Link>
           <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
         </div>
       </nav>
@@ -164,7 +176,7 @@ export default function BreathSimPage() {
             ['①', '输入', 'query / valence / arousal'],
             ['②', '候选池', `${data?.total_candidates ?? '—'} 桶`],
             ['③', '四维评分', 'topic · emotion · time · imp'],
-            ['④', '阈值过滤', `${data?.threshold ?? 50} → ${data?.passed_count ?? '—'} 通过`],
+            ['④', '阈值过滤', `${data?.threshold ?? threshold} → ${data?.passed_count ?? '—'} 通过`],
             ['⑤', '排序', `top ${data?.results?.length ?? 'N'}`],
           ].map(([n, title, sub], i) => (
             <div key={i} className="flex items-center gap-1 flex-shrink-0">
@@ -213,6 +225,28 @@ export default function BreathSimPage() {
             className="bg-[#D97757] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#C86645] disabled:opacity-50 transition-colors flex-shrink-0"
           >
             {loading ? '模拟中…' : '模拟 Breath'}
+          </button>
+          <div className="w-full flex gap-4 pt-1">
+            <div className="flex justify-between text-[10px] text-[#A8A49D] mb-1">
+              <span>阈值 Threshold</span><span>{threshold}</span>
+            </div>
+            <input type="range" min="0" max="100" value={threshold}
+              onChange={e => setThreshold(Number(e.target.value))}
+              className="w-full accent-[#D97757]" />
+          </div>
+          <div className="flex-1"></div>
+          <button
+            onClick={async () => {
+              const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fuzzy_threshold: threshold }),
+              })
+              const data = await res.json()
+              if (data.ok) alert(`已应用：阈值 ${data.fuzzy_threshold}`)
+            }}
+            className="text-xs px-3 py-1.5 bg-[#D97757] text-white rounded-lg hover:bg-[#C86645] transition-colors">
+            应用到后端
           </button>
         </div>
 
