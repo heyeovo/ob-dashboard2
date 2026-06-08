@@ -15,6 +15,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "小言&小羊的家",
   description: "New Ombre Brain",
+  manifest: "/manifest.json",               // ← 添加 manifest
+  appleWebApp: {
+    capable: true,
+    title: "小言&小羊的家",                 // ← apple-mobile-web-app-title
+    statusBarStyle: "black-translucent",   // ← 状态栏样式
+  },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",                  // ← 覆盖全屏（刘海屏适配）
+  },
 };
 
 export default function RootLayout({
