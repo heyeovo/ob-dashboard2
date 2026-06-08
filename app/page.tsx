@@ -1046,15 +1046,15 @@ function HomeClient() {
 
                       {/* 日期列表（折叠时隐藏） */}
                       {!isMonthCollapsed && (
-                        <div className={`relative pl-4 ${index === 0 ? 'mt-0' : 'mt-1'}`}>
+                        <div className={`relative pl-2 ${index === 0 ? 'mt-0' : 'mt-1'}`}>
                           {days.map(({ date, items }) => {
                             const isDayCollapsed = collapsedDates.has(date);
                             return (
-                              <div key={date} className="relative pl-4 mb-6">
+                              <div key={date} className="relative pl-2 mb-6">
                                 {/* 日折叠箭头 */}
                                 <button
                                   onClick={() => toggleDateCollapse(date)}
-                                  className="absolute -left-[7px] top-2 -translate-y-1/2 text-[#D97757] hover:text-[#B65D40] transition-colors z-10"
+                                  className="absolute -left-[7px] top-2 -translate-y-1/2 text-[#D97757] hover:text-[#B65D40] transition-colors z-[1]"
                                 >
                                   <span className={`leading-none ${isDayCollapsed ? 'text-xs' : 'text-sm'}`}>
                                     {isDayCollapsed ? '▶\uFE0E' : '▼\uFE0E'}
