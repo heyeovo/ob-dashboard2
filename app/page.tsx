@@ -5,6 +5,8 @@ import { Suspense, useEffect, useState, useMemo, useCallback, useRef } from 'rea
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import BucketDetailDrawer from './components/BucketDetailDrawer'
+import { getBuckets } from '@/app/lib/api'
+import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
 
 // ==================== 类型定义 ====================
 interface Bucket {
@@ -47,7 +49,7 @@ interface BucketDetail {
   }
 }
 
-type QuickFilter = 'all' | 'pinned' | 'important' | 'feel' | 'digested' | 'resolved' | 'other'
+type QuickFilter = 'all' | 'pinned' | 'important' | 'feel' | 'digested' | 'resolved' | 'archived' | 'other'
 type DatePreset = 'all' | '7d' | '30d' | '90d' | 'custom'
 type Status = '已精修' | '存疑' | null
 
@@ -63,6 +65,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: 'feel', label: 'feel' },
   { key: 'digested', label: '已消化' },
   { key: 'resolved', label: '已解决' },
+  { key: 'archived', label: '已归档' },
   { key: 'other', label: '其他记忆' },
 ]
 
@@ -85,6 +88,7 @@ function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
     case 'feel': return isFeel(b)
     case 'digested': return !!b.digested
     case 'resolved': return b.resolved
+    case 'archived': return b.type === 'archived'
     case 'other': return !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b)
   }
 }
@@ -106,13 +110,14 @@ function matchesDateFilter(b: Bucket, preset: DatePreset, start: string, end: st
 
 function formatReviewDate(dateStr: string) {
   if (!dateStr) return '—'
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return dateStr
-  const day = d.getDate()
-  const mon = d.toLocaleDateString('en', { month: 'short' })
-  const year = d.getFullYear()
-  const weekdays = ['日', '一', '二', '三', '四', '五', '六']
-  return `${day} ${mon} ${year} · 周${weekdays[d.getDay()]}`
+  const datePart = formatBeijingDate(dateStr) // e.g. "2026/06/08"
+  const dayOfWeek = getBeijingDayOfWeek(dateStr) // e.g. "周一"
+  const parts = datePart.split('/')
+  const day = parseInt(parts[2], 10)
+  const monthNum = parseInt(parts[1], 10) - 1 // 0-indexed
+  const year = parts[0]
+  const monthShort = new Date(Date.UTC(2000, monthNum)).toLocaleDateString('en', { month: 'short' })
+  return `${day} ${monthShort} ${year} · ${dayOfWeek}`
 }
 
 function formatDateGroup(dateStr: string) {
@@ -655,8 +660,9 @@ function HomeClient() {
             {b.name}
           </span>
           {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-1.5 py-0.5 rounded-full font-medium">feel</span>}
-          {b.resolved && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已解决</span>}
+          {b.resolved && <span className="text-xs bg-[#EDF4FC] text-[#3B72B9] px-1.5 py-0.5 rounded-full">已解决</span>}
           {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
+          {b.type === 'archived' && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
         </div>
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 text-xs sm:text-sm">
           <span className="text-[#A8A49D] font-medium">imp {Number(b.importance) > 0 ? Number(b.importance) : '—'}</span>
@@ -679,7 +685,7 @@ function HomeClient() {
         </div>
         {b.last_active && (
           <span className="text-xs text-[#A8A49D] flex-shrink-0">
-            {new Date(b.last_active).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+             {formatBeijingDate(b.last_active)}
           </span>
         )}
       </div>
@@ -731,6 +737,7 @@ function HomeClient() {
       feel: list.filter(b => isFeel(b)).length,
       digested: list.filter(b => !!b.digested).length,
       resolved: list.filter(b => b.resolved).length,
+      archived: list.filter(b => b.type === 'archived').length,
       other: list.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b)).length,
     }
   }, [searchResults, buckets])
@@ -954,6 +961,7 @@ function HomeClient() {
                     <GridSection title="feel" items={displayed.filter(b => !b.pinned && isFeel(b) && !b.resolved && !b.digested)} />
                     <GridSection title="已解决" items={displayed.filter(b => !b.pinned && b.resolved)} />
                     <GridSection title="已消化" items={displayed.filter(b => !b.pinned && !b.resolved && b.digested)} />
+                    <GridSection title="已归档" items={displayed.filter(b => b.type === 'archived')} />
                     <GridSection title="其他记忆" items={displayed.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b))} />
                   </>
                 ) : (
@@ -984,6 +992,21 @@ function HomeClient() {
         onSaveEdit={saveEdit}
         onTraceOp={traceOp}
         onCopyId={copyId}
+        onTouch={async (id) => {
+          await fetch(`/api/touch/${id}`, { method: 'POST' })
+        }}
+        onArchive={async (id) => {
+          const res = await fetch(`/api/archive/${id}`, { method: 'POST' })
+          const data = await res.json()
+          if (data.ok) {
+            setSelected(null)
+            const fresh = await getBuckets()
+            setBuckets(fresh)
+          }
+        }}
+        onActivate={async (id) => {
+          await fetch(`/api/touch/${id}?ripple=true`, { method: 'POST' })
+        }}
       />
 
       {/* 悬浮加号 */}

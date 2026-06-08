@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { formatBeijingDateTime } from '@/app/utils/format'
 
 // ==================== 类型定义 ====================
 interface BucketDetail {
@@ -39,6 +40,9 @@ interface Props {
   onTraceOp: (id: string, args: Record<string, unknown>) => Promise<void>
   onCopyId: () => void
   onImportanceChange?: (id: string, val: number) => void  // 可选，用于 importance 修改
+  onTouch: (id: string) => Promise<void>
+  onArchive: (id: string) => Promise<void>
+  onActivate: (id: string) => Promise<void>
 }
 
 export default function BucketDetailDrawer({
@@ -56,6 +60,9 @@ export default function BucketDetailDrawer({
   onTraceOp,
   onCopyId,
   onImportanceChange,
+  onTouch,
+  onArchive,
+  onActivate,
 }: Props) {
   // 内部缓存 importance 输入值
   const [localImp, setLocalImp] = useState<number | null>(null)
@@ -79,8 +86,7 @@ export default function BucketDetailDrawer({
                   <h2 className="text-xl sm:text-2xl font-bold text-[#2B2927]">{selected.metadata.name}</h2>
                 </div>
                 <div className="text-xs text-[#8A8681] truncate mt-2">
-                  创建: {selected.metadata.created}{' '}·{' '}
-                  修改: {selected.metadata.last_active}
+                  创建: {formatBeijingDateTime(selected.metadata.created)} · 修改: {formatBeijingDateTime(selected.metadata.last_active)}
                 </div>
               </div>
               <button onClick={onClose} className="text-[#A8A49D] hover:text-[#3A3836] p-1.5 bg-[#F9F8F6] rounded-full">✕</button>
@@ -89,32 +95,42 @@ export default function BucketDetailDrawer({
             {/* 信息胶囊 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[#8A8681] mb-0.5">重要度</div>
-                <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.importance}/10</div>
+                <div className="text-[10px] text-[#8A8681] mb-0.5">IMP</div>
+                <input
+                  type="number" min="0" max="10"
+                  className="w-full text-sm font-bold text-[#D97757] outline-none text-center bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  defaultValue={selected.metadata.importance ?? ''}
+                  disabled={operating}
+                  onBlur={(e) => {
+                    const val = parseInt(e.target.value)
+                    if (isNaN(val) || val === selected.metadata.importance) return
+                    if (onImportanceChange) onImportanceChange(selected.id, val)
+                  }}
+                />
               </div>
-              <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[#8A8681] mb-0.5">权重</div>
-                <div className="text-sm font-semibold text-[#3A3836]">{selected.score?.toFixed(2) ?? '—'}</div>
-              </div>
-              <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[#8A8681] mb-0.5">激活</div>
-                <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.activation_count ?? '—'}</div>
-              </div>
-              <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[#8A8681] mb-0.5">效价 V</div>
-                <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
-              </div>
-              <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[#8A8681] mb-0.5">唤醒 A</div>
-                <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
-              </div>
-              <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[#8A8681] mb-0.5">类型</div>
-                <div className="text-sm font-semibold text-[#3A3836]">
-                  {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}
+                <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+                  <div className="text-[10px] text-[#8A8681] mb-0.5">权重</div>
+                  <div className="text-sm font-semibold text-[#3A3836]">{selected.score?.toFixed(2) ?? '—'}</div>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+                  <div className="text-[10px] text-[#8A8681] mb-0.5">激活</div>
+                  <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.activation_count ?? '—'}</div>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+                  <div className="text-[10px] text-[#8A8681] mb-0.5">效价 V</div>
+                  <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+                  <div className="text-[10px] text-[#8A8681] mb-0.5">唤醒 A</div>
+                  <div className="text-sm font-semibold text-[#3A3836]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
+                  <div className="text-[10px] text-[#8A8681] mb-0.5">类型</div>
+                  <div className="text-sm font-semibold text-[#3A3836]">
+                    {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}
+                  </div>
                 </div>
               </div>
-            </div>
 
             {/* 标签 */}
             <div className="flex flex-wrap gap-1.5 mb-4">
@@ -136,47 +152,38 @@ export default function BucketDetailDrawer({
                 {selected.metadata.pinned ? '已钉选' : '钉 选'}
               </button>
               <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { resolved: selected.metadata.resolved ? 0 : 1 })}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.resolved ? 'bg-[#EAF5E9] text-[#478B4A]' : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
-                }`}>
-                {selected.metadata.resolved ? '已解决' : '解 决'}
-              </button>
-              <button disabled={operating}
                 onClick={() => onTraceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 })}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.digested ? 'bg-[#EAF5E9] text-[#478B4A]' : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                  selected.metadata.digested ? 'bg-[#EDF4FC] text-[#3B72B9]' : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
                 }`}>
                 {selected.metadata.digested ? '已消化' : '消 化'}
               </button>
               <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { type: 'archived' })}
+                onClick={() => onTraceOp(selected.id, { resolved: selected.metadata.resolved ? 0 : 1 })}
+                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                  selected.metadata.resolved
+                    ? 'bg-[#EDF4FC] text-[#3B72B9]'
+                    : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                }`}>
+                {selected.metadata.resolved ? '已解决' : '解 决'}
+              </button>
+              <button disabled={operating}
+                onClick={() => onArchive(selected.id)}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                   selected.metadata.type === 'archived' ? 'bg-[#F4F2EC] text-[#8A8681]' : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
                 }`}>
                 {selected.metadata.type === 'archived' ? '已归档' : '归 档'}
               </button>
               <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { touch: true })}
+                onClick={() => onTouch(selected.id)}
                 className="text-xs py-2 rounded-lg font-medium bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] transition-colors disabled:opacity-50">
                 轻 触
               </button>
-              <div className="bg-white border border-[#E8E6E1] rounded-lg flex items-center justify-center gap-1 px-2 py-2">
-                <span className="text-[10px] text-[#8A8681]">IMP</span>
-                <input
-                  type="number" min="0" max="10"
-                  className="w-10 text-sm font-bold text-[#D97757] outline-none text-center"
-                  defaultValue={selected.metadata.importance ?? ''}
-                  disabled={operating}
-                  onBlur={async (e) => {
-                    const val = parseInt(e.target.value)
-                    if (isNaN(val) || val === selected.metadata.importance) return
-                    if (onImportanceChange) {
-                      onImportanceChange(selected.id, val)
-                    }
-                  }}
-                />
-              </div>
+              <button disabled={operating}
+                onClick={() => onActivate(selected.id)}
+                className="text-xs py-2 rounded-lg font-medium bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] transition-colors disabled:opacity-50">
+                激 活
+              </button>
             </div>
 
             {/* 内容区 */}

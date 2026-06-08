@@ -282,6 +282,15 @@ export default function BreathSimPage() {
         onSaveEdit={saveEdit}
         onTraceOp={traceOp}
         onCopyId={copyId}
+        onTouch={async (id) => {
+          await fetch(`/api/touch/${id}`, { method: 'POST' })
+        }}
+        onArchive={async (id) => {
+          await fetch(`/api/archive/${id}`, { method: 'POST' })
+        }}
+        onActivate={async (id) => {
+          await fetch(`/api/touch/${id}?ripple=true`, { method: 'POST' })
+        }}
       />
     </div>
   )
