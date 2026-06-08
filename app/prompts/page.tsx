@@ -49,7 +49,7 @@ function TestModal({ name, label, currentPrompt, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-6xl h-[75vh] max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#E8E6E1]">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-[#3A3836]">测试 · {label}</span>
@@ -93,7 +93,7 @@ function TestModal({ name, label, currentPrompt, onClose }: {
           <button onClick={onClose} className="text-xs px-4 py-2 border border-[#E8E6E1] text-[#8A8681] rounded-lg hover:bg-[#F9F8F6] transition-colors">关闭</button>
           <button onClick={run} disabled={!input.trim() || running}
             className="text-xs px-4 py-2 bg-[#D97757] text-white rounded-lg hover:bg-[#C86645] disabled:opacity-40 transition-colors">
-            {running ? '运行中…' : '▶ 运行'}
+            {running ? '运行中…' : '▶\uFE0E 运行'}
           </button>
         </div>
       </div>

@@ -222,32 +222,55 @@ export default function BreathSimPage() {
           <button
             onClick={simulate}
             disabled={loading}
-            className="bg-[#D97757] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#C86645] disabled:opacity-50 transition-colors flex-shrink-0"
+            className="w-28 bg-[#D97757] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#C86645] disabled:opacity-50 transition-colors flex-shrink-0"
           >
             {loading ? '模拟中…' : '模拟 Breath'}
           </button>
-          <div className="w-full flex gap-4 pt-1">
-            <div className="flex justify-between text-[10px] text-[#A8A49D] mb-1">
-              <span>阈值 Threshold</span><span>{threshold}</span>
+          <div className="w-full flex items-center gap-4 pt-1">
+            <div className="flex-1 flex items-center gap-3">
+              <span className="text-xs text-[#A8A49D] whitespace-nowrap">阈值</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={threshold}
+                onChange={e => setThreshold(Number(e.target.value))}
+                style={{
+                  background: `linear-gradient(to right, #D97757 0%, #D97757 ${threshold}%, #EEEAE4 ${threshold}%)`
+                }}
+                className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer
+                  accent-[#D97757]
+                  [&::-webkit-slider-thumb]:appearance-none
+                  [&::-webkit-slider-thumb]:w-4
+                  [&::-webkit-slider-thumb]:h-4
+                  [&::-webkit-slider-thumb]:bg-[#D97757]
+                  [&::-webkit-slider-thumb]:rounded-full
+                  [&::-webkit-slider-thumb]:shadow-md
+                  [&::-moz-range-thumb]:w-4
+                  [&::-moz-range-thumb]:h-4
+                  [&::-moz-range-thumb]:bg-[#D97757]
+                  [&::-moz-range-thumb]:rounded-full
+                  [&::-moz-range-thumb]:border-0"
+              />
+              <span className="text-sm font-medium text-[#D97757] w-4 text-right tabular-nums">
+                {threshold}
+              </span>
             </div>
-            <input type="range" min="0" max="100" value={threshold}
-              onChange={e => setThreshold(Number(e.target.value))}
-              className="w-full accent-[#D97757]" />
+            <button
+              onClick={async () => {
+                const res = await fetch('/api/config', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ fuzzy_threshold: threshold }),
+                })
+                const data = await res.json()
+                if (data.ok) alert(`已应用：阈值 ${data.fuzzy_threshold}`)
+              }}
+              className="w-28 bg-[#D97757] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#C86645] disabled:opacity-50 transition-colors flex-shrink-0"
+            >
+              应用到后端
+            </button>
           </div>
-          <div className="flex-1"></div>
-          <button
-            onClick={async () => {
-              const res = await fetch('/api/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fuzzy_threshold: threshold }),
-              })
-              const data = await res.json()
-              if (data.ok) alert(`已应用：阈值 ${data.fuzzy_threshold}`)
-            }}
-            className="text-xs px-3 py-1.5 bg-[#D97757] text-white rounded-lg hover:bg-[#C86645] transition-colors">
-            应用到后端
-          </button>
         </div>
 
         {/* 权重摘要：增加上下间距 */}

@@ -96,17 +96,19 @@ export default function BucketDetailDrawer({
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
                 <div className="text-[10px] text-[#8A8681] mb-0.5">IMP</div>
-                <input
-                  type="number" min="0" max="10"
-                  className="w-full text-sm font-bold text-[#D97757] outline-none text-center bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  defaultValue={selected.metadata.importance ?? ''}
-                  disabled={operating}
-                  onBlur={(e) => {
-                    const val = parseInt(e.target.value)
-                    if (isNaN(val) || val === selected.metadata.importance) return
-                    if (onImportanceChange) onImportanceChange(selected.id, val)
-                  }}
-                />
+                <div className="h-5 flex items-center justify-center">
+                  <input
+                    type="number" min="0" max="10"
+                    className="w-full text-sm font-bold text-[#D97757] outline-none text-center bg-transparent p-0 m-0 h-full border-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    defaultValue={selected.metadata.importance ?? ''}
+                    disabled={operating}
+                    onBlur={(e) => {
+                      const val = parseInt(e.target.value)
+                      if (isNaN(val) || val === selected.metadata.importance) return
+                      if (onImportanceChange) onImportanceChange(selected.id, val)
+                    }}
+                  />
+                </div>
               </div>
                 <div className="bg-white/60 backdrop-blur-sm border border-[#E8E6E1] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[#8A8681] mb-0.5">权重</div>
@@ -186,11 +188,16 @@ export default function BucketDetailDrawer({
               </button>
             </div>
 
-            {/* 内容区 */}
+                        {/* 内容区 */}
             {!editing ? (
               <div className="bg-[#FDFCFB] border border-[#F0EFEB] rounded-xl overflow-hidden mb-4">
                 <div className="flex justify-between items-center px-5 pt-3 pb-2 border-b border-[#F0EFEB]">
-                  <span className="text-xs font-medium text-[#A8A49D] uppercase tracking-wider">内容</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-[#A8A49D] uppercase tracking-wider">内容</span>
+                    <span className="text-[10px] text-[#C4896A] font-mono">
+                      {selected.content.length} 字 · ~{Math.ceil(selected.content.length * 1.3)} tokens
+                    </span>
+                  </div>
                   <button onClick={() => onStartEdit(selected.content)} className="text-xs text-[#D97757] font-medium hover:text-[#B65D40]">编辑</button>
                 </div>
                 <div className="p-5 text-sm leading-loose whitespace-pre-wrap">
@@ -205,10 +212,15 @@ export default function BucketDetailDrawer({
                   value={editContent}
                   onChange={e => onStartEdit(e.target.value)}
                 />
-                <div className="flex justify-end gap-2 mt-3">
-                  <button onClick={onCancelEdit} className="text-sm text-[#8A8681] hover:text-[#3A3836]">取消</button>
-                  <button onClick={onSaveEdit} disabled={saving}
-                    className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg disabled:opacity-50">{saving ? '保存中' : '保存更改'}</button>
+                <div className="flex justify-between items-center mt-3">
+                  <span className="text-[10px] text-[#C4896A] font-mono">
+                    {editContent.length} 字 · ~{Math.ceil(editContent.length * 1.3)} tokens
+                  </span>
+                  <div className="flex gap-2">
+                    <button onClick={onCancelEdit} className="text-sm text-[#8A8681] hover:text-[#3A3836]">取消</button>
+                    <button onClick={onSaveEdit} disabled={saving}
+                      className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg disabled:opacity-50">{saving ? '保存中' : '保存更改'}</button>
+                  </div>
                 </div>
               </div>
             )}

@@ -152,9 +152,26 @@ function groupByDate(buckets: Bucket[]) {
       date,
       items: items.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-        return (b.score ?? 0) - (a.score ?? 0)
+        return new Date(b.created).getTime() - new Date(a.created).getTime()
       })
     }))
+}
+
+// 在 groupByDate 下方新增一个函数
+function groupByMonth(buckets: Bucket[]) {
+  const map = new Map<string, Bucket[]>()
+  for (const b of buckets) {
+    const d = (b.created ?? '').slice(0, 7) || 'unknown'  // 取 YYYY-MM
+    if (!map.has(d)) map.set(d, [])
+    map.get(d)!.push(b)
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))   // 月份倒序
+    .map(([month, items]) => {
+      // 对每个月内的 buckets 再按天分组（复用原逻辑）
+      const days = groupByDate(items)   // 返回 { date, items }[]
+      return { month, days }
+    })
 }
 
 // ==================== 审阅子组件 ====================
@@ -490,6 +507,21 @@ function HomeClient() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
+  const toggleDateCollapse = (date: string) => {
+    setCollapsedDates(prev => {
+      const next = new Set(prev)
+      next.has(date) ? next.delete(date) : next.add(date)
+      return next
+    })
+  }
+  const [collapsedMonths, setCollapsedMonths] = useState<Set<string>>(new Set());
+  const toggleMonthCollapse = (month: string) => {
+    setCollapsedMonths(prev => {
+      const next = new Set(prev);
+      next.has(month) ? next.delete(month) : next.add(month);
+      return next;
+    });
+  };
   const [selected, setSelected] = useState<BucketDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -641,57 +673,97 @@ function HomeClient() {
     (activeCategory === '' || categoryMap[b.id] === activeCategory)
   )
 
-  const grouped = useMemo(() => groupByDate(displayed), [displayed])
+  const monthlyGroups = useMemo(() => groupByMonth(displayed), [displayed]);
 
-  const toggleDateCollapse = (date: string) => {
-    setCollapsedDates(prev => {
-      const next = new Set(prev)
-      next.has(date) ? next.delete(date) : next.add(date)
-      return next
-    })
-  }
 
-  const BucketCard = ({ b }: { b: Bucket }) => (
-    <div onClick={() => openBucket(b.id)}
-      className="bg-white rounded-xl p-4 sm:p-5 hover:shadow-md cursor-pointer border border-[#E8E6E1] hover:border-[#D97757]/30 transition-all duration-200 group w-full">
-      <div className="flex items-start justify-between mb-2 sm:mb-3 gap-2 sm:gap-3">
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap">
-          {b.pinned && <span className="text-[#D97757] text-xs sm:text-sm flex-shrink-0">★</span>}
-          <span className="font-semibold text-[#3A3836] text-sm sm:text-base truncate group-hover:text-[#D97757] transition-colors">
-            {b.name}
-          </span>
-          {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-1.5 py-0.5 rounded-full font-medium">feel</span>}
-          {b.resolved && <span className="text-xs bg-[#EDF4FC] text-[#3B72B9] px-1.5 py-0.5 rounded-full">已解决</span>}
-          {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
-          {b.type === 'archived' && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
+  function ImpSignal({ importance }: { importance: number | string | undefined }) {
+    const maxBars = 5
+    const num = Number(importance)
+    if (importance == null || isNaN(num)) {
+      return <span className="text-xs text-[#A8A49D] font-medium">—</span>
+    }
+    const value = Math.max(0, Math.min(num, 10)) / 2
+    const fullBars = Math.floor(value)
+    const remainder = value - fullBars
+
+    return (
+      <div className="flex items-center">
+        <div className="flex gap-px">
+          {Array.from({ length: maxBars }).map((_, i) => {
+            let opacity: number
+            if (i < fullBars) {
+              opacity = 1
+            } else if (i === fullBars && remainder > 0) {
+              opacity = 0.3 + remainder * 0.7
+            } else {
+              opacity = 0.12
+            }
+            return (
+              <div
+                key={i}
+                className="w-1 h-2 rounded-[1px]"
+                style={{
+                  backgroundColor: `rgba(217, 119, 87, ${opacity})`,
+                }}
+              />
+            )
+          })}
         </div>
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 text-xs sm:text-sm">
-          <span className="text-[#A8A49D] font-medium">imp {Number(b.importance) > 0 ? Number(b.importance) : '—'}</span>
-          <span className="text-[#A8A49D]">|</span>
-          <span className="text-[#D97757] font-medium">score {b.score != null ? b.score.toFixed(1) : '—'}</span>
-        </div>
+        <span className="text-xs text-[#D97757] font-medium tabular-nums leading-none ml-0.5">
+          {Math.round(num)}
+        </span>
       </div>
-      <p className="text-xs sm:text-sm text-[#6C6965] line-clamp-2 mb-3 sm:mb-4 leading-relaxed">{b.content_preview}</p>
-      <div className="flex items-end justify-between gap-2">
-        <div className="flex flex-wrap gap-1 sm:gap-1.5">
-          {(b.domain ?? []).map(d => (
-            <span key={d} className="text-xs bg-[#F4F2EC] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[#5B5854]">{d}</span>
-          ))}
-          {(b.tags ?? []).slice(0, 3).map(t => (
-            <span key={t} className="text-xs border border-[#E8E6E1] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[#8A8681]">{t}</span>
-          ))}
-          {(b.tags ?? []).length > 3 && (
-            <span className="text-xs text-[#A8A49D] py-0.5 px-1">+{(b.tags ?? []).length - 3}</span>
-          )}
-        </div>
-        {b.last_active && (
-          <span className="text-xs text-[#A8A49D] flex-shrink-0">
-             {formatBeijingDate(b.last_active)}
+    )
+  }
+  const BucketCard = ({ b }: { b: Bucket }) => (
+  <div 
+    onClick={() => openBucket(b.id)}
+    className="bg-white rounded-xl p-4 sm:p-5 hover:shadow-md cursor-pointer border border-[#E8E6E1] hover:border-[#D97757]/30 transition-all duration-200 group w-full relative"
+  >
+    <div className="flex items-start justify-between mb-1 gap-2 sm:gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap pr-16 sm:pr-0">
+        {b.pinned && <span className="text-[#D97757] text-xs sm:text-sm flex-shrink-0">★</span>}
+        <span className="font-semibold text-[#3A3836] text-sm sm:text-base truncate group-hover:text-[#D97757] transition-colors">
+          {b.name}
+        </span>
+        {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-1.5 py-0.5 rounded-full font-medium">feel</span>}
+        {b.resolved && <span className="text-xs bg-[#EDF4FC] text-[#3B72B9] px-1.5 py-0.5 rounded-full">已解决</span>}
+        {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
+        {b.type === 'archived' && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
+      </div>
+      <div className="absolute top-4 right-4 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
+        <div className="min-w-[56px] bg-[#FFF5F2] rounded-full px-2.5 py-0.5 flex items-center justify-center">
+          <span className="text-xs text-[#D97757] font-medium leading-tight">
+            score {b.score != null ? b.score.toFixed(1) : '—'}
           </span>
-        )}
+        </div>
+        <ImpSignal importance={b.importance} />
       </div>
     </div>
-  )
+    <p className="text-xs sm:text-sm text-[#6C6965] line-clamp-2 mb-3 sm:mb-4 leading-relaxed pr-20">
+      {b.content_preview}
+    </p>
+
+    <div className="flex items-end justify-between mb-0 gap-2 sm:gap-3">
+      <div className="flex flex-wrap gap-1 sm:gap-1.5">
+        {(b.domain ?? []).map(d => (
+          <span key={d} className="text-xs bg-[#F4F2EC] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[#5B5854]">{d}</span>
+        ))}
+        {(b.tags ?? []).slice(0, 2).map(t => (
+          <span key={t} className="text-xs border border-[#E8E6E1] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[#8A8681]">{t}</span>
+        ))}
+        {(b.tags ?? []).length > 2 && (
+          <span className="text-xs text-[#A8A49D] py-0.5 px-1">+{(b.tags ?? []).length - 3}</span>
+        )}
+      </div>
+      {b.last_active && (
+        <span className="text-xs text-[#A8A49D] flex-shrink-0">
+           {formatBeijingDate(b.last_active)}
+        </span>
+      )}
+    </div>
+  </div>
+)
 
   const GridSection = ({ title, items }: { title: string, items: Bucket[] }) => {
     if (items.length === 0) return null;
@@ -831,6 +903,7 @@ function HomeClient() {
               <div className="w-full h-px bg-[#F0EFEB] mb-3 sm:mb-4"></div>
 
               <div className="flex flex-wrap items-center gap-y-3 gap-x-4">
+                {/* 上排：快捷筛选 */}
                 <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
                   {QUICK_FILTERS.map(f => (
                     <button key={f.key} onClick={() => setQuickFilter(f.key)}
@@ -843,18 +916,31 @@ function HomeClient() {
                     </button>
                   ))}
                 </div>
+
+                {/* 下排：分类标签 */}
                 {categories.length > 0 && (
                   <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+                    {/* “全部” 按钮 */}
                     <button onClick={() => setActiveCategory('')}
-                      className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full border whitespace-nowrap ${
-                        activeCategory === '' ? 'bg-[#3A3836] text-white' : 'bg-white text-[#6C6965] hover:bg-[#F9F8F6]'
+                      // 加上了 transition-all 确保动画一致
+                      className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
+                        // 统一了选中与未选中的边框颜色及 hover 效果
+                        activeCategory === '' 
+                          ? 'bg-[#3A3836] border-[#3A3836] text-white' 
+                          : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:border-[#C4C1BC] hover:bg-[#F9F8F6]'
                       }`}>
                       全部
                     </button>
+                    
+                    {/* 动态分类循环 */}
                     {categories.map(c => (
                       <button key={c} onClick={() => setActiveCategory(c)}
-                        className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full border whitespace-nowrap ${
-                          activeCategory === c ? 'bg-[#3A3836] text-white' : 'bg-white text-[#6C6965] hover:bg-[#F9F8F6]'
+                        // 加上了 transition-all 确保动画一致
+                        className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
+                          // 统一了选中与未选中的边框颜色及 hover 效果
+                          activeCategory === c 
+                            ? 'bg-[#3A3836] border-[#3A3836] text-white' 
+                            : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:border-[#C4C1BC] hover:bg-[#F9F8F6]'
                         }`}>{c}</button>
                     ))}
                   </div>
@@ -881,8 +967,27 @@ function HomeClient() {
               )}
             </div>
 
-            {/* 工具条 */}
-            <div className="flex items-center justify-end gap-2 sm:gap-3 mb-6 px-1">
+                        {/* 工具条 */}
+            <div className={`flex items-center gap-2 sm:gap-3 mb-6 px-1 ${
+              activeTab === 'timeline' ? 'justify-between' : 'justify-end'
+            }`}>
+              {/* 新增：如果是时间线模式，把首个月份标题顶到工具条左侧的空白处 */}
+              {activeTab === 'timeline' && (
+                monthlyGroups.length > 0 ? (
+                  <div className="flex items-center gap-2 ml-[calc(1rem-7px)] translate-y-[8px] cursor-pointer select-none" onClick={() => toggleMonthCollapse(monthlyGroups[0].month)}>
+                    <h2 className="text-xl font-bold italic font-serif text-[#D97757] leading-tight whitespace-nowrap">
+                      {monthlyGroups[0].month.replace('-', '·')}
+                    </h2>
+                    <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">
+                      {monthlyGroups[0].days.reduce((sum, d) => sum + d.items.length, 0)} 条
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-xs text-[#A8A49D] ml-1">暂无记录</div>
+                )
+              )}
+
+              {/* 时间选择器 */}
               <div className="flex items-center gap-2 bg-white/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[#E8E6E1] shadow-sm">
                 <span className="text-xs text-[#A8A49D] hidden sm:inline">时间</span>
                 <select
@@ -900,6 +1005,8 @@ function HomeClient() {
                   </div>
                 )}
               </div>
+
+              {/* 记忆格视图特有控件 */}
               {activeTab === 'grid' && (
                 <>
                   <button onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
@@ -918,43 +1025,71 @@ function HomeClient() {
               )}
             </div>
 
-            {/* 时间线 - 带折叠箭头的日期组 */}
+            {/* 时间线 - 渲染区域 */}
             {activeTab === 'timeline' ? (
-              <div className="space-y-6 sm:space-y-8">
-                {grouped.map(({ date, items }) => {
-  const isCollapsed = collapsedDates.has(date)
-  return (
-    <div key={date} className="relative pl-4">
-      {/* 箭头替代圆点，始终显示 */}
-      <button
-        onClick={() => toggleDateCollapse(date)}
-        className="absolute -left-[7px] top-2 -translate-y-1/2 text-[#D97757] hover:text-[#B65D40] transition-colors z-10"
-      >
-       <span className={`leading-none ${isCollapsed ? 'text-xs' : 'text-sm'}`}>
-  {isCollapsed ? '▶' : '▼'}
-</span>
-      </button>
+              <div>
+                {monthlyGroups.map(({ month, days }, index) => {
+                  const isMonthCollapsed = collapsedMonths.has(month);
+                  return (
+                    <div key={month} className="mb-8">
+                      {/* 核心改动：只有非第一个月份（index > 0），才在下方单独渲染月份标题行 */}
+                      {index > 0 && (
+                        <div className="flex items-center gap-2 mb-4 ml-[calc(1rem-7px)] cursor-pointer select-none" onClick={() => toggleMonthCollapse(month)}>
+                          <h2 className="text-xl font-bold italic font-serif text-[#D97757] leading-tight whitespace-nowrap">
+                            {month.replace('-', '·')}
+                          </h2>
+                          <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">
+                            {days.reduce((sum, d) => sum + d.items.length, 0)} 条
+                          </span>
+                        </div>
+                      )}
 
-      <button
-        onClick={() => toggleDateCollapse(date)}
-        className="flex items-center gap-3 mb-4 ml-1 cursor-pointer hover:text-[#D97757] transition-colors text-left w-full"
-      >
-        <span className="text-sm font-semibold text-[#3A3836]">{formatDateGroup(date)}</span>
-        <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">{items.length} 条</span>
-      </button>
+                      {/* 日期列表（折叠时隐藏） */}
+                      {!isMonthCollapsed && (
+                        <div className={`relative pl-4 ${index === 0 ? 'mt-0' : 'mt-1'}`}>
+                          {days.map(({ date, items }) => {
+                            const isDayCollapsed = collapsedDates.has(date);
+                            return (
+                              <div key={date} className="relative pl-4 mb-6">
+                                {/* 日折叠箭头 */}
+                                <button
+                                  onClick={() => toggleDateCollapse(date)}
+                                  className="absolute -left-[7px] top-2 -translate-y-1/2 text-[#D97757] hover:text-[#B65D40] transition-colors z-10"
+                                >
+                                  <span className={`leading-none ${isDayCollapsed ? 'text-xs' : 'text-sm'}`}>
+                                    {isDayCollapsed ? '▶\uFE0E' : '▼\uFE0E'}
+                                  </span>
+                                </button>
 
-      {!isCollapsed && (
-        <>
-          {/* 竖线只在展开时出现 */}
-          <div className="absolute left-0 top-2.5 bottom-0 w-px bg-[#E8E6E1]"></div>
-          <div className="space-y-3 ml-1">
-            {items.map(b => <BucketCard key={b.id} b={b} />)}
-          </div>
-        </>
-      )}
-    </div>
-  )
-})}
+                                {/* 日期标签 */}
+                                <button
+                                  onClick={() => toggleDateCollapse(date)}
+                                  className="flex items-center gap-3 mb-4 ml-1 cursor-pointer hover:text-[#D97757] transition-colors text-left w-full"
+                                >
+                                  <span className="text-sm font-semibold text-[#3A3836]">
+                                    {formatDateGroup(date)}
+                                  </span>
+                                  <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">
+                                    {items.length} 条
+                                  </span>
+                                </button>
+
+                                {!isDayCollapsed && (
+                                  <>
+                                    <div className="absolute left-0 top-2.5 bottom-0 w-px bg-[#E8E6E1]" />
+                                    <div className="space-y-3 ml-1">
+                                      {items.map(b => <BucketCard key={b.id} b={b} />)}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div>
