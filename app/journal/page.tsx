@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
-import { formatBeijingDateTime } from '@/app/utils/format'
+import { formatBeijingDate, formatBeijingDateTime, getBeijingDayOfWeek } from '@/app/utils/format'
 
 interface JournalEntry {
   id: string
@@ -13,21 +13,70 @@ interface JournalEntry {
   unlock_hint?: string
 }
 
+interface JournalDetailMeta {
+  name: string
+  created: string
+  last_active: string
+  [key: string]: unknown
+}
+
+interface BucketDetailResponse {
+  id: string
+  content: string
+  score?: number
+  metadata: JournalDetailMeta
+}
+
 type Author = '言之' | '小羊' | '共同'
+
+function formatJournalDate(dateStr: string): string {
+  const datePart = formatBeijingDate(dateStr)
+  if (datePart === '—') return '—'
+  const dayOfWeek = getBeijingDayOfWeek(dateStr)
+  const parts = datePart.split('/')
+  const day = parseInt(parts[2], 10)
+  const monthNum = parseInt(parts[1], 10) - 1
+  const year = parts[0]
+  const monthShort = new Date(Date.UTC(2000, monthNum)).toLocaleDateString('en', { month: 'short' })
+  return `${day} ${monthShort} ${year} · ${dayOfWeek}`
+}
+
+function stats(text: string) {
+  return { chars: text.length, tokens: Math.ceil(text.length * 1.3) }
+}
 
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [content, setContent] = useState('')
-  const [name, setName] = useState('')
-  const [author, setAuthor] = useState<Author>('共同')
-  const [locked, setLocked] = useState(false)
-  const [unlockHint, setUnlockHint] = useState('')
+
+  // ---- 筛选 ----
+  const [search, setSearch] = useState('')
+  const [dateStart, setDateStart] = useState('')
+  const [dateEnd, setDateEnd] = useState('')
+
+  // ---- 详情弹窗 ----
+  const [detail, setDetail] = useState<{
+    entry: JournalEntry
+    meta: JournalDetailMeta | null
+    fullContent: string
+  } | null>(null)
+  const [detailFetching, setDetailFetching] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // ---- 写新日记弹窗 ----
+  const [showAdd, setShowAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newContent, setNewContent] = useState('')
+  const [newAuthor, setNewAuthor] = useState<Author>('共同')
+  const [newLocked, setNewLocked] = useState(false)
+  const [newUnlockHint, setNewUnlockHint] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -40,39 +89,162 @@ export default function JournalPage() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // ---- 筛选逻辑 ----
+  const filtered = useMemo(() => {
+    let arr = entries
+    // 文本搜索
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      arr = arr.filter(e => e.name?.toLowerCase().includes(q) || e.content?.toLowerCase().includes(q))
+    }
+    // 日期筛选
+    if (dateStart || dateEnd) {
+      const s = dateStart ? new Date(dateStart).getTime() : 0
+      const e = dateEnd ? new Date(dateEnd).getTime() + 86400000 : Infinity
+      arr = arr.filter(item => {
+        const t = new Date(item.created).getTime()
+        return t >= s && t <= e
+      })
+    }
+    return arr
+  }, [entries, search, dateStart, dateEnd])
+
+  // 按日记日期分组
+  const dateGroups = useMemo(() => {
+    const groups = new Map<string, JournalEntry[]>()
+    for (const e of filtered) {
+      const date = formatBeijingDate(e.created)
+      if (!groups.has(date)) groups.set(date, [])
+      groups.get(date)!.push(e)
+    }
+    for (const [, list] of groups) {
+      list.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime())
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => b.localeCompare(a))
+  }, [filtered])
+
+  // ---- 统计 ----
+  const statsSummary = useMemo(() => {
+    const yz = entries.filter(e => e.author === '言之').length
+    const xy = entries.filter(e => e.author === '小羊').length
+    const gt = entries.filter(e => e.author === '共同').length
+    return { 言之: yz, 小羊: xy, 共同: gt, total: entries.length }
+  }, [entries])
+
+  // ---- 详情弹窗操作 ----
+  const openDetail = async (entry: JournalEntry) => {
+    setEditing(false)
+    setDetail({ entry, meta: null, fullContent: entry.content ?? '' })
+    setDetailFetching(true)
+    try {
+      const res = await fetch(`/api/bucket/${entry.id}`)
+      if (res.ok) {
+        const data: BucketDetailResponse = await res.json()
+        setDetail({
+          entry,
+          meta: data.metadata ?? null,
+          fullContent: data.content ?? entry.content ?? '',
+        })
+      }
+    } catch { /* 静默失败 */ }
+    setDetailFetching(false)
   }
 
-  useEffect(() => { load() }, [])
-
-  const resetForm = () => {
-    setContent(''); setName(''); setAuthor('共同'); setLocked(false); setUnlockHint('')
+  const closeDetail = () => {
+    setDetail(null)
+    setEditing(false)
+    setCopied(false)
   }
 
-  const submit = async () => {
-    if (!content.trim()) return
+  const saveEdit = async () => {
+    if (!detail) return
+    setSaving(true)
+    try {
+      await fetch('/api/edit-bucket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: detail.entry.id, content: editContent }),
+      })
+      setEditing(false)
+      const res = await fetch(`/api/bucket/${detail.entry.id}`)
+      if (res.ok) {
+        const data: BucketDetailResponse = await res.json()
+        setDetail({
+          entry: { ...detail.entry, content: data.content },
+          meta: data.metadata ?? detail.meta,
+          fullContent: data.content,
+        })
+      }
+      await load()
+    } catch (e) {
+      console.error('保存失败', e)
+    }
+    setSaving(false)
+  }
+
+  const deleteJournal = async () => {
+    if (!detail || !confirm('确定抹除此日记？不可恢复。')) return
+    try {
+      await fetch('/api/edit-bucket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: detail.entry.id, delete: true }),
+      })
+      closeDetail()
+      await load()
+    } catch (e) {
+      console.error('删除失败', e)
+    }
+  }
+
+  const copyId = () => {
+    if (!detail) return
+    navigator.clipboard.writeText(detail.entry.id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  // ---- 新建日记操作 ----
+  const submitNew = async () => {
+    if (!newContent.trim()) return
     setSubmitting(true)
     try {
       const res = await fetch('/api/journal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content,
-          name: name.trim() || undefined,
-          author,
-          locked,
-          unlock_hint: locked ? unlockHint : '',
+          content: newContent,
+          name: newName.trim() || undefined,
+          author: newAuthor,
+          locked: newLocked,
+          unlock_hint: newLocked ? newUnlockHint : '',
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? '创建失败')
-      resetForm()
-      setShowForm(false)
+      setShowAdd(false)
+      setNewName('')
+      setNewContent('')
+      setNewAuthor('共同')
+      setNewLocked(false)
+      setNewUnlockHint('')
       await load()
     } catch (e) {
       setError(String(e))
-    } finally {
-      setSubmitting(false)
     }
+    setSubmitting(false)
+  }
+
+  const resetNewForm = () => {
+    setNewName('')
+    setNewContent('')
+    setNewAuthor('共同')
+    setNewLocked(false)
+    setNewUnlockHint('')
   }
 
   const authorColor = (a: string) =>
@@ -80,121 +252,325 @@ export default function JournalPage() {
     : a === '小羊' ? 'bg-[#EDF4FC] text-[#3B72B9]'
     : 'bg-[#F4F2EC] text-[#6C6965]'
 
+  // ============ 渲染 ============
+
   return (
-    <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans pb-20">
-      <nav className="border-b border-[#E8E6E1] bg-white/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[#8A8681]">
-          <Link href="/" className="text-[#3A3836] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4">
-            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-br from-[#D97757] to-[#E8A58F]"></div>
+    <div className="min-h-screen" style={{ background: '#FCFAF8' }}>
+      <style>{`
+        .tl-line { position: absolute; left: 20px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, #E8D5C4, #E8D5C4 75%, transparent); }
+        .tl-dot { position: relative; z-index: 1; width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; background: #D97757; box-shadow: 0 0 0 3px #FCFAF8; }
+        .tl-card { background: #FFFFFF; border: 1px solid #F0EFEB; border-radius: 16px; transition: all 0.2s ease; cursor: pointer; }
+        .tl-card:hover { box-shadow: 0 4px 16px rgba(180,160,140,0.15); transform: translateY(-1px); }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #D4C9BD; border-radius: 4px; }
+      `}</style>
+
+      {/* ===== 顶部导航 ===== */}
+      <nav className="border-b border-[#E8E6E1]" style={{ background: 'rgba(253,252,248,0.7)', backdropFilter: 'blur(12px)' }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[#8A8681] overflow-x-auto">
+          <Link href="/" className="text-[#3A3836] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4 flex-shrink-0">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full" style={{ background: 'linear-gradient(135deg, #D97757, #E8A58F)' }} />
             <span className="text-xs sm:text-sm">Ombre Brain</span>
           </Link>
-          <Link href="/?tab=timeline" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">时间线</Link>
-          <Link href="/?tab=grid" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">记忆格</Link>
-          <Link href="/?tab=review" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">审阅</Link>
-          <Link href="/breath-sim" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">模拟 Breath</Link>
-          <Link href="/graph" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">关系图谱</Link>
-          <span className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap text-[#3A3836] border-b-2 border-[#D97757]">日记</span>
-          <Link href="/prompts" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">权重配置</Link>
+          <Link href="/?tab=timeline" className="hover:text-[#3A3836] whitespace-nowrap transition-colors h-full flex items-center">时间线</Link>
+          <Link href="/?tab=grid" className="hover:text-[#3A3836] whitespace-nowrap transition-colors h-full flex items-center">记忆格</Link>
+          <Link href="/?tab=review" className="hover:text-[#3A3836] whitespace-nowrap transition-colors h-full flex items-center">审阅</Link>
+          <Link href="/breath-sim" className="hover:text-[#3A3836] whitespace-nowrap transition-colors h-full flex items-center">模拟 Breath</Link>
+          <Link href="/graph" className="hover:text-[#3A3836] whitespace-nowrap transition-colors h-full flex items-center">关系图谱</Link>
+          <span className="text-[#3A3836] whitespace-nowrap h-full flex items-center border-b-2" style={{ borderBottomColor: '#D97757' }}>日记</span>
+          <Link href="/prompts" className="hover:text-[#3A3836] whitespace-nowrap transition-colors h-full flex items-center">权重配置</Link>
         </div>
       </nav>
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
+
+        {/* ===== 标题栏 ===== */}
         <div className="flex items-center justify-between mb-5">
-          <h1 className="text-lg font-bold text-[#3A3836]">日记</h1>
-          <button
-            onClick={() => setShowForm(v => !v)}
-            className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg hover:bg-[#B65D40] transition-colors"
-          >
-            {showForm ? '收起' : '写新日记'}
+          <h1 className="text-xl font-bold text-[#3A3836] tracking-tight">日记</h1>
+          <button onClick={() => { setShowAdd(true); resetNewForm() }}
+            className="text-sm text-white px-5 py-2 rounded-full transition-all duration-200 hover:shadow-md active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #E8A58F, #D97757)' }}>
+            + 写新日记
           </button>
         </div>
 
-        {error && (
-          <div className="mb-4 text-sm text-[#C64B45] bg-[#FDEDEC] border border-[#F3C9C6] rounded-lg px-3 py-2">{error}</div>
-        )}
+        {/* ===== 统计条 ===== */}
+        <div className="flex items-center gap-4 mb-5 text-xs">
+          <span className="font-medium text-[#D97757]">{statsSummary.言之} 篇<span className="text-[#A8A49D] ml-1">言之</span></span>
+          <span className="font-medium text-[#3B72B9]">{statsSummary.小羊} 篇<span className="text-[#A8A49D] ml-1">小羊</span></span>
+          <span className="font-medium text-[#8A8681]">{statsSummary.共同} 篇<span className="text-[#A8A49D] ml-1">共同</span></span>
+          <span className="text-[#B0A590]">共 {statsSummary.total} 篇</span>
+        </div>
 
-        {showForm && (
-          <div className="bg-white border border-[#E8E6E1] rounded-xl p-4 mb-6">
+        {/* ===== 搜索 ===== */}
+        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-3 sm:p-4 shadow-sm mb-3">
+          <div className="relative w-full">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A8A49D]" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <circle cx="8.5" cy="8.5" r="6" /><path d="M13.5 13.5L18 18" />
+            </svg>
             <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="标题（可选，留空自动生成）"
-              className="w-full text-sm border border-[#E8E6E1] rounded-lg px-3 py-2 mb-3 outline-none focus:border-[#D97757]"
+              className="w-full bg-[#F9F8F6] border border-transparent rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-[#D97757] focus:ring-2 focus:ring-[#D97757]/10 transition-all placeholder-[#A8A49D]"
+              placeholder="搜索日记标题或内容..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
             />
-            <textarea
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              placeholder="写点什么…"
-              rows={8}
-              className="w-full text-sm border border-[#E8E6E1] rounded-lg px-3 py-2 mb-3 outline-none focus:border-[#D97757] resize-none leading-relaxed"
-            />
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                {(['言之', '小羊', '共同'] as Author[]).map(a => (
-                  <button
-                    key={a}
-                    onClick={() => setAuthor(a)}
-                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                      author === a ? authorColor(a) : 'bg-white border border-[#E8E6E1] text-[#8A8681] hover:bg-[#F9F8F6]'
-                    }`}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-1.5 text-xs text-[#6C6965] cursor-pointer">
-                <input type="checkbox" checked={locked} onChange={e => setLocked(e.target.checked)} className="accent-[#D97757]" />
-                上锁
-              </label>
+          </div>
+        </div>
+
+        {/* ===== 日期筛选（右下角） ===== */}
+        <div className="flex items-center justify-end gap-2 mb-5">
+          <div className="flex items-center bg-white border border-[#E8E6E1] rounded-lg overflow-hidden" style={{ fontSize: 0 }}>
+            <div className="border-r border-[#E8E6E1]">
+              <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
+                className="text-xs px-2.5 py-1.5 outline-none bg-transparent focus:text-[#D97757] transition-colors" />
             </div>
-            {locked && (
-              <input
-                value={unlockHint}
-                onChange={e => setUnlockHint(e.target.value)}
-                placeholder="解锁提示（日期如 2026-07-01 到点自动解锁，其他文本则保持锁定当提示用）"
-                className="w-full text-xs border border-[#E8E6E1] rounded-lg px-3 py-2 mt-3 outline-none focus:border-[#D97757]"
-              />
-            )}
-            <div className="flex justify-end mt-3">
-              <button
-                onClick={submit}
-                disabled={submitting || !content.trim()}
-                className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg disabled:opacity-50 hover:bg-[#B65D40] transition-colors"
-              >
-                {submitting ? '保存中…' : '保存日记'}
-              </button>
-            </div>
+            <span className="text-[10px] text-[#A8A49D] px-1.5">至</span>
+            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)}
+              className="text-xs px-2.5 py-1.5 outline-none bg-transparent focus:text-[#D97757] transition-colors" />
+          </div>
+          <span className="text-xs text-[#A8A49D]">{filtered.length} 篇</span>
+        </div>
+
+        {/* ===== 错误提示 ===== */}
+        {error && (
+          <div className="mb-5 text-sm text-[#C64B45] bg-[#FDEDEC] border border-[#F3C9C6] rounded-lg px-4 py-2.5 flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError('')} className="text-[#C64B45] opacity-60 hover:opacity-100 ml-3">✕</button>
           </div>
         )}
 
+        {/* ===== 加载状态 ===== */}
         {loading ? (
-          <div className="text-center text-sm text-[#8A8681] py-10">读取中…</div>
-        ) : entries.length === 0 ? (
-          <div className="text-center text-sm text-[#A8A49D] py-10">还没有日记</div>
-        ) : (
-          <div className="space-y-3">
-            {entries.map(e => (
-              <div key={e.id} className="bg-white border border-[#E8E6E1] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2 gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>{e.author}</span>
-                    <span className="font-semibold text-sm text-[#3A3836] truncate">{e.name}</span>
-                    {e.locked && <span className="text-xs flex-shrink-0">🔒</span>}
-                  </div>
-                  <span className="text-xs text-[#A8A49D] flex-shrink-0">{formatBeijingDateTime(e.created)}</span>
+          <div className="space-y-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex gap-4 animate-pulse">
+                <div className="flex-shrink-0 w-[42px] flex flex-col items-center pt-1">
+                  <div className="w-[18px] h-[18px] rounded-full bg-[#E8E6E1]" />
                 </div>
-                {e.locked ? (
-                  <p className="text-sm text-[#A8A49D] italic">
-                    已上锁{e.unlock_hint ? ` · 提示：${e.unlock_hint}` : ''}
-                  </p>
-                ) : (
-                  <p className="text-sm text-[#3A3836] leading-relaxed whitespace-pre-wrap">{e.content}</p>
-                )}
+                <div className="flex-1">
+                  <div className="h-4 w-24 bg-[#E8E6E1] rounded mb-3" />
+                  <div className="h-28 bg-[#F0EFEB] rounded-2xl" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="text-4xl mb-4 opacity-40">📖</div>
+            <p className="text-sm text-[#A8A49D]">
+              {search || dateStart || dateEnd ? '没有匹配的日记' : '还没有日记'}
+            </p>
+          </div>
+        ) : (
+          /* ===== 时间轴 ===== */
+          <div className="space-y-8">
+            {dateGroups.map(([date, items]) => (
+              <div key={date} className="relative">
+                {/* 时间线竖线 */}
+                <div className="tl-line" style={{ left: 21 }} />
+
+                {/* 日期头 */}
+                <div className="relative flex items-center gap-3 mb-3" style={{ marginLeft: 54 }}>
+                  <div className="tl-dot" style={{ position: 'absolute', left: -39, top: '50%', marginTop: -7 }} />
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-semibold text-[#3A3836]">{formatJournalDate(items[0].created)}</span>
+                    <span className="text-[11px] text-[#A8A49D]">{items.length} 篇</span>
+                  </div>
+                </div>
+
+                {/* 日记卡片 */}
+                <div className="space-y-3" style={{ marginLeft: 54 }}>
+                  {items.map(e => {
+                    const s = stats(e.content ?? '')
+                    return (
+                      <div key={e.id} className="tl-card p-4" onClick={() => openDetail(e)}>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>
+                              {e.author}
+                            </span>
+                            <span className="text-sm font-semibold text-[#3A3836] truncate">{e.name}</span>
+                            {e.locked && <span className="text-xs flex-shrink-0 opacity-60">🔒</span>}
+                          </div>
+                          <span className="text-[11px] text-[#B0A590] font-mono flex-shrink-0 whitespace-nowrap">{s.chars}字·~{s.tokens}tok</span>
+                        </div>
+                        {e.locked ? (
+                          <p className="text-sm text-[#A8A49D] italic leading-relaxed">
+                            已上锁{e.unlock_hint ? ` · ${e.unlock_hint}` : ''}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-[#5B5854] leading-relaxed whitespace-pre-wrap line-clamp-3">
+                            {e.content}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* ===== 详情弹窗 ===== */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-10 overflow-y-auto"
+          style={{ background: 'rgba(58,56,54,0.35)', backdropFilter: 'blur(4px)' }}
+          onClick={closeDetail}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col"
+            style={{ maxHeight: '80vh', animation: 'modalIn 0.2s ease-out' }}
+            onClick={e => e.stopPropagation()}>
+            <style>{`@keyframes modalIn { from { opacity:0; transform:translateY(12px) scale(0.97) } to { opacity:1; transform:translateY(0) scale(1) } }`}</style>
+
+            {detailFetching ? (
+              <div className="flex items-center justify-center py-20 text-sm text-[#A8A49D]">读取中...</div>
+            ) : (
+              <>
+                {/* 头部 */}
+                <div className="px-6 pt-6 pb-4 border-b border-[#F0EFEB]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-lg font-bold text-[#3A3836] mb-2">{detail.entry.name}</h2>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#8A8681]">
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${authorColor(detail.entry.author)}`}>
+                          {detail.entry.author}
+                        </span>
+                        <span>日记: {formatBeijingDate(detail.entry.created)}</span>
+                        <span>创建: {formatBeijingDateTime(detail.entry.created)}</span>
+                        {detail.meta?.last_active && detail.meta.last_active !== detail.entry.created && (
+                          <span>修改: {formatBeijingDateTime(detail.meta.last_active)}</span>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={closeDetail}
+                      className="text-[#A8A49D] hover:text-[#3A3836] p-1.5 bg-[#F9F8F6] rounded-full flex-shrink-0 transition-colors text-sm leading-none">✕</button>
+                  </div>
+                </div>
+
+                {/* 内容区 */}
+                <div className="px-6 py-4 flex-1 overflow-y-auto custom-scroll" style={{ minHeight: 0 }}>
+                  {detail.entry.locked && detail.fullContent === (detail.entry.content ?? '') ? (
+                    <p className="text-sm text-[#A8A49D] italic py-6 text-center">
+                      已上锁{detail.entry.unlock_hint ? ` · 提示：${detail.entry.unlock_hint}` : ''}
+                    </p>
+                  ) : !editing ? (
+                    <div className="text-sm text-[#3A3836] leading-relaxed whitespace-pre-wrap">{detail.fullContent}</div>
+                  ) : (
+                    <textarea
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      className="w-full text-sm leading-relaxed resize-none outline-none border border-[#D97757] rounded-xl p-4 min-h-[200px]"
+                      style={{ background: '#FDFCFB' }}
+                      rows={14}
+                    />
+                  )}
+                </div>
+
+                {/* 底部操作区 */}
+                <div className="px-6 py-4 border-t border-[#F0EFEB]">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="text-[11px] text-[#B0A590] font-mono">
+                      {stats(detail.fullContent).chars} 字 · ~{stats(detail.fullContent).tokens} tokens
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {!editing ? (
+                        <button onClick={() => { setEditing(true); setEditContent(detail.fullContent) }}
+                          className="text-xs font-medium px-3 py-1.5 rounded-full border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] transition-colors">
+                          编辑
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => setEditing(false)}
+                            className="text-xs px-3 py-1.5 rounded-full text-[#8A8681] hover:text-[#3A3836] transition-colors">
+                            取消
+                          </button>
+                          <button onClick={saveEdit} disabled={saving}
+                            className="text-xs text-white px-4 py-1.5 rounded-full disabled:opacity-50 transition-all"
+                            style={{ background: 'linear-gradient(135deg, #E8A58F, #D97757)' }}>
+                            {saving ? '保存中…' : '保存更改'}
+                          </button>
+                        </>
+                      )}
+                      <button onClick={deleteJournal}
+                        className="text-xs font-medium text-[#C64B45] hover:text-red-700 transition-colors">
+                        抹除
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-[11px] text-[#A8A49D] font-mono">bucket_id: {detail.entry.id}</span>
+                    <button onClick={copyId}
+                      className="text-[11px] text-[#D97757] hover:underline flex-shrink-0">
+                      {copied ? '已复制' : '复制'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== 写新日记弹窗 ===== */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background: 'rgba(58,56,54,0.35)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowAdd(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5 sm:p-6"
+            style={{ animation: 'modalIn 0.2s ease-out' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 className="text-[#3A3836] font-semibold mb-4">写新日记</h3>
+
+            <input value={newName} onChange={e => setNewName(e.target.value)}
+              placeholder="标题（可选，留空自动生成）"
+              className="w-full border border-[#E8E6E1] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[#D97757] transition-colors" />
+
+            <textarea value={newContent} onChange={e => setNewContent(e.target.value)}
+              placeholder="写点什么…"
+              rows={8}
+              className="w-full border border-[#E8E6E1] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[#D97757] transition-colors resize-none leading-relaxed" />
+
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                {(['言之', '小羊', '共同'] as Author[]).map(a => (
+                  <button key={a} onClick={() => setNewAuthor(a)}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                      newAuthor === a ? authorColor(a) : 'bg-white border border-[#E8E6E1] text-[#8A8681] hover:bg-[#F9F8F6]'
+                    }`}>
+                    {a}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-[#6C6965] cursor-pointer select-none">
+                <input type="checkbox" checked={newLocked} onChange={e => setNewLocked(e.target.checked)}
+                  className="accent-[#D97757]" />
+                上锁
+              </label>
+            </div>
+
+            {newLocked && (
+              <input value={newUnlockHint} onChange={e => setNewUnlockHint(e.target.value)}
+                placeholder="解锁提示（日期如 2026-07-01 到点自动解锁，其他文本保持锁定当提示用）"
+                className="w-full border border-[#E8E6E1] rounded-xl px-3 py-2 text-xs mb-3 outline-none focus:border-[#D97757] transition-colors" />
+            )}
+
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setShowAdd(false)}
+                className="text-sm px-4 py-2 text-[#8A8681] hover:text-[#3A3836] transition-colors">
+                取消
+              </button>
+              <button onClick={submitNew} disabled={submitting || !newContent.trim()}
+                className="text-sm text-white px-5 py-2 rounded-full disabled:opacity-50 transition-all hover:shadow-md"
+                style={{ background: 'linear-gradient(135deg, #E8A58F, #D97757)' }}>
+                {submitting ? '保存中…' : '保存日记'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

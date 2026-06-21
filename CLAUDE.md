@@ -25,7 +25,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 所有服务端 API 调用统一用 `getSessionCookie()`：每次调用 OB 前 POST `/auth/login` 重新获取 session cookie。**不依赖浏览器 cookie**（跨域无法传递）。
 
-`lib/api.ts` 有一份，各 route.ts 也各自有一份（待重构统一）。
+`lib/api.ts` 有一份，所有 route.ts 都 import 同一份，已统一。
 
 ---
 
@@ -37,8 +37,10 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 |------|------|------|
 | `buckets/route.ts` | GET | 获取所有桶列表 |
 | `bucket/[id]/route.ts` | GET | 单个桶详情 |
-| `add-bucket/route.ts` | POST | 新建桶（走 MCP trace） |
-| `edit-bucket/route.ts` | POST | 编辑桶（MCP trace，支持 content/pinned/resolved/digested/tags/importance/delete） |
+| `add-bucket/route.ts` | POST | 新建桶（已从 MCP 迁移到 REST POST /api/bucket） |
+| `edit-bucket/route.ts` | POST | 编辑桶（已从 MCP 迁移到 REST PATCH/DELETE /api/bucket/{id}，支持 content/pinned/resolved/digested/tags/importance/delete） |
+| `journal/route.ts` | GET/POST | GET 日记列表；POST 创建新日记 |
+| `to-journal/route.ts` | POST | 将已有桶转为日记（不可逆，body: { id, author, locked, unlock_hint }） |
 | `search/route.ts` | GET | 搜索桶（?q=&include_archive=） |
 | `review-status/route.ts` | POST | 审阅状态 |
 | `breath-debug/route.ts` | GET | 模拟 breath（?q=&valence=&arousal=&threshold=） |
@@ -54,8 +56,11 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 |------|------|
 | `page.tsx` | 主页面（~1100行，含时间线/记忆格/审阅三个 tab） |
 | `breath-sim/page.tsx` | 模拟 Breath 页面（四维评分可视化，threshold 动态调控） |
+| `graph/page.tsx` | 关系图谱页（力导向聚类图 + 三级缓存 + BucketDetailDrawer 抽屉） |
+| `journal/page.tsx` | 日记页（垂直时间轴布局 + 日期分组 + 搜索/日期筛选 + 居中详情弹窗） |
+| `review/page.tsx` | 审阅页面 |
 | `prompts/page.tsx` | Prompt 配置页面（可折叠编辑，测试弹窗） |
-| `bucket/[id]/page.tsx` | 桶详情独立页面 |
+| `bucket/[id]/page.tsx` | 桶详情独立页面（旧版，graph 页已改用 BucketDetailDrawer） |
 
 ### `app/lib/api.ts`
 
@@ -63,7 +68,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 ### `components/BucketDetailDrawer`
 
-桶详情抽屉，主页面和 breath-sim 共用。
+桶详情抽屉，主页面、breath-sim、graph 页共用。
 
 ```typescript
 interface Props {
@@ -84,6 +89,7 @@ interface Props {
   onTouch: (id: string) => Promise<void>
   onActivate: (id: string) => Promise<void>
   onArchive: (id: string) => Promise<void>
+  onConvertToJournal?: (id: string, args: { author: string; locked: boolean; unlock_hint: string }) => Promise<void>
 }
 ```
 
@@ -100,10 +106,20 @@ POST /auth/login  { password }  →  set-cookie
 ```
 GET  /api/buckets                        # 所有桶（include_archive=True，含已归档）
 GET  /api/bucket/{id}                    # 单个桶详情
+POST /api/bucket                         # 新增桶（已从 MCP 迁移到 REST）
+PATCH /api/bucket/{id}                   # 更新桶字段（已从 MCP 迁移到 REST）
+DELETE /api/bucket/{id}                  # 硬删除桶（已从 MCP 迁移到 REST）
 GET  /api/search?q=&include_archive=&limit=  # 搜索（limit默认=max_results，show_all默认false）
 POST /api/touch/{id}?ripple=true/false   # 轻触(false) 或完整激活(true，+1激活+涟漪)
 POST /api/archive/{id}                   # 物理归档（移文件到archive_dir）
 POST /api/unarchive/{id}                 # 恢复归档
+```
+
+### 日记系统
+```
+GET  /api/journal                        # 日记列表（返回 [{ id, name, author, created, locked, content?, unlock_hint? }]）
+POST /api/journal                        # 创建新日记（body: { content, name?, author, locked, unlock_hint? }）
+POST /api/bucket/{id}/to-journal         # 已有桶转为日记（body: { author, locked, unlock_hint? }，不可逆）
 ```
 
 ### 模拟 Breath（Debug）
@@ -126,11 +142,6 @@ POST /api/prompts/test { name, content, prompt_override? }
 # 测试 prompt，绕过 SQLite 缓存直接调 LLM，prompt_override 不需先应用即可测试
 ```
 
-### MCP（不走 REST）
-```
-edit-bucket / add-bucket 走 MCP trace 工具，通过 getMcpSession() 获取 session
-```
-
 ---
 
 ## 关键实现细节
@@ -138,10 +149,8 @@ edit-bucket / add-bucket 走 MCP trace 工具，通过 getMcpSession() 获取 se
 ### Next.js 15 动态路由
 params 是 Promise，必须 `const { id } = await params`，**不能直接用 params.id**（会是 undefined）。
 
-### MCP vs REST 边界
-- `trace/hold/grow/breath` 等 OB 工具 → MCP 协议
-- `buckets/search/touch/archive/config/prompts` → REST API
-- `edit-bucket/add-bucket` 目前走 MCP，待迁移到 REST
+### MCP vs REST 边界（全部已迁移到 REST，不再走 MCP）
+所有前端操作现在都通过 REST API 代理到 OB 后端，不再经过 MCP 协议。
 
 ### OB 目录结构
 桶存文件系统：`{buckets_dir}/permanent/`, `dynamic/`, `feel/`, `archive/`
@@ -162,19 +171,33 @@ params 是 Promise，必须 `const { id } = await params`，**不能直接用 pa
 "保留内容类型标签（如：剧情游戏、故事虚构、角色扮演）"
 防止游戏剧情内容被脱水成真实事件记录。
 
+### 图谱页缓存策略（`app/graph/page.tsx`）
+三级缓存以减少重复加载：
+1. **sessionStorage `graph_data`** — 缓存 API 返回的桶列表，刷新/切Tab回来时不重拉
+2. **localStorage `graph_positions`** — 缓存力导向布局计算结果（200节点 × 150迭代 = O(n²) 计算），带指纹校验
+3. **`computedKeyRef`** — 内存级防重复计算，相同数据 hash 不重新跑力导向
+- 指纹 `simpleHash()` 基于桶列表的 id + score + domain 拼接
+- 数据变化时自动失效重算
+
+### 日记页设计（`app/journal/page.tsx`）
+- 垂直时间轴布局：CSS `.tl-line`（2px 竖线，left:21）、`.tl-dot`（14px 圆点，绝对定位 left: -39）
+- 卡片内容区域统一 `marginLeft: 54`（为时间轴留空），标题和弹窗用不同的组件样式
+- 详情弹窗：居中 overlay，`max-h-[80vh]` 固定高度，内容区 `overflow-y-auto custom-scroll`
+- 弹窗样式**和 BucketDetailDrawer 不同** — 日记弹窗是自己实现的居中 modal，不是侧边抽屉
+- 搜索框：仿主页面搜索样式（圆角 container + 放大镜 SVG icon + input）
+- 日期筛选：合并为单个组件，两个 date input 用"至"连接
+- 底部统计：言之（橙）、小羊（蓝）、共同（灰）三种 author 标签色
+
 ---
 
 ## 待办事项
 
 ### Bug / 优化
-- [ ] getSessionCookie 统一到 lib/api.ts，各 route.ts 不再各自实现
-- [ ] MCP 接口迁移到 REST（add-bucket, edit-bucket）
 - [ ] Prompt 修改持久化（目前只改内存，重启丢失）
 - [ ] dehydrate 缓存失效策略（prompt 改了后旧缓存应清除）
 
 ### 新功能（按优先级）
-- [ ] breath-sim：语义关联桶展示
-- [ ] 单个桶详情显示语义关联桶
+- [ ] 关系图谱页和主页面等 UI 风格统一（graph 页视觉和其他页面有不一致）
 - [ ] 导入记忆页面（从开发者 dashboard 移植）
 - [ ] 梦境展示页面
 - [ ] 情绪系统前端页面
