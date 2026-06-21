@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
-import { getBuckets } from '@/app/lib/api'
 
 interface GraphBucket {
   id: string
@@ -45,7 +44,9 @@ export default function GraphPage() {
   useEffect(() => {
     async function load() {
       try {
-        const list: GraphBucket[] = await getBuckets()
+        const res = await fetch('/api/buckets')
+        const list: GraphBucket[] = await res.json()
+        if (!res.ok) throw new Error((list as unknown as { error?: string })?.error ?? '读取失败')
         setAllBuckets(list)
 
         let included: string[] | null = null

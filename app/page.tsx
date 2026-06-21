@@ -5,7 +5,6 @@ import { Suspense, useEffect, useState, useMemo, useCallback, useRef } from 'rea
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import BucketDetailDrawer from './components/BucketDetailDrawer'
-import { getBuckets } from '@/app/lib/api'
 import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
 
 // ==================== 类型定义 ====================
@@ -1154,7 +1153,7 @@ function HomeClient() {
           const data = await res.json()
           if (data.ok) {
             setSelected(null)
-            const fresh = await getBuckets()
+            const fresh = await fetch('/api/buckets').then(r => r.json())
             setBuckets(fresh)
           }
         }}
@@ -1170,7 +1169,7 @@ function HomeClient() {
           const data = await res.json()
           if (data.ok) {
             setSelected(null)
-            const fresh = await getBuckets()
+            const fresh = await fetch('/api/buckets').then(r => r.json())
             setBuckets(fresh)
           } else {
             alert(data.error ?? '转换失败')
