@@ -1161,6 +1161,21 @@ function HomeClient() {
         onActivate={async (id) => {
           await fetch(`/api/touch/${id}?ripple=true`, { method: 'POST' })
         }}
+        onConvertToJournal={async (id, args) => {
+          const res = await fetch('/api/to-journal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, ...args }),
+          })
+          const data = await res.json()
+          if (data.ok) {
+            setSelected(null)
+            const fresh = await getBuckets()
+            setBuckets(fresh)
+          } else {
+            alert(data.error ?? '转换失败')
+          }
+        }}
       />
 
       {/* 悬浮加号 */}

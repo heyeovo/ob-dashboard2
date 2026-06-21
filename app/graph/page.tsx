@@ -28,6 +28,7 @@ export default function GraphPage() {
   const [nodes, setNodes] = useState<GraphBucket[]>([])
   const [positions, setPositions] = useState<Record<string, Pos>>({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dragNodeId, setDragNodeId] = useState<string | null>(null)
@@ -43,42 +44,48 @@ export default function GraphPage() {
 
   useEffect(() => {
     async function load() {
-      const list: GraphBucket[] = await getBuckets()
-      setAllBuckets(list)
-
-      let included: string[] | null = null
       try {
-        const raw = localStorage.getItem(STORAGE_INCLUDED_KEY)
-        if (raw) included = JSON.parse(raw)
-      } catch {}
-      if (!included) {
-        included = list
-          .filter(b => b.wish || b.todo || b.pinned || (b.related && b.related.length > 0))
-          .map(b => b.id)
-      }
-      const includedSet = new Set(included)
-      const initialNodes = list.filter(b => includedSet.has(b.id))
-      setNodes(initialNodes)
+        const list: GraphBucket[] = await getBuckets()
+        setAllBuckets(list)
 
-      let savedPos: Record<string, Pos> = {}
-      try {
-        const raw = localStorage.getItem(STORAGE_POS_KEY)
-        if (raw) savedPos = JSON.parse(raw)
-      } catch {}
-      const center = { x: 480, y: 300 }
-      const radius = Math.min(280, 60 + initialNodes.length * 14)
-      const next: Record<string, Pos> = { ...savedPos }
-      initialNodes.forEach((n, i) => {
-        if (!next[n.id]) {
-          const angle = (i / Math.max(1, initialNodes.length)) * Math.PI * 2
-          next[n.id] = {
-            x: center.x + radius * Math.cos(angle),
-            y: center.y + radius * Math.sin(angle),
-          }
+        let included: string[] | null = null
+        try {
+          const raw = localStorage.getItem(STORAGE_INCLUDED_KEY)
+          if (raw) included = JSON.parse(raw)
+        } catch {}
+        if (!included) {
+          included = list
+            .filter(b => b.wish || b.todo || b.pinned || (b.related && b.related.length > 0))
+            .map(b => b.id)
         }
-      })
-      setPositions(next)
-      setLoading(false)
+        const includedSet = new Set(included)
+        const initialNodes = list.filter(b => includedSet.has(b.id))
+        setNodes(initialNodes)
+
+        let savedPos: Record<string, Pos> = {}
+        try {
+          const raw = localStorage.getItem(STORAGE_POS_KEY)
+          if (raw) savedPos = JSON.parse(raw)
+        } catch {}
+        const center = { x: 480, y: 300 }
+        const radius = Math.min(280, 60 + initialNodes.length * 14)
+        const next: Record<string, Pos> = { ...savedPos }
+        initialNodes.forEach((n, i) => {
+          if (!next[n.id]) {
+            const angle = (i / Math.max(1, initialNodes.length)) * Math.PI * 2
+            next[n.id] = {
+              x: center.x + radius * Math.cos(angle),
+              y: center.y + radius * Math.sin(angle),
+            }
+          }
+        })
+        setPositions(next)
+      } catch (e) {
+        console.error('图谱加载失败', e)
+        setLoadError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [])
@@ -237,6 +244,12 @@ export default function GraphPage() {
   const selected = nodes.find(n => n.id === selectedId) ?? null
 
   if (loading) return <div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">读取中...</div>
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center h-screen bg-[#FCFAF8] text-[#C64B45] gap-3 px-4 text-center">
+      <span>图谱加载失败：{loadError}</span>
+      <Link href="/" className="text-sm text-[#D97757] underline">返回首页</Link>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans pb-20">

@@ -47,6 +47,7 @@ interface Props {
   onTouch: (id: string) => Promise<void>
   onArchive: (id: string) => Promise<void>
   onActivate: (id: string) => Promise<void>
+  onConvertToJournal?: (id: string, args: { author: string; locked: boolean; unlock_hint: string }) => Promise<void>
 }
 
 export default function BucketDetailDrawer({
@@ -67,9 +68,16 @@ export default function BucketDetailDrawer({
   onTouch,
   onArchive,
   onActivate,
+  onConvertToJournal,
 }: Props) {
   // 内部缓存 importance 输入值
   const [localImp, setLocalImp] = useState<number | null>(null)
+  // 设为日记的小表单
+  const [showJournalForm, setShowJournalForm] = useState(false)
+  const [journalAuthor, setJournalAuthor] = useState<'言之' | '小羊' | '共同'>('共同')
+  const [journalLocked, setJournalLocked] = useState(false)
+  const [journalUnlockHint, setJournalUnlockHint] = useState('')
+  const [convertingToJournal, setConvertingToJournal] = useState(false)
 
   return (
     <div className={`fixed inset-0 z-50 transition-opacity duration-300 ${selected || detailLoading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
@@ -258,6 +266,62 @@ export default function BucketDetailDrawer({
                       className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg disabled:opacity-50">{saving ? '保存中' : '保存更改'}</button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* 设为日记 */}
+            {onConvertToJournal && (
+              <div className="mb-4">
+                {showJournalForm ? (
+                  <div className="bg-[#FDFCFB] border border-[#E8E6E1] rounded-xl p-4">
+                    <div className="text-xs text-[#A8A49D] mb-3">
+                      转为日记后会移出常规记忆库，只能在日记页编辑，不可逆。
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      {(['言之', '小羊', '共同'] as const).map(a => (
+                        <button key={a} onClick={() => setJournalAuthor(a)}
+                          className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                            journalAuthor === a ? 'bg-[#FDF0ED] text-[#D97757]' : 'bg-white border border-[#E8E6E1] text-[#8A8681] hover:bg-[#F9F8F6]'
+                          }`}>
+                          {a}
+                        </button>
+                      ))}
+                      <label className="flex items-center gap-1.5 text-xs text-[#6C6965] cursor-pointer ml-2">
+                        <input type="checkbox" checked={journalLocked} onChange={e => setJournalLocked(e.target.checked)} className="accent-[#D97757]" />
+                        上锁
+                      </label>
+                    </div>
+                    {journalLocked && (
+                      <input
+                        value={journalUnlockHint}
+                        onChange={e => setJournalUnlockHint(e.target.value)}
+                        placeholder="解锁提示（日期到点自动解锁，其他文本保持锁定）"
+                        className="w-full text-xs border border-[#E8E6E1] rounded-lg px-3 py-2 mb-3 outline-none focus:border-[#D97757]"
+                      />
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setShowJournalForm(false)} className="text-sm text-[#8A8681] hover:text-[#3A3836]">取消</button>
+                      <button
+                        disabled={convertingToJournal}
+                        onClick={async () => {
+                          if (!confirm('确定把这个桶转为日记？转换后不可恢复为常规记忆。')) return
+                          setConvertingToJournal(true)
+                          await onConvertToJournal(selected.id, { author: journalAuthor, locked: journalLocked, unlock_hint: journalUnlockHint })
+                          setConvertingToJournal(false)
+                          setShowJournalForm(false)
+                          onClose()
+                        }}
+                        className="text-sm bg-[#D97757] text-white px-4 py-1.5 rounded-lg disabled:opacity-50 hover:bg-[#B65D40]"
+                      >
+                        {convertingToJournal ? '转换中…' : '确认转为日记'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowJournalForm(true)} className="text-xs text-[#8A8681] hover:text-[#3A3836] underline">
+                    设为日记
+                  </button>
+                )}
               </div>
             )}
 
