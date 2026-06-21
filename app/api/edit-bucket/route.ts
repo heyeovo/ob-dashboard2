@@ -1,47 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { BASE_URL, getSessionCookie } from '../../lib/api'
 
-const MCP_URL = 'https://forxiaoyan.zeabur.app/mcp'
-
-async function getMcpSession() {
-  const res = await fetch(MCP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
-    body: JSON.stringify({
-      jsonrpc: '2.0', id: 1, method: 'initialize',
-      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'ob-dashboard', version: '1.0' } }
-    })
-  })
-  return res.headers.get('mcp-session-id')
-}
-
+// 编辑/删除桶——原来走 MCP trace 工具，现在改用 REST：
+// 普通字段更新 → PATCH /api/bucket/{id}，硬删除 → DELETE /api/bucket/{id}
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { id, content, pinned, resolved, digested, tags, importance, delete: del } = body
+  const { id, delete: del, ...fields } = body
 
   if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
 
-  const sessionId = await getMcpSession()
-  if (!sessionId) return NextResponse.json({ error: 'failed to get session' }, { status: 500 })
+  try {
+    const cookie = await getSessionCookie()
 
-  const args: Record<string, unknown> = { bucket_id: id }
-  if (content !== undefined) args.content = content
-  if (pinned !== undefined) args.pinned = pinned
-  if (resolved !== undefined) args.resolved = resolved
-  if (digested !== undefined) args.digested = digested
-  if (tags !== undefined) args.tags = tags
-  if (importance !== undefined) args.importance = importance  // ← 新增
-  if (del !== undefined) args.delete = del
+    if (del) {
+      const res = await fetch(`${BASE_URL}/api/bucket/${id}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie },
+      })
+      const data = await res.json()
+      if (!res.ok) return NextResponse.json({ error: data.error ?? '删除失败' }, { status: res.status })
+      return NextResponse.json({ ok: true, result: data })
+    }
 
-  const res = await fetch(MCP_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/event-stream',
-      'mcp-session-id': sessionId
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'trace', arguments: args } })
-  })
-
-  const data = await res.text()
-  return NextResponse.json({ ok: true, result: data })
+    const res = await fetch(`${BASE_URL}/api/bucket/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(fields),
+    })
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json({ error: data.error ?? '更新失败' }, { status: res.status })
+    return NextResponse.json({ ok: true, result: data })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
 }

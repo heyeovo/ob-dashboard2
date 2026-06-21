@@ -21,6 +21,10 @@ interface BucketDetail {
     created: string
     last_active: string
     activation_count?: number
+    wish?: boolean
+    todo?: string
+    todo_done?: boolean
+    related?: string[]
   }
 }
 
@@ -186,6 +190,38 @@ export default function BucketDetailDrawer({
                 className="text-xs py-2 rounded-lg font-medium bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] transition-colors disabled:opacity-50">
                 激 活
               </button>
+              <button disabled={operating}
+                onClick={() => onTraceOp(selected.id, { wish: selected.metadata.wish ? 0 : 1 })}
+                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                  selected.metadata.wish ? 'bg-[#FDF3E7] text-[#B8860B]' : 'bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                }`}>
+                {selected.metadata.wish ? '已悬念' : '标悬念'}
+              </button>
+            </div>
+
+            {/* 待办 */}
+            <div className="flex items-center gap-3 bg-white/60 backdrop-blur-sm border border-[#E8E6E1] rounded-xl px-4 py-2.5 mb-4">
+              <input
+                type="checkbox"
+                checked={!!selected.metadata.todo_done}
+                disabled={operating || !selected.metadata.todo}
+                onChange={() => onTraceOp(selected.id, { todo_done: selected.metadata.todo_done ? 0 : 1 })}
+                className="accent-[#D97757] w-4 h-4 flex-shrink-0"
+              />
+              <input
+                key={selected.id}
+                type="text"
+                placeholder="写点待办…"
+                defaultValue={selected.metadata.todo ?? ''}
+                disabled={operating}
+                onBlur={(e) => {
+                  if (e.target.value === (selected.metadata.todo ?? '')) return
+                  onTraceOp(selected.id, { todo: e.target.value })
+                }}
+                className={`flex-1 text-sm bg-transparent outline-none ${
+                  selected.metadata.todo_done ? 'line-through text-[#A8A49D]' : 'text-[#3A3836]'
+                }`}
+              />
             </div>
 
                         {/* 内容区 */}

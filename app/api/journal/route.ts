@@ -4,10 +4,10 @@ import { BASE_URL, getSessionCookie } from '../../lib/api'
 export async function GET() {
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/prompts`, {
-      headers: { Cookie: cookie },
-    })
-    return NextResponse.json(await res.json())
+    const res = await fetch(`${BASE_URL}/api/journal`, { headers: { Cookie: cookie } })
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json({ error: data.error ?? '读取失败' }, { status: res.status })
+    return NextResponse.json(data)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -17,12 +17,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/prompts`, {
+    const res = await fetch(`${BASE_URL}/api/journal`, {
       method: 'POST',
-      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify(body),
     })
-    return NextResponse.json(await res.json())
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json({ error: data.error ?? '创建失败' }, { status: res.status })
+    return NextResponse.json(data)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

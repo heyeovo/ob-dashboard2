@@ -26,6 +26,10 @@ interface Bucket {
   score: number
   activation_count?: number
   content_preview: string
+  wish?: boolean
+  todo?: string
+  todo_done?: boolean
+  related?: string[]
 }
 
 interface BucketDetail {
@@ -46,6 +50,10 @@ interface BucketDetail {
     created: string
     last_active: string
     activation_count?: number
+    wish?: boolean
+    todo?: string
+    todo_done?: boolean
+    related?: string[]
   }
 }
 
@@ -54,7 +62,7 @@ type DatePreset = 'all' | '7d' | '30d' | '90d' | 'custom'
 type Status = '已精修' | '存疑' | null
 
 interface ReviewBucket extends Bucket {
-  content?: { raw?: string } | string
+  content?: string
 }
 
 // ==================== 工具函数 ====================
@@ -279,8 +287,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
 
   const getContent = (b: ReviewBucket | null) => {
     if (!b) return ''
-    if (typeof b.content === 'string') return b.content
-    return b.content?.raw ?? ''
+    return b.content ?? ''
   }
 
   const startEdit = () => {
@@ -730,6 +737,8 @@ function HomeClient() {
         {b.resolved && <span className="text-xs bg-[#EDF4FC] text-[#3B72B9] px-1.5 py-0.5 rounded-full">已解决</span>}
         {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
         {b.type === 'archived' && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
+        {b.wish && <span title="悬念" className="text-xs text-[#B8860B] flex-shrink-0">✦</span>}
+        {b.todo && !b.todo_done && <span title={`待办：${b.todo}`} className="text-xs text-[#D97757] flex-shrink-0">☐</span>}
       </div>
       <div className="absolute top-4 right-4 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
         <div className="min-w-[56px] bg-[#FFF5F2] rounded-full px-2.5 py-0.5 flex items-center justify-center">
@@ -844,6 +853,12 @@ function HomeClient() {
           ))}
           <Link href="/breath-sim" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
             模拟 Breath
+          </Link>
+          <Link href="/graph" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            关系图谱
+          </Link>
+          <Link href="/journal" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
+            日记
           </Link>
           <Link href="/prompts" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
             权重配置

@@ -161,6 +161,12 @@ export default function BreathSimPage() {
           <span className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap text-[#3A3836] border-b-2 border-[#D97757]">
             模拟 Breath
           </span>
+          <Link href="/graph" className="hover:text-[#3A3836] cursor-pointer transition-colors h-full flex items-center whitespace-nowrap">
+            关系图谱
+          </Link>
+          <Link href="/journal" className="hover:text-[#3A3836] cursor-pointer transition-colors h-full flex items-center whitespace-nowrap">
+            日记
+          </Link>
           <Link href="/prompts" className="hover:text-[#3A3836] cursor-pointer transition-colors h-full flex items-center whitespace-nowrap">
             权重配置
           </Link>

@@ -1,8 +1,8 @@
-const BASE_URL = process.env.OMBRE_BASE_URL || process.env.NEXT_PUBLIC_OMBRE_BASE_URL!;
+export const BASE_URL = process.env.OMBRE_BASE_URL || process.env.NEXT_PUBLIC_OMBRE_BASE_URL!;
 const PASSWORD = process.env.OMBRE_SESSION || process.env.NEXT_PUBLIC_OMBRE_SESSION!;
 
 // 自动登录并获取 Cookie
-async function getSessionCookie(): Promise<string> {
+export async function getSessionCookie(): Promise<string> {
     const loginRes = await fetch(`${BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

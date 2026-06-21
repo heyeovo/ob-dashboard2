@@ -12,7 +12,7 @@ type Bucket = {
 }
 
 type FullBucket = Bucket & {
-  content?: { raw?: string } | string
+  content?: string
 }
 
 type Status = '已精修' | '存疑' | null
@@ -107,8 +107,7 @@ export default function ReviewPage() {
 
   const getContent = (b: FullBucket | null) => {
     if (!b) return ''
-    if (typeof b.content === 'string') return b.content
-    return b.content?.raw ?? ''
+    return b.content ?? ''
   }
 
   if (loading) return (

@@ -1,34 +1,19 @@
 import { NextResponse } from 'next/server'
+import { BASE_URL, getSessionCookie } from '../../lib/api'
 
-const OB_MCP = `${process.env.OMBRE_BASE_URL}/mcp`
-
-async function callOB(tool: string, args: Record<string, unknown>) {
-  const initRes = await fetch(OB_MCP, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'ob-dashboard', version: '1.0' } } })
-  })
-  const sessionId = initRes.headers.get('mcp-session-id')
-  const res = await fetch(OB_MCP, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream', ...(sessionId ? { 'mcp-session-id': sessionId } : {}) },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: tool, arguments: args } })
-  })
-  const rawText = await res.text()
-  const dataLine = rawText.split('\n').find(line => line.startsWith('data: '))
-  const data = JSON.parse(dataLine?.slice(6) ?? '{}')
-  return data?.result?.content?.[0]?.text ?? ''
-}
-
+// 新增记忆——原来走 MCP hold 工具，现在改用 REST POST /api/bucket
 export async function POST(req: Request) {
   try {
     const { content, tags, importance } = await req.json()
-    const result = await callOB('hold', {
-      content,
-      tags,
-      importance: Number(importance),
+    const cookie = await getSessionCookie()
+    const res = await fetch(`${BASE_URL}/api/bucket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ content, tags, importance: Number(importance) }),
     })
-    return NextResponse.json({ ok: true, result })
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json({ error: data.error ?? '创建失败' }, { status: res.status })
+    return NextResponse.json({ ok: true, result: data })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
