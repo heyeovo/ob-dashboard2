@@ -4,6 +4,12 @@
 /* Design Tokens — 视觉层变量                    */
 /* ============================================ */
 
+/* 消除移动端 300ms 点击延迟 + 移除 iOS 点击高亮 */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 :root {
   /* ---- Color: brand / 品牌色 ---- */
   --color-primary:          #D97757;

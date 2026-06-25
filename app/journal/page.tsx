@@ -260,9 +260,10 @@ export default function JournalPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <style>{`
-        .tl-line { position: absolute; left: 20px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, #E8D5C4, #E8D5C4 75%, transparent); }
-        .tl-dot { position: relative; z-index: 1; width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; background: var(--color-primary); box-shadow: 0 0 0 3px var(--color-bg); }
-        .tl-card { background: #FFFFFF; border: 1px solid var(--color-border-light); border-radius: 16px; transition: all 0.2s ease; cursor: pointer; }
+        .tl-line { position: absolute; left: 18px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, #E8D5C4, #E8D5C4 75%, transparent); }
+        .tl-dot { position: relative; z-index: 1; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: var(--color-primary); box-shadow: 0 0 0 3px var(--color-bg); }
+        .tl-card { background: #FFFFFF; border: 1px solid var(--color-border-light); border-radius: 16px; transition: all 0.15s ease; cursor: pointer; }
+        .tl-card:active { box-shadow: 0 4px 16px rgba(180,160,140,0.15); transform: scale(0.985); }
         .tl-card:hover { box-shadow: 0 4px 16px rgba(180,160,140,0.15); transform: translateY(-1px); }
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -272,7 +273,7 @@ export default function JournalPage() {
       {/* ===== 顶部导航 ===== */}
       <NavBar activeSlug="journal" />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 pb-24">
 
         {/* ===== 标题栏 ===== */}
         <div className="flex items-center justify-between mb-5">
@@ -345,8 +346,8 @@ export default function JournalPage() {
                 <div className="tl-line" style={{ left: 21 }} />
 
                 {/* 日期头 */}
-                <div className="relative flex items-center gap-3 mb-3" style={{ marginLeft: 54 }}>
-                  <div className="tl-dot" style={{ position: 'absolute', left: -39, top: '50%', marginTop: -7 }} />
+                <div className="relative flex items-center gap-3 mb-3" style={{ marginLeft: 48 }}>
+                  <div className="tl-dot" style={{ position: 'absolute', left: -30, top: '50%', marginTop: -6 }} />
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-semibold text-[var(--color-text-primary)]">{formatJournalDate(items[0].created)}</span>
                     <span className="text-[11px] text-[var(--color-text-disabled)]">{items.length} 篇</span>
@@ -354,11 +355,11 @@ export default function JournalPage() {
                 </div>
 
                 {/* 日记卡片 */}
-                <div className="space-y-3" style={{ marginLeft: 54 }}>
+                <div className="space-y-3" style={{ marginLeft: 48 }}>
                   {items.map(e => {
                     const s = stats(e.content ?? '')
                     return (
-                      <div key={e.id} className="tl-card p-4" onClick={() => openDetail(e)}>
+                      <div key={e.id} className="tl-card p-3 sm:p-4" onClick={() => openDetail(e)}>
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>
@@ -533,7 +534,7 @@ export default function JournalPage() {
 
       {/* 悬浮加号 */}
       <button onClick={() => { setShowAdd(true); resetNewForm() }}
-        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center z-50">
+        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
         +
       </button>
     </div>

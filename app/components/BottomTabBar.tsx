@@ -51,7 +51,7 @@ export default function BottomTabBar() {
                 <button
                   key={tab.slug}
                   onClick={() => setShowMore(prev => !prev)}
-                  className={`flex flex-col items-center gap-1 min-w-[56px] transition-colors duration-150 ${
+                  className={`flex flex-col items-center gap-1 min-w-[56px] transition-all duration-150 active:scale-90 ${
                     isActive ? 'text-[#2D2A4A] font-semibold' : 'text-slate-400'
                   }`}
                 >

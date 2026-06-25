@@ -738,14 +738,14 @@ function HomeClient() {
   const BucketCard = ({ b }: { b: Bucket }) => (
   <div
     onClick={() => openBucket(b.id)}
-    className={`bg-white rounded-xl p-4 sm:p-5 hover:shadow-md cursor-pointer border transition-all duration-200 group w-full relative ${
+    className={`bg-white rounded-xl p-3 sm:p-5 hover:shadow-md cursor-pointer border transition-all duration-200 group w-full relative active:scale-[0.985] touch-pan-y ${
       (b.noise || (b.resolved && b.importance === 1))
         ? 'border-[var(--color-border)] opacity-50 saturate-50'
         : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'
     }`}
   >
     <div className="flex items-start justify-between mb-1 gap-2 sm:gap-3">
-      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap pr-16 sm:pr-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap pr-14 sm:pr-0">
         {b.pinned && <span className="text-[var(--color-primary)] text-xs sm:text-sm flex-shrink-0">★</span>}
         <span className="font-semibold text-[var(--color-text-primary)] text-sm sm:text-base truncate group-hover:text-[var(--color-primary)] transition-colors">
           {b.name}
@@ -755,8 +755,8 @@ function HomeClient() {
         {b.wish && <span title="悬念" className="text-xs text-[var(--color-wish)] flex-shrink-0">✦</span>}
         {b.todo && !b.todo_done && <span title={`待办：${b.todo}`} className="text-xs text-[var(--color-primary)] flex-shrink-0">☐</span>}
       </div>
-      <div className="absolute top-4 right-4 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
-        <div className="min-w-[56px] bg-[#FFF5F2] rounded-full px-2.5 py-0.5 flex items-center justify-center">
+      <div className="absolute top-3 right-3 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
+        <div className="min-w-[48px] sm:min-w-[56px] bg-[#FFF5F2] rounded-full px-2 sm:px-2.5 py-0.5 flex items-center justify-center">
           <span className="text-xs text-[var(--color-primary)] font-medium leading-tight">
             score {b.score != null ? b.score.toFixed(1) : '—'}
           </span>
@@ -764,7 +764,7 @@ function HomeClient() {
         <ImpSignal importance={b.importance} />
       </div>
     </div>
-    <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] line-clamp-2 mb-3 sm:mb-4 leading-relaxed pr-20">
+    <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] line-clamp-2 mb-2.5 sm:mb-4 leading-relaxed pr-16 sm:pr-20">
       {b.content_preview}
     </p>
 
@@ -852,7 +852,7 @@ function HomeClient() {
       <NavBar activeSlug={activeTab} onTabClick={(tab) => router.replace(`/?tab=${tab}`, { scroll: false })} />
 
       {/* Mobile-only header */}
-      <header className="md:hidden sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)] px-4 h-12 flex items-center justify-between">
+      <header className="md:hidden sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)] px-3 h-12 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">Ombre Brain</span>
@@ -860,7 +860,7 @@ function HomeClient() {
         <MobileViewSwitch />
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-10">
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10">
         {activeTab !== 'review' && (
           <div className="hidden md:block mb-6 sm:mb-8">
             <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)] mb-2 sm:mb-3">
@@ -1163,7 +1163,7 @@ function HomeClient() {
 
       {/* 悬浮加号 */}
       <button onClick={() => setShowAdd(true)}
-        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center z-50">
+        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
         +
       </button>
 
