@@ -2,17 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { BASE_URL, getSessionCookie } from '../../lib/api'
 
 export async function GET(req: NextRequest) {
-  // Forward all query params transparently — needed for simulate, include_vector, limit, etc.
-  // 透传全部 query 参数给后端
-  const backendUrl = `${BASE_URL}/api/search?${new URL(req.url).searchParams.toString()}`
+  const { searchParams } = new URL(req.url)
+  const limit = searchParams.get('limit') || '20'
+
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(backendUrl, {
+    const params = new URLSearchParams({ limit })
+    const res = await fetch(`${BASE_URL}/api/recent-searches?${params}`, {
       headers: { Cookie: cookie },
     })
     const data = await res.json()
     return NextResponse.json(data)
   } catch (e) {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }

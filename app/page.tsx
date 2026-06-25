@@ -5,6 +5,12 @@ import { Suspense, useEffect, useState, useMemo, useCallback, useRef } from 'rea
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import BucketDetailDrawer from './components/BucketDetailDrawer'
+import NavBar from './components/NavBar'
+import StatusBadge, { statusLabel } from './components/StatusBadge'
+import DetailPanel from './components/DetailPanel'
+import Card from './components/Card'
+import SearchBar from './components/SearchBar'
+import FilterBar, { FilterPill } from './components/FilterBar'
 import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
 
 // ==================== 类型定义 ====================
@@ -29,12 +35,14 @@ interface Bucket {
   todo?: string
   todo_done?: boolean
   related?: string[]
+  noise?: boolean  // resolved + importance==1
 }
 
 interface BucketDetail {
   id: string
   content: string
   score: number
+  noise?: boolean
   metadata: {
     name: string
     domain: string[]
@@ -56,7 +64,7 @@ interface BucketDetail {
   }
 }
 
-type QuickFilter = 'all' | 'pinned' | 'important' | 'feel' | 'digested' | 'resolved' | 'archived' | 'other'
+type QuickFilter = 'all' | 'pinned' | 'important' | 'feel' | 'digested' | 'resolved' | 'archived' | 'noise' | 'other'
 type DatePreset = 'all' | '7d' | '30d' | '90d' | 'custom'
 type Status = '已精修' | '存疑' | null
 
@@ -73,6 +81,7 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
   { key: 'digested', label: '已消化' },
   { key: 'resolved', label: '已解决' },
   { key: 'archived', label: '已归档' },
+  { key: 'noise', label: '🔇 噪声' },
   { key: 'other', label: '其他记忆' },
 ]
 
@@ -96,6 +105,7 @@ function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
     case 'digested': return !!b.digested
     case 'resolved': return b.resolved
     case 'archived': return b.type === 'archived'
+    case 'noise': return !!b.noise || (b.resolved && b.importance === 1)
     case 'other': return !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b)
   }
 }
@@ -321,7 +331,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center py-20 text-[#8A8681] text-sm">加载中…</div>
+    <div className="flex items-center justify-center py-20 text-[var(--color-text-tertiary)] text-sm">加载中…</div>
   )
 
   const cur = queue[current]
@@ -335,8 +345,8 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
             <button key={t} onClick={() => { setTimeFilter(t); setCurrent(0) }}
               className={`text-xs px-3 py-1 rounded-full border transition-colors whitespace-nowrap ${
                 timeFilter === t
-                  ? 'bg-[#D97757] border-[#D97757] text-white'
-                  : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                  ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
+                  : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
               }`}>
               {t}
             </button>
@@ -350,14 +360,14 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
           <button key={f} onClick={() => { setFilter(f); setCurrent(0) }}
             className={`flex items-center gap-1 text-xs px-3.5 py-1.5 rounded-full border transition-all whitespace-nowrap ${
               filter === f
-                ? 'bg-[#2B2927] border-[#2B2927] text-white'
-                : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                ? 'bg-[var(--color-text-heading)] border-[var(--color-text-heading)] text-white'
+                : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
             }`}
           >
             <span className={`text-[10px] ${
               f === '待办' ? 'text-yellow-400' :
               f === '存疑' ? 'text-red-400' :
-              f === '已精修' ? 'text-green-400' : 'text-[#A8A49D]'
+              f === '已精修' ? 'text-green-400' : 'text-[var(--color-text-disabled)]'
             }`}>●</span>
             {f} {f !== '全部' && <span className="opacity-60 ml-0.5">{counts[f as keyof typeof counts]}</span>}
           </button>
@@ -366,24 +376,24 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
 
       {/* 卡片 */}
       {!cur ? (
-        <div className="text-center text-[#A8A49D] py-20 text-sm bg-white rounded-2xl border border-[#E8E6E1] border-dashed">
+        <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-[var(--color-border)] border-dashed">
           {filter === '待办' ? '🎉 全部审阅完啦' : '这里什么都没有'}
         </div>
       ) : (
-        <div className="bg-white border border-[#E8E6E1] rounded-2xl p-4 sm:p-6 shadow-sm mb-5">
+        <div className="bg-white border border-[var(--color-border)] rounded-2xl p-4 sm:p-6 shadow-sm mb-5">
           {/* 第一行：日期 左，页码右 */}
-          <div className="flex items-center justify-between text-xs text-[#A8A49D] mb-3">
+          <div className="flex items-center justify-between text-xs text-[var(--color-text-disabled)] mb-3">
             <span>{formatReviewDate(cur.created || '')}</span>
             <span>{current + 1}/{queue.length}</span>
           </div>
 
           {/* 第二行：标题加 imp|score */}
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg sm:text-xl font-semibold text-[#2B2927]">{cur.name}</h2>
-            <div className="text-xs text-[#A8A49D] flex items-center gap-2 flex-shrink-0 ml-4">
+            <h2 className="text-lg sm:text-xl font-semibold text-[var(--color-text-heading)]">{cur.name}</h2>
+            <div className="text-xs text-[var(--color-text-disabled)] flex items-center gap-2 flex-shrink-0 ml-4">
               <span>imp {cur.importance ?? '—'}</span>
               <span>|</span>
-              <span className="text-[#D97757] font-medium">score {cur.score?.toFixed(2) ?? '—'}</span>
+              <span className="text-[var(--color-primary)] font-medium">score {cur.score?.toFixed(2) ?? '—'}</span>
             </div>
           </div>
 
@@ -391,7 +401,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
           {statusMap[cur.id] && (
             <div className="mb-3">
               <span className={`text-xs px-2.5 py-0.5 rounded-full ${
-                statusMap[cur.id] === '已精修' ? 'bg-[#EAF5E9] text-[#478B4A]' : 'bg-[#FDF3E4] text-[#C97E2C]'
+                statusMap[cur.id] === '已精修' ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[#FDF3E4] text-[#C97E2C]'
               }`}>
                 {statusMap[cur.id]}
               </span>
@@ -402,7 +412,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
           {cur.tags && cur.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {cur.tags.map(t => (
-                <span key={t} className="text-xs px-2.5 py-0.5 rounded-full bg-white/60 backdrop-blur-sm border border-[#E8E6E1] text-[#6C6965]">
+                <span key={t} className="text-xs px-2.5 py-0.5 rounded-full bg-white/60 backdrop-blur-sm border border-[var(--color-border)] text-[var(--color-text-secondary)]">
                   {t}
                 </span>
               ))}
@@ -412,13 +422,13 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
           {/* 正文 */}
           {editing ? (
             <textarea
-              className="w-full bg-[#FDFCFB] border border-[#D97757] rounded-xl p-4 text-sm leading-relaxed resize-none mb-4"
+              className="w-full bg-[var(--color-surface-elevated)] border border-[var(--color-primary)] rounded-xl p-4 text-sm leading-relaxed resize-none mb-4"
               rows={8}
               value={editContent}
               onChange={e => setEditContent(e.target.value)}
             />
           ) : (
-            <div className="text-[#3A3836] text-sm leading-relaxed whitespace-pre-wrap bg-[#FDFCFB] rounded-xl p-4 border border-[#F0EFEB] max-h-72 overflow-y-auto mb-4">
+            <div className="text-[var(--color-text-primary)] text-sm leading-relaxed whitespace-pre-wrap bg-[var(--color-surface-elevated)] rounded-xl p-4 border border-[var(--color-border-light)] max-h-72 overflow-y-auto mb-4">
               {fullBucket ? getContent(fullBucket) : '加载中…'}
             </div>
           )}
@@ -428,7 +438,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
             <select
               value={categoryMap[cur.id] ?? ''}
               onChange={e => updateCategory(cur.id, e.target.value || null)}
-              className="flex-1 bg-white text-[#3A3836] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[#E8E6E1] outline-none focus:border-[#D97757]"
+              className="flex-1 bg-white text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)]"
             >
               <option value="">— 选择分类 —</option>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -443,7 +453,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
                   setNewCatInput('')
                 }
               }}
-              className="w-24 sm:w-32 bg-white text-[#3A3836] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[#E8E6E1] outline-none focus:border-[#D97757]"
+              className="w-24 sm:w-32 bg-white text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -453,26 +463,26 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
       {cur && (
         <div className="grid grid-cols-4 gap-2 mb-6">
           <button onClick={() => updateStatus(cur.id, '已精修')} disabled={savingStatus}
-            className="py-2.5 rounded-xl bg-[#EAF5E9] border border-[#C5E0C3] text-[#478B4A] hover:bg-[#D4EAD2] text-xs sm:text-sm font-semibold disabled:opacity-50"
+            className="py-2.5 rounded-xl bg-[var(--color-digested-bg)] border border-[#C5E0C3] text-[var(--color-digested)] hover:bg-[#D4EAD2] text-xs sm:text-sm font-semibold disabled:opacity-50"
           >✓ 已阅</button>
           <button onClick={() => updateStatus(cur.id, '存疑')} disabled={savingStatus}
             className="py-2.5 rounded-xl bg-[#FDF3E4] border border-[#F2D9B6] text-[#C97E2C] hover:bg-[#FBE9D0] text-xs sm:text-sm font-semibold disabled:opacity-50"
           >? 存疑</button>
           <button onClick={handleDelete} disabled={savingStatus}
-            className="py-2.5 rounded-xl bg-[#FCE8E7] border border-[#F0C0BF] text-[#C64B45] hover:bg-[#FADAD9] text-xs sm:text-sm font-semibold disabled:opacity-50"
+            className="py-2.5 rounded-xl bg-[#FCE8E7] border border-[#F0C0BF] text-[var(--color-danger)] hover:bg-[#FADAD9] text-xs sm:text-sm font-semibold disabled:opacity-50"
           >🗑 删除</button>
           {editing ? (
             <>
               <button onClick={cancelEdit}
-                className="py-2.5 rounded-xl bg-[#F4F2EC] border border-[#E8E6E1] text-[#6C6965] hover:bg-[#E8E4DC] text-xs sm:text-sm font-semibold"
+                className="py-2.5 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[#E8E4DC] text-xs sm:text-sm font-semibold"
               >取消</button>
               <button onClick={saveEdit} disabled={savingEdit}
-                className="py-2.5 rounded-xl bg-[#D97757] text-white hover:bg-[#C86645] text-xs sm:text-sm font-semibold disabled:opacity-50"
+                className="py-2.5 rounded-xl bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
               >保存</button>
             </>
           ) : (
             <button onClick={startEdit}
-              className="py-2.5 rounded-xl bg-[#EDF4FC] border border-[#C8DAF0] text-[#3B72B9] hover:bg-[#E0ECF8] text-xs sm:text-sm font-semibold"
+              className="py-2.5 rounded-xl bg-[var(--color-resolved-bg)] border border-[#C8DAF0] text-[var(--color-resolved)] hover:bg-[#E0ECF8] text-xs sm:text-sm font-semibold"
             >✎ 编辑</button>
           )}
         </div>
@@ -482,10 +492,10 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
       {queue.length > 1 && (
         <div className="flex justify-between">
           <button onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}
-            className="px-5 py-2 rounded-lg bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] disabled:opacity-40 text-sm"
+            className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
           >← 上一条</button>
           <button onClick={() => setCurrent(c => Math.min(queue.length - 1, c + 1))} disabled={current === queue.length - 1}
-            className="px-5 py-2 rounded-lg bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] disabled:opacity-40 text-sm"
+            className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
           >下一条 →</button>
         </div>
       )}
@@ -509,6 +519,7 @@ function HomeClient() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [hideNoise, setHideNoise] = useState(true) // 默认隐藏噪声
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
@@ -546,7 +557,7 @@ function HomeClient() {
   const [activeCategory, setActiveCategory] = useState<string>('')
 
   const fetchBuckets = useCallback(() =>
-  fetch('/api/buckets')
+  fetch('/api/buckets?full=1')
     .then(r => r.json())
     .then(data => {
       const arr = Array.isArray(data) ? data : []
@@ -589,40 +600,33 @@ function HomeClient() {
   }, [activeTab])
 
   const doSearch = async (q: string) => {
-
     if (!q.trim()) { setSearchResults(null); return }
     setSearchLoading(true)
-    setQuickFilter('all')
-    setActiveTag(null)
-    setDatePreset('all')
-    setCustomStart('')
-    setCustomEnd('')
-    try {
-      const raw = await fetch(`/api/search?q=${encodeURIComponent(q)}&include_archive=true`).then(r => r.json())
-      const arr = Array.isArray(raw) ? raw : []
-      const enriched = arr.map((item: any) => {
-        const local = buckets.find(b => b.id === item.id)
-        return {
-          ...item,
-          score: local?.score ?? item.score,
-          created: item.created || local?.created || new Date().toISOString(),
-          pinned: item.pinned ?? local?.pinned ?? false,
-          importance: item.importance ?? local?.importance ?? 0,
-          resolved: item.resolved ?? local?.resolved ?? false,
-          digested: item.digested ?? local?.digested ?? false,
-          tags: item.tags ?? local?.tags ?? [],
-          domain: item.domain ?? local?.domain ?? [],
-          content_preview: item.content_preview ?? local?.content_preview ?? '',
-          last_active: local?.last_active ?? item.last_active,
-        }
-      })
-      console.log('search results:', enriched)
-      setSearchResults(enriched)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSearchLoading(false)
-    }
+    setQuickFilter('all'); setActiveTag(null); setDatePreset('all')
+    setCustomStart(''); setCustomEnd('')
+
+    // Tokenize: split by whitespace, then each token as exact substring
+    const tokens = q.trim().split(/\s+/).filter(t => t.length >= 1)
+    const qLower = q.trim().toLowerCase()
+    const results = buckets.filter(b => {
+      const haystack = [
+        b.name || '',
+        ...(b.domain || []),
+        ...(b.tags || []),
+        b.content_preview || '',  // full content via ?full=1
+      ].join(' ').toLowerCase()
+      // Try whole query first, then individual tokens
+      if (haystack.includes(qLower)) return true
+      if (tokens.length > 1) return tokens.some(t => haystack.includes(t.toLowerCase()))
+      return false
+    })
+
+    setSearchResults(results.map(b => ({
+      ...b,
+      score: b.score ?? 0,
+      created: b.created || new Date().toISOString(),
+    })))
+    setSearchLoading(false)
   }
 
   const openBucket = async (id: string) => {
@@ -635,6 +639,16 @@ function HomeClient() {
   }
 
   const traceOp = async (id: string, args: Record<string, unknown>) => {
+    // Optimistic update for noise/resolved toggle — instant UI feedback
+    // 噪声／解决状态乐观更新 — 立即反馈
+    if (selected && selected.id === id && 'resolved' in args) {
+      setSelected(prev => prev ? {
+        ...prev,
+        metadata: { ...prev.metadata, resolved: Boolean(args.resolved), importance: args.importance != null ? Number(args.importance) : prev.metadata.importance },
+        noise: Boolean(args.resolved) && (args.importance != null ? Number(args.importance) : prev.metadata.importance) === 1,
+      } : prev)
+    }
+
     setOperating(true)
     await fetch('/api/edit-bucket', {
       method: 'POST',
@@ -676,7 +690,8 @@ function HomeClient() {
     matchesQuickFilter(b, quickFilter) &&
     matchesDateFilter(b, datePreset, customStart, customEnd) &&
     (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag))) &&
-    (activeCategory === '' || categoryMap[b.id] === activeCategory)
+    (activeCategory === '' || categoryMap[b.id] === activeCategory) &&
+    (!hideNoise || !(!!b.noise || (b.resolved && b.importance === 1))) // 隐藏噪声
   )
 
   const monthlyGroups = useMemo(() => groupByMonth(displayed), [displayed]);
@@ -686,7 +701,7 @@ function HomeClient() {
     const maxBars = 5
     const num = Number(importance)
     if (importance == null || isNaN(num)) {
-      return <span className="text-xs text-[#A8A49D] font-medium">—</span>
+      return <span className="text-xs text-[var(--color-text-disabled)] font-medium">—</span>
     }
     const value = Math.max(0, Math.min(num, 10)) / 2
     const fullBars = Math.floor(value)
@@ -715,57 +730,59 @@ function HomeClient() {
             )
           })}
         </div>
-        <span className="text-xs text-[#D97757] font-medium tabular-nums leading-none ml-0.5">
+        <span className="text-xs text-[var(--color-primary)] font-medium tabular-nums leading-none ml-0.5">
           {Math.round(num)}
         </span>
       </div>
     )
   }
   const BucketCard = ({ b }: { b: Bucket }) => (
-  <div 
+  <div
     onClick={() => openBucket(b.id)}
-    className="bg-white rounded-xl p-4 sm:p-5 hover:shadow-md cursor-pointer border border-[#E8E6E1] hover:border-[#D97757]/30 transition-all duration-200 group w-full relative"
+    className={`bg-white rounded-xl p-4 sm:p-5 hover:shadow-md cursor-pointer border transition-all duration-200 group w-full relative ${
+      (b.noise || (b.resolved && b.importance === 1))
+        ? 'border-[var(--color-border)] opacity-50 saturate-50'
+        : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'
+    }`}
   >
     <div className="flex items-start justify-between mb-1 gap-2 sm:gap-3">
       <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap pr-16 sm:pr-0">
-        {b.pinned && <span className="text-[#D97757] text-xs sm:text-sm flex-shrink-0">★</span>}
-        <span className="font-semibold text-[#3A3836] text-sm sm:text-base truncate group-hover:text-[#D97757] transition-colors">
+        {b.pinned && <span className="text-[var(--color-primary)] text-xs sm:text-sm flex-shrink-0">★</span>}
+        <span className="font-semibold text-[var(--color-text-primary)] text-sm sm:text-base truncate group-hover:text-[var(--color-primary)] transition-colors">
           {b.name}
         </span>
-        {isFeel(b) && <span className="text-xs bg-[#FDF0ED] text-[#D97757] px-1.5 py-0.5 rounded-full font-medium">feel</span>}
-        {b.resolved && <span className="text-xs bg-[#EDF4FC] text-[#3B72B9] px-1.5 py-0.5 rounded-full">已解决</span>}
-        {b.digested && <span className="text-xs bg-[#EAF5E9] text-[#478B4A] px-1.5 py-0.5 rounded-full">已消化</span>}
-        {b.type === 'archived' && <span className="text-xs bg-[#F4F2EC] text-[#8A8681] px-1.5 py-0.5 rounded-full">已归档</span>}
-        {b.wish && <span title="悬念" className="text-xs text-[#B8860B] flex-shrink-0">✦</span>}
-        {b.todo && !b.todo_done && <span title={`待办：${b.todo}`} className="text-xs text-[#D97757] flex-shrink-0">☐</span>}
+        {isFeel(b) && <StatusBadge type="feel" />}
+        {(() => { const st = statusLabel(b as any); return st && !['pinned', 'feel'].includes(st) ? <StatusBadge type={st} /> : null })()}
+        {b.wish && <span title="悬念" className="text-xs text-[var(--color-wish)] flex-shrink-0">✦</span>}
+        {b.todo && !b.todo_done && <span title={`待办：${b.todo}`} className="text-xs text-[var(--color-primary)] flex-shrink-0">☐</span>}
       </div>
       <div className="absolute top-4 right-4 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
         <div className="min-w-[56px] bg-[#FFF5F2] rounded-full px-2.5 py-0.5 flex items-center justify-center">
-          <span className="text-xs text-[#D97757] font-medium leading-tight">
+          <span className="text-xs text-[var(--color-primary)] font-medium leading-tight">
             score {b.score != null ? b.score.toFixed(1) : '—'}
           </span>
         </div>
         <ImpSignal importance={b.importance} />
       </div>
     </div>
-    <p className="text-xs sm:text-sm text-[#6C6965] line-clamp-2 mb-3 sm:mb-4 leading-relaxed pr-20">
+    <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] line-clamp-2 mb-3 sm:mb-4 leading-relaxed pr-20">
       {b.content_preview}
     </p>
 
     <div className="flex items-end justify-between mb-0 gap-2 sm:gap-3">
       <div className="flex flex-wrap gap-1 sm:gap-1.5">
         {(b.domain ?? []).map(d => (
-          <span key={d} className="text-xs bg-[#F4F2EC] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[#5B5854]">{d}</span>
+          <span key={d} className="text-xs bg-[var(--color-surface-tertiary)] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[var(--color-text-secondary)]">{d}</span>
         ))}
         {(b.tags ?? []).slice(0, 2).map(t => (
-          <span key={t} className="text-xs border border-[#E8E6E1] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[#8A8681]">{t}</span>
+          <span key={t} className="text-xs border border-[var(--color-border)] px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[var(--color-text-tertiary)]">{t}</span>
         ))}
         {(b.tags ?? []).length > 2 && (
-          <span className="text-xs text-[#A8A49D] py-0.5 px-1">+{(b.tags ?? []).length - 3}</span>
+          <span className="text-xs text-[var(--color-text-disabled)] py-0.5 px-1">+{(b.tags ?? []).length - 3}</span>
         )}
       </div>
       {b.last_active && (
-        <span className="text-xs text-[#A8A49D] flex-shrink-0">
+        <span className="text-xs text-[var(--color-text-disabled)] flex-shrink-0">
            {formatBeijingDate(b.last_active)}
         </span>
       )}
@@ -790,9 +807,9 @@ function HomeClient() {
     return (
       <div className="mb-8 sm:mb-10">
         <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
-          <span className="text-sm sm:text-base font-semibold text-[#3A3836] italic">{title}</span>
-          <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">{sortedItems.length} 条</span>
-          <div className="flex-1 h-px bg-[#E8E6E1]"></div>
+          <span className="text-sm sm:text-base font-semibold text-[var(--color-text-primary)] italic">{title}</span>
+          <span className="text-xs text-[var(--color-text-disabled)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md">{sortedItems.length} 条</span>
+          <div className="flex-1 h-px bg-[var(--color-border)]"></div>
         </div>
         {gridViewMode === 'list' ? (
           <div className="space-y-2 sm:space-y-3">
@@ -819,60 +836,29 @@ function HomeClient() {
       digested: list.filter(b => !!b.digested).length,
       resolved: list.filter(b => b.resolved).length,
       archived: list.filter(b => b.type === 'archived').length,
-      other: list.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b)).length,
+      noise: list.filter(b => !!b.noise || (b.resolved && b.importance === 1)).length,
+      other: list.filter(b => !b.pinned && Number(b.importance) < 7 && !b.resolved && !b.digested && !isFeel(b) && !(!!b.noise || (b.resolved && b.importance === 1))).length,
     }
   }, [searchResults, buckets])
 
-  if (loading && buckets.length === 0) return <div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">读取中...</div>
+  if (loading && buckets.length === 0) return <div className="flex items-center justify-center h-screen bg-[var(--color-bg)] text-[var(--color-text-tertiary)]">读取中...</div>
 
   return (
-    <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans selection:bg-[#D97757] selection:text-white pb-20">
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white pb-20">
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* 顶部导航 */}
-      <nav className="border-b border-[#E8E6E1] bg-white/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[#8A8681]">
-          <span className="text-[#3A3836] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4">
-            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-br from-[#D97757] to-[#E8A58F]"></div>
-            <span className="text-xs sm:text-sm">Ombre Brain</span>
-          </span>
-          {(['timeline', 'grid', 'review'] as const).map(tab => (
-              <span
-              key={tab}
-              onClick={() => router.replace(`/?tab=${tab}`, { scroll: false })}
-              className={`cursor-pointer transition-colors h-full flex items-center whitespace-nowrap ${
-                activeTab === tab ? 'text-[#3A3836] border-b-2 border-[#D97757]' : 'hover:text-[#3A3836]'
-              }`}
-            >
-              {tab === 'timeline' ? '时间线' : tab === 'grid' ? '记忆格' : '审阅'}
-            </span>
-          ))}
-          <Link href="/breath-sim" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
-            模拟 Breath
-          </Link>
-          <Link href="/graph" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
-            关系图谱
-          </Link>
-          <Link href="/journal" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
-            日记
-          </Link>
-          <Link href="/prompts" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[#3A3836]">
-            权重配置
-          </Link>
-          <span className="hover:text-[#3A3836] cursor-pointer transition-colors ml-auto whitespace-nowrap">配置</span>
-        </div>
-      </nav>
+      <NavBar activeSlug={activeTab} onTabClick={(tab) => router.replace(`/?tab=${tab}`, { scroll: false })} />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
         {activeTab !== 'review' && (
           <div className="hidden md:block mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[#2B2927] mb-2 sm:mb-3">
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)] mb-2 sm:mb-3">
               {activeTab === 'timeline' ? '时间线' : '记忆格'}
             </h1>
-            <p className="text-[#8A8681] text-xs sm:text-sm">
+            <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm">
               {activeTab === 'timeline' 
                 ? `沿时间回溯，当前展示 ${displayed.length} 条记录` 
                 : `分类整理与检索 · ${buckets.length} 格`}
@@ -891,13 +877,13 @@ function HomeClient() {
           />
         ) : (
           <>
-            <div className="bg-white border border-[#E8E6E1] rounded-2xl p-3 sm:p-4 shadow-sm mb-4">
+            <div className="bg-white border border-[var(--color-border)] rounded-2xl p-3 sm:p-4 shadow-sm mb-4">
               <div className="relative w-full mb-3 sm:mb-4">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A8A49D]" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-disabled)]" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <circle cx="8.5" cy="8.5" r="6" /><path d="M13.5 13.5L18 18" />
                 </svg>
                 <input
-                  className="w-full bg-[#F9F8F6] border border-transparent rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-[#D97757] focus:ring-2 focus:ring-[#D97757]/10 transition-all placeholder-[#A8A49D]"
+                  className="w-full bg-[var(--color-surface-secondary)] border border-transparent rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all placeholder-[var(--color-text-disabled)]"
                   placeholder="搜索记忆、标签或内容..."
                   value={search}
                   onChange={e => {
@@ -914,22 +900,25 @@ function HomeClient() {
                 }}
                 />
               </div>
-              <div className="w-full h-px bg-[#F0EFEB] mb-3 sm:mb-4"></div>
+              <div className="w-full h-px bg-[var(--color-border-light)] mb-3 sm:mb-4"></div>
 
               <div className="flex flex-wrap items-center gap-y-3 gap-x-4">
-                {/* 上排：快捷筛选 */}
-                <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+                <FilterBar>
                   {QUICK_FILTERS.map(f => (
-                    <button key={f.key} onClick={() => setQuickFilter(f.key)}
-                      className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
-                        quickFilter === f.key 
-                          ? 'bg-[#3A3836] border-[#3A3836] text-white' 
-                          : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:border-[#C4C1BC] hover:bg-[#F9F8F6]'
-                      }`}>
-                      {f.label} {statusCounts[f.key]}
-                    </button>
+                    <FilterPill key={f.key} label={`${f.label} ${statusCounts[f.key]}`} active={quickFilter === f.key} onClick={() => setQuickFilter(f.key)} />
                   ))}
-                </div>
+                </FilterBar>
+
+                {/* Hide Noise toggle */}
+                <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hideNoise}
+                    onChange={e => setHideNoise(e.target.checked)}
+                    className="accent-[var(--color-primary)] w-3.5 h-3.5"
+                  />
+                  隐藏噪声
+                </label>
 
                 {/* 下排：分类标签 */}
                 {categories.length > 0 && (
@@ -940,8 +929,8 @@ function HomeClient() {
                       className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
                         // 统一了选中与未选中的边框颜色及 hover 效果
                         activeCategory === '' 
-                          ? 'bg-[#3A3836] border-[#3A3836] text-white' 
-                          : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:border-[#C4C1BC] hover:bg-[#F9F8F6]'
+                          ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white' 
+                          : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[#C4C1BC] hover:bg-[var(--color-surface-secondary)]'
                       }`}>
                       全部
                     </button>
@@ -953,8 +942,8 @@ function HomeClient() {
                         className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
                           // 统一了选中与未选中的边框颜色及 hover 效果
                           activeCategory === c 
-                            ? 'bg-[#3A3836] border-[#3A3836] text-white' 
-                            : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:border-[#C4C1BC] hover:bg-[#F9F8F6]'
+                            ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white' 
+                            : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[#C4C1BC] hover:bg-[var(--color-surface-secondary)]'
                         }`}>{c}</button>
                     ))}
                   </div>
@@ -962,17 +951,17 @@ function HomeClient() {
               </div>
 
               {activeTab === 'grid' && (
-                <div className="flex gap-1.5 sm:gap-2 mt-4 pt-4 border-t border-[#F0EFEB] overflow-x-auto no-scrollbar">
+                <div className="flex gap-1.5 sm:gap-2 mt-4 pt-4 border-t border-[var(--color-border-light)] overflow-x-auto no-scrollbar">
                   <button onClick={() => setActiveTag(activeTag === 'feel' ? null : 'feel')}
                     className={`text-xs px-2.5 sm:px-3 py-1 rounded-md whitespace-nowrap ${
-                      activeTag === 'feel' ? 'bg-[#D97757] text-white' : 'text-[#8A8681] hover:bg-[#F4F2EC]'
+                      activeTag === 'feel' ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)]'
                     }`}>
                     feel
                   </button>
                   {topTags.map(t => (
                     <button key={t} onClick={() => setActiveTag(activeTag === t ? null : t)}
                       className={`text-xs px-2.5 sm:px-3 py-1 rounded-md whitespace-nowrap ${
-                        activeTag === t ? 'bg-[#D97757] text-white' : 'text-[#8A8681] hover:bg-[#F4F2EC]'
+                        activeTag === t ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)]'
                       }`}>
                       {t}
                     </button>
@@ -989,33 +978,33 @@ function HomeClient() {
               {activeTab === 'timeline' && (
                 monthlyGroups.length > 0 ? (
                   <div className="flex items-center gap-2 ml-[calc(1rem-7px)] translate-y-[8px] cursor-pointer select-none" onClick={() => toggleMonthCollapse(monthlyGroups[0].month)}>
-                    <h2 className="text-xl font-bold italic font-serif text-[#D97757] leading-tight whitespace-nowrap">
+                    <h2 className="text-xl font-bold italic font-serif text-[var(--color-primary)] leading-tight whitespace-nowrap">
                       {monthlyGroups[0].month.replace('-', '·')}
                     </h2>
-                    <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">
+                    <span className="text-xs text-[var(--color-text-disabled)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md">
                       {monthlyGroups[0].days.reduce((sum, d) => sum + d.items.length, 0)} 条
                     </span>
                   </div>
                 ) : (
-                  <div className="text-xs text-[#A8A49D] ml-1">暂无记录</div>
+                  <div className="text-xs text-[var(--color-text-disabled)] ml-1">暂无记录</div>
                 )
               )}
 
               {/* 时间选择器 */}
-              <div className="flex items-center gap-2 bg-white/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[#E8E6E1] shadow-sm">
-                <span className="text-xs text-[#A8A49D] hidden sm:inline">时间</span>
+              <div className="flex items-center gap-2 bg-white/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--color-border)] shadow-sm">
+                <span className="text-xs text-[var(--color-text-disabled)] hidden sm:inline">时间</span>
                 <select
-                  className="text-xs bg-transparent outline-none text-[#5B5854] cursor-pointer"
+                  className="text-xs bg-transparent outline-none text-[var(--color-text-secondary)] cursor-pointer"
                   value={datePreset} onChange={e => setDatePreset(e.target.value as DatePreset)}>
                   {DATE_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                 </select>
                 {datePreset === 'custom' && (
                   <div className="flex items-center gap-1">
                     <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                      className="bg-white rounded px-1.5 py-0.5 text-xs border border-[#E8E6E1]" />
-                    <span className="text-[#A8A49D]">-</span>
+                      className="bg-white rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
+                    <span className="text-[var(--color-text-disabled)]">-</span>
                     <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                      className="bg-white rounded px-1.5 py-0.5 text-xs border border-[#E8E6E1]" />
+                      className="bg-white rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
                   </div>
                 )}
               </div>
@@ -1024,16 +1013,16 @@ function HomeClient() {
               {activeTab === 'grid' && (
                 <>
                   <button onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[#E8E6E1] bg-white/60 backdrop-blur-sm text-[#6C6965] hover:bg-[#F9F8F6]"
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-white/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]"
                   >{gridViewMode === 'list' ? '⧉' : '☰'}</button>
                   <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[#E8E6E1] bg-white/60 backdrop-blur-sm text-[#6C6965] outline-none cursor-pointer">
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-white/60 backdrop-blur-sm text-[var(--color-text-secondary)] outline-none cursor-pointer">
                     <option value="score">权重</option>
                     <option value="importance">重要度</option>
                     <option value="created">时间</option>
                   </select>
                   <button onClick={() => setSortOrder(order => order === 'desc' ? 'asc' : 'desc')}
-                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[#D97757] text-white' : 'bg-white/60 backdrop-blur-sm text-[#6C6965] hover:bg-[#F9F8F6]'}`}
+                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[var(--color-primary)] text-white' : 'bg-white/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}
                   >{sortOrder === 'desc' ? '↓降序' : '↑升序'}</button>
                 </>
               )}
@@ -1049,10 +1038,10 @@ function HomeClient() {
                       {/* 核心改动：只有非第一个月份（index > 0），才在下方单独渲染月份标题行 */}
                       {index > 0 && (
                         <div className="flex items-center gap-2 mb-4 ml-[calc(1rem-7px)] cursor-pointer select-none" onClick={() => toggleMonthCollapse(month)}>
-                          <h2 className="text-xl font-bold italic font-serif text-[#D97757] leading-tight whitespace-nowrap">
+                          <h2 className="text-xl font-bold italic font-serif text-[var(--color-primary)] leading-tight whitespace-nowrap">
                             {month.replace('-', '·')}
                           </h2>
-                          <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">
+                          <span className="text-xs text-[var(--color-text-disabled)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md">
                             {days.reduce((sum, d) => sum + d.items.length, 0)} 条
                           </span>
                         </div>
@@ -1068,7 +1057,7 @@ function HomeClient() {
                                 {/* 日折叠箭头 */}
                                 <button
                                   onClick={() => toggleDateCollapse(date)}
-                                  className="absolute -left-[7px] top-2 -translate-y-1/2 text-[#D97757] hover:text-[#B65D40] transition-colors z-[1]"
+                                  className="absolute -left-[7px] top-2 -translate-y-1/2 text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors z-[1]"
                                 >
                                   <span className={`leading-none ${isDayCollapsed ? 'text-xs' : 'text-sm'}`}>
                                     {isDayCollapsed ? '▶\uFE0E' : '▼\uFE0E'}
@@ -1078,19 +1067,19 @@ function HomeClient() {
                                 {/* 日期标签 */}
                                 <button
                                   onClick={() => toggleDateCollapse(date)}
-                                  className="flex items-center gap-3 mb-4 ml-1 cursor-pointer hover:text-[#D97757] transition-colors text-left w-full"
+                                  className="flex items-center gap-3 mb-4 ml-1 cursor-pointer hover:text-[var(--color-primary)] transition-colors text-left w-full"
                                 >
-                                  <span className="text-sm font-semibold text-[#3A3836]">
+                                  <span className="text-sm font-semibold text-[var(--color-text-primary)]">
                                     {formatDateGroup(date)}
                                   </span>
-                                  <span className="text-xs text-[#A8A49D] bg-[#F4F2EC] px-2 py-0.5 rounded-md">
+                                  <span className="text-xs text-[var(--color-text-disabled)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md">
                                     {items.length} 条
                                   </span>
                                 </button>
 
                                 {!isDayCollapsed && (
                                   <>
-                                    <div className="absolute left-0 top-2.5 bottom-0 w-px bg-[#E8E6E1]" />
+                                    <div className="absolute left-0 top-2.5 bottom-0 w-px bg-[var(--color-border)]" />
                                     <div className="space-y-3 ml-1">
                                       {items.map(b => <BucketCard key={b.id} b={b} />)}
                                     </div>
@@ -1123,7 +1112,7 @@ function HomeClient() {
               </div>
             )}
             {displayed.length === 0 && (
-              <div className="text-center text-[#A8A49D] py-20 text-sm bg-white rounded-2xl border border-dashed border-[#E8E6E1]">
+              <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-dashed border-[var(--color-border)]">
                 没有找到对应的记录
               </div>
             )}
@@ -1179,31 +1168,27 @@ function HomeClient() {
 
       {/* 悬浮加号 */}
       <button onClick={() => setShowAdd(true)}
-        className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#D97757] text-white text-xl sm:text-2xl shadow-lg hover:bg-[#C86645] transition-colors flex items-center justify-center z-50">
+        className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center z-50">
         +
       </button>
 
       {/* 新增弹窗 */}
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center px-4"
-          onClick={() => setShowAdd(false)}>
-          <div className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-lg shadow-xl"
-            onClick={e => e.stopPropagation()}>
-            <h3 className="text-[#3A3836] font-semibold mb-4">新增记忆</h3>
+      <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-lg">
+        <h3 className="text-[var(--color-text-primary)] font-semibold mb-4">新增记忆</h3>
             <input placeholder="标题（可选）" value={addForm.title} onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-[#D97757]" />
+              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-[var(--color-primary)]" />
             <textarea placeholder="内容…" value={addForm.content} onChange={e => setAddForm(f => ({ ...f, content: e.target.value }))}
-              rows={5} className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm mb-3 resize-none focus:outline-none focus:border-[#D97757]" />
+              rows={5} className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-3 resize-none focus:outline-none focus:border-[var(--color-primary)]" />
             <input placeholder="标签（逗号分隔）" value={addForm.tags} onChange={e => setAddForm(f => ({ ...f, tags: e.target.value }))}
-              className="w-full border border-[#E8E6E1] rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-[#D97757]" />
+              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-[var(--color-primary)]" />
             <div className="flex items-center gap-3 mb-5">
-              <span className="text-sm text-[#8A8681]">重要度</span>
+              <span className="text-sm text-[var(--color-text-tertiary)]">重要度</span>
               <input type="range" min={1} max={10} value={addForm.importance} onChange={e => setAddForm(f => ({ ...f, importance: Number(e.target.value) }))}
-                className="flex-1 accent-[#D97757]" />
-              <span className="text-sm text-[#3A3836] w-4">{addForm.importance}</span>
+                className="flex-1 accent-[var(--color-primary)]" />
+              <span className="text-sm text-[var(--color-text-primary)] w-4">{addForm.importance}</span>
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-[#8A8681]">取消</button>
+              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消</button>
               <button disabled={!addForm.content.trim() || adding}
                 onClick={async () => {
                   setAdding(true)
@@ -1217,20 +1202,18 @@ function HomeClient() {
                   setAddForm({ title: '', content: '', tags: '', importance: 5 })
                   fetchBuckets()
                 }}
-                className="px-4 py-2 text-sm bg-[#D97757] text-white rounded-lg disabled:opacity-40 hover:bg-[#C86645] transition-colors">
+                className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
                 {adding ? '存入中…' : '存入记忆'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </DetailPanel>
     </div>
   )
 }
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">加载中...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-screen bg-[var(--color-bg)] text-[var(--color-text-tertiary)]">加载中...</div>}>
       <HomeClient />
     </Suspense>
   )

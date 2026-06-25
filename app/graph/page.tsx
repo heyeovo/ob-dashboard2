@@ -3,6 +3,10 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
+import NavBar from '../components/NavBar'
+import Card from '../components/Card'
+import SearchBar from '../components/SearchBar'
+import { FilterPill } from '../components/FilterBar'
 
 interface GraphBucket {
   id: string
@@ -51,7 +55,7 @@ const TYPE_LABEL: Record<string, string> = { dynamic: '动态', permanent: '永�
 const TYPES: ('dynamic' | 'permanent' | 'feel')[] = ['dynamic', 'permanent', 'feel']
 
 const TYPE_COLORS: Record<string, { fill: string; border: string; text: string }> = {
-  dynamic: { fill: '#FFF5F0', border: '#D97757', text: '#B65D40' },
+  dynamic: { fill: '#FFF5F0', border: 'var(--color-primary)', text: 'var(--color-primary-hover)' },
   permanent: { fill: '#FFFBF0', border: '#C49B3A', text: '#8A6A1F' },
   feel: { fill: '#F8F0FA', border: '#B795C9', text: '#8A6A9A' },
 }
@@ -527,85 +531,24 @@ export default function GraphPage() {
   // ============ 渲染 ============
 
   const NEUMORPHIC = `
-    .graph-page {
-      --bg: #FCFAF8;
-      --bg-gradient: radial-gradient(ellipse at 30% 20%, #FCFAF8 0%, #F5F0E8 60%, #EDE4D3 100%);
-      --surface: rgba(255, 255, 255, 0.45);
-      --surface-solid: #F7F2E8;
-      --border: rgba(200, 185, 165, 0.25);
-      --border-strong: rgba(180, 160, 135, 0.45);
-      --text: #3A3836;
-      --text-dim: #8A8681;
-      --text-light: #B0A590;
-      --accent: #D97757;
-      --accent-light: #E8A58F;
-      --accent-glow: rgba(217, 119, 87, 0.15);
-      --positive: #4A7C59;
-      --negative: #8B4A4A;
-      --shadow-light: rgba(255, 252, 248, 0.8);
-      --shadow-dark: rgba(180, 160, 140, 0.30);
-      --shadow-dark-subtle: rgba(180, 160, 140, 0.15);
-      background: var(--bg-gradient);
-      background-attachment: fixed;
-      min-height: 100vh;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      color: var(--text);
-    }
-    .neu-card { background: linear-gradient(145deg, #FAFAF6, #F0EDE4); border: 1px solid var(--border); border-radius: 20px; box-shadow: 6px 6px 14px var(--shadow-dark-subtle), -6px -6px 14px var(--shadow-light); }
-    .neu-inset { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; box-shadow: inset 4px 4px 10px var(--shadow-dark-subtle), inset -4px -4px 10px var(--shadow-light); }
-    .neu-pill { background: linear-gradient(145deg, #FAF6ED, #EDE4D3); border: none; border-radius: 24px; box-shadow: 3px 3px 6px var(--shadow-dark-subtle), -3px -3px 6px var(--shadow-light); transition: all 0.2s cubic-bezier(0.4,0,0.2,1); color: var(--text-dim); cursor: pointer; font-family: inherit; }
-    .neu-pill:hover { color: var(--accent); box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light); transform: translateY(-1px); }
-    .neu-pill:active { transform: translateY(0); box-shadow: inset 2px 2px 5px var(--shadow-dark-subtle), inset -2px -2px 5px var(--shadow-light); }
-    .neu-pill.active { color: #F0EDE4; background: linear-gradient(145deg, var(--accent-light), var(--accent)); box-shadow: inset 3px 3px 6px rgba(0,0,0,0.2), inset -2px -2px 4px rgba(255,255,255,0.05); }
-    .neu-input { background: rgba(255,255,255,0.55); border: 1px solid var(--border); border-radius: 12px; box-shadow: inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light); transition: all 0.25s ease; font-family: inherit; color: var(--text); }
-    .neu-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow), inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light); }
-    .neu-input::placeholder { color: var(--text-light); }
-    .neu-select { background: rgba(255,255,255,0.55); border: 1px solid var(--border); border-radius: 12px; box-shadow: inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light); color: var(--text-dim); font-family: inherit; cursor: pointer; transition: all 0.25s ease; }
-    .neu-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow), inset 2px 2px 4px var(--shadow-dark-subtle); }
-    .neu-btn-primary { background: linear-gradient(145deg, var(--accent-light), var(--accent)); color: #FEF8F5; border: none; border-radius: 24px; box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light); transition: all 0.2s cubic-bezier(0.4,0,0.2,1); cursor: pointer; font-family: inherit; position: relative; overflow: hidden; }
-    .neu-btn-primary:hover { box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light); transform: translateY(-1px); }
-    .neu-btn-primary:active { transform: translateY(0); box-shadow: inset 3px 3px 6px rgba(0,0,0,0.15), inset -2px -2px 4px rgba(255,255,255,0.05); }
-    .list-item { border-radius: 14px; transition: all 0.2s ease; cursor: pointer; border: 1px solid transparent; }
-    .list-item:hover { background: rgba(255,255,255,0.6); box-shadow: 3px 3px 8px var(--shadow-dark-subtle), -3px -3px 8px var(--shadow-light); border-color: var(--border); transform: translateY(-1px); }
-    .list-item.active { background: rgba(255,255,255,0.8); border-color: var(--accent); box-shadow: 4px 4px 10px var(--shadow-dark-subtle), -4px -4px 10px var(--shadow-light); }
-    .related-item { background: rgba(255,255,255,0.45); border-radius: 12px; transition: all 0.15s ease; border: 1px solid transparent; }
-    .related-item:hover { background: rgba(255,255,255,0.7); border-color: var(--border); }
-    .dropdown-results { background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 12px; box-shadow: 6px 6px 16px var(--shadow-dark-subtle); overflow: hidden; }
-    .custom-scroll::-webkit-scrollbar { width: 4px; }
-    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
-    .glass-nav { background: rgba(253,252,248,0.7); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
-    @keyframes neuPulse { 0%,100% { box-shadow: 0 0 0 0 var(--accent-glow); } 50% { box-shadow: 0 0 0 6px transparent; } }
+    .graph-page { background: var(--color-bg); min-height: 100vh; color: var(--color-text-primary); }
     .graph-node-highlight { animation: neuPulse 1.5s ease-in-out infinite; }
+    @keyframes neuPulse { 0%,100% { box-shadow: 0 0 0 0 var(--color-primary)/15; } 50% { box-shadow: 0 0 0 6px transparent; } }
   `
 
   return (
     <>
       <style>{NEUMORPHIC}</style>
       <div className="graph-page pb-10">
-        <nav className="glass-nav sticky top-0 z-20">
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[var(--text-dim)] overflow-x-auto">
-            <Link href="/" className="text-[var(--text)] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4 flex-shrink-0">
-              <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-light))' }} />
-              <span className="text-xs sm:text-sm">Ombre Brain</span>
-            </Link>
-            <Link href="/?tab=timeline" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[var(--text)]">时间线</Link>
-            <Link href="/?tab=grid" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[var(--text)]">记忆格</Link>
-            <Link href="/?tab=review" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[var(--text)]">审阅</Link>
-            <Link href="/breath-sim" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[var(--text)]">模拟 Breath</Link>
-            <span className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap text-[var(--text)] border-b-2" style={{ borderBottomColor: 'var(--accent)' }}>关系图谱</span>
-            <Link href="/journal" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[var(--text)]">日记</Link>
-            <Link href="/prompts" className="cursor-pointer transition-colors h-full flex items-center whitespace-nowrap hover:text-[var(--text)]">权重配置</Link>
-          </div>
-        </nav>
+        <NavBar activeSlug="graph" />
 
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           {loadError ? (
             /* ---- 错误状态（全宽展示） ---- */
-            <div className="neu-card px-8 py-10 text-center max-w-lg mx-auto mt-12">
-              <div className="text-[var(--negative)] text-sm mb-2">图谱加载失败：{loadError}</div>
-              <Link href="/" className="text-sm text-[var(--accent)] underline">返回首页</Link>
-            </div>
+            <Card variant="outline" padding="lg" className="text-center max-w-lg mx-auto mt-12">
+              <div className="text-[var(--color-danger)] text-sm mb-2">图谱加载失败：{loadError}</div>
+              <Link href="/" className="text-sm text-[var(--color-primary)] underline">返回首页</Link>
+            </Card>
           ) : (
             <>
               {/* 状态栏 */}
@@ -619,7 +562,7 @@ export default function GraphPage() {
 
               <div className="flex flex-col lg:flex-row gap-4 items-stretch">
                 {/* ========== 左侧：筛选 + 列表 ========== */}
-                <div className="w-full lg:w-72 flex-shrink-0 neu-card p-3 flex flex-col h-[420px] lg:h-[680px]">
+                <Card variant="outline" padding="sm" className="w-full lg:w-72 flex-shrink-0 flex flex-col h-[420px] lg:h-[680px]">
                   {loading ? (
                     /* Loading 骨架 */
                     <div className="flex-1 flex items-center justify-center">
@@ -632,52 +575,46 @@ export default function GraphPage() {
                     <>
                       <input value={listSearch} onChange={e => setListSearch(e.target.value)}
                         placeholder="搜索桶名或内容…"
-                        className="neu-input w-full text-sm px-3 py-1.5 mb-2 text-[var(--text)]" />
+                        className="w-full text-sm px-3 py-1.5 mb-2 border border-[var(--color-border)] rounded-xl bg-white outline-none focus:border-[var(--color-primary)] text-[var(--color-text-primary)]" />
                       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                         {(['all', ...TYPES] as const).map(t => (
-                          <button key={t} onClick={() => setTypeFilter(t)}
-                            className={`neu-pill text-xs px-2.5 py-1 ${typeFilter === t ? 'active' : ''}`}>
-                            {t === 'all' ? '全部' : TYPE_LABEL[t]}
-                          </button>
+                          <FilterPill key={t} label={t === 'all' ? '全部' : TYPE_LABEL[t]} active={typeFilter === t} onClick={() => setTypeFilter(t)} />
                         ))}
                       </div>
                       <div className="flex items-center gap-1.5 mb-3">
                         <select value={sortBy} onChange={e => setSortBy(e.target.value as 'score' | 'importance' | 'created')}
-                          className="neu-select text-xs px-2 py-1.5 flex-1">
+                          className="text-xs px-2 py-1.5 flex-1 border border-[var(--color-border)] rounded-xl bg-white outline-none text-[var(--color-text-secondary)]">
                           <option value="score">权重</option>
                           <option value="importance">重要度</option>
                           <option value="created">时间</option>
                         </select>
-                        <button onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
-                          className={`neu-pill text-xs px-2.5 py-1.5 ${sortOrder === 'desc' ? 'active' : ''}`}>
-                          {sortOrder === 'desc' ? '↓' : '↑'}
-                        </button>
+                        <FilterPill label={sortOrder === 'desc' ? '↓' : '↑'} active={true} onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} />
                       </div>
-                      <div className="flex-1 overflow-y-auto space-y-1.5 -mr-1 pr-1 custom-scroll">
+                      <div className="flex-1 overflow-y-auto space-y-1.5 -mr-1 pr-1 no-scrollbar overflow-y-auto">
                         {listItems.map(b => {
                           const inGraph = includedIds.has(b.id)
                           const isSel = selectedId === b.id
                           return (
-                            <div key={b.id} onClick={() => setSelectedId(b.id)}
-                              className={`list-item px-2.5 py-2 ${isSel ? 'active' : ''}`}>
+                            <Card key={b.id} variant="ghost" padding="sm" onClick={() => setSelectedId(b.id)}
+                              className={`${isSel ? '!border-[var(--color-primary)]' : ''}`}>
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-[var(--text)] truncate">{b.name}</span>
+                                <span className="text-xs font-medium text-[var(--color-text-primary)] truncate">{b.name}</span>
                                 {!inGraph && (
                                   <button onClick={e => { e.stopPropagation(); toggleNodeInGraph(b.id) }}
-                                    className="text-[10px] text-[var(--accent)] flex-shrink-0 hover:underline whitespace-nowrap">加入图谱</button>
+                                    className="text-[10px] text-[var(--color-primary)] flex-shrink-0 hover:underline whitespace-nowrap">加入图谱</button>
                                 )}
                               </div>
-                              <p className="text-[11px] text-[var(--text-dim)] truncate mt-0.5">{b.content_preview}</p>
-                            </div>
+                              <p className="text-[11px] text-[var(--color-text-tertiary)] truncate mt-0.5">{b.content_preview}</p>
+                            </Card>
                           )
                         })}
                         {listItems.length === 0 && (
-                          <div className="text-xs text-[var(--text-light)] text-center py-6">没有匹配的桶</div>
+                          <div className="text-xs text-[var(--color-text-disabled)] text-center py-6">没有匹配的桶</div>
                         )}
                       </div>
                     </>
                   )}
-                </div>
+                </Card>
 
                 {/* ========== 中间：图谱 ========== */}
                 <div className="flex-1 flex flex-col gap-2">
@@ -698,7 +635,7 @@ export default function GraphPage() {
                   )}
 
                   <div ref={containerRef}
-                    className="relative flex-1 neu-inset overflow-hidden select-none h-[390px] lg:h-[648px]"
+                    className="relative flex-1 border border-[var(--color-border)] rounded-2xl bg-[var(--color-bg)] overflow-hidden select-none h-[390px] lg:h-[648px]"
                     onClick={() => setSelectedId(null)}>
 
                     {loading ? (
@@ -709,7 +646,7 @@ export default function GraphPage() {
                         </div>
                       </div>
                     ) : nodes.length === 0 ? (
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--text-light)] text-center px-6">
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--color-text-disabled)] text-center px-6">
                         图谱是空的，从左边列表里把桶"加入图谱"
                       </div>
                     ) : (
@@ -741,9 +678,9 @@ export default function GraphPage() {
                               style={{
                                 left: pos.x, top: pos.y, width: r * 2, height: r * 2,
                                 fontSize: r > 32 ? 11 : 10,
-                                background: isSel ? '#FDF0ED' : (n.pinned ? '#FFFBF0' : tc.fill),
+                                background: isSel ? 'var(--color-pinned-bg)' : (n.pinned ? '#FFFBF0' : tc.fill),
                                 borderColor: isSel ? 'var(--accent)' : (n.pinned ? '#E8A23A' : tc.border),
-                                color: isSel ? '#B65D40' : (n.pinned ? '#8A6A1F' : tc.text),
+                                color: isSel ? 'var(--color-primary-hover)' : (n.pinned ? '#8A6A1F' : tc.text),
                                 boxShadow: isSel ? '0 0 0 4px var(--accent-glow)' : '0 1px 3px var(--shadow-dark-subtle)',
                               }}>
                               {n.name?.length > 12 ? n.name.slice(0, 11) + '…' : n.name}
@@ -760,17 +697,17 @@ export default function GraphPage() {
                 </div>
 
                 {/* ========== 右侧：详情面板 ========== */}
-                <div className="w-full lg:w-80 flex-shrink-0 neu-card p-4 h-[420px] lg:h-[680px] overflow-y-auto custom-scroll">
+                <Card variant="outline" padding="sm" className="w-full lg:w-80 flex-shrink-0 h-[420px] lg:h-[680px] overflow-y-auto no-scrollbar">
                   {loading ? (
-                    <div className="text-sm text-[var(--text-light)] text-center py-10">加载中...</div>
+                    <div className="text-sm text-[var(--color-text-disabled)] text-center py-10">加载中...</div>
                   ) : !selectedNode ? (
-                    <div className="text-sm text-[var(--text-light)] text-center py-10">点一个桶查看详情</div>
+                    <div className="text-sm text-[var(--color-text-disabled)] text-center py-10">点一个桶查看详情</div>
                   ) : (
                     <div>
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-semibold text-[var(--text)]">{selectedNode.name}</span>
-                        {selectedNode.pinned && <span className="text-xs" style={{ color: '#B8860B' }}>★钉选</span>}
-                        {selectedNode.wish && <span className="text-xs" style={{ color: '#B8860B' }}>✦悬念</span>}
+                        {selectedNode.pinned && <span className="text-xs" style={{ color: 'var(--color-wish)' }}>★钉选</span>}
+                        {selectedNode.wish && <span className="text-xs" style={{ color: 'var(--color-wish)' }}>✦悬念</span>}
                       </div>
                       <div className="text-[11px] text-[var(--text-dim)] mb-3">
                         {TYPE_LABEL[selectedNode.type] ?? selectedNode.type} · 重要度 {selectedNode.importance}
@@ -779,9 +716,9 @@ export default function GraphPage() {
                       <p className="text-sm text-[var(--text)] leading-relaxed mb-4 whitespace-pre-wrap opacity-80">{selectedNode.content_preview}</p>
 
                       <div className="flex items-center gap-3 mb-4 flex-wrap">
-                        <button onClick={() => openBucketDetail(selectedNode.id)} className="neu-btn-primary text-xs px-4 py-1.5">查看详情</button>
+                        <button onClick={() => openBucketDetail(selectedNode.id)} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-full text-xs px-4 py-1.5 font-medium text-white">查看详情</button>
                         {selectedInGraph ? (
-                          <button onClick={() => toggleNodeInGraph(selectedNode.id)} className="text-xs text-[var(--text-dim)] hover:text-[#C64B45] hover:underline">移出图谱</button>
+                          <button onClick={() => toggleNodeInGraph(selectedNode.id)} className="text-xs text-[var(--text-dim)] hover:text-[var(--color-danger)] hover:underline">移出图谱</button>
                         ) : (
                           <button onClick={() => toggleNodeInGraph(selectedNode.id)} className="text-xs text-[var(--accent)] hover:underline">加入图谱</button>
                         )}
@@ -795,7 +732,7 @@ export default function GraphPage() {
                             if (!rb) return null
                             const rInGraph = includedIds.has(rid)
                             return (
-                              <div key={rid} className="related-item px-2.5 py-2 flex items-center justify-between gap-2">
+                              <div key={rid} className="border border-[var(--color-border)] rounded-xl bg-[var(--color-surface-secondary)] px-2.5 py-2 flex items-center justify-between gap-2">
                                 <div className="min-w-0 cursor-pointer" onClick={() => setSelectedId(rid)}>
                                   <div className="text-xs font-medium text-[var(--text)] truncate">{rb.name}</div>
                                   <div className="text-[11px] text-[var(--text-dim)] truncate">{rb.content_preview}</div>
@@ -804,13 +741,13 @@ export default function GraphPage() {
                                   {!rInGraph && (
                                     <button onClick={() => toggleNodeInGraph(rid)} className="text-[10px] text-[var(--accent)] hover:underline whitespace-nowrap">加入</button>
                                   )}
-                                  <button onClick={() => toggleEdge(selectedNode.id, rid)} className="text-[10px] text-[var(--text-light)] hover:text-[#C64B45] hover:underline">✕</button>
+                                  <button onClick={() => toggleEdge(selectedNode.id, rid)} className="text-[10px] text-[var(--color-text-disabled)] hover:text-[var(--color-danger)] hover:underline">✕</button>
                                 </div>
                               </div>
                             )
                           })}
                           {(selectedNode.related ?? []).length === 0 && (
-                            <div className="text-xs text-[var(--text-light)]">还没有关联记忆</div>
+                            <div className="text-xs text-[var(--color-text-disabled)]">还没有关联记忆</div>
                           )}
                         </div>
 
@@ -819,10 +756,10 @@ export default function GraphPage() {
                             placeholder="+ 添加关联记忆…"
                             className="neu-input w-full text-xs px-3 py-1.5" />
                           {addRelResults.length > 0 && (
-                            <div className="dropdown-results absolute z-20 mt-1 w-full">
+                            <div className="overflow-hidden border border-[var(--color-border)] rounded-xl bg-white shadow-md absolute z-20 mt-1 w-full">
                               {addRelResults.map(b => (
                                 <div key={b.id} onClick={() => addRelation(b.id)}
-                                  className="px-3 py-2 text-xs hover:bg-[var(--accent-glow)] cursor-pointer truncate text-[var(--text)]">{b.name}</div>
+                                  className="px-3 py-2 text-xs hover:bg-[var(--color-primary-soft)] cursor-pointer truncate text-[var(--text)]">{b.name}</div>
                               ))}
                             </div>
                           )}
@@ -830,7 +767,7 @@ export default function GraphPage() {
                       </div>
                     </div>
                   )}
-                </div>
+                </Card>
               </div>
             </>
           )}

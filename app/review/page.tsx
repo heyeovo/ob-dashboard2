@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import NavBar from '../components/NavBar'
+import { FilterPill } from '../components/FilterBar'
 
 type Bucket = {
   id: string
@@ -111,7 +113,7 @@ export default function ReviewPage() {
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-[#FCFAF8] text-[#8A8681]">
+    <div className="flex items-center justify-center h-screen bg-[var(--color-bg)] text-[var(--color-text-tertiary)]">
       <span>加载中...</span>
     </div>
   )
@@ -119,43 +121,26 @@ export default function ReviewPage() {
   const cur = queue[current]
 
   return (
-    <div className="min-h-screen bg-[#FCFAF8] text-[#3A3836] font-sans selection:bg-[#D97757] selection:text-white">
-      <nav className="border-b border-[#E8E6E1] bg-white/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-6 text-xs sm:text-sm font-medium text-[#8A8681]">
-          <a href="/" className="hover:text-[#3A3836] transition-colors flex items-center gap-1">
-            ← 返回
-          </a>
-          <span className="text-[#3A3836] font-semibold whitespace-nowrap">审阅 · REVIEW</span>
-          {queue.length > 0 && (
-            <span className="text-[#A8A49D] text-xs ml-auto">
-              {current + 1}/{queue.length}
-            </span>
-          )}
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white">
+      <NavBar activeSlug="review" />{queue.length > 0 && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 text-xs text-[var(--color-text-disabled)]">
+          ← <a href="/" className="hover:text-[var(--color-text-primary)]">返回</a> · {current + 1}/{queue.length}
         </div>
-      </nav>
+      )}
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-20">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-6 sm:mb-8">
           <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
-            {(['待办', '存疑', '已精修', '全部'] as const).map(f => (
-              <button key={f} onClick={() => { setFilter(f); setCurrent(0) }}
-                className={`flex items-center gap-1 sm:gap-1.5 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full border transition-all whitespace-nowrap ${
-                  filter === f
-                    ? 'bg-[#3A3836] border-[#3A3836] text-white'
-                    : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] hover:border-[#C4C1BC]'
-                }`}
-              >
-                <span className={
-                  f === '待办' ? 'text-yellow-500' :
-                  f === '存疑' ? 'text-red-500' :
-                  f === '已精修' ? 'text-green-600' : 'text-[#A8A49D]'
-                }>●</span>
-                {f}{' '}
-                <span className="text-[#A8A49D]">
-                  {f !== '全部' ? counts[f as keyof typeof counts] : buckets.length}
-                </span>
-              </button>
-            ))}
+            {(['待办', '存疑', '已精修', '全部'] as const).map(f => {
+              const DOTS: Record<string, string> = { 待办: 'text-yellow-500', 存疑: 'text-red-500', 已精修: 'text-green-600', 全部: 'text-[var(--color-text-disabled)]' }
+              return (
+                <FilterPill key={f} label={f} active={filter === f} onClick={() => { setFilter(f); setCurrent(0) }}
+                  className="flex items-center gap-1">
+                  <span className={DOTS[f]}>●</span>
+                  <span className="text-[var(--color-text-disabled)]">{f !== '全部' ? counts[f as keyof typeof counts] : buckets.length}</span>
+                </FilterPill>
+              )
+            })}
           </div>
 
           <div className="flex gap-1.5 sm:gap-2 ml-auto">
@@ -163,8 +148,8 @@ export default function ReviewPage() {
               <button key={t} onClick={() => { setTimeFilter(t); setCurrent(0) }}
                 className={`text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md border transition-colors whitespace-nowrap ${
                   timeFilter === t
-                    ? 'bg-[#D97757] border-[#D97757] text-white'
-                    : 'bg-white border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6]'
+                    ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
+                    : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {t}
               </button>
@@ -173,49 +158,49 @@ export default function ReviewPage() {
         </div>
 
         {!cur ? (
-          <div className="text-center text-[#A8A49D] py-20 text-sm bg-white rounded-2xl border border-[#E8E6E1] border-dashed">
+          <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-[var(--color-border)] border-dashed">
             {filter === '待办' ? '🎉 全部审阅完啦' : '这里什么都没有'}
           </div>
         ) : (
-          <div className="bg-white border border-[#E8E6E1] rounded-2xl p-4 sm:p-6 shadow-sm mb-5 sm:mb-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4 text-xs text-[#A8A49D]">
+          <div className="bg-white border border-[var(--color-border)] rounded-2xl p-4 sm:p-6 shadow-sm mb-5 sm:mb-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 text-xs text-[var(--color-text-disabled)]">
               <span>{cur.created?.slice(0, 10) || '未知日期'}</span>
               <div className="flex items-center gap-2 sm:gap-3">
                 {statusMap[cur.id] && (
                   <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     statusMap[cur.id] === '已精修' 
-                      ? 'bg-[#EAF5E9] text-[#478B4A]' 
+                      ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' 
                       : 'bg-[#FDF3E4] text-[#C97E2C]'
                   }`}>
                     {statusMap[cur.id]}
                   </span>
                 )}
                 <span>imp {cur.importance ?? '—'}</span>
-                {cur.score != null && <span className="text-[#D97757] font-medium">score {cur.score}</span>}
+                {cur.score != null && <span className="text-[var(--color-primary)] font-medium">score {cur.score}</span>}
               </div>
             </div>
 
             {cur.tags && cur.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 sm:gap-1.5 mb-3 sm:mb-4">
                 {cur.tags.map(t => (
-                  <span key={t} className="text-xs px-2 sm:px-2.5 py-0.5 rounded-full bg-[#F4F2EC] text-[#5B5854] border border-[#E8E6E1]">
+                  <span key={t} className="text-xs px-2 sm:px-2.5 py-0.5 rounded-full bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] border border-[var(--color-border)]">
                     {t}
                   </span>
                 ))}
               </div>
             )}
 
-            <h2 className="text-lg sm:text-xl font-semibold text-[#2B2927] mb-3 sm:mb-4">{cur.name}</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-[var(--color-text-heading)] mb-3 sm:mb-4">{cur.name}</h2>
 
-            <div className="text-[#3A3836] text-sm leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto bg-[#FDFCFB] rounded-xl p-4 sm:p-5 border border-[#F0EFEB]">
-              {fullBucket ? getContent(fullBucket) : <span className="text-[#A8A49D] italic">加载中…</span>}
+            <div className="text-[var(--color-text-primary)] text-sm leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto bg-[var(--color-surface-elevated)] rounded-xl p-4 sm:p-5 border border-[var(--color-border-light)]">
+              {fullBucket ? getContent(fullBucket) : <span className="text-[var(--color-text-disabled)] italic">加载中…</span>}
             </div>
 
             <div className="mt-4 sm:mt-5 flex gap-2 items-center">
               <select
                 value={categoryMap[cur.id] ?? ''}
                 onChange={e => updateCategory(cur.id, e.target.value || null)}
-                className="flex-1 bg-white text-[#3A3836] text-xs sm:text-sm rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 border border-[#E8E6E1] outline-none focus:border-[#D97757] focus:ring-2 focus:ring-[#D97757]/10 transition-colors"
+                className="flex-1 bg-white text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-colors"
               >
                 <option value="">— 选择分类 —</option>
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -230,7 +215,7 @@ export default function ReviewPage() {
                     setNewCatInput('')
                   }
                 }}
-                className="w-24 sm:w-32 bg-white text-[#3A3836] text-xs sm:text-sm rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 border border-[#E8E6E1] outline-none focus:border-[#D97757] placeholder-[#A8A49D] transition-colors"
+                className="w-24 sm:w-32 bg-white text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)] placeholder-[var(--color-text-disabled)] transition-colors"
               />
             </div>
           </div>
@@ -239,7 +224,7 @@ export default function ReviewPage() {
         {cur && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5 sm:mb-6">
             <button onClick={() => updateStatus(cur.id, '已精修')} disabled={saving}
-              className="py-2.5 sm:py-3 rounded-xl bg-[#EAF5E9] border border-[#C5E0C3] text-[#478B4A] hover:bg-[#D4EAD2] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-digested-bg)] border border-[#C5E0C3] text-[var(--color-digested)] hover:bg-[#D4EAD2] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               ✓ 已阅
             </button>
@@ -249,12 +234,12 @@ export default function ReviewPage() {
               ? 存疑
             </button>
             <button onClick={() => updateStatus(cur.id, null)} disabled={saving}
-              className="py-2.5 sm:py-3 rounded-xl bg-[#F4F2EC] border border-[#E8E6E1] text-[#6C6965] hover:bg-[#E8E4DC] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[#E8E4DC] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               ↺ 重置
             </button>
             <a href={`/bucket/${cur.id}`}
-              className="py-2.5 sm:py-3 rounded-xl bg-[#EDF4FC] border border-[#C8DAF0] text-[#3B72B9] hover:bg-[#E0ECF8] transition-colors text-xs sm:text-sm font-semibold text-center"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-resolved-bg)] border border-[#C8DAF0] text-[var(--color-resolved)] hover:bg-[#E0ECF8] transition-colors text-xs sm:text-sm font-semibold text-center"
             >
               ✎ 编辑
             </a>
@@ -264,12 +249,12 @@ export default function ReviewPage() {
         {queue.length > 1 && (
           <div className="flex justify-between">
             <button onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}
-              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] disabled:opacity-40 text-xs sm:text-sm transition-colors"
+              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-xs sm:text-sm transition-colors"
             >
               ← 上一条
             </button>
             <button onClick={() => setCurrent(c => Math.min(queue.length - 1, c + 1))} disabled={current === queue.length - 1}
-              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-white border border-[#E8E6E1] text-[#6C6965] hover:bg-[#F9F8F6] disabled:opacity-40 text-xs sm:text-sm transition-colors"
+              className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-xs sm:text-sm transition-colors"
             >
               下一条 →
             </button>

@@ -23,79 +23,72 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 ## 认证方式
 
-所有服务端 API 调用统一用 `getSessionCookie()`：每次调用 OB 前 POST `/auth/login` 重新获取 session cookie。**不依赖浏览器 cookie**（跨域无法传递）。
-
-`lib/api.ts` 有一份，所有 route.ts 都 import 同一份，已统一。
+`lib/api.ts` 中 `getSessionCookie()` 统一管理。**已加 5 分钟内存缓存**，避免每次 fetch 重复 POST `/auth/login`。所有 API proxy route 共用同一份。
 
 ---
 
 ## 文件结构
 
+### 共享组件 `app/components/`
+
+| 文件 | 说明 |
+|------|------|
+| `NavBar.tsx` | **统一导航栏**，全站 6 页共用。activeSlug prop 控制高亮，主页额外 onTabClick |
+| `BucketDetailDrawer.tsx` | 桶详情抽屉，含噪声标记、相似记忆推荐、合并预览弹窗 |
+
 ### `app/api/` — Next.js API Routes（代理到 OB 后端）
 
 | 路径 | 方法 | 说明 |
 |------|------|------|
-| `buckets/route.ts` | GET | 获取所有桶列表 |
+| `buckets/route.ts` | GET | 桶列表 |
 | `bucket/[id]/route.ts` | GET | 单个桶详情 |
-| `add-bucket/route.ts` | POST | 新建桶（已从 MCP 迁移到 REST POST /api/bucket） |
-| `edit-bucket/route.ts` | POST | 编辑桶（已从 MCP 迁移到 REST PATCH/DELETE /api/bucket/{id}，支持 content/pinned/resolved/digested/tags/importance/delete） |
-| `journal/route.ts` | GET/POST | GET 日记列表；POST 创建新日记 |
-| `to-journal/route.ts` | POST | 将已有桶转为日记（不可逆，body: { id, author, locked, unlock_hint }） |
-| `search/route.ts` | GET | 搜索桶（?q=&include_archive=） |
+| `add-bucket/route.ts` | POST | 新建桶 |
+| `edit-bucket/route.ts` | POST | 编辑/删除桶（噪声标记、字段修改、delete:true） |
+| `search/route.ts` | GET | **透传全部 query params**（含 simulate, include_vector, limit 等） |
+| `breath-debug/route.ts` | GET | 模拟 breath |
+| `journal/route.ts` | GET/POST | 日记列表 / 新建日记 |
+| `to-journal/route.ts` | POST | 桶转日记 |
+| `config/route.ts` | GET/POST | fuzzy_threshold 配置 |
+| `prompts/route.ts` | GET/POST | prompt 配置 |
+| `prompts/test/route.ts` | POST | prompt 效果测试 |
+| `touch/[id]/route.ts` | POST | 轻触 / 激活 |
+| `archive/[id]/route.ts` | POST | 归档 |
 | `review-status/route.ts` | POST | 审阅状态 |
-| `breath-debug/route.ts` | GET | 模拟 breath（?q=&valence=&arousal=&threshold=） |
-| `config/route.ts` | GET/POST | 读写后端配置（fuzzy_threshold） |
-| `prompts/route.ts` | GET/POST | 读写 prompt 配置 |
-| `prompts/test/route.ts` | POST | 测试 prompt 效果（绕过缓存，支持 prompt_override） |
-| `touch/[id]/route.ts` | POST | 轻触（默认）或完整激活（?ripple=true） |
-| `archive/[id]/route.ts` | POST | 物理归档桶 |
+| `hit-stats/route.ts` | GET/POST | 🆕 命中统计 |
+| `recent-searches/route.ts` | GET | 🆕 检索追溯 |
+| `scoring-config/route.ts` | GET/POST | 🆕 检索评分旋钮 |
+| `import-upload/route.ts` | POST | 🆕 上传导入文件 |
+| `import-status/route.ts` | GET | 🆕 导入进度 |
+| `import-results/route.ts` | GET | 🆕 导入结果列表 |
+| `bucket/[id]/similar/route.ts` | GET | 🆕 相似桶查找 |
+| `bucket/[id]/merge-preview/route.ts` | POST | 🆕 合并预览 |
+| `bucket/[id]/merge-commit/route.ts` | POST | 🆕 确认合并 |
+| `bucket/[id]/restore/route.ts` | POST | 🆕 恢复桶 |
+| `bucket/[id]/purge/route.ts` | POST | 🆕 彻底删除 |
+| `trash/route.ts` | GET/POST | 🆕 回收站列表 / 清空 |
 
 ### `app/` — 页面
 
 | 路径 | 说明 |
 |------|------|
-| `page.tsx` | 主页面（~1100行，含时间线/记忆格/审阅三个 tab） |
-| `breath-sim/page.tsx` | 模拟 Breath 页面（四维评分可视化，threshold 动态调控） |
-| `graph/page.tsx` | 关系图谱页（力导向聚类图 + 三级缓存 + BucketDetailDrawer 抽屉） |
-| `journal/page.tsx` | 日记页（垂直时间轴布局 + 日期分组 + 搜索/日期筛选 + 居中详情弹窗） |
+| `page.tsx` | 主页面（时间线/记忆格/审阅，含噪声筛选 + 隐藏开关 + 乐观更新） |
+| `breath-sim/page.tsx` | **重写** — 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
+| `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |
+| `journal/page.tsx` | 日记页（垂直时间轴） |
+| `import/page.tsx` | 🆕 **导入工作台**：拖拽/粘贴、大/小模式、试跑、进度+费用、完成后审查 |
+| `trash/page.tsx` | 🆕 **回收站**：恢复/彻底删除/清空 |
 | `review/page.tsx` | 审阅页面 |
-| `prompts/page.tsx` | Prompt 配置页面（可折叠编辑，测试弹窗） |
-| `bucket/[id]/page.tsx` | 桶详情独立页面（旧版，graph 页已改用 BucketDetailDrawer） |
+| `prompts/page.tsx` | Prompt 配置 |
 
 ### `app/lib/api.ts`
 
-统一 API 函数：`getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`
-
-### `components/BucketDetailDrawer`
-
-桶详情抽屉，主页面、breath-sim、graph 页共用。
-
-```typescript
-interface Props {
-  selected: BucketDetail | null
-  detailLoading: boolean
-  editing: boolean
-  editContent: string
-  saving: boolean
-  operating: boolean
-  copied: boolean
-  onClose: () => void
-  onStartEdit: (content: string) => void
-  onCancelEdit: () => void
-  onSaveEdit: () => void
-  onTraceOp: (id: string, args: Record<string, unknown>) => Promise<void>
-  onCopyId: () => void
-  onImportanceChange?: (id: string, val: number) => void
-  onTouch: (id: string) => Promise<void>
-  onActivate: (id: string) => Promise<void>
-  onArchive: (id: string) => Promise<void>
-  onConvertToJournal?: (id: string, args: { author: string; locked: boolean; unlock_hint: string }) => Promise<void>
-}
-```
+- `getSessionCookie()` — 带 5min 缓存
+- `clearSessionCookie()` — 手动清除缓存
+- `getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`
 
 ---
 
-## OB 后端接口（Zeabur）
+## OB 后端接口汇总
 
 ### 认证
 ```
@@ -104,42 +97,73 @@ POST /auth/login  { password }  →  set-cookie
 
 ### 桶管理
 ```
-GET  /api/buckets                        # 所有桶（include_archive=True，含已归档）
-GET  /api/bucket/{id}                    # 单个桶详情
-POST /api/bucket                         # 新增桶（已从 MCP 迁移到 REST）
-PATCH /api/bucket/{id}                   # 更新桶字段（已从 MCP 迁移到 REST）
-DELETE /api/bucket/{id}                  # 硬删除桶（已从 MCP 迁移到 REST）
-GET  /api/search?q=&include_archive=&limit=  # 搜索（limit默认=max_results，show_all默认false）
-POST /api/touch/{id}?ripple=true/false   # 轻触(false) 或完整激活(true，+1激活+涟漪)
-POST /api/archive/{id}                   # 物理归档（移文件到archive_dir）
-POST /api/unarchive/{id}                 # 恢复归档
+GET    /api/buckets                         # 所有桶
+GET    /api/bucket/{id}                     # 单个桶
+POST   /api/bucket                          # 新建
+PATCH  /api/bucket/{id}                     # 更新字段
+DELETE /api/bucket/{id}                     # 软删除（移入回收站）
+POST   /api/touch/{id}?ripple=true/false    # 轻触/激活
+POST   /api/archive/{id}                    # 归档
+POST   /api/unarchive/{id}                  # 恢复归档
 ```
 
-### 日记系统
+### 搜索 & 模拟
 ```
-GET  /api/journal                        # 日记列表（返回 [{ id, name, author, created, locked, content?, unlock_hint? }]）
-POST /api/journal                        # 创建新日记（body: { content, name?, author, locked, unlock_hint? }）
-POST /api/bucket/{id}/to-journal         # 已有桶转为日记（body: { author, locked, unlock_hint? }，不可逆）
-```
-
-### 模拟 Breath（Debug）
-```
+GET /api/search?q=&simulate=&include_vector=&include_noise=&limit=
+# simulate=true → 返回 matched_fields + vector_similarity
+# include_vector=true → 附加 embedding 向量相似度
+# include_noise=true → 包含噪声桶
 GET /api/breath-debug?q=&valence=&arousal=&threshold=
-# 返回所有桶的四维评分详情（top 50，含未过阈值的桶置灰显示）
+# 四维评分可视化，top 50
+```
+
+### 回收站 🆕
+```
+GET  /api/trash                  # 列表
+POST /api/trash/empty            # 清空
+POST /api/bucket/{id}/restore    # 恢复
+POST /api/bucket/{id}/purge      # 彻底删除
+```
+
+### 相似 & 合并 🆕
+```
+GET  /api/bucket/{id}/similar?n=5                # embedding 相似桶
+POST /api/bucket/{id}/merge-preview?into={id}    # LLM 合并预览 + 费用
+POST /api/bucket/{id}/merge-commit?into={id}     # 确认合并
+```
+
+### 可观测性 🆕
+```
+GET  /api/hit-stats?limit=&include_zero=&order=   # 命中统计
+POST /api/hit-stats/reset                         # 重置统计
+GET  /api/recent-searches?limit=                  # 检索追溯
+GET  /api/scoring-config                          # 读旋钮
+POST /api/scoring-config                          # 写旋钮
+POST /api/scoring-config/reset                    # 重置旋钮
+```
+
+### 日记
+```
+GET  /api/journal                         # 列表（60s 缓存）
+POST /api/journal                         # 新建
+POST /api/bucket/{id}/to-journal          # 桶转日记
+```
+
+### 导入
+```
+POST /api/import/upload?mode=&max_chunks=  # 上传 + 启动导入
+GET  /api/import/status                    # 进度（含 total_cost_usd）
+GET  /api/import/results?limit=            # 导入结果列表
+POST /api/import/review                    # 审查决策
 ```
 
 ### 配置
 ```
-GET  /api/config                        # 返回 { fuzzy_threshold, max_results }
-POST /api/config { fuzzy_threshold }    # 更新内存值（重启恢复 config.yaml 默认 55）
-```
-
-### Prompt 配置
-```
-GET  /api/prompts                              # 返回 { dehydrate, analyze }
-POST /api/prompts { name, content }            # 更新内存中的 prompt（name: dehydrate/analyze）
-POST /api/prompts/test { name, content, prompt_override? }
-# 测试 prompt，绕过 SQLite 缓存直接调 LLM，prompt_override 不需先应用即可测试
+GET  /api/config                     # { fuzzy_threshold, max_results }
+POST /api/config { fuzzy_threshold } # 更新（重启恢复默认，持久化待做）
+GET  /api/prompts                    # 读 prompt
+POST /api/prompts                    # 写 prompt
+POST /api/prompts/test               # 测试 prompt
 ```
 
 ---
@@ -147,60 +171,46 @@ POST /api/prompts/test { name, content, prompt_override? }
 ## 关键实现细节
 
 ### Next.js 15 动态路由
-params 是 Promise，必须 `const { id } = await params`，**不能直接用 params.id**（会是 undefined）。
+params 是 Promise，必须 `const { id } = await params`。
 
-### MCP vs REST 边界（全部已迁移到 REST，不再走 MCP）
-所有前端操作现在都通过 REST API 代理到 OB 后端，不再经过 MCP 协议。
+### 噪声系统
+噪声 = `resolved=true AND importance=1`。标记时保存 `importance_before_noise`；撤销时自动恢复。search() 默认排除，`include_noise=true` 可包含。
 
-### OB 目录结构
-桶存文件系统：`{buckets_dir}/permanent/`, `dynamic/`, `feel/`, `archive/`
-`bucket_mgr.list_all(include_archive=False)` 只扫描前三个目录。
-`/api/buckets` 用 `include_archive=True`（主页面展示所有桶包括已归档）。
+### 回收站
+软删除：文件移到 `buckets/trash/`，保留 `original_type` + `trashed_at`。恢复/彻底删除/清空均通过 BucketManager 方法。
 
-### 脱水缓存
-`dehydrate()` 有 SQLite 缓存，相同 content 直接返回缓存，不重新调 LLM。
-测试接口直接调 `_api_dehydrate()` 绕过缓存。
-`analyze()` 无缓存，直接调 LLM。
+### 相似记忆
+依赖 embedding 引擎。BucketDetailDrawer 打开时自动查询 top 5，可手动刷新。显示相似度 + 内容预览 + 合并预览按钮。
 
-### Prompt 实例变量
-`dehydrator.dehydrate_prompt` / `dehydrator.analyze_prompt`
-初始值来自模块常量 DEHYDRATE_PROMPT / ANALYZE_PROMPT，
-可动态修改，**重启后恢复**（待做持久化到 runtime_config.json）。
+### 合并流程
+1. 点击「合并预览」→ POST merge-preview → LLM 生成合并结果 + 费用估算
+2. 弹窗三栏对比（A 源 / B 目标 / 合并结果）
+3. 确认 → POST merge-commit → 更新 B 内容+元数据，删除 A
 
-### DEHYDRATE_PROMPT 第 7 条
-"保留内容类型标签（如：剧情游戏、故事虚构、角色扮演）"
-防止游戏剧情内容被脱水成真实事件记录。
+### 命中统计 & 追溯
+`buckets/hit_stats.json` 持久化。search() 自动记录（`record_stats=True`），即时模拟（`simulate=true`）不记录。
 
-### 图谱页缓存策略（`app/graph/page.tsx`）
-三级缓存以减少重复加载：
-1. **sessionStorage `graph_data`** — 缓存 API 返回的桶列表，刷新/切Tab回来时不重拉
-2. **localStorage `graph_positions`** — 缓存力导向布局计算结果（200节点 × 150迭代 = O(n²) 计算），带指纹校验
-3. **`computedKeyRef`** — 内存级防重复计算，相同数据 hash 不重新跑力导向
-- 指纹 `simpleHash()` 基于桶列表的 id + score + domain 拼接
-- 数据变化时自动失效重算
+### 检索评分旋钮
+5 个运行时旋钮，通过 `/api/scoring-config` 读写，持久化到 `runtime_config.json`，重启不丢。全部默认值 = 跟上游行为一致。
 
-### 日记页设计（`app/journal/page.tsx`）
-- 垂直时间轴布局：CSS `.tl-line`（2px 竖线，left:21）、`.tl-dot`（14px 圆点，绝对定位 left: -39）
-- 卡片内容区域统一 `marginLeft: 54`（为时间轴留空），标题和弹窗用不同的组件样式
-- 详情弹窗：居中 overlay，`max-h-[80vh]` 固定高度，内容区 `overflow-y-auto custom-scroll`
-- 弹窗样式**和 BucketDetailDrawer 不同** — 日记弹窗是自己实现的居中 modal，不是侧边抽屉
-- 搜索框：仿主页面搜索样式（圆角 container + 放大镜 SVG icon + input）
-- 日期筛选：合并为单个组件，两个 date input 用"至"连接
-- 底部统计：言之（橙）、小羊（蓝）、共同（灰）三种 author 标签色
+### Journal 缓存
+GET `/api/journal` 60s TTL 内存缓存。新建日记时自动 invalidate。
+
+### 会话 Cookie 缓存
+`getSessionCookie()` 5min 内存缓存。避免每次 API 请求重复 POST `/auth/login`。
 
 ---
 
 ## 待办事项
 
+### 未接入的 Fork 功能
+- [ ] 重新脱水（redehydrate）— 不满意 LLM 结果可重做 + 预览对比
+- [ ] 控制台配置页 — 多组 LLM profile 切换、衰减权重可视化
+- [ ] 自动备份 — GitHub Actions 每天备份 buckets
+- [ ] 导入增强 — 长摘要 source_excerpt、Claude Exporter 插件支持、原文时间戳嵌入
+- [ ] 即时模拟增强 — 分词器命中详情可视化、最近浮现/检索分离标记
+
 ### Bug / 优化
 - [ ] Prompt 修改持久化（目前只改内存，重启丢失）
 - [ ] dehydrate 缓存失效策略（prompt 改了后旧缓存应清除）
-
-### 新功能（按优先级）
-- [ ] 关系图谱页和主页面等 UI 风格统一（graph 页视觉和其他页面有不一致）
-- [ ] 导入记忆页面（从开发者 dashboard 移植）
-- [ ] 梦境展示页面
-- [ ] 情绪系统前端页面
-- [ ] 桶合并功能
-- [ ] 记忆密度可视化
-- [ ] 里程碑时间线 / 纪念日倒计时
+- [ ] 关系图谱页 UI 和其他页面风格统一

@@ -1,26 +1,114 @@
 @import "tailwindcss";
 
+/* ============================================ */
+/* Design Tokens — 视觉层变量                    */
+/* ============================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---- Color: brand / 品牌色 ---- */
+  --color-primary:          #D97757;
+  --color-primary-hover:    #C86645;
+  --color-primary-soft:     #FDF0ED;
+  --color-primary-muted:    #FDF9F7;
+
+  /* ---- Color: surface / 表面层级 ---- */
+  --color-bg:               #FCFAF8;
+  --color-surface:          #FFFFFF;
+  --color-surface-elevated: #FDFCFB;
+  --color-surface-secondary:#F9F8F6;
+  --color-surface-tertiary: #F4F2EC;
+
+  /* ---- Color: border / 边框 ---- */
+  --color-border:           #E8E6E1;
+  --color-border-light:     #F0EFEB;
+  --color-border-subtle:    #EEEAE4;
+
+  /* ---- Color: text / 文字层级 ---- */
+  --color-text-primary:     #3A3836;
+  --color-text-heading:     #2B2927;
+  --color-text-secondary:   #6C6965;
+  --color-text-tertiary:    #8A8681;
+  --color-text-disabled:    #A8A49D;
+  --color-text-divider:     #D0CEC9;
+
+  /* ---- Color: status / 状态色 ---- */
+  --color-pinned:           #D97757;
+  --color-pinned-bg:        #FDF0ED;
+  --color-resolved:         #3B72B9;
+  --color-resolved-bg:      #EDF4FC;
+  --color-digested:         #478B4A;
+  --color-digested-bg:      #EAF5E9;
+  --color-feel:             #D97757;
+  --color-feel-bg:          #FDF0ED;
+  --color-wish:             #B8860B;
+  --color-wish-bg:          #FDF3E7;
+  --color-archived:         #8A8681;
+  --color-archived-bg:      #F4F2EC;
+  --color-noise:            #8A8681;
+  --color-noise-bg:         #F4F2EC;
+  --color-danger:           #C64B45;
+  --color-vector:           #478B4A;
+
+  /* ---- Color: semantic channel / 即时模拟双栏 ---- */
+  --color-keyword:          #D97757;
+  --color-keyword-bg:       #FDF0ED;
+  --color-semantic:         #478B4A;
+  --color-semantic-bg:      #EAF5E9;
+
+  /* ---- Color: field-match / 字段命中色 ---- */
+  --color-field-name:       #D97757;
+  --color-field-domain:     #8A8681;
+  --color-field-tags:       #3B72B9;
+  --color-field-content:    #478B4A;
+
+  /* ---- Radius / 圆角层级 ---- */
+  --radius-sm:              6px;
+  --radius-md:              10px;
+  --radius-lg:              14px;
+  --radius-xl:              16px;
+  --radius-2xl:             22px;
+
+  /* ---- Spacing / 间距层级 ---- */
+  --space-xs:               6px;
+  --space-sm:               10px;
+  --space-md:               16px;
+  --space-lg:               22px;
+  --space-xl:               36px;
+
+  /* ---- Typography / 排版 ---- */
+  --font-sans:              "Inter", "Noto Sans SC", -apple-system, system-ui, sans-serif;
+  --font-mono:              "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- Motion / 动效 ---- */
+  --ease-standard:          cubic-bezier(.2, .8, .2, 1);
+  --duration-fast:          0.12s;
+  --duration-normal:        0.18s;
+  --duration-slow:          0.26s;
+
+  /* ---- Shadow / 阴影 ---- */
+  --shadow-sm:              0 2px 6px rgba(58, 56, 54, 0.04);
+  --shadow-md:              0 4px 14px rgba(58, 56, 54, 0.06);
+  --shadow-hover:           0 4px 18px rgba(217, 119, 87, 0.10);
+
+  /* ---- Layout / 布局 ---- */
+  --page-width:             1152px;
 }
 
+/* ---- Tailwind theme bridge ---- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text-primary);
+  --font-sans: "Inter", "Noto Sans SC", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ---- Base ---- */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
 }
+
+/* ---- Utility: hide scrollbar ---- */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
