@@ -539,7 +539,7 @@ export default function GraphPage() {
   return (
     <>
       <style>{NEUMORPHIC}</style>
-      <div className="graph-page pb-10">
+      <div className="graph-page pb-24 md:pb-10">
         <NavBar activeSlug="graph" />
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">

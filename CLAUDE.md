@@ -31,10 +31,35 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 ### 共享组件 `app/components/`
 
+**导航系：**
 | 文件 | 说明 |
 |------|------|
-| `NavBar.tsx` | **统一导航栏**，全站 6 页共用。activeSlug prop 控制高亮，主页额外 onTabClick |
-| `BucketDetailDrawer.tsx` | 桶详情抽屉，含噪声标记、相似记忆推荐、合并预览弹窗 |
+| `NavBar.tsx` | 桌面端顶部导航栏（`hidden md:block`），全站 8 页共用 |
+| `BottomTabBar.tsx` | 🆕 手机端底部 5 栏 Tab Bar（记忆/审阅/日记/Breath/设置） |
+| `MobileViewSwitch.tsx` | 🆕 手机端记忆页时间线/记忆格切换 |
+| `MobileShell.tsx` | 🆕 手机端布局容器（加底部间距，包装全站） |
+
+**弹窗系：**
+| 文件 | 说明 |
+|------|------|
+| `DetailPanel.tsx` | 🆕 统一弹窗壳：`mode="drawer"` 右侧滑入，`mode="modal"` 居中弹出。替代了各页面独立弹窗 |
+| `BucketDetailDrawer.tsx` | 桶详情内容区，含噪声标记、相似记忆推荐、合并预览（壳已换成 DetailPanel） |
+
+**UI 原子组件：**
+| 文件 | 说明 |
+|------|------|
+| `StatusBadge.tsx` | 🆕 桶状态标签（pinned/resolved/digested/noise/feel/wish），导出 `statusLabel()` 判断函数 |
+| `TagPill.tsx` | 🆕 domain/tag 标签胶囊，区分 domain 和 tag 两种变体 |
+| `DataBadge.tsx` | 🆕 score/imp 等数字展示胶囊 |
+| `Stat.tsx` | 🆕 统计格子 |
+| `Card.tsx` | 🆕 统一卡片壳（variant: interactive/outline/ghost/empty） |
+| `SearchBar.tsx` | 🆕 全站统一药丸搜索框 |
+| `FilterBar.tsx` | 🆕 筛选按钮行容器 + `FilterPill` 单个筛选药丸 |
+| `KnobRow.tsx` | 🆕 评分旋钮滑条 |
+| `KnobToggle.tsx` | 🆕 评分旋钮开关 |
+| `ScoreBar.tsx` | 🆕 Pipeline 四维评分条 |
+
+> 完整设计规范见 `DESIGN.md`。
 
 ### `app/api/` — Next.js API Routes（代理到 OB 后端）
 
@@ -168,7 +193,33 @@ POST /api/prompts/test               # 测试 prompt
 
 ---
 
+## 导航架构
+
+### 桌面端
+`NavBar` 横向排列全部页面入口（`hidden md:block`），`max-w-6xl` 统一宽度。
+
+### 手机端
+`BottomTabBar` 固定在底部（`md:hidden`），5 个 Tab：
+- 审阅 → `/?tab=review`
+- 日记 → `/journal`
+- **记忆**（中间圆形突起）→ `/`
+- Breath → `/breath-sim`
+- 设置（点击向上弹出菜单：关系图谱/导入/回收站/权重配置）
+
+记忆页顶部 mini header：左 Ombre Brain logo，右 `MobileViewSwitch`（时间线/记忆格切换）。所有页面通过 `MobileShell` 包裹获得底部安全间距。
+
+---
+
 ## 关键实现细节
+
+### 设计 Token
+所有颜色/圆角/阴影/间距统一在 `globals.css` 的 `:root` 中定义。修改一处全局生效。详见 `DESIGN.md`。
+
+### 弹窗规范
+所有弹窗统一使用 `DetailPanel`。桶详情用 `mode="drawer"`，其他（新增记忆/日记、合并预览、日记查看、Prompt 测试）用 `mode="modal"`。
+
+### 卡片规范
+`Card` 壳提供 4 个变体：`interactive`（可点击+hover效果）、`outline`（普通白底+边框）、`ghost`（淡底+细边框）、`empty`（虚线边框空状态）。
 
 ### Next.js 15 动态路由
 params 是 Promise，必须 `const { id } = await params`。

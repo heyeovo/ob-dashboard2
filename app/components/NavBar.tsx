@@ -23,7 +23,7 @@ const PAGE_LINKS = [
 
 export default function NavBar({ activeSlug, onTabClick }: NavBarProps) {
   return (
-    <nav className="border-b border-[var(--color-border)] bg-white/50 backdrop-blur-md sticky top-0 z-10">
+    <nav className="hidden md:block border-b border-[var(--color-border)] bg-white/50 backdrop-blur-md sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3 sm:gap-5 md:gap-8 text-xs sm:text-sm font-medium text-[var(--color-text-tertiary)]">
         {/* Logo */}
         <Link

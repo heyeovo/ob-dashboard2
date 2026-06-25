@@ -9,6 +9,7 @@ import NavBar from './components/NavBar'
 import StatusBadge, { statusLabel } from './components/StatusBadge'
 import DetailPanel from './components/DetailPanel'
 import Card from './components/Card'
+import MobileViewSwitch from './components/MobileViewSwitch'
 import SearchBar from './components/SearchBar'
 import FilterBar, { FilterPill } from './components/FilterBar'
 import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
@@ -519,7 +520,6 @@ function HomeClient() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [activeTag, setActiveTag] = useState<string | null>(null)
-  const [hideNoise, setHideNoise] = useState(true) // 默认隐藏噪声
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
@@ -690,8 +690,7 @@ function HomeClient() {
     matchesQuickFilter(b, quickFilter) &&
     matchesDateFilter(b, datePreset, customStart, customEnd) &&
     (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag))) &&
-    (activeCategory === '' || categoryMap[b.id] === activeCategory) &&
-    (!hideNoise || !(!!b.noise || (b.resolved && b.importance === 1))) // 隐藏噪声
+    (activeCategory === '' || categoryMap[b.id] === activeCategory)
   )
 
   const monthlyGroups = useMemo(() => groupByMonth(displayed), [displayed]);
@@ -852,7 +851,16 @@ function HomeClient() {
 
       <NavBar activeSlug={activeTab} onTabClick={(tab) => router.replace(`/?tab=${tab}`, { scroll: false })} />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
+      {/* Mobile-only header */}
+      <header className="md:hidden sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)] px-4 h-12 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
+          <span className="text-sm font-semibold text-[var(--color-text-primary)]">Ombre Brain</span>
+        </div>
+        <MobileViewSwitch />
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-10">
         {activeTab !== 'review' && (
           <div className="hidden md:block mb-6 sm:mb-8">
             <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)] mb-2 sm:mb-3">
@@ -902,27 +910,15 @@ function HomeClient() {
               </div>
               <div className="w-full h-px bg-[var(--color-border-light)] mb-3 sm:mb-4"></div>
 
-              <div className="flex flex-wrap items-center gap-y-3 gap-x-4">
-                <FilterBar>
-                  {QUICK_FILTERS.map(f => (
-                    <FilterPill key={f.key} label={`${f.label} ${statusCounts[f.key]}`} active={quickFilter === f.key} onClick={() => setQuickFilter(f.key)} />
-                  ))}
-                </FilterBar>
+              <FilterBar>
+                {QUICK_FILTERS.map(f => (
+                  <FilterPill key={f.key} label={`${f.label} ${statusCounts[f.key]}`} active={quickFilter === f.key} onClick={() => setQuickFilter(f.key)} />
+                ))}
+              </FilterBar>
 
-                {/* Hide Noise toggle */}
-                <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={hideNoise}
-                    onChange={e => setHideNoise(e.target.checked)}
-                    className="accent-[var(--color-primary)] w-3.5 h-3.5"
-                  />
-                  隐藏噪声
-                </label>
-
-                {/* 下排：分类标签 */}
-                {categories.length > 0 && (
-                  <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+              {/* 下排：分类标签 */}
+              {categories.length > 0 && (
+                <div className="flex gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar mt-3">
                     {/* “全部” 按钮 */}
                     <button onClick={() => setActiveCategory('')}
                       // 加上了 transition-all 确保动画一致
@@ -948,7 +944,6 @@ function HomeClient() {
                     ))}
                   </div>
                 )}
-              </div>
 
               {activeTab === 'grid' && (
                 <div className="flex gap-1.5 sm:gap-2 mt-4 pt-4 border-t border-[var(--color-border-light)] overflow-x-auto no-scrollbar">
@@ -1168,7 +1163,7 @@ function HomeClient() {
 
       {/* 悬浮加号 */}
       <button onClick={() => setShowAdd(true)}
-        className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center z-50">
+        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center z-50">
         +
       </button>
 

@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
  */
 export default function FilterBar({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`flex flex-wrap items-center gap-y-3 gap-x-4 ${className}`}>
+    <div className={`flex items-center gap-2 overflow-x-auto no-scrollbar ${className}`}>
       {children}
     </div>
   )

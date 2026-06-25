@@ -277,11 +277,6 @@ export default function JournalPage() {
         {/* ===== 标题栏 ===== */}
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-[var(--color-text-primary)] tracking-tight">日记</h1>
-          <button onClick={() => { setShowAdd(true); resetNewForm() }}
-            className="text-sm text-white px-5 py-2 rounded-full transition-all duration-200 hover:shadow-md active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #E8A58F, var(--color-primary))' }}>
-            + 写新日记
-          </button>
         </div>
 
         {/* ===== 统计条 ===== */}
@@ -394,7 +389,8 @@ export default function JournalPage() {
       </div>
 
       {/* ===== 详情弹窗 ===== */}
-      {detail && <DetailPanel open={true} onClose={closeDetail} mode="modal" width="max-w-2xl">
+      {detail && (
+        <DetailPanel open={true} onClose={closeDetail} mode="modal" width="max-w-2xl">
 
             {detailFetching ? (
               <div className="flex items-center justify-center py-20 text-sm text-[var(--color-text-disabled)]">读取中...</div>
@@ -482,7 +478,8 @@ export default function JournalPage() {
                 </div>
               </>
             )}
-        </DetailPanel>}
+        </DetailPanel>
+      )}
 
       {/* ===== 写新日记弹窗 ===== */}
       <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-lg">
@@ -533,6 +530,12 @@ export default function JournalPage() {
               </button>
             </div>
         </DetailPanel>
+
+      {/* 悬浮加号 */}
+      <button onClick={() => { setShowAdd(true); resetNewForm() }}
+        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] transition-colors flex items-center justify-center z-50">
+        +
+      </button>
     </div>
   )
 }
