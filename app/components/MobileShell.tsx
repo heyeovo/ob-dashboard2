@@ -1,4 +1,5 @@
 'use client'
+import { Suspense } from 'react'
 import BottomTabBar from './BottomTabBar'
 import type { ReactNode } from 'react'
 
@@ -12,7 +13,9 @@ export default function MobileShell({ children }: { children: ReactNode }) {
       {children}
       {/* Bottom tab bar — only visible on small screens */}
       <div className="md:hidden">
-        <BottomTabBar />
+        <Suspense fallback={null}>
+          <BottomTabBar />
+        </Suspense>
       </div>
       {/* Extra bottom padding on mobile for the tab bar + safe area */}
       <div className="md:hidden h-20" />
