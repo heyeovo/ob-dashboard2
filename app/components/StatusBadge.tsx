@@ -29,15 +29,16 @@ export function statusLabel(bucket: {
  * Status badge pill — compact label for bucket states.
  * Usage: <StatusBadge type="resolved" /> or <StatusBadge type="resolved" label="已解决" />
  */
-export default function StatusBadge({ type, label, size = 'sm' }: {
-  type: StatusType; label?: string; size?: 'sm' | 'xs'
+export default function StatusBadge({ type, label, size = 'sm', onClick }: {
+  type: StatusType; label?: string; size?: 'sm' | 'xs'; onClick?: () => void
 }) {
   const s = STATUS_MAP[type]
   const text = label ?? s.label
   return (
     <span
-      className={`rounded-full font-medium inline-block whitespace-nowrap ${size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'}`}
+      className={`rounded-full font-medium inline-block whitespace-nowrap ${size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'} ${onClick ? 'cursor-pointer hover:opacity-70 active:scale-95 transition-all' : ''}`}
       style={{ backgroundColor: s.bg, color: s.fg }}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : undefined}
     >
       {text}
     </span>

@@ -166,7 +166,7 @@ export default function BucketDetailDrawer({
                   创建: {formatBeijingDateTime(selected.metadata.created)} · 修改: {formatBeijingDateTime(selected.metadata.last_active)}
                 </div>
               </div>
-              <button onClick={onClose} className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full">✕</button>
+              <button onClick={onClose} className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full md:inline-flex hidden">✕</button>
             </div>
 
             {/* 信息胶囊 */}
@@ -233,7 +233,7 @@ export default function BucketDetailDrawer({
               <button disabled={operating}
                 onClick={() => onTraceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 })}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.digested ? 'bg-[var(--color-resolved-bg)] text-[var(--color-resolved)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  selected.metadata.digested ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {selected.metadata.digested ? '已消化' : '消 化'}
               </button>

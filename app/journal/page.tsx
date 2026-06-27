@@ -5,6 +5,7 @@ import DetailPanel from '../components/DetailPanel'
 import SearchBar from '../components/SearchBar'
 import TagPill from '../components/TagPill'
 import { formatBeijingDate, formatBeijingDateTime, getBeijingDayOfWeek } from '@/app/utils/format'
+import TimelineDayGroup from '../components/TimelineDayGroup'
 
 interface JournalEntry {
   id: string
@@ -260,11 +261,6 @@ export default function JournalPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <style>{`
-        .tl-line { position: absolute; left: 18px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, #E8D5C4, #E8D5C4 75%, transparent); }
-        .tl-dot { position: relative; z-index: 1; width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; background: var(--color-primary); box-shadow: 0 0 0 3px var(--color-bg); }
-        .tl-card { background: #FFFFFF; border: 1px solid var(--color-border-light); border-radius: 16px; transition: all 0.15s ease; cursor: pointer; }
-        .tl-card:active { box-shadow: 0 4px 16px rgba(180,160,140,0.15); transform: scale(0.985); }
-        .tl-card:hover { box-shadow: 0 4px 16px rgba(180,160,140,0.15); transform: translateY(-1px); }
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #D4C9BD; border-radius: 4px; }
@@ -273,38 +269,51 @@ export default function JournalPage() {
       {/* ===== 顶部导航 ===== */}
       <NavBar activeSlug="journal" />
 
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 pb-24">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
 
-        {/* ===== 标题栏 ===== */}
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="text-xl font-bold text-[var(--color-text-primary)] tracking-tight">日记</h1>
+        {/* ===== 头部 ===== */}
+        <div className="pb-4 border-b border-slate-100 mb-5">
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Journal</h1>
+          <p className="text-sm text-slate-400 mt-1">寻回时间的线索，点滴卡片皆当下。</p>
+
+          {/* 数据看板 */}
+          <div className="flex items-center gap-3 text-xs text-slate-700 mt-3">
+            <div>言之 <span className="font-semibold">{statsSummary.言之}</span> 条</div>
+            <div className="h-3 w-[1px] bg-slate-200" />
+            <div>小羊 <span className="font-semibold">{statsSummary.小羊}</span> 条</div>
+            <div className="h-3 w-[1px] bg-slate-200" />
+            <div>共同 <span className="font-semibold">{statsSummary.共同}</span> 条</div>
+            <div className="h-3 w-[1px] bg-slate-200" />
+            <div>总计 <span className="font-semibold">{statsSummary.total}</span> 篇</div>
+          </div>
         </div>
 
-        {/* ===== 统计条 ===== */}
-        <div className="flex items-center gap-4 mb-5 text-xs">
-          <span className="font-medium text-[var(--color-primary)]">{statsSummary.言之} 篇<span className="text-[var(--color-text-disabled)] ml-1">言之</span></span>
-          <span className="font-medium text-[var(--color-resolved)]">{statsSummary.小羊} 篇<span className="text-[var(--color-text-disabled)] ml-1">小羊</span></span>
-          <span className="font-medium text-[var(--color-text-tertiary)]">{statsSummary.共同} 篇<span className="text-[var(--color-text-disabled)] ml-1">共同</span></span>
-          <span className="text-[#B0A590]">共 {statsSummary.total} 篇</span>
-        </div>
-
-        {/* ===== 搜索 ===== */}
-        <div className="mb-3">
+        {/* 搜索 */}
+        <div className="mb-5">
           <SearchBar value={search} onChange={setSearch} placeholder="搜索日记标题或内容..." />
         </div>
 
         {/* ===== 日期筛选（右下角） ===== */}
-        <div className="flex items-center justify-end gap-2 mb-5">
-          <div className="flex items-center bg-white border border-[var(--color-border)] rounded-lg overflow-hidden" style={{ fontSize: 0 }}>
-            <div className="border-r border-[var(--color-border)]">
-              <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
-                className="text-xs px-2.5 py-1.5 outline-none bg-transparent focus:text-[var(--color-primary)] transition-colors" />
-            </div>
-            <span className="text-[10px] text-[var(--color-text-disabled)] px-1.5">至</span>
-            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)}
-              className="text-xs px-2.5 py-1.5 outline-none bg-transparent focus:text-[var(--color-primary)] transition-colors" />
+        <div className="flex items-center justify-end gap-1.5 mb-5">
+          <div className="flex items-center gap-1 bg-white border border-[var(--color-border)] rounded-lg px-2 py-1.5">
+            <svg className="w-3 h-3 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
+              className="text-xs outline-none bg-transparent text-slate-600 w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
           </div>
-          <span className="text-xs text-[var(--color-text-disabled)]">{filtered.length} 篇</span>
+          <span className="text-xs text-slate-400">至</span>
+          <div className="flex items-center gap-1 bg-white border border-[var(--color-border)] rounded-lg px-2 py-1.5">
+            <svg className="w-3 h-3 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)}
+              className="text-xs outline-none bg-transparent text-slate-600 w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
+          </div>
         </div>
 
         {/* ===== 错误提示 ===== */}
@@ -325,7 +334,7 @@ export default function JournalPage() {
                 </div>
                 <div className="flex-1">
                   <div className="h-4 w-24 bg-[var(--color-border)] rounded mb-3" />
-                  <div className="h-28 bg-[var(--color-border-light)] rounded-2xl" />
+                  <div className="h-28 bg-gradient-to-br from-white to-slate-50/50 rounded-2xl border border-[var(--color-border)]" />
                 </div>
               </div>
             ))}
@@ -339,27 +348,20 @@ export default function JournalPage() {
           </div>
         ) : (
           /* ===== 时间轴 ===== */
-          <div className="space-y-8">
+          <div>
             {dateGroups.map(([date, items]) => (
-              <div key={date} className="relative">
-                {/* 时间线竖线 */}
-                <div className="tl-line" style={{ left: 21 }} />
-
-                {/* 日期头 */}
-                <div className="relative flex items-center gap-3 mb-3" style={{ marginLeft: 48 }}>
-                  <div className="tl-dot" style={{ position: 'absolute', left: -30, top: '50%', marginTop: -6 }} />
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">{formatJournalDate(items[0].created)}</span>
-                    <span className="text-[11px] text-[var(--color-text-disabled)]">{items.length} 篇</span>
-                  </div>
-                </div>
-
-                {/* 日记卡片 */}
-                <div className="space-y-3" style={{ marginLeft: 48 }}>
-                  {items.map(e => {
-                    const s = stats(e.content ?? '')
-                    return (
-                      <div key={e.id} className="tl-card p-3 sm:p-4" onClick={() => openDetail(e)}>
+              <div key={date}>
+                <TimelineDayGroup
+                  date={formatJournalDate(items[0].created)}
+                  count={items.length}
+                  unit="篇"
+                >
+                      {items.map(e => {
+                        const s = stats(e.content ?? '')
+                        return (
+                          <div key={e.id}
+                            className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl p-4 sm:p-6 hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y border-[var(--color-border)] hover:border-[var(--color-primary)]/30"
+                            onClick={() => openDetail(e)}>
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>
@@ -382,7 +384,7 @@ export default function JournalPage() {
                       </div>
                     )
                   })}
-                </div>
+                </TimelineDayGroup>
               </div>
             ))}
           </div>
@@ -396,9 +398,9 @@ export default function JournalPage() {
             {detailFetching ? (
               <div className="flex items-center justify-center py-20 text-sm text-[var(--color-text-disabled)]">读取中...</div>
             ) : (
-              <>
+              <div className="flex flex-col" style={{ height: '65vh', maxHeight: '75vh' }}>
                 {/* 头部 */}
-                <div className="px-6 pt-6 pb-4 border-b border-[var(--color-border-light)]">
+                <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-[var(--color-border-light)]">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">{detail.entry.name}</h2>
@@ -418,8 +420,8 @@ export default function JournalPage() {
                   </div>
                 </div>
 
-                {/* 内容区 */}
-                <div className="px-6 py-4 flex-1 overflow-y-auto custom-scroll" style={{ minHeight: 0 }}>
+                {/* 内容区 — 仅此区域可滚 */}
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scroll px-6 py-4">
                   {detail.entry.locked && detail.fullContent === (detail.entry.content ?? '') ? (
                     <p className="text-sm text-[var(--color-text-disabled)] italic py-6 text-center">
                       已上锁{detail.entry.unlock_hint ? ` · 提示：${detail.entry.unlock_hint}` : ''}
@@ -438,7 +440,7 @@ export default function JournalPage() {
                 </div>
 
                 {/* 底部操作区 */}
-                <div className="px-6 py-4 border-t border-[var(--color-border-light)]">
+                <div className="flex-shrink-0 px-6 py-4 border-t border-[var(--color-border-light)]">
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div className="text-[11px] text-[#B0A590] font-mono">
                       {stats(detail.fullContent).chars} 字 · ~{stats(detail.fullContent).tokens} tokens
@@ -477,7 +479,7 @@ export default function JournalPage() {
                     </button>
                   </div>
                 </div>
-              </>
+              </div>
             )}
         </DetailPanel>
       )}

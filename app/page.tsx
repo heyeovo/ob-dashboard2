@@ -338,50 +338,52 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
   const cur = queue[current]
 
   return (
-    <div>
-      {/* 顶端：今天/全部 右对齐 */}
-      <div className="flex justify-end mb-4">
-        <div className="flex gap-1.5">
-          {(['今天', '全部'] as const).map(t => (
-            <button key={t} onClick={() => { setTimeFilter(t); setCurrent(0) }}
-              className={`text-xs px-3 py-1 rounded-full border transition-colors whitespace-nowrap ${
-                timeFilter === t
-                  ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
+    <div className="flex flex-col min-h-0 flex-1">
+      {/* Fixed top filters */}
+      <div className="flex-shrink-0">
+        {/* 状态过滤行 + 今天/全部 */}
+        <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
+          {(['待办', '存疑', '已精修', '全部'] as const).map(f => (
+            <button key={f} onClick={() => { setFilter(f); setCurrent(0) }}
+              className={`flex items-center gap-1 text-xs px-3.5 py-1.5 rounded-full border transition-all whitespace-nowrap ${
+                filter === f
+                  ? 'bg-[var(--color-text-heading)] border-[var(--color-text-heading)] text-white'
                   : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-              }`}>
-              {t}
+              }`}
+            >
+              <span className={`text-[10px] ${
+                f === '待办' ? 'text-yellow-400' :
+                f === '存疑' ? 'text-red-400' :
+                f === '已精修' ? 'text-green-400' : 'text-[var(--color-text-disabled)]'
+              }`}>●</span>
+              {f} {f !== '全部' && <span className="opacity-60 ml-0.5">{counts[f as keyof typeof counts]}</span>}
             </button>
           ))}
+          {/* 今天/全部 — 跟在筛选行末尾 */}
+          <div className="flex gap-1.5 ml-2 pl-2 border-l border-[var(--color-border)]">
+            {(['今天', '全部'] as const).map(t => (
+              <button key={t} onClick={() => { setTimeFilter(t); setCurrent(0) }}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap ${
+                  timeFilter === t
+                    ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
+                    : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                }`}>
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 状态过滤行：更精致圆润的胶囊 */}
-      <div className="flex justify-center gap-2 mb-6 flex-wrap">
-        {(['待办', '存疑', '已精修', '全部'] as const).map(f => (
-          <button key={f} onClick={() => { setFilter(f); setCurrent(0) }}
-            className={`flex items-center gap-1 text-xs px-3.5 py-1.5 rounded-full border transition-all whitespace-nowrap ${
-              filter === f
-                ? 'bg-[var(--color-text-heading)] border-[var(--color-text-heading)] text-white'
-                : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-            }`}
-          >
-            <span className={`text-[10px] ${
-              f === '待办' ? 'text-yellow-400' :
-              f === '存疑' ? 'text-red-400' :
-              f === '已精修' ? 'text-green-400' : 'text-[var(--color-text-disabled)]'
-            }`}>●</span>
-            {f} {f !== '全部' && <span className="opacity-60 ml-0.5">{counts[f as keyof typeof counts]}</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* 卡片 */}
-      {!cur ? (
-        <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-[var(--color-border)] border-dashed">
-          {filter === '待办' ? '🎉 全部审阅完啦' : '这里什么都没有'}
-        </div>
-      ) : (
-        <div className="bg-white border border-[var(--color-border)] rounded-2xl p-4 sm:p-6 shadow-sm mb-5">
+      {/* Scrollable middle */}
+      <div className="flex-1 overflow-y-auto min-h-0 mb-4">
+        {/* 卡片 */}
+        {!cur ? (
+          <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-[var(--color-border)] border-dashed">
+            {filter === '待办' ? '🎉 全部审阅完啦' : '这里什么都没有'}
+          </div>
+        ) : (
+          <div className="bg-white border border-[var(--color-border)] rounded-2xl p-4 sm:p-6 shadow-sm mb-4">
           {/* 第一行：日期 左，页码右 */}
           <div className="flex items-center justify-between text-xs text-[var(--color-text-disabled)] mb-3">
             <span>{formatReviewDate(cur.created || '')}</span>
@@ -406,17 +408,6 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
               }`}>
                 {statusMap[cur.id]}
               </span>
-            </div>
-          )}
-
-          {/* 标签（透明高级感） */}
-          {cur.tags && cur.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {cur.tags.map(t => (
-                <span key={t} className="text-xs px-2.5 py-0.5 rounded-full bg-white/60 backdrop-blur-sm border border-[var(--color-border)] text-[var(--color-text-secondary)]">
-                  {t}
-                </span>
-              ))}
             </div>
           )}
 
@@ -460,50 +451,52 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
         </div>
       )}
 
-      {/* 操作按钮组 */}
-      {cur && (
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          <button onClick={() => updateStatus(cur.id, '已精修')} disabled={savingStatus}
-            className="py-2.5 rounded-xl bg-[var(--color-digested-bg)] border border-[#C5E0C3] text-[var(--color-digested)] hover:bg-[#D4EAD2] text-xs sm:text-sm font-semibold disabled:opacity-50"
-          >✓ 已阅</button>
-          <button onClick={() => updateStatus(cur.id, '存疑')} disabled={savingStatus}
-            className="py-2.5 rounded-xl bg-[#FDF3E4] border border-[#F2D9B6] text-[#C97E2C] hover:bg-[#FBE9D0] text-xs sm:text-sm font-semibold disabled:opacity-50"
-          >? 存疑</button>
-          <button onClick={handleDelete} disabled={savingStatus}
-            className="py-2.5 rounded-xl bg-[#FCE8E7] border border-[#F0C0BF] text-[var(--color-danger)] hover:bg-[#FADAD9] text-xs sm:text-sm font-semibold disabled:opacity-50"
-          >🗑 删除</button>
-          {editing ? (
-            <>
-              <button onClick={cancelEdit}
-                className="py-2.5 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[#E8E4DC] text-xs sm:text-sm font-semibold"
-              >取消</button>
-              <button onClick={saveEdit} disabled={savingEdit}
-                className="py-2.5 rounded-xl bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
-              >保存</button>
-            </>
-          ) : (
-            <button onClick={startEdit}
-              className="py-2.5 rounded-xl bg-[var(--color-resolved-bg)] border border-[#C8DAF0] text-[var(--color-resolved)] hover:bg-[#E0ECF8] text-xs sm:text-sm font-semibold"
-            >✎ 编辑</button>
-          )}
-        </div>
-      )}
+        {/* 操作按钮组 */}
+        {cur && (
+          <div className="grid grid-cols-4 gap-2 mb-2">
+            <button onClick={() => updateStatus(cur.id, '已精修')} disabled={savingStatus}
+              className="py-2.5 rounded-xl bg-[var(--color-digested-bg)] border border-[#C5E0C3] text-[var(--color-digested)] hover:bg-[#D4EAD2] text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >✓ 已阅</button>
+            <button onClick={() => updateStatus(cur.id, '存疑')} disabled={savingStatus}
+              className="py-2.5 rounded-xl bg-[#FDF3E4] border border-[#F2D9B6] text-[#C97E2C] hover:bg-[#FBE9D0] text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >? 存疑</button>
+            <button onClick={handleDelete} disabled={savingStatus}
+              className="py-2.5 rounded-xl bg-[#FCE8E7] border border-[#F0C0BF] text-[var(--color-danger)] hover:bg-[#FADAD9] text-xs sm:text-sm font-semibold disabled:opacity-50"
+            >🗑 删除</button>
+            {editing ? (
+              <>
+                <button onClick={cancelEdit}
+                  className="py-2.5 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[#E8E4DC] text-xs sm:text-sm font-semibold"
+                >取消</button>
+                <button onClick={saveEdit} disabled={savingEdit}
+                  className="py-2.5 rounded-xl bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
+                >保存</button>
+              </>
+            ) : (
+              <button onClick={startEdit}
+                className="py-2.5 rounded-xl bg-[var(--color-resolved-bg)] border border-[#C8DAF0] text-[var(--color-resolved)] hover:bg-[#E0ECF8] text-xs sm:text-sm font-semibold"
+              >✎ 编辑</button>
+            )}
+          </div>
+        )}
+      </div>
 
-      {/* 翻页 */}
-      {queue.length > 1 && (
-        <div className="flex justify-between">
-          <button onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}
-            className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
-          >← 上一条</button>
-          <button onClick={() => setCurrent(c => Math.min(queue.length - 1, c + 1))} disabled={current === queue.length - 1}
-            className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
-          >下一条 →</button>
-        </div>
-      )}
+      {/* Fixed bottom pagination */}
+      <div className="flex-shrink-0">
+        {queue.length > 1 && (
+          <div className="flex justify-between">
+            <button onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}
+              className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
+            >← 上一条</button>
+            <button onClick={() => setCurrent(c => Math.min(queue.length - 1, c + 1))} disabled={current === queue.length - 1}
+              className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
+            >下一条 →</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
-
 // ==================== 主页组件 ====================
 function HomeClient() {
  
@@ -738,7 +731,7 @@ function HomeClient() {
   const BucketCard = ({ b }: { b: Bucket }) => (
   <div
     onClick={() => openBucket(b.id)}
-    className={`bg-white rounded-xl p-3 sm:p-5 hover:shadow-md cursor-pointer border transition-all duration-200 group w-full relative active:scale-[0.985] touch-pan-y ${
+    className={`bg-gradient-to-br from-white to-slate-50/50 rounded-2xl p-4 sm:p-6 hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y ${
       (b.noise || (b.resolved && b.importance === 1))
         ? 'border-[var(--color-border)] opacity-50 saturate-50'
         : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'
@@ -751,8 +744,21 @@ function HomeClient() {
           {b.name}
         </span>
         {isFeel(b) && <StatusBadge type="feel" />}
-        {(() => { const st = statusLabel(b as any); return st && !['pinned', 'feel'].includes(st) ? <StatusBadge type={st} /> : null })()}
-        {b.wish && <span title="悬念" className="text-xs text-[var(--color-wish)] flex-shrink-0">✦</span>}
+        {b.digested && <StatusBadge type="digested" />}
+        {b.resolved && !(b.noise || (b.resolved && b.importance === 1)) && <StatusBadge type="resolved" />}
+        {b.type === 'archived' && <StatusBadge type="archived" />}
+        {(b.noise || (b.resolved && b.importance === 1)) && (
+          <StatusBadge type="noise" onClick={() => {
+            // 乐观更新：立即从本地列表移除 noise 状态
+            setBuckets(prev => prev.map(bucket =>
+              bucket.id === b.id
+                ? { ...bucket, noise: false, resolved: false, importance: bucket.importance }
+                : bucket
+            ))
+            traceOp(b.id, { resolved: false })
+          }} />
+        )}
+        {b.wish && <StatusBadge type="wish" />}
         {b.todo && !b.todo_done && <span title={`待办：${b.todo}`} className="text-xs text-[var(--color-primary)] flex-shrink-0">☐</span>}
       </div>
       <div className="absolute top-3 right-3 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -843,7 +849,7 @@ function HomeClient() {
   if (loading && buckets.length === 0) return <div className="flex items-center justify-center h-screen bg-[var(--color-bg)] text-[var(--color-text-tertiary)]">读取中...</div>
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white pb-20">
+    <div className={`min-h-screen ${activeTab === 'review' ? 'flex flex-col' : ''} bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white pb-20`}>
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -857,10 +863,10 @@ function HomeClient() {
           <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">Ombre Brain</span>
         </div>
-        <MobileViewSwitch />
+        {activeTab !== 'review' && <MobileViewSwitch />}
       </header>
 
-      <main className="max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10">
+      <main className={`max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10 ${activeTab === 'review' ? 'flex flex-col flex-1 min-h-0 pb-4' : ''}`}>
         {activeTab !== 'review' && (
           <div className="hidden md:block mb-6 sm:mb-8">
             <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)] mb-2 sm:mb-3">
@@ -1049,13 +1055,13 @@ function HomeClient() {
                             const isDayCollapsed = collapsedDates.has(date);
                             return (
                               <div key={date} className="relative pl-2 mb-6">
-                                {/* 日折叠箭头 */}
+                                {/* 折叠箭头 */}
                                 <button
                                   onClick={() => toggleDateCollapse(date)}
                                   className="absolute -left-[7px] top-2 -translate-y-1/2 text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors z-[1]"
                                 >
                                   <span className={`leading-none ${isDayCollapsed ? 'text-xs' : 'text-sm'}`}>
-                                    {isDayCollapsed ? '▶\uFE0E' : '▼\uFE0E'}
+                                    {isDayCollapsed ? '▶︎' : '▼︎'}
                                   </span>
                                 </button>
 
@@ -1067,14 +1073,17 @@ function HomeClient() {
                                   <span className="text-sm font-semibold text-[var(--color-text-primary)]">
                                     {formatDateGroup(date)}
                                   </span>
-                                  <span className="text-xs text-[var(--color-text-disabled)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md">
+                                  <span className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md font-medium">
                                     {items.length} 条
                                   </span>
                                 </button>
 
                                 {!isDayCollapsed && (
                                   <>
-                                    <div className="absolute left-0 top-2.5 bottom-0 w-px bg-[var(--color-border)]" />
+                                    {/* 极细空气线 */}
+                                    <div className="absolute left-0 top-2.5 bottom-0 w-[1px] bg-slate-200/60" />
+                                    {/* 空心呼吸圆点 */}
+                                    <div className="absolute left-0 top-2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[var(--color-primary)] bg-white ring-4 ring-orange-50 shadow-[0_0_6px_rgba(217,119,87,0.15)] z-[1]" />
                                     <div className="space-y-3 ml-1">
                                       {items.map(b => <BucketCard key={b.id} b={b} />)}
                                     </div>
@@ -1162,10 +1171,12 @@ function HomeClient() {
       />
 
       {/* 悬浮加号 */}
-      <button onClick={() => setShowAdd(true)}
-        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
-        +
-      </button>
+      {activeTab !== 'review' && (
+        <button onClick={() => setShowAdd(true)}
+          className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
+          +
+        </button>
+      )}
 
       {/* 新增弹窗 */}
       <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-lg">

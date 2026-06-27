@@ -31,7 +31,25 @@ export function formatBeijingDateTime(dateStr: string): string {
   return `${year}/${month}/${day} ${hour}:${minute}`
 }
 
-/** 获取北京时间的星期几（如“周一”） */
+/**
+ * 将时间字符串拆分为 timeline 日期组件所需的两段
+ * 返回 { headline: “23 Jun”, caption: “2026 · 周六” }
+ * 若解析失败返回 null
+ */
+export function formatTimelineDateParts(dateStr: string): { headline: string; caption: string } | null {
+  const datePart = formatBeijingDate(dateStr)
+  if (datePart === '—') return null
+  const dayOfWeek = getBeijingDayOfWeek(dateStr)
+  const parts = datePart.split('/')
+  if (parts.length < 3) return null
+  const day = parseInt(parts[2], 10)
+  const monthNum = parseInt(parts[1], 10) - 1
+  const year = parts[0]
+  const monthShort = new Date(Date.UTC(2000, monthNum)).toLocaleDateString('en', { month: 'short' })
+  return { headline: `${day} ${monthShort}`, caption: `${year} · ${dayOfWeek}` }
+}
+
+/** 获取北京时间的星期几（如”周一”） */
 export function getBeijingDayOfWeek(dateStr: string): string {
   const beijing = utcToBeijing(dateStr)
   if (!beijing) return ''
