@@ -59,33 +59,50 @@ function DrawerPanel({
   const contentRef = useRef<HTMLDivElement>(null)
   const [dragY, setDragY] = useState(0)
   const [dragging, setDragging] = useState(false)
+  const [dismissing, setDismissing] = useState(false)
   const startYRef = useRef(0)
   const startScrollRef = useRef(0)
+  const draggingRef = useRef(false)
+  const dragYRef = useRef(0)
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     if (contentRef.current) {
       startScrollRef.current = contentRef.current.scrollTop
     }
     startYRef.current = e.touches[0].clientY
-    setDragging(true)
+    draggingRef.current = false
+    dragYRef.current = 0
   }, [])
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
-    // Only allow pull-down when content is scrolled to top
     if (contentRef.current && contentRef.current.scrollTop > 0) return
     const delta = e.touches[0].clientY - startYRef.current
-    if (delta > 0) {
+    // Only activate drag after 8px of downward movement (avoid intercepting taps)
+    if (delta > 8) {
+      if (!draggingRef.current) setDragging(true)
+      draggingRef.current = true
+      dragYRef.current = delta
       setDragY(delta)
     }
   }, [])
 
   const onTouchEnd = useCallback(() => {
+    if (!draggingRef.current) return
     setDragging(false)
-    if (dragY > DRAG_THRESHOLD) {
-      onClose()
+    draggingRef.current = false
+    if (dragYRef.current > DRAG_THRESHOLD) {
+      setDragY(0)
+      dismiss()
+    } else {
+      setDragY(0)
     }
-    setDragY(0)
-  }, [dragY, onClose])
+    dragYRef.current = 0
+  }, [onClose])
+
+  const dismiss = useCallback(() => {
+    setDismissing(true)
+    setTimeout(() => { onClose(); setDismissing(false) }, 250)
+  }, [onClose])
 
   // Reset drag state on close
   useEffect(() => {
@@ -95,7 +112,7 @@ function DrawerPanel({
   return (
     <div className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-[var(--color-text-primary)]/20 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--color-text-primary)]/20 backdrop-blur-sm" onClick={dismiss} />
 
       {/* Desktop: right-side panel */}
       <div
@@ -118,9 +135,17 @@ function DrawerPanel({
         onClick={e => e.stopPropagation()}
         style={{
           maxHeight: '88vh',
-          transform: dragging ? `translateY(${dragY}px)` : 'translateY(0)',
-          transition: dragging ? 'none' : undefined,
-          animation: !dragging ? 'dpSheetUp 0.3s cubic-bezier(.2,.8,.2,1)' : undefined,
+          transform: dismissing
+            ? 'translateY(100%)'
+            : dragging
+              ? `translateY(${dragY}px)`
+              : 'translateY(0)',
+          transition: dismissing
+            ? 'transform 0.25s ease-in'
+            : dragging
+              ? 'none'
+              : undefined,
+          animation: !dragging && !dismissing ? 'dpSheetUp 0.3s cubic-bezier(.2,.8,.2,1)' : undefined,
         }}
       >
         {/* Drag handle */}
@@ -134,7 +159,7 @@ function DrawerPanel({
         </div>
 
         {/* Close X */}
-        <button onClick={onClose}
+        <button onClick={dismiss}
           className="absolute top-3 right-4 z-10 text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full transition-colors text-sm leading-none">
           ✕
         </button>
@@ -144,9 +169,6 @@ function DrawerPanel({
           ref={contentRef}
           className={`flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${className}`}
           style={{ minHeight: 0 }}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
         >
           {loading ? (
             <div className="flex items-center justify-center py-20 text-[var(--color-text-disabled)]">读取中...</div>
