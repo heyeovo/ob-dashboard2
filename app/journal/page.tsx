@@ -193,11 +193,7 @@ export default function JournalPage() {
   const deleteJournal = async () => {
     if (!detail || !confirm('确定抹除此日记？不可恢复。')) return
     try {
-      await fetch('/api/edit-bucket', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: detail.entry.id, delete: true }),
-      })
+      await fetch(`/api/journal/${detail.entry.id}`, { method: 'DELETE' })
       closeDetail()
       await load()
     } catch (e) {

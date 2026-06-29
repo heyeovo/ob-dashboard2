@@ -537,6 +537,7 @@ function HomeClient() {
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
+  const detailCache = useRef<Map<string, BucketDetail>>(new Map())
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
@@ -623,10 +624,16 @@ function HomeClient() {
   }
 
   const openBucket = async (id: string) => {
-    setDetailLoading(true)
-    setSelected(null)
     setEditing(false)
+    // 缓存命中 → 瞬时打开，不请求
+    if (detailCache.current.has(id)) {
+      setSelected(detailCache.current.get(id)!)
+      return
+    }
+    // 首次打开：不清空上一个选中数据，只显示 loading，避免闪烁
+    setDetailLoading(true)
     const data = await fetch(`/api/bucket/${id}`).then(r => r.json())
+    detailCache.current.set(id, data)
     setSelected(data)
     setDetailLoading(false)
   }
@@ -652,6 +659,7 @@ function HomeClient() {
       fetchBuckets(),
       fetch(`/api/bucket/${id}`).then(r => r.json())
     ])
+    detailCache.current.set(id, detail)
     setSelected(detail)
 
     setOperating(false)
@@ -667,6 +675,7 @@ function HomeClient() {
     })
     setSaving(false)
     setEditing(false)
+    detailCache.current.delete(selected.id)  // 清缓存让 openBucket 重新拉
     openBucket(selected.id)
   }
 
