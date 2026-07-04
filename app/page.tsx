@@ -37,6 +37,7 @@ interface Bucket {
   todo_done?: boolean
   related?: string[]
   noise?: boolean  // resolved + importance==1
+  event_time?: string
 }
 
 interface BucketDetail {
@@ -62,6 +63,7 @@ interface BucketDetail {
     todo?: string
     todo_done?: boolean
     related?: string[]
+    event_time?: string
   }
 }
 

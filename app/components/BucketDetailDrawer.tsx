@@ -27,6 +27,7 @@ interface BucketDetail {
     todo?: string
     todo_done?: boolean
     related?: string[]
+    event_time?: string
   }
 }
 
@@ -80,6 +81,7 @@ export default function BucketDetailDrawer({
   const [journalLocked, setJournalLocked] = useState(false)
   const [journalUnlockHint, setJournalUnlockHint] = useState('')
   const [convertingToJournal, setConvertingToJournal] = useState(false)
+  const [editingEventTime, setEditingEventTime] = useState(false); const [eventTimeVal, setEventTimeVal] = useState('')
 
   // Similar buckets & merge preview
   const [similarBuckets, setSimilarBuckets] = useState<any[]>([])
@@ -162,8 +164,36 @@ export default function BucketDetailDrawer({
                   {selected.metadata.pinned && <span className="text-[var(--color-primary)] text-lg">★</span>}
                   <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text-heading)]">{selected.metadata.name}</h2>
                 </div>
-                <div className="text-xs text-[var(--color-text-tertiary)] truncate mt-2">
-                  创建: {formatBeijingDateTime(selected.metadata.created)} · 修改: {formatBeijingDateTime(selected.metadata.last_active)}
+                <div className="text-xs text-[var(--color-text-tertiary)] mt-2 flex items-center gap-1 flex-wrap">
+                  <span>事件:</span>
+                  {editingEventTime ? (
+                    <input
+                      type="date"
+                      className="text-xs px-1 py-0 border border-[var(--color-primary)] rounded bg-white outline-none"
+                      value={eventTimeVal.slice(0, 10)}
+                      onChange={e => setEventTimeVal(e.target.value + 'T00:00:00')}
+                      onBlur={async () => {
+                        setEditingEventTime(false)
+                        if (eventTimeVal && eventTimeVal !== (selected.metadata.event_time || selected.metadata.created)) {
+                          await onTraceOp(selected.id, { event_time: eventTimeVal })
+                        }
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      className="cursor-pointer hover:text-[var(--color-primary)] hover:underline underline-offset-2 decoration-dotted"
+                      onClick={() => {
+                        setEventTimeVal(selected.metadata.event_time || selected.metadata.created || '')
+                        setEditingEventTime(true)
+                      }}
+                      title="点击修改事件时间"
+                    >
+                      {formatBeijingDateTime(selected.metadata.event_time || selected.metadata.created || '') || '未设置'}
+                    </span>
+                  )}
+                  <span>· 创建: {formatBeijingDateTime(selected.metadata.created)} · 修改: {formatBeijingDateTime(selected.metadata.last_active)}</span>
                 </div>
               </div>
               <button onClick={onClose} className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full md:inline-flex hidden">✕</button>

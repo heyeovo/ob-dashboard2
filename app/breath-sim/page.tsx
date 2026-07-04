@@ -21,11 +21,23 @@ interface DebugResult {
 }
 interface BucketDetail {
   id: string; content: string; score: number; noise?: boolean
-  metadata: { name: string; domain: string[]; tags: string[]; valence: number; arousal: number; importance: number; pinned: boolean; resolved: boolean; digested?: boolean; type: string; created: string; last_active: string; activation_count?: number }
+  metadata: { name: string; domain: string[]; tags: string[]; valence: number; arousal: number; importance: number; pinned: boolean; resolved: boolean; digested?: boolean; type: string; created: string; last_active: string; activation_count?: number; event_time?: string }
 }
 
 const BAR_COLORS = { topic: '#C86B45', emotion: '#D98D6A', time: '#DFA882', importance: '#C4B49A' }
 const SLIDER_STYLE = `w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[var(--color-primary)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[var(--color-primary)] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-[var(--color-primary)] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0`
+const SCORING_LS_KEY = 'breath-sim-scoring'
+
+function loadScoringFromLS(): Record<string, any> {
+  if (typeof window === 'undefined') return {}
+  try { const s = localStorage.getItem(SCORING_LS_KEY); return s ? JSON.parse(s) : {} } catch { return {} }
+}
+function saveScoringToLS(v: Record<string, any>) {
+  try { localStorage.setItem(SCORING_LS_KEY, JSON.stringify(v)) } catch {}
+}
+function clearScoringLS() {
+  try { localStorage.removeItem(SCORING_LS_KEY) } catch {}
+}
 
 export default function BreathSimPage() {
   const [query, setQuery] = useState(''); const [valence, setValence] = useState(''); const [arousal, setArousal] = useState('')
@@ -40,7 +52,7 @@ export default function BreathSimPage() {
   const [hitStatsLoading, setHitStatsLoading] = useState(false); const [hitStatsOrder, setHitStatsOrder] = useState<'desc' | 'asc'>('desc')
   const [recentSearches, setRecentSearches] = useState<any[]>([]); const [recentLoading, setRecentLoading] = useState(false)
   const [simQuery, setSimQuery] = useState(''); const [simLoading, setSimLoading] = useState(false); const [simResults, setSimResults] = useState<any[]>([]); const [vecResults, setVecResults] = useState<any[]>([])
-  const [scoringCurrent, setScoringCurrent] = useState<Record<string, any>>({})
+  const [scoringCurrent, setScoringCurrent] = useState<Record<string, any>>(loadScoringFromLS)
   const [bucketMeta, setBucketMeta] = useState<Map<string, any>>(new Map())
 
   useEffect(() => { fetch('/api/buckets').then(r => r.json()).then(data => { const m = new Map(); (data || []).forEach((b: any) => m.set(b.id, b)); setBucketMeta(m) }).catch(() => {}) }, [])
@@ -57,9 +69,9 @@ export default function BreathSimPage() {
   const fetchHitStats = async (order?: string) => { setHitStatsLoading(true); try { const d = await (await fetch(`/api/hit-stats?limit=50&include_zero=true&order=${order || hitStatsOrder}`)).json(); if (!d.error) setHitStats(d) } catch (e) { console.error(e) } finally { setHitStatsLoading(false) } }
   const fetchRecentSearches = async () => { setRecentLoading(true); try { const d = await (await fetch('/api/recent-searches?limit=20')).json(); if (!d.error) setRecentSearches(d) } catch (e) { console.error(e) } finally { setRecentLoading(false) } }
   const doInstantSim = async () => { if (!simQuery.trim()) return; setSimLoading(true); setSimResults([]); setVecResults([]); try { const d = await (await fetch(`/api/search?q=${encodeURIComponent(simQuery)}&simulate=true&limit=20&include_vector=true`)).json(); if (!d.error) { if (Array.isArray(d)) { setSimResults(d); setVecResults([]) } else { setSimResults(d.items || []); setVecResults(d.vector_only || []) } } } catch (e) { console.error(e) } finally { setSimLoading(false) } }
-  const fetchScoringConfig = async () => { try { const d = await (await fetch('/api/scoring-config')).json(); if (!d.error) setScoringCurrent(d.current || {}) } catch (e) { console.error(e) } }
-  const updateScoringKnob = async (key: string, value: any) => { setScoringCurrent(prev => ({ ...prev, [key]: value })); try { await fetch('/api/scoring-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }) }) } catch (e) { console.error(e) } }
-  const resetScoringConfig = async () => { try { await fetch('/api/scoring-config/reset', { method: 'POST' }); await fetchScoringConfig() } catch (e) { console.error(e) } }
+  const fetchScoringConfig = async () => { try { const d = await (await fetch('/api/scoring-config')).json(); if (!d.error && d.current) { setScoringCurrent(d.current); saveScoringToLS(d.current) } } catch (e) { console.error(e) } }
+  const updateScoringKnob = async (key: string, value: any) => { setScoringCurrent(prev => { const next = { ...prev, [key]: value }; saveScoringToLS(next); return next }); try { await fetch('/api/scoring-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: value }) }) } catch (e) { console.error(e) } }
+  const resetScoringConfig = async () => { try { await fetch('/api/scoring-config/reset', { method: 'POST' }); clearScoringLS(); await fetchScoringConfig() } catch (e) { console.error(e) } }
 
   useEffect(() => { fetch('/api/config').then(r => r.json()).then(d => { if (d.fuzzy_threshold) setThreshold(d.fuzzy_threshold) }).catch(() => {}); fetchScoringConfig() }, [])
 

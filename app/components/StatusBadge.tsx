@@ -15,11 +15,14 @@ const STATUS_MAP: Record<StatusType, { label: string; fg: string; bg: string }> 
 export function statusLabel(bucket: {
   noise?: boolean; pinned?: boolean; resolved?: boolean
   digested?: boolean; wish?: boolean; type?: string; importance?: number
+  domain?: string[]; tags?: string[]
 }): StatusType | null {
   if (bucket.noise || (bucket.resolved && bucket.importance === 1)) return 'noise'
   if (bucket.pinned) return 'pinned'
-  if (bucket.digested) return 'digested'
+  // feel detected even when archived (tags preserved by backend)
+  if (bucket.type === 'feel' || (bucket.domain ?? []).includes('feel') || (bucket.tags ?? []).includes('feel')) return 'feel'
   if (bucket.type === 'archived') return 'archived'
+  if (bucket.digested) return 'digested'
   if (bucket.resolved) return 'resolved'
   if (bucket.wish) return 'wish'
   return null
