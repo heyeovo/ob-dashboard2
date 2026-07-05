@@ -543,7 +543,7 @@ function HomeClient() {
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5 })
+  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5, journey: false })
   const [adding, setAdding] = useState(false)
   const [gridViewMode, setGridViewMode] = useState<'list' | 'card'>('list')
   const [sortBy, setSortBy] = useState<'score' | 'importance' | 'created'>('score')
@@ -1204,6 +1204,12 @@ function HomeClient() {
                 className="flex-1 accent-[var(--color-primary)]" />
               <span className="text-sm text-[var(--color-text-primary)] w-4">{addForm.importance}</span>
             </div>
+            <div className="flex items-center gap-2 mb-5">
+              <input type="checkbox" id="addJourney" checked={addForm.journey}
+                onChange={e => setAddForm(f => ({ ...f, journey: e.target.checked }))}
+                className="accent-[var(--color-primary)] w-4 h-4" />
+              <label htmlFor="addJourney" className="text-sm text-[var(--color-text-secondary)] cursor-pointer select-none">存为轨迹桶（不参与普通浮现和搜索）</label>
+            </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消</button>
               <button disabled={!addForm.content.trim() || adding}
@@ -1216,7 +1222,7 @@ function HomeClient() {
                   })
                   setAdding(false)
                   setShowAdd(false)
-                  setAddForm({ title: '', content: '', tags: '', importance: 5 })
+                  setAddForm({ title: '', content: '', tags: '', importance: 5, journey: false })
                   fetchBuckets()
                 }}
                 className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
