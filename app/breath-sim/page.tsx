@@ -47,6 +47,7 @@ export default function BreathSimPage() {
   const [saving, setSaving] = useState(false); const [operating, setOperating] = useState(false); const [copied, setCopied] = useState(false)
   const [threshold, setThreshold] = useState(55)
   const [activeTab, setActiveTab] = useState<'pipeline' | 'hitstats' | 'trace' | 'sim'>('pipeline')
+  const [knobsOpen, setKnobsOpen] = useState(false)
 
   const [hitStats, setHitStats] = useState<{ total_searches: number; tracked_buckets: number; items: any[] } | null>(null)
   const [hitStatsLoading, setHitStatsLoading] = useState(false); const [hitStatsOrder, setHitStatsOrder] = useState<'desc' | 'asc'>('desc')
@@ -90,7 +91,7 @@ export default function BreathSimPage() {
         {/* Pipeline Tab */}
         {activeTab === 'pipeline' && <>
           <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1 max-w-full">
-            {[['1', '输入', 'query / valence / arousal'], ['2', '候选池', `${data?.total_candidates ?? '--'} 桶`], ['3', '四维评分', 'topic . emotion . time . imp'], ['4', '阈值过滤', `${data?.threshold ?? threshold} \\u2192 ${data?.passed_count ?? '--'} 通过`], ['5', '排序', `top ${data?.results?.length ?? 'N'}`]].map(([n, title, sub], i) => (
+            {[['1', '输入', 'query / valence / arousal'], ['2', '候选池', `${data?.total_candidates ?? '--'} 桶`], ['3', '四维评分', 'topic . emotion . time . imp'], ['4', '阈值过滤', `${data?.threshold ?? threshold} → ${data?.passed_count ?? '--'} 通过`], ['5', '排序', `top ${data?.results?.length ?? 'N'}`]].map(([n, title, sub], i) => (
               <div key={i} className="flex items-center gap-1 flex-shrink-0"><div className="bg-white border border-[var(--color-border)] rounded-xl px-3 py-2 text-center min-w-[90px]"><div className="text-xs text-[var(--color-text-disabled)]">{n} {title}</div><div className="text-xs text-[var(--color-text-secondary)] mt-0.5">{sub}</div></div>{i < 4 && <span className="text-[var(--color-text-divider)] text-sm">{'->'}</span>}</div>
             ))}
           </div>
@@ -115,16 +116,32 @@ export default function BreathSimPage() {
 
         {/* Instant Simulation + Knobs (side panel) */}
         {activeTab === 'sim' && (
-          <div className="flex gap-5 items-start">
-            <div className="w-52 flex-shrink-0 bg-white border border-[var(--color-border)] rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between"><span className="text-xs font-medium text-[var(--color-text-primary)]">评分旋钮</span><button onClick={resetScoringConfig} className="text-[10px] text-red-500 hover:text-red-700">重置</button></div>
-              <KnobRow label="content_weight" desc="正文权重" value={scoringCurrent.content_weight ?? 1.0} min={0} max={5} step={0.5} onChange={v => updateScoringKnob('content_weight', v)} />
-              <KnobRow label="title_hit_bonus" desc="标题加分" value={scoringCurrent.title_hit_bonus ?? 0.0} min={0} max={100} step={1} onChange={v => updateScoringKnob('title_hit_bonus', v)} />
-              <KnobToggle label="token_exact" desc="token精确匹配(默认开)" checked={scoringCurrent.token_exact_match ?? true} onChange={v => updateScoringKnob('token_exact_match', v)} />
-              <KnobToggle label="keyword_first" desc="标题命中排最前" checked={scoringCurrent.keyword_first_sort ?? false} onChange={v => updateScoringKnob('keyword_first_sort', v)} />
-              <KnobToggle label="keyword_bypass" desc="命中name/domain/tags跳过阈值" checked={scoringCurrent.keyword_bypass ?? false} onChange={v => updateScoringKnob('keyword_bypass', v)} />
-              <KnobToggle label="precise_match" desc="token精确+砍评分+绕过阈值" checked={scoringCurrent.precise_match_mode ?? false} onChange={v => updateScoringKnob('precise_match_mode', v)} />
-              <KnobRow label="warmth_boost" desc="积极记忆偏置" value={scoringCurrent.warmth_boost ?? 0.0} min={0} max={5} step={0.5} onChange={v => updateScoringKnob('warmth_boost', v)} />
+          <div className="flex flex-col lg:flex-row gap-5 lg:items-start">
+            <div className="w-full lg:w-52 flex-shrink-0 bg-white border border-[var(--color-border)] rounded-2xl overflow-hidden">
+              <div
+                onClick={() => setKnobsOpen(v => !v)}
+                className="w-full flex items-center justify-between p-4 hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setKnobsOpen(v => !v) } }}
+              >
+                <span className="text-xs font-medium text-[var(--color-text-primary)]">评分旋钮</span>
+                <span className="flex items-center gap-2">
+                  {knobsOpen && <button onClick={(e) => { e.stopPropagation(); resetScoringConfig() }} className="text-[10px] text-red-500 hover:text-red-700">重置</button>}
+                  <span className="text-[var(--color-text-disabled)] text-xs transition-transform duration-200" style={{ transform: knobsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                </span>
+              </div>
+              {knobsOpen && (
+                <div className="px-4 pb-4 space-y-3">
+                  <KnobRow label="正文权重" desc="正文权重" value={scoringCurrent.content_weight ?? 1.0} min={0} max={5} step={0.5} onChange={v => updateScoringKnob('content_weight', v)} />
+                  <KnobRow label="标题加分" desc="标题命中额外加分" value={scoringCurrent.title_hit_bonus ?? 0.0} min={0} max={100} step={1} onChange={v => updateScoringKnob('title_hit_bonus', v)} />
+                  <KnobToggle label="精确匹配" desc="token精确匹配(默认开)" checked={scoringCurrent.token_exact_match ?? true} onChange={v => updateScoringKnob('token_exact_match', v)} />
+                  <KnobToggle label="关键词排前" desc="标题命中排最前" checked={scoringCurrent.keyword_first_sort ?? false} onChange={v => updateScoringKnob('keyword_first_sort', v)} />
+                  <KnobToggle label="关键词绕过阈值" desc="命中name/domain/tags跳过阈值" checked={scoringCurrent.keyword_bypass ?? false} onChange={v => updateScoringKnob('keyword_bypass', v)} />
+                  <KnobToggle label="精确模式" desc="token精确+砍评分+绕过阈值" checked={scoringCurrent.precise_match_mode ?? false} onChange={v => updateScoringKnob('precise_match_mode', v)} />
+                  <KnobRow label="积极偏置" desc="积极记忆偏置" value={scoringCurrent.warmth_boost ?? 0.0} min={0} max={5} step={0.5} onChange={v => updateScoringKnob('warmth_boost', v)} />
+                </div>
+              )}
             </div>
             <div className="flex-1 min-w-0 space-y-3">
               <div className="bg-white border border-[var(--color-border)] rounded-2xl p-3 flex gap-2 items-end">
@@ -180,4 +197,3 @@ export default function BreathSimPage() {
     </div>
   )
 }
-

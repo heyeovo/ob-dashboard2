@@ -481,19 +481,19 @@ export default function JournalPage() {
       )}
 
       {/* ===== 写新日记弹窗 ===== */}
-      <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-lg">
-        <h3 className="text-[var(--color-text-primary)] font-semibold mb-4">写新日记</h3>
+      <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-2xl">
+        <div className="flex flex-col" style={{ height: '65vh', maxHeight: '75vh' }}>
+        <h3 className="text-[var(--color-text-primary)] font-semibold mb-4 flex-shrink-0">写新日记</h3>
 
             <input value={newName} onChange={e => setNewName(e.target.value)}
               placeholder="标题（可选，留空自动生成）"
-              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors" />
+              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
 
             <textarea value={newContent} onChange={e => setNewContent(e.target.value)}
               placeholder="写点什么…"
-              rows={8}
-              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors resize-none leading-relaxed" />
+              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors resize-none leading-relaxed flex-1 min-h-0" />
 
-            <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 {(['言之', '小羊', '共同'] as Author[]).map(a => (
                   <button key={a} onClick={() => setNewAuthor(a)}
@@ -514,10 +514,10 @@ export default function JournalPage() {
             {newLocked && (
               <input value={newUnlockHint} onChange={e => setNewUnlockHint(e.target.value)}
                 placeholder="解锁提示（日期如 2026-07-01 到点自动解锁，其他文本保持锁定当提示用）"
-                className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-xs mb-3 outline-none focus:border-[var(--color-primary)] transition-colors" />
+                className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-xs mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
             )}
 
-            <div className="flex justify-end gap-3 pt-1">
+            <div className="flex justify-end gap-3 pt-1 flex-shrink-0">
               <button onClick={() => setShowAdd(false)}
                 className="text-sm px-4 py-2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
                 取消
@@ -528,6 +528,7 @@ export default function JournalPage() {
                 {submitting ? '保存中…' : '保存日记'}
               </button>
             </div>
+        </div>
         </DetailPanel>
 
       {/* 悬浮加号 */}

@@ -82,6 +82,8 @@ export default function BucketDetailDrawer({
   const [journalUnlockHint, setJournalUnlockHint] = useState('')
   const [convertingToJournal, setConvertingToJournal] = useState(false)
   const [editingEventTime, setEditingEventTime] = useState(false); const [eventTimeVal, setEventTimeVal] = useState('')
+  const eventTimeRef = useRef('') // ref to avoid stale closure in onBlur
+  const [contentCopied, setContentCopied] = useState(false)
 
   // Similar buckets & merge preview
   const [similarBuckets, setSimilarBuckets] = useState<any[]>([])
@@ -164,36 +166,48 @@ export default function BucketDetailDrawer({
                   {selected.metadata.pinned && <span className="text-[var(--color-primary)] text-lg">★</span>}
                   <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text-heading)]">{selected.metadata.name}</h2>
                 </div>
-                <div className="text-xs text-[var(--color-text-tertiary)] mt-2 flex items-center gap-1 flex-wrap">
-                  <span>事件:</span>
-                  {editingEventTime ? (
-                    <input
-                      type="date"
-                      className="text-xs px-1 py-0 border border-[var(--color-primary)] rounded bg-white outline-none"
-                      value={eventTimeVal.slice(0, 10)}
-                      onChange={e => setEventTimeVal(e.target.value + 'T00:00:00')}
-                      onBlur={async () => {
-                        setEditingEventTime(false)
-                        if (eventTimeVal && eventTimeVal !== (selected.metadata.event_time || selected.metadata.created)) {
-                          await onTraceOp(selected.id, { event_time: eventTimeVal })
-                        }
-                      }}
-                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                      autoFocus
-                    />
-                  ) : (
-                    <span
-                      className="cursor-pointer hover:text-[var(--color-primary)] hover:underline underline-offset-2 decoration-dotted"
-                      onClick={() => {
-                        setEventTimeVal(selected.metadata.event_time || selected.metadata.created || '')
-                        setEditingEventTime(true)
-                      }}
-                      title="点击修改事件时间"
-                    >
-                      {formatBeijingDateTime(selected.metadata.event_time || selected.metadata.created || '') || '未设置'}
-                    </span>
-                  )}
-                  <span>· 创建: {formatBeijingDateTime(selected.metadata.created)} · 修改: {formatBeijingDateTime(selected.metadata.last_active)}</span>
+                <div className="text-xs mt-2 space-y-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[var(--color-text-tertiary)]">·</span> <span className="text-[var(--color-primary)] font-medium">事件: </span>
+                    {editingEventTime ? (
+                      <input
+                        type="date"
+                        className="text-xs px-1 py-0 border border-[var(--color-primary)] rounded bg-white outline-none text-[var(--color-primary)]"
+                        value={eventTimeVal.slice(0, 10)}
+                        onChange={e => {
+                          const v = e.target.value + 'T00:00:00'
+                          setEventTimeVal(v)
+                          eventTimeRef.current = v
+                        }}
+                        onBlur={() => {
+                          setEditingEventTime(false)
+                          const v = eventTimeRef.current || eventTimeVal
+                          if (v && v !== (selected.metadata.event_time || selected.metadata.created)) {
+                            onTraceOp(selected.id, { event_time: v })
+                          }
+                        }}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                        autoFocus
+                      />
+                    ) : (
+                      <span
+                        className="cursor-pointer hover:text-[var(--color-primary-hover)] hover:underline underline-offset-2 decoration-dotted text-[var(--color-primary)] font-medium"
+                        onClick={() => {
+                          const v = selected.metadata.event_time || selected.metadata.created || ''
+                          setEventTimeVal(v)
+                          eventTimeRef.current = v
+                          setEditingEventTime(true)
+                        }}
+                        title="点击修改事件时间"
+                      >
+                        {formatBeijingDateTime(selected.metadata.event_time || selected.metadata.created || '') || '未设置'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[var(--color-text-tertiary)]">
+                    <span>· 创建: {formatBeijingDateTime(selected.metadata.created)}</span>
+                    <span>· 修改: {formatBeijingDateTime(selected.metadata.last_active)}</span>
+                  </div>
                 </div>
               </div>
               <button onClick={onClose} className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full md:inline-flex hidden">✕</button>
@@ -354,7 +368,17 @@ export default function BucketDetailDrawer({
                       {selected.content.length} 字 · ~{Math.ceil(selected.content.length * 1.3)} tokens
                     </span>
                   </div>
-                  <button onClick={() => onStartEdit(selected.content)} className="text-xs text-[var(--color-primary)] font-medium hover:text-[var(--color-primary-hover)]">编辑</button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selected.content)
+                        setContentCopied(true)
+                        setTimeout(() => setContentCopied(false), 1500)
+                      }}
+                      className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                    >{contentCopied ? '已复制' : '复制'}</button>
+                    <button onClick={() => onStartEdit(selected.content)} className="text-xs text-[var(--color-primary)] font-medium hover:text-[var(--color-primary-hover)]">编辑</button>
+                  </div>
                 </div>
                 <div className="p-5 text-sm leading-loose whitespace-pre-wrap">
                   {selected.content}

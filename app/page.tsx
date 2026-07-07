@@ -8,6 +8,7 @@ import BucketDetailDrawer from './components/BucketDetailDrawer'
 import NavBar from './components/NavBar'
 import StatusBadge, { statusLabel } from './components/StatusBadge'
 import DetailPanel from './components/DetailPanel'
+import KnobRow from './components/KnobRow'
 import Card from './components/Card'
 import MobileViewSwitch from './components/MobileViewSwitch'
 import SearchBar from './components/SearchBar'
@@ -161,8 +162,8 @@ function getTopTags(buckets: Bucket[], n = 10): string[] {
 function groupByDate(buckets: Bucket[]) {
   const map = new Map<string, Bucket[]>()
   for (const b of buckets) {
-    const created = b.created ?? ''
-    const d = created ? created.slice(0, 10) : 'unknown'
+    const eventTime = b.event_time || b.created || ''
+    const d = eventTime ? eventTime.slice(0, 10) : 'unknown'
     if (!map.has(d)) map.set(d, [])
     map.get(d)!.push(b)
   }
@@ -172,7 +173,9 @@ function groupByDate(buckets: Bucket[]) {
       date,
       items: items.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-        return new Date(b.created).getTime() - new Date(a.created).getTime()
+        const aTime = a.event_time || a.created || ''
+        const bTime = b.event_time || b.created || ''
+        return new Date(bTime).getTime() - new Date(aTime).getTime()
       })
     }))
 }
@@ -181,7 +184,7 @@ function groupByDate(buckets: Bucket[]) {
 function groupByMonth(buckets: Bucket[]) {
   const map = new Map<string, Bucket[]>()
   for (const b of buckets) {
-    const d = (b.created ?? '').slice(0, 7) || 'unknown'  // 取 YYYY-MM
+    const d = ((b.event_time || b.created) ?? '').slice(0, 7) || 'unknown'  // 取 YYYY-MM
     if (!map.has(d)) map.set(d, [])
     map.get(d)!.push(b)
   }
@@ -543,7 +546,7 @@ function HomeClient() {
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5, journey: false })
+  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5, journey: false, valence: 0.5, arousal: 0.3 })
   const [adding, setAdding] = useState(false)
   const [gridViewMode, setGridViewMode] = useState<'list' | 'card'>('list')
   const [sortBy, setSortBy] = useState<'score' | 'importance' | 'created'>('score')
@@ -553,7 +556,7 @@ function HomeClient() {
   const [activeCategory, setActiveCategory] = useState<string>('')
 
   const fetchBuckets = useCallback(() =>
-  fetch('/api/buckets?full=1')
+  fetch(`/api/buckets?full=1&_t=${Date.now()}`)
     .then(r => r.json())
     .then(data => {
       const arr = Array.isArray(data) ? data : []
@@ -605,7 +608,10 @@ function HomeClient() {
     const tokens = q.trim().split(/\s+/).filter(t => t.length >= 1)
     const qLower = q.trim().toLowerCase()
     const results = buckets.filter(b => {
+      // Exact ID match has highest priority
+      if (b.id.toLowerCase() === qLower) return true
       const haystack = [
+        b.id,
         b.name || '',
         ...(b.domain || []),
         ...(b.tags || []),
@@ -641,14 +647,26 @@ function HomeClient() {
   }
 
   const traceOp = async (id: string, args: Record<string, unknown>) => {
-    // Optimistic update for noise/resolved toggle — instant UI feedback
-    // 噪声／解决状态乐观更新 — 立即反馈
-    if (selected && selected.id === id && 'resolved' in args) {
-      setSelected(prev => prev ? {
-        ...prev,
-        metadata: { ...prev.metadata, resolved: Boolean(args.resolved), importance: args.importance != null ? Number(args.importance) : prev.metadata.importance },
-        noise: Boolean(args.resolved) && (args.importance != null ? Number(args.importance) : prev.metadata.importance) === 1,
-      } : prev)
+    // Optimistic update — instant UI feedback for metadata changes
+    // 元数据乐观更新 — 立即反馈
+    if (selected && selected.id === id) {
+      const updates: any = {}
+      if ('resolved' in args) {
+        updates.resolved = Boolean(args.resolved)
+        if (args.importance != null) updates.importance = Number(args.importance)
+      }
+      if ('event_time' in args) {
+        updates.event_time = String(args.event_time)
+      }
+      if (Object.keys(updates).length > 0) {
+        setSelected(prev => prev ? {
+          ...prev,
+          metadata: { ...prev.metadata, ...updates },
+          noise: 'resolved' in args
+            ? (Boolean(args.resolved) && (args.importance != null ? Number(args.importance) : prev.metadata.importance) === 1)
+            : prev.noise,
+        } : prev)
+      }
     }
 
     setOperating(true)
@@ -657,14 +675,13 @@ function HomeClient() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...args })
     })
-    const [, detail] = await Promise.all([
-      fetchBuckets(),
-      fetch(`/api/bucket/${id}`).then(r => r.json())
-    ])
+    // Fetch detail first to update drawer immediately, refresh list in background
+    const detail = await fetch(`/api/bucket/${id}`).then(r => r.json())
     detailCache.current.set(id, detail)
     setSelected(detail)
-
     setOperating(false)
+    // Background: refresh full list (may be slow with many buckets, don't block UI)
+    fetchBuckets()
   }
 
   const saveEdit = async () => {
@@ -1153,12 +1170,25 @@ function HomeClient() {
           await fetch(`/api/touch/${id}`, { method: 'POST' })
         }}
         onArchive={async (id) => {
-          const res = await fetch(`/api/archive/${id}`, { method: 'POST' })
-          const data = await res.json()
-          if (data.ok) {
-            setSelected(null)
-            const fresh = await fetch('/api/buckets').then(r => r.json())
-            setBuckets(fresh)
+          const isArchived = selected?.metadata.type === 'archived'
+          const endpoint = isArchived ? `/api/unarchive/${id}` : `/api/archive/${id}`
+          setOperating(true)
+          try {
+            const res = await fetch(endpoint, { method: 'POST' })
+            const data = await res.json()
+            if (data.ok) {
+              detailCache.current.delete(id)
+              const detail = await fetch(`/api/bucket/${id}`).then(r => r.json())
+              detailCache.current.set(id, detail)
+              setSelected(detail)
+              fetchBuckets()  // background refresh, don't block
+            } else {
+              console.error('Archive/unarchive failed:', data)
+            }
+          } catch (e) {
+            console.error('Archive/unarchive error:', e)
+          } finally {
+            setOperating(false)
           }
         }}
         onActivate={async (id) => {
@@ -1190,45 +1220,49 @@ function HomeClient() {
       )}
 
       {/* 新增弹窗 */}
-      <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-lg">
-        <h3 className="text-[var(--color-text-primary)] font-semibold mb-4">新增记忆</h3>
+      <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-2xl">
+        <div className="flex flex-col" style={{ height: '65vh', maxHeight: '75vh' }}>
+        <h3 className="text-[var(--color-text-primary)] font-semibold mb-4 flex-shrink-0">新增记忆</h3>
             <input placeholder="标题（可选）" value={addForm.title} onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-[var(--color-primary)]" />
+              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-[var(--color-primary)] flex-shrink-0" />
             <textarea placeholder="内容…" value={addForm.content} onChange={e => setAddForm(f => ({ ...f, content: e.target.value }))}
-              rows={5} className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-3 resize-none focus:outline-none focus:border-[var(--color-primary)]" />
+              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-3 resize-none focus:outline-none focus:border-[var(--color-primary)] flex-1 min-h-0" />
             <input placeholder="标签（逗号分隔）" value={addForm.tags} onChange={e => setAddForm(f => ({ ...f, tags: e.target.value }))}
-              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-[var(--color-primary)]" />
-            <div className="flex items-center gap-3 mb-5">
-              <span className="text-sm text-[var(--color-text-tertiary)]">重要度</span>
-              <input type="range" min={1} max={10} value={addForm.importance} onChange={e => setAddForm(f => ({ ...f, importance: Number(e.target.value) }))}
-                className="flex-1 accent-[var(--color-primary)]" />
-              <span className="text-sm text-[var(--color-text-primary)] w-4">{addForm.importance}</span>
+              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-[var(--color-primary)] flex-shrink-0" />
+            <div className="grid grid-cols-3 gap-3 mb-4 flex-shrink-0">
+              <KnobRow label="重要度" desc="1–10，越高越不易遗忘" value={addForm.importance} min={1} max={10} step={1} onChange={v => setAddForm(f => ({ ...f, importance: v }))} />
+              <KnobRow label="效价 V" desc="0 负面 → 1 正面" value={addForm.valence} min={0} max={1} step={0.1} onChange={v => setAddForm(f => ({ ...f, valence: v }))} />
+              <KnobRow label="唤醒 A" desc="0 平静 → 1 激动" value={addForm.arousal} min={0} max={1} step={0.1} onChange={v => setAddForm(f => ({ ...f, arousal: v }))} />
             </div>
-            <div className="flex items-center gap-2 mb-5">
-              <input type="checkbox" id="addJourney" checked={addForm.journey}
-                onChange={e => setAddForm(f => ({ ...f, journey: e.target.checked }))}
-                className="accent-[var(--color-primary)] w-4 h-4" />
-              <label htmlFor="addJourney" className="text-sm text-[var(--color-text-secondary)] cursor-pointer select-none">存为轨迹桶（不参与普通浮现和搜索）</label>
+            <div className="flex items-end justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="addJourney" checked={addForm.journey}
+                  onChange={e => setAddForm(f => ({ ...f, journey: e.target.checked }))}
+                  className="accent-[var(--color-primary)] w-4 h-4" />
+                <label htmlFor="addJourney" className="text-sm text-[var(--color-text-secondary)] cursor-pointer select-none">存为轨迹桶</label>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消</button>
+                <button disabled={!addForm.content.trim() || adding}
+                  onClick={async () => {
+                    setAdding(true)
+                    await fetch('/api/add-bucket', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ ...addForm, content: addForm.title ? `${addForm.title}\n${addForm.content}` : addForm.content })
+                    })
+                    setAdding(false)
+                    setShowAdd(false)
+                    setAddForm({ title: '', content: '', tags: '', importance: 5, journey: false, valence: 0.5, arousal: 0.3 })
+                    setSearchResults(null)
+                    await fetchBuckets()
+                  }}
+                  className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
+                  {adding ? '存入中…' : '存入记忆'}
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消</button>
-              <button disabled={!addForm.content.trim() || adding}
-                onClick={async () => {
-                  setAdding(true)
-                  await fetch('/api/add-bucket', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...addForm, content: addForm.title ? `${addForm.title}\n${addForm.content}` : addForm.content })
-                  })
-                  setAdding(false)
-                  setShowAdd(false)
-                  setAddForm({ title: '', content: '', tags: '', importance: 5, journey: false })
-                  fetchBuckets()
-                }}
-                className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
-                {adding ? '存入中…' : '存入记忆'}
-              </button>
-            </div>
+        </div>
           </DetailPanel>
     </div>
   )
