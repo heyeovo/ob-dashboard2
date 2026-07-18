@@ -4,11 +4,19 @@ import DetailPanel from './DetailPanel'
 import { formatBeijingDateTime } from '@/app/utils/format'
 
 // ==================== 类型定义 ====================
+// 注意：列表接口 /api/buckets 和单桶接口 /api/bucket/{id} 返回结构不同
+// - 列表接口：source, wish, todo, todo_done, type, valence, arousal 在顶层
+// - 单桶接口：这些字段在 metadata 里（metadata_view 也在 metadata 里）
 interface BucketDetail {
   id: string
   content: string
   score: number
-  noise?: boolean  // resolved + importance==1, user-marked soft-delete
+  source?: string        // 列表接口在顶层，单桶在 metadata.source
+  noise?: boolean
+  wish?: boolean         // 列表接口在顶层，单桶在 metadata.wish
+  type?: string
+  valence?: number
+  arousal?: number
   metadata: {
     name: string
     domain: string[]
@@ -23,11 +31,10 @@ interface BucketDetail {
     created: string
     last_active: string
     activation_count?: number
-    wish?: boolean
-    todo?: string
-    todo_done?: boolean
     related?: string[]
     event_time?: string
+    source?: string       // 单桶接口在此
+    wish?: boolean
   }
 }
 
@@ -154,6 +161,11 @@ export default function BucketDetailDrawer({
     setMergeCommitting(false)
   }
 
+  // 兼容单桶/列表两组返回结构的 helper — 单桶接口字段在 metadata 里
+  const s = selected as BucketDetail | null
+  const sWish = (s as any)?.wish ?? s?.metadata?.wish ?? false
+  const sSource = s?.metadata?.source || (s as any)?.source || ''
+
   return (
     <>
     <DetailPanel open={!!(selected || detailLoading)} onClose={onClose} mode="drawer" loading={detailLoading}>
@@ -207,6 +219,7 @@ export default function BucketDetailDrawer({
                   <div className="flex items-center gap-1 text-[var(--color-text-tertiary)]">
                     <span>· 创建: {formatBeijingDateTime(selected.metadata.created)}</span>
                     <span>· 修改: {formatBeijingDateTime(selected.metadata.last_active)}</span>
+                    {sSource ? <span>· 来源: {sSource}</span> : null}
                   </div>
                 </div>
               </div>
@@ -308,11 +321,11 @@ export default function BucketDetailDrawer({
                 激 活
               </button>
               <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { wish: selected.metadata.wish ? 0 : 1 })}
+                onClick={() => onTraceOp(selected.id, { wish: sWish ? 0 : 1 })}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.wish ? 'bg-[var(--color-wish-bg)] text-[var(--color-wish)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  sWish ? 'bg-[var(--color-wish-bg)] text-[var(--color-wish)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
-                {selected.metadata.wish ? '已悬念' : '标悬念'}
+                {sWish ? '已悬念' : '标悬念'}
               </button>
               {/* Noise toggle: marks as resolved+imp=1 (excluded from searches) */}
               <button disabled={operating}
@@ -331,31 +344,6 @@ export default function BucketDetailDrawer({
                 }`}>
                 {(selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1)) ? '已噪声' : '标噪声'}
               </button>
-            </div>
-
-            {/* 待办 */}
-            <div className="flex items-center gap-3 bg-white/60 backdrop-blur-sm border border-[var(--color-border)] rounded-xl px-4 py-2.5 mb-4">
-              <input
-                type="checkbox"
-                checked={!!selected.metadata.todo_done}
-                disabled={operating || !selected.metadata.todo}
-                onChange={() => onTraceOp(selected.id, { todo_done: selected.metadata.todo_done ? 0 : 1 })}
-                className="accent-[var(--color-primary)] w-4 h-4 flex-shrink-0"
-              />
-              <input
-                key={selected.id}
-                type="text"
-                placeholder="写点待办…"
-                defaultValue={selected.metadata.todo ?? ''}
-                disabled={operating}
-                onBlur={(e) => {
-                  if (e.target.value === (selected.metadata.todo ?? '')) return
-                  onTraceOp(selected.id, { todo: e.target.value })
-                }}
-                className={`flex-1 text-sm bg-transparent outline-none ${
-                  selected.metadata.todo_done ? 'line-through text-[var(--color-text-disabled)]' : 'text-[var(--color-text-primary)]'
-                }`}
-              />
             </div>
 
                         {/* 内容区 */}
@@ -380,7 +368,7 @@ export default function BucketDetailDrawer({
                     <button onClick={() => onStartEdit(selected.content)} className="text-xs text-[var(--color-primary)] font-medium hover:text-[var(--color-primary-hover)]">编辑</button>
                   </div>
                 </div>
-                <div className="p-5 text-sm leading-loose whitespace-pre-wrap">
+                <div className="p-5 text-sm leading-loose whitespace-pre-wrap break-words">
                   {selected.content}
                 </div>
               </div>

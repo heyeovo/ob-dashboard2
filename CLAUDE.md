@@ -10,7 +10,7 @@ ob-dashboard2 是 Ombre Brain 记忆系统的前端看板，Next.js 15 App Route
 - **前端仓库**：github.com/heyeovo/ob-dashboard2
 - **OB后端仓库**：github.com/heyeovo/Ombre-Brain
 - **Vercel 域名**：ob-dashboard2.vercel.app
-- **Zeabur 域名**：https://forxiaoyan.zeabur.app
+- **Zeabur 域名**：https://foryan.zeabur.app
 
 ## 启动
 
@@ -23,9 +23,9 @@ npm run build    # 生产构建
 ## 环境变量（.env.local）
 
 ```
-OMBRE_BASE_URL=https://forxiaoyan.zeabur.app
+OMBRE_BASE_URL=https://foryan.zeabur.app
 OMBRE_SESSION=<密码>
-NEXT_PUBLIC_OMBRE_BASE_URL=https://forxiaoyan.zeabur.app
+NEXT_PUBLIC_OMBRE_BASE_URL=https://foryan.zeabur.app
 NEXT_PUBLIC_OMBRE_SESSION=<密码>
 ```
 

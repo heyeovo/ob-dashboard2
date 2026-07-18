@@ -30,11 +30,18 @@ export default function TrashPage() {
   useEffect(() => { fetchTrash() }, [])
 
   const restore = async (id: string) => {
+    console.log('restore called', id)
     setOperating(true)
     try {
-      await fetch(`/api/bucket/${id}/restore`, { method: 'POST' })
-      setItems(prev => prev.filter(it => it.id !== id))
-    } catch { }
+      const res = await fetch(`/api/bucket/${id}/restore`, { method: 'POST' })
+      const data = await res.json()
+      console.log('restore response:', data)
+      if (data.ok) {
+        setItems(prev => prev.filter(it => it.id !== id))
+      }
+    } catch (e) {
+      console.error('restore error:', e)
+    }
     setOperating(false)
   }
 
@@ -96,7 +103,7 @@ export default function TrashPage() {
                     {item.trashed_at && <span className="text-xs text-[var(--color-text-disabled)]">{item.trashed_at.slice(0, 16).replace('T', ' ')}</span>}
                   </div>
                 </div>
-                <button onClick={() => restore(item.id)} disabled={operating}
+                <button onClick={() => { alert('click restore ' + item.id); restore(item.id) }} disabled={operating}
                   className="text-xs px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">
                   恢复
                 </button>

@@ -651,13 +651,12 @@ function HomeClient() {
     // 元数据乐观更新 — 立即反馈
     if (selected && selected.id === id) {
       const updates: any = {}
-      if ('resolved' in args) {
-        updates.resolved = Boolean(args.resolved)
-        if (args.importance != null) updates.importance = Number(args.importance)
+      const directFields = ['resolved', 'event_time', 'pinned', 'digested', 'wish', 'todo_done', 'todo']
+      for (const f of directFields) {
+        if (f in args) updates[f] = args[f]
       }
-      if ('event_time' in args) {
-        updates.event_time = String(args.event_time)
-      }
+      if ('importance' in args) updates.importance = Number(args.importance)
+
       if (Object.keys(updates).length > 0) {
         setSelected(prev => prev ? {
           ...prev,
@@ -1168,20 +1167,28 @@ function HomeClient() {
         onCopyId={copyId}
         onTouch={async (id) => {
           await fetch(`/api/touch/${id}`, { method: 'POST' })
+          // Refresh drawer immediately to show updated activation_count
+          const detail = await fetch(`/api/bucket/${id}`).then(r => r.json())
+          detailCache.current.set(id, detail)
+          setSelected(detail)
+          fetchBuckets()
         }}
         onArchive={async (id) => {
-          const isArchived = selected?.metadata.type === 'archived'
+          // 从当前 drawer 状态判断 — 比从 selected 闭包更可靠
+          const isArchived = (selected?.metadata?.type || (selected as any)?.type) === 'archived'
           const endpoint = isArchived ? `/api/unarchive/${id}` : `/api/archive/${id}`
           setOperating(true)
           try {
             const res = await fetch(endpoint, { method: 'POST' })
             const data = await res.json()
+            console.log('archive/unarchive response:', endpoint, data)
             if (data.ok) {
               detailCache.current.delete(id)
               const detail = await fetch(`/api/bucket/${id}`).then(r => r.json())
+              console.log('re-fetched detail type:', detail?.metadata?.type)
               detailCache.current.set(id, detail)
               setSelected(detail)
-              fetchBuckets()  // background refresh, don't block
+              fetchBuckets()
             } else {
               console.error('Archive/unarchive failed:', data)
             }

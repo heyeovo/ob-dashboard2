@@ -3,17 +3,18 @@ import { useState, useCallback, useMemo } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 
 const TABS = [
-  { slug: 'review',  label: '审阅',  href: '/?tab=review' },
-  { slug: 'journal', label: '日记',  href: '/journal' },
-  { slug: 'home',    label: '记忆',  href: '/' },
+  { slug: 'chat',    label: '聊天',   href: '/chat' },
+  { slug: 'home',    label: '记忆',   href: '/' },
+  { slug: 'review',  label: '审阅',   href: '/?tab=review' },
   { slug: 'breath',  label: 'Breath', href: '/breath-sim' },
-  { slug: 'more',    label: '设置',  href: '' },
+  { slug: 'more',    label: '设置',   href: '' },
 ]
 
 const MORE_ITEMS = [
+  { slug: 'journal', label: '日记',      href: '/journal' },
   { slug: 'graph',   label: '关系图谱',  href: '/graph' },
-  { slug: 'import',  label: '导入',     href: '/import' },
-  { slug: 'trash',   label: '回收站',   href: '/trash' },
+  { slug: 'import',  label: '导入',      href: '/import' },
+  { slug: 'trash',   label: '回收站',    href: '/trash' },
   { slug: 'prompts', label: '权重配置',  href: '/prompts' },
 ]
 
