@@ -6,7 +6,7 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Polaris lives outside the Next.js project to avoid Turbopack scanning conflicts
 POLARIS_SOURCE="${POLARIS_SOURCE:-$ROOT_DIR/../polaris-local-first}"
-OUT_DIR="$ROOT_DIR/public/chat"
+OUT_DIR="$ROOT_DIR/public/chat-app"
 
 if [ ! -d "$POLARIS_SOURCE" ]; then
   echo "ERROR: Polaris source not found at $POLARIS_SOURCE"

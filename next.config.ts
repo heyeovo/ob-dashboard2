@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
-      { source: '/chat', destination: '/chat/index.html' },
+      { source: '/chat-app', destination: '/chat-app/index.html' },
     ]
   },
   async headers() {

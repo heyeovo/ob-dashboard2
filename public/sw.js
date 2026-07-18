@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
   // Static assets (Next.js + Polaris): Cache First
   if (
     url.pathname.startsWith('/_next/static/') ||
-    url.pathname.startsWith('/chat/assets/') ||
+    url.pathname.startsWith('/chat-app/assets/') ||
     url.pathname.match(/\.(js|css|woff2?|ttf|otf)$/)
   ) {
     event.respondWith(cacheFirst(request, STATIC_CACHE))
@@ -54,7 +54,7 @@ self.addEventListener('fetch', (event) => {
   // Images & icons: Stale While Revalidate
   if (
     url.pathname.startsWith('/icons/') ||
-    url.pathname.startsWith('/chat/icons/') ||
+    url.pathname.startsWith('/chat-app/icons/') ||
     url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp)$/)
   ) {
     event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE))

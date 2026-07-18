@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/chat", "destination": "/chat/index.html" },
-    { "source": "/chat/:path*", "destination": "/chat/:path*" }
+    { "source": "/chat-app", "destination": "/chat-app/index.html" },
+    { "source": "/chat-app/:path*", "destination": "/chat-app/:path*" }
   ]
 }
