@@ -27,6 +27,8 @@ async function proxy(req: NextRequest, subpath: string, method: string) {
     }
     const auth = req.headers.get('authorization')
     if (auth) headers['Authorization'] = auth
+    const apiKey = req.headers.get('x-api-key')
+    if (apiKey) headers['x-api-key'] = apiKey
     const ct = req.headers.get('content-type')
     if (ct) headers['Content-Type'] = ct
 
