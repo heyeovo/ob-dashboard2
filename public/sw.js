@@ -61,8 +61,9 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // HTML pages: Network First with offline fallback
-  event.respondWith(networkFirst(request, STATIC_CACHE))
+  // HTML pages: Stale-while-revalidate for instant PWA display
+  // 即时显示缓存版本，后台静默拉取最新，避免白屏等待
+  event.respondWith(staleWhileRevalidate(request, STATIC_CACHE))
 })
 
 // --- Strategies ---

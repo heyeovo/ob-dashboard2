@@ -5,16 +5,14 @@ import MobileShell from './components/MobileShell'
 
 export default function ChatHomePage() {
   return (
-    <MobileShell>
-      <div className="flex flex-col h-screen bg-[var(--color-bg)]">
-        <NavBar activeSlug="chat" />
-        <iframe
-          src="/chat-app/index.html?layout=phone&embed=ob"
-          className="flex-1 w-full border-0"
-          title="Chat"
-          style={{ minHeight: 0 }}
-        />
-      </div>
-    </MobileShell>
+    <div className="flex flex-col bg-[var(--color-bg)] h-dvh overflow-hidden">
+      <NavBar activeSlug="chat" />
+      <iframe
+        src="/chat-app/index.html?layout=phone&embed=ob"
+        className="flex-1 w-full border-0"
+        title="Chat"
+        style={{ minHeight: 0 }}
+      />
+    </div>
   )
 }

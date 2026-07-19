@@ -124,7 +124,7 @@ export default function ReviewPage() {
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white">
       <NavBar activeSlug="review" />{queue.length > 0 && (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 text-xs text-[var(--color-text-disabled)]">
-          ← <a href="/" className="hover:text-[var(--color-text-primary)]">返回</a> · {current + 1}/{queue.length}
+          ← <a href="/memory" className="hover:text-[var(--color-text-primary)]">返回</a> · {current + 1}/{queue.length}
         </div>
       )}
 
