@@ -104,53 +104,12 @@
         min-height: 100dvh;
         background: var(--polaris-boot-bg);
       }
-
-      #root:empty::before,
-      #root:empty::after {
-        content: "";
-        position: fixed;
-        left: 50%;
-        top: 50%;
-        pointer-events: none;
-      }
-
-      #root:empty::before {
-        width: 48px;
-        height: 48px;
-        margin: -24px 0 0 -24px;
-        border-radius: 999px;
-        background: var(--polaris-boot-star-aura);
-        animation: startupStarBreath 1.8s ease-in-out infinite;
-      }
-
-      #root:empty::after {
-        width: 36px;
-        height: 36px;
-        margin: -18px 0 0 -18px;
-        background: var(--polaris-boot-star);
-        clip-path: polygon(50% 16.67%, 57.5% 42.5%, 83.33% 50%, 57.5% 57.5%, 50% 83.33%, 42.5% 57.5%, 16.67% 50%, 42.5% 42.5%);
-        filter: var(--polaris-boot-star-shadow);
-        animation: startupStarTurn 1.8s cubic-bezier(0.62, 0, 0.16, 1) infinite;
-      }
-
-      @keyframes startupStarTurn {
-        0% { transform: rotate(0deg) scale(0.92); opacity: 0.78; }
-        14% { opacity: 1; }
-        58% { transform: rotate(360deg) scale(1); opacity: 1; }
-        76% { transform: rotate(360deg) scale(0.94); opacity: 0.86; }
-        100% { transform: rotate(360deg) scale(0.92); opacity: 0.78; }
-      }
-
-      @keyframes startupStarBreath {
-        0%, 100% { transform: scale(0.78); opacity: 0.42; }
-        48% { transform: scale(1.18); opacity: 0.78; }
-      }
     </style>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/chat-app/icons/polaris-icon-192.png" type="image/png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Polaris</title>
-    <script type="module" crossorigin src="/chat-app/assets/main-5mZSy4m-.js"></script>
+    <script type="module" crossorigin src="/chat-app/assets/main-CvK212nI.js"></script>
     <link rel="modulepreload" crossorigin href="/chat-app/assets/react-core-BnB9aJjD.js">
     <link rel="modulepreload" crossorigin href="/chat-app/assets/zip-B8vz3x07.js">
     <link rel="modulepreload" crossorigin href="/chat-app/assets/capacitor-DubZox_v.js">
@@ -158,6 +117,6 @@
     <link rel="stylesheet" crossorigin href="/chat-app/assets/main-C6ljrvc3.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
   </body>
 </html>
