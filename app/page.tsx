@@ -1,18 +1,17 @@
 'use client'
 
 import NavBar from './components/NavBar'
-import MobileShell from './components/MobileShell'
 
 export default function ChatHomePage() {
   return (
-    <div className="flex flex-col bg-[var(--color-bg)] h-dvh overflow-hidden">
+    <>
       <NavBar activeSlug="chat" />
       <iframe
-        src="/chat-app/index.html?layout=phone&embed=ob"
-        className="flex-1 w-full border-0"
+        src="/chat-app/index.html?embed=ob"
+        className="w-full border-0 md:h-[calc(100vh-56px)] h-[calc(100dvh-72px-env(safe-area-inset-bottom,0px))]"
         title="Chat"
         style={{ minHeight: 0 }}
       />
-    </div>
+    </>
   )
 }
