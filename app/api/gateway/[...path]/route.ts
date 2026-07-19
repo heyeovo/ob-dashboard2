@@ -25,6 +25,8 @@ async function proxy(req: NextRequest, subpath: string, method: string) {
     const headers: Record<string, string> = {
       'X-Ombre-Session-Id': sessionId,
     }
+    const skipHandoff = req.headers.get('x-ombre-skip-handoff')
+    if (skipHandoff) headers['X-Ombre-Skip-Handoff'] = skipHandoff
     const auth = req.headers.get('authorization')
     if (auth) headers['Authorization'] = auth
     const apiKey = req.headers.get('x-api-key')
