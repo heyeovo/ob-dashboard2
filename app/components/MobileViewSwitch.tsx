@@ -15,7 +15,7 @@ export default function MobileViewSwitch() {
       {(['timeline', 'grid'] as const).map(t => (
         <button
           key={t}
-          onClick={() => router.replace(`/?tab=${t}`, { scroll: false })}
+          onClick={() => router.replace(`/memory?tab=${t}`, { scroll: false })}
           className={`px-2.5 py-1 rounded-md transition-colors font-medium ${
             activeTab === t
               ? 'bg-white text-[var(--color-text-primary)] shadow-sm'

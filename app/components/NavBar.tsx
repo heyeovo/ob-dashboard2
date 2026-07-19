@@ -7,13 +7,13 @@ interface NavBarProps {
 }
 
 const TAB_LINKS = [
-  { slug: 'timeline', href: '/?tab=timeline', label: '时间线' },
-  { slug: 'grid', href: '/?tab=grid', label: '记忆格' },
-  { slug: 'review', href: '/?tab=review', label: '审阅' },
+  { slug: 'timeline', href: '/memory?tab=timeline', label: '时间线' },
+  { slug: 'grid', href: '/memory?tab=grid', label: '记忆格' },
+  { slug: 'review', href: '/memory?tab=review', label: '审阅' },
 ] as const
 
 const PAGE_LINKS = [
-  { slug: 'chat', href: '/chat', label: '聊天' },
+  { slug: 'chat', href: '/', label: '聊天' },
   { slug: 'breath-sim', href: '/breath-sim', label: '模拟 Breath' },
   { slug: 'graph', href: '/graph', label: '关系图谱' },
   { slug: 'journal', href: '/journal', label: '日记' },

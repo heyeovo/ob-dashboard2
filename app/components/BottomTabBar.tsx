@@ -3,9 +3,9 @@ import { useState, useCallback, useMemo } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 
 const TABS = [
-  { slug: 'chat',    label: '聊天',   href: '/chat' },
-  { slug: 'home',    label: '记忆',   href: '/' },
-  { slug: 'review',  label: '审阅',   href: '/?tab=review' },
+  { slug: 'home',    label: '记忆',   href: '/memory' },
+  { slug: 'review',  label: '审阅',   href: '/memory?tab=review' },
+  { slug: 'chat',    label: '聊天',   href: '/' },
   { slug: 'breath',  label: 'Breath', href: '/breath-sim' },
   { slug: 'more',    label: '设置',   href: '' },
 ]
@@ -22,20 +22,16 @@ export default function BottomTabBar() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
   const [showMore, setShowMore] = useState(false)
 
-  const currentTab = useMemo(() => {
-    const tab = searchParams?.get('tab')
-    if (tab === 'review') return 'review'
-    return null
-  }, [searchParams])
-
   const active = useCallback((slug: string) => {
-    if (slug === 'home') return pathname === '/' && currentTab !== 'review'
-    if (slug === 'review') return pathname === '/' && currentTab === 'review'
+    if (slug === 'home') return pathname === '/memory' && searchParams?.get('tab') !== 'review'
+    if (slug === 'review') return pathname === '/memory' && searchParams?.get('tab') === 'review'
+    if (slug === 'chat') return pathname === '/'
     if (slug === 'more') return false
     return pathname.startsWith(`/${slug}`)
-  }, [pathname, currentTab])
+  }, [pathname, searchParams])
 
   return (
     <>
@@ -71,7 +67,7 @@ export default function BottomTabBar() {
                 className="flex flex-col items-center gap-1.5 min-w-[64px] transition-all duration-200 active:scale-90 group"
               >
                 <div className="flex items-center justify-center w-6 h-6 transition-all duration-200">
-                  {tab.slug === 'home' ? (
+                  {tab.slug === 'chat' ? (
                     <svg className="w-5 h-5" viewBox="0 0 20 20" fill={isActive ? '#D97757' : 'currentColor'}>
                       <path d="M2 10l1.5-1.5M5 6.5V3h2v1.5M10 2l8 8-1.5 1.5M4.5 11V18h4v-5h3v5h4V11" />
                     </svg>
@@ -79,11 +75,11 @@ export default function BottomTabBar() {
                     <svg className="w-5 h-5" viewBox="0 0 20 20" stroke={isActive ? '#D97757' : 'currentColor'} fill="none" strokeWidth="1.5">
                       <path d="M2 4h16M2 8h12M2 12h16M2 16h8" />
                     </svg>
-                  ) : tab.slug === 'journal' ? (
+                  ) : tab.slug === 'home' ? (
                     <svg className="w-5 h-5" viewBox="0 0 20 20" stroke={isActive ? '#D97757' : 'currentColor'} fill="none" strokeWidth="1.5">
-                      <rect x="3" y="2" width="14" height="16" rx="2" />
-                      <line x1="7" y1="6" x2="14" y2="6" strokeWidth="1" />
-                      <line x1="7" y1="10" x2="14" y2="10" strokeWidth="1" />
+                      <circle cx="10" cy="10" r="8" />
+                      <line x1="10" y1="6" x2="10" y2="10" strokeWidth="1.5" />
+                      <line x1="10" y1="10" x2="13" y2="12" strokeWidth="1.5" />
                     </svg>
                   ) : (
                     <svg className="w-5 h-5" viewBox="0 0 20 20" stroke={isActive ? '#D97757' : 'currentColor'} fill="none" strokeWidth="1.5">

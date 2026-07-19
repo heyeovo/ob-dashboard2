@@ -47,6 +47,27 @@ export async function getBuckets(full?: boolean) {
     return res.json();
 }
 
+export interface PaginatedBuckets {
+    buckets: any[];
+    count: number;
+    limit: number;
+    offset: number;
+}
+
+export async function getBucketsPaginated(limit: number, offset: number, full?: boolean): Promise<PaginatedBuckets> {
+    const cookie = await getSessionCookie();
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    if (full) params.set('full', '1');
+    const url = `${BASE_URL}/api/buckets?${params.toString()}`;
+    const res = await fetch(url, {
+        headers: { 'Cookie': cookie },
+    });
+    if (!res.ok) throw new Error('Failed to fetch buckets');
+    return res.json();
+}
+
 export async function getBucket(id: string) {
     const cookie = await getSessionCookie();
     const res = await fetch(`${BASE_URL}/api/bucket/${id}`, {
