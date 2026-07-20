@@ -1,0 +1,1 @@
+import{P as t}from"./assetStore-CO3d-Yye.js";import{h as a}from"./main-DujoiujH.js";import"./capacitor-DubZox_v.js";const l="Polaris 内置线路";function r(i){return a(i).route.isBuiltInTrial}function P(i,o="还没填模型",e=l){return r(i)?e:i.model||o}function L(i){return r(i)?t:i.model}export{L as a,P as g,r as i};
