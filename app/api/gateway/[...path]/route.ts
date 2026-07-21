@@ -31,8 +31,6 @@ async function proxy(req: NextRequest, subpath: string, method: string) {
     if (forceHandoff) headers['X-Ombre-Force-Handoff'] = forceHandoff
     const handoffBuckets = req.headers.get('x-ombre-handoff-buckets')
     if (handoffBuckets) headers['X-Ombre-Handoff-Buckets'] = handoffBuckets
-    const handoffRecentRounds = req.headers.get('x-ombre-handoff-recent-rounds')
-    if (handoffRecentRounds) headers['X-Ombre-Handoff-Recent-Rounds'] = handoffRecentRounds
     const auth = req.headers.get('authorization')
     if (auth) headers['Authorization'] = auth
     const apiKey = req.headers.get('x-api-key')
