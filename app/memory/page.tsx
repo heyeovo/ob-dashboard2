@@ -513,11 +513,6 @@ function HomeClient() {
   // 从 sessionStorage 恢复缓存，避免重新挂载时白屏
   const [buckets, setBuckets] = useState<Bucket[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const totalCountRef = useRef(0)
-  const offsetRef = useRef(0)
-  const PAGE_SIZE = 20
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Bucket[] | null>(null)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -559,61 +554,35 @@ function HomeClient() {
   const [categoryMap, setCategoryMap] = useState<Record<string, string>>({})
   const [categories, setCategories] = useState<string[]>([])
   const [activeCategory, setActiveCategory] = useState<string>('')
-  const sentinelRef = useRef<HTMLDivElement>(null)
 
-  const fetchBuckets = useCallback((reset = false) => {
-    const offset = reset ? 0 : offsetRef.current
-    return fetch(`/api/buckets?full=1&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`)
+  const fetchBuckets = useCallback((signal?: AbortSignal) => {
+    return fetch(`/api/buckets?full=1&_t=${Date.now()}`, { signal })
       .then(r => r.json())
       .then(data => {
-        // Backward compat: if no limit param received, backend returns flat array
-        const newBuckets = Array.isArray(data) ? data : (data.buckets || [])
-        const total = Array.isArray(data) ? newBuckets.length : (data.count || 0)
-        totalCountRef.current = total
-        const merged = reset ? newBuckets : [...buckets, ...newBuckets]
-        setBuckets(merged)
-        setHasMore(merged.length < total)
-        offsetRef.current = reset ? newBuckets.length : offsetRef.current + newBuckets.length
-        try { sessionStorage.setItem('ombra_buckets', JSON.stringify(merged)) } catch {}
+        const all = Array.isArray(data) ? data : (data.buckets || [])
+        setBuckets(all)
+        try { sessionStorage.setItem('ombra_buckets', JSON.stringify(all)) } catch {}
       })
-  }, [buckets])
+  }, [])
 
-  const loadMore = useCallback(() => {
-    if (loadingMore || !hasMore) return
-    setLoadingMore(true)
-    fetch(`/api/buckets?full=1&limit=${PAGE_SIZE}&offset=${offsetRef.current}&_t=${Date.now()}`)
-      .then(r => r.json())
-      .then(data => {
-        const newBuckets = Array.isArray(data) ? data : (data.buckets || [])
-        const total = Array.isArray(data) ? newBuckets.length : (data.count || 0)
-        totalCountRef.current = total
-        setBuckets(prev => {
-          const merged = [...prev, ...newBuckets]
-          setHasMore(merged.length < total)
-          offsetRef.current = merged.length
-          try { sessionStorage.setItem('ombra_buckets', JSON.stringify(merged)) } catch {}
-          return merged
-        })
-        setLoadingMore(false)
-      })
-      .catch(() => setLoadingMore(false))
-  }, [loadingMore, hasMore])
-
-  // 首次加载：sessionStorage 恢复 + 后台拉取首屏 20 条
+  // 首次加载：sessionStorage 恢复 + 后台拉取全部数据
   useEffect(() => {
+    const ac = new AbortController()
     try {
       const cached = sessionStorage.getItem('ombra_buckets')
       if (cached) {
         const arr = JSON.parse(cached)
         if (Array.isArray(arr) && arr.length > 0) {
           setBuckets(arr)
-          offsetRef.current = arr.length
           setLoading(false)
         }
       }
     } catch {}
-    fetchBuckets(true).then(() => setLoading(false))
-  }, [])
+    fetchBuckets(ac.signal).then(() => setLoading(false)).catch((e) => {
+      if (e?.name !== 'AbortError') setLoading(false)
+    })
+    return () => ac.abort()
+  }, [fetchBuckets])
 
   useEffect(() => {
     const raw = localStorage.getItem('review_state')
@@ -630,22 +599,6 @@ function HomeClient() {
     setQuickFilter('all')
     setActiveTag(null)
   }, [activeTab])
-
-  // IntersectionObserver — 滚动到底自动加载更多
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasMore && !loadingMore && !loading) {
-          loadMore()
-        }
-      },
-      { rootMargin: '200px' },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasMore, loadingMore, loading, loadMore])
 
   const doSearch = async (q: string) => {
     if (!q.trim()) { setSearchResults(null); return }
@@ -729,7 +682,7 @@ function HomeClient() {
     setSelected(detail)
     setOperating(false)
     // Background: refresh full list (may be slow with many buckets, don't block UI)
-    fetchBuckets(true)
+    fetchBuckets()
   }
 
   const saveEdit = async () => {
@@ -1222,14 +1175,14 @@ function HomeClient() {
                 )}
               </div>
             )}
-            {displayed.length === 0 && !loading && !loadingMore && (
+            {displayed.length === 0 && !loading && (
               <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-dashed border-[var(--color-border)]">
                 没有找到对应的记录
               </div>
             )}
 
-            {/* 加载更多骨架卡片 */}
-            {(loadingMore || (loading && buckets.length > 0)) && (
+            {/* 首次加载骨架卡片 */}
+            {loading && buckets.length === 0 && (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <SkeletonCard key={i} />
@@ -1237,14 +1190,9 @@ function HomeClient() {
               </div>
             )}
 
-            {/* 滚动哨兵 — 触底自动加载 */}
-            {hasMore && !loading && (
-              <div ref={sentinelRef} className="h-4" />
-            )}
-
-            {!hasMore && buckets.length > 0 && (
+            {!loading && buckets.length > 0 && (
               <div className="text-center text-[var(--color-text-disabled)] py-8 text-xs">
-                已加载全部 {totalCountRef.current} 条记录
+                已加载全部 {buckets.length} 条记录
               </div>
             )}
           </>
@@ -1271,7 +1219,7 @@ function HomeClient() {
           const detail = await fetch(`/api/bucket/${id}`).then(r => r.json())
           detailCache.current.set(id, detail)
           setSelected(detail)
-          fetchBuckets(true)
+          fetchBuckets()
         }}
         onArchive={async (id) => {
           // 从当前 drawer 状态判断 — 比从 selected 闭包更可靠
@@ -1288,7 +1236,7 @@ function HomeClient() {
               console.log('re-fetched detail type:', detail?.metadata?.type)
               detailCache.current.set(id, detail)
               setSelected(detail)
-              fetchBuckets(true)
+              fetchBuckets()
             } else {
               console.error('Archive/unarchive failed:', data)
             }
@@ -1362,7 +1310,7 @@ function HomeClient() {
                     setShowAdd(false)
                     setAddForm({ title: '', content: '', tags: '', importance: 5, journey: false, valence: 0.5, arousal: 0.3 })
                     setSearchResults(null)
-                    await fetchBuckets(true)
+                    await fetchBuckets()
                   }}
                   className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
                   {adding ? '存入中…' : '存入记忆'}
