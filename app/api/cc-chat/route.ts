@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import type { SDKMessage, SDKUserMessage, Options } from '@anthropic-ai/claude-agent-sdk'
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
+import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import { recordTurn } from '@/app/lib/havenTurns'
 import {
@@ -46,11 +47,21 @@ type ChatBody = {
   semantic?: boolean
   /** 传 false 就不查记忆（调试用） */
   recall?: boolean
+  /** 4.5b：用哪个协作者。提示词 / 记忆条目 / 两个召回开关 / 引擎都从它来 */
+  persona_id?: string
 }
 
 function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
+
+// 这个会话的两个召回开关。
+//
+// 为什么要一张表：下面那个 UserPromptSubmit hook 的闭包只在会话**第一轮**建起来，
+// 直接捕获变量的话，之后改开关得等新对话才生效。放这里让 hook 每轮重读，
+// 「注入 OB 记忆 / 语义检索」就能当场生效 —— 提示词和引擎做不到这点
+// （那是子进程的启动参数，界面上也是这么写的）。
+const recallPrefs = new Map<string, { recall: boolean; semantic: boolean }>()
 
 export async function POST(request: NextRequest) {
   let body: ChatBody
@@ -65,10 +76,32 @@ export async function POST(request: NextRequest) {
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
   if (!text) return Response.json({ ok: false, error: 'text 为空' }, { status: 400 })
 
-  const cred: CredMode = body.cred === 'subscription' ? 'subscription' : 'api'
+  // 协作者：读不到就当没有，聊天照常（退回 claude code 自带的系统提示）。
+  // 配置读不出来不该让人发不了话。
+  let persona: HavenPersona | null = null
+  if (body.persona_id) {
+    const res = await getPersona(body.persona_id)
+    persona = res.persona
+  }
+
+  // 引擎 → 额度。selfhost 是第 7 步的自建引擎，走到这里一律按中转站算。
+  const engine = persona?.engine || ''
+  const credFromEngine: CredMode = engine === 'subscription' ? 'subscription' : 'api'
+  // body 里显式传的优先（调试用），否则听协作者
+  const cred: CredMode = body.cred === 'subscription'
+    ? 'subscription'
+    : body.cred === 'api'
+      ? 'api'
+      : credFromEngine
   const model = body.model || process.env.ANTHROPIC_MODEL || undefined
-  const semantic = body.semantic !== false
-  const wantRecall = body.recall !== false
+
+  // 两个召回开关同样是 body 优先、协作者兜底，存进表让 hook 每轮重读
+  recallPrefs.set(sessionId, {
+    recall: body.recall !== undefined ? body.recall !== false : persona?.recall_on !== false,
+    semantic: body.semantic !== undefined ? body.semantic !== false : persona?.semantic_on !== false,
+  })
+
+  const personaAppend = buildPersonaAppend(persona)
 
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -95,7 +128,12 @@ export async function POST(request: NextRequest) {
 
       const buildOptions = (resumeFrom: string | null): Options => ({
         model,
-        systemPrompt: { type: 'preset', preset: 'claude_code' },
+        // 协作者的人设接在 claude code 自带系统提示**后面**，不替换它 ——
+        // 那段里有工具怎么用、路径怎么写，换掉工具就废了。
+        // append 为空时不带这个键，保持第 4 步的行为不变。
+        systemPrompt: personaAppend
+          ? { type: 'preset', preset: 'claude_code', append: personaAppend }
+          : { type: 'preset', preset: 'claude_code' },
         cwd: process.cwd(),
         allowedTools: READ_ONLY_TOOLS,
         // 只读工具直接放行，其余一律拒。第 5 步换成 canUseTool 挂长连接等用户点按钮。
@@ -112,11 +150,13 @@ export async function POST(request: NextRequest) {
               timeout: 30,
               hooks: [
                 async (input, _toolUseId, { signal }) => {
-                  if (!wantRecall) return {}
+                  // 每轮重读，所以开关改完当场生效（这个闭包只在第一轮建）
+                  const prefs = recallPrefs.get(sessionId)
+                  if (prefs && !prefs.recall) return {}
                   const prompt = (input as { prompt?: string }).prompt || ''
                   const recall = await recallForPrompt(prompt, {
                     sessionId,
-                    semantic,
+                    semantic: prefs ? prefs.semantic : true,
                     signal,
                   })
                   recallInfo = {
@@ -257,6 +297,8 @@ export async function POST(request: NextRequest) {
             raw: {
               engine: 'claude-code-agent-sdk',
               cred_mode: cred,
+              persona_id: persona?.id || undefined,
+              persona_name: persona?.name || undefined,
               thinking: thinkingText || undefined,
               recall: recallInfo,
               tools: toolEvents,
@@ -319,5 +361,6 @@ export async function DELETE(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('session_id') || ''
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
   dropSession(sessionId)
+  recallPrefs.delete(sessionId)
   return Response.json({ ok: true })
 }

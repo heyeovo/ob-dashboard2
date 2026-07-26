@@ -52,7 +52,7 @@ function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   return out
 }
 
-export function useCcChat() {
+export function useCcChat(personaId = '') {
   const [sessionId, setSessionId] = useState('')
   const [sessions, setSessions] = useState<CcSessionListItem[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(true)
@@ -191,7 +191,9 @@ export function useCcChat() {
         const res = await fetch('/api/cc-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, text }),
+          // persona_id 每轮都带上：服务端按它取提示词/记忆/引擎。
+          // 会话中途换人不生效（子进程已经起来了），服务端会沿用第一轮那个。
+          body: JSON.stringify({ session_id: sessionId, text, persona_id: personaId }),
           signal: ac.signal,
         })
         if (!res.ok || !res.body) {
@@ -260,7 +262,7 @@ export function useCcChat() {
         setSending(false)
       }
     },
-    [sessionId, sending, refreshSessions],
+    [sessionId, sending, personaId, refreshSessions],
   )
 
   return {

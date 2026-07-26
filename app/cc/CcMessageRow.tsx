@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import CcMarkdown from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
-import { DEFAULT_PERSONA } from './persona'
+import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcMessage, CcToolEvent } from './types'
 
 // 一条消息。
@@ -25,12 +25,20 @@ function formatTime(ms: number) {
 
 type Props = {
   message: CcMessage
+  /** 当前选中的协作者，只用来画名字行的头像和名字 */
+  persona?: CcPersona
   onCopy: (text: string) => void
   onEditAndResend?: (text: string) => void
   onOpenRecall?: (message: CcMessage) => void
 }
 
-export default function CcMessageRow({ message, onCopy, onEditAndResend, onOpenRecall }: Props) {
+export default function CcMessageRow({
+  message,
+  persona: personaProp,
+  onCopy,
+  onEditAndResend,
+  onOpenRecall,
+}: Props) {
   const isUser = message.role === 'user'
   const [menuOpen, setMenuOpen] = useState(false)
   // 默认展开。流式中跟着输出，结束后不自动收 —— 只有用户点了才收。
@@ -129,7 +137,8 @@ export default function CcMessageRow({ message, onCopy, onEditAndResend, onOpenR
   }
 
   /* ---------- 助手侧 ---------- */
-  const persona = DEFAULT_PERSONA
+  // 历史消息不记「当时是谁回的」，一律按当前协作者显示。要按轮存 persona 是以后的事。
+  const persona = personaProp || FALLBACK_PERSONA
   const tools = message.tools || []
 
   return (

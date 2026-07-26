@@ -609,3 +609,220 @@ body {
   white-space: nowrap;
 }
 .cc-md-tablewrap tr:last-child td { border-bottom: 0; }
+
+/* ========================================================================
+   Chat 4.5b — 协作者体系
+   顶栏两个入口（左 chip 换人 / 右 设置）、设置弹窗的子 tab 和表单件。
+   只用现成 token，没有新增 :root 变量。
+   ======================================================================== */
+
+/* --- 顶栏 --- */
+.cc-persona-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px 3px 3px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--color-text-primary);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.cc-persona-chip:hover { background: var(--color-surface-secondary); }
+.cc-persona-chip .cc-avatar { width: 22px; height: 22px; font-size: 10.5px; }
+
+.cc-icon-btn {
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  padding: 4px 9px;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  transition: background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.cc-icon-btn:hover {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+}
+
+/* 协作者读写出错时的浮条：不挡输入框，自己消失靠用户重试 */
+.cc-persona-error {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  z-index: 60;
+  transform: translateX(-50%);
+  max-width: 88vw;
+  border-radius: var(--radius-lg);
+  background: #FCEEED;
+  padding: 8px 14px;
+  font-size: 11.5px;
+  color: var(--color-danger);
+  box-shadow: var(--shadow-md);
+}
+
+/* --- 子 tab --- */
+.cc-subtab {
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  transition: background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.cc-subtab:hover { background: var(--color-surface-secondary); }
+.cc-subtab.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* --- 表单 --- */
+.cc-field { display: flex; flex-direction: column; gap: 5px; }
+.cc-field-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+.cc-field-hint {
+  display: block;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--color-text-disabled);
+}
+
+.cc-input,
+.cc-textarea {
+  width: 100%;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+.cc-textarea { line-height: 1.6; resize: vertical; }
+.cc-input:focus,
+.cc-textarea:focus { outline: none; border-color: var(--color-primary-muted); }
+.cc-input::placeholder,
+.cc-textarea::placeholder { color: var(--color-text-disabled); }
+
+.cc-tint-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px var(--color-border-light);
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+.cc-tint-dot.active { box-shadow: 0 0 0 2px var(--color-primary); }
+
+.cc-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+.cc-toggle-row input { margin-top: 2px; accent-color: var(--color-primary); }
+.cc-toggle-row input:disabled { opacity: 0.4; }
+.cc-toggle-row input:disabled ~ span { opacity: 0.5; }
+
+/* 记忆条目 */
+.cc-entry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}
+.cc-entry-del {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--color-text-disabled);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+.cc-entry-del:hover { color: var(--color-danger); }
+
+/* 引擎卡片 */
+.cc-engine-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  padding: 11px 13px;
+  text-align: left;
+  transition: border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+.cc-engine-card:hover:not(.disabled) { border-color: var(--color-primary-muted); }
+.cc-engine-card.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.cc-engine-card.disabled { opacity: 0.5; cursor: not-allowed; }
+.cc-engine-radio {
+  flex-shrink: 0;
+  margin-top: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.cc-engine-card.active .cc-engine-radio {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 3px var(--color-surface);
+  background: var(--color-primary);
+}
+
+/* 弹窗里的说明段 */
+.cc-note {
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  padding: 9px 11px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--color-text-tertiary);
+}
+.cc-note b { font-weight: 500; color: var(--color-text-secondary); }
+
+/* 弹窗底部按钮 */
+.cc-btn-primary {
+  border-radius: 999px;
+  background: var(--color-primary);
+  padding: 6px 18px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fff;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.cc-btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.cc-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.cc-btn-ghost {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+.cc-btn-ghost:hover { background: var(--color-surface-secondary); }
+
+.cc-btn-danger {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--color-danger);
+  padding: 5px 13px;
+  font-size: 11.5px;
+  color: #fff;
+}

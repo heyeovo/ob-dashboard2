@@ -3,9 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 import NavBar from '../components/NavBar'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
+import CcPersonaDialog from './CcPersonaDialog'
+import CcPersonaRail from './CcPersonaRail'
 import CcRecallDialog from './CcRecallDialog'
 import CcSessionRail from './CcSessionRail'
+import { draftPersona, type CcPersona } from './persona'
 import { useCcChat } from './useCcChat'
+import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
 
 // 第 4 步的聊天页。
@@ -31,8 +35,12 @@ function formatCacheLeft(ms: number) {
 }
 
 export default function CcChatPage() {
-  const chat = useCcChat()
+  const people = usePersonas()
+  const chat = useCcChat(people.activeId)
   const [railOpen, setRailOpen] = useState(false)
+  // 协作者：左上角开列表，右上角开设置。settingsFor 为 null 就是没开设置。
+  const [personaRailOpen, setPersonaRailOpen] = useState(false)
+  const [settingsFor, setSettingsFor] = useState<CcPersona | null>(null)
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -56,6 +64,18 @@ export default function CcChatPage() {
       >
         对话
       </button>
+      {/* 左：当前协作者，点开换人 */}
+      <button
+        type="button"
+        onClick={() => setPersonaRailOpen(true)}
+        className="cc-persona-chip"
+        title="切换协作者"
+      >
+        <span className="cc-avatar" style={{ background: people.active.tint }} aria-hidden="true">
+          {people.active.initial}
+        </span>
+        <span className="max-w-[7rem] truncate">{people.active.name}</span>
+      </button>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
           {chat.messages.find(m => m.role === 'user')?.text.slice(0, 40) || '新对话'}
@@ -76,6 +96,16 @@ export default function CcChatPage() {
           ) : null}
         </div>
       </div>
+      {/* 右：配当前这个协作者 */}
+      <button
+        type="button"
+        onClick={() => setSettingsFor(people.active)}
+        aria-label="协作者设置"
+        title="协作者设置"
+        className="cc-icon-btn"
+      >
+        设置
+      </button>
     </div>
   )
 
@@ -96,6 +126,7 @@ export default function CcChatPage() {
             <CcMessageRow
               key={m.id}
               message={m}
+              persona={people.active}
               onCopy={copy}
               onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
               onOpenRecall={setRecallDetail}
@@ -142,6 +173,35 @@ export default function CcChatPage() {
     />
   )
 
+  // 协作者列表：桌面端和手机端都是从左侧盖上来的浮层。
+  // 桌面端左边那栏是会话列表，两个东西不能抢同一个位置。
+  const personaRail = personaRailOpen ? (
+    <div className="fixed inset-0 z-40">
+      <button
+        type="button"
+        aria-label="关闭协作者列表"
+        onClick={() => setPersonaRailOpen(false)}
+        className="absolute inset-0 bg-black/20"
+      />
+      <div className="absolute left-0 top-0 h-full w-[78%] max-w-[300px] bg-[var(--color-surface)] shadow-xl">
+        <CcPersonaRail
+          personas={people.personas}
+          activeId={people.activeId}
+          loading={people.loading}
+          onPick={id => {
+            people.selectPersona(id)
+            setPersonaRailOpen(false)
+          }}
+          onNew={() => {
+            setPersonaRailOpen(false)
+            setSettingsFor(draftPersona())
+          }}
+          onClose={() => setPersonaRailOpen(false)}
+        />
+      </div>
+    </div>
+  ) : null
+
   return (
     <>
       {/* 桌面端：NavBar + 左会话列表 + 右对话 */}
@@ -179,6 +239,33 @@ export default function CcChatPage() {
             {rail}
           </div>
         </div>
+      ) : null}
+
+      {personaRail}
+
+      {settingsFor ? (
+        <CcPersonaDialog
+          // key = 换人就整个重挂，弹窗内部的草稿跟着重取
+          key={settingsFor.id}
+          persona={settingsFor}
+          canDelete={people.personas.length > 1 && people.personas.some(p => p.id === settingsFor.id)}
+          saving={people.saving}
+          onSave={async persona => {
+            const res = await people.savePersona(persona)
+            // 新建的：保存成功就切过去
+            if (res.ok && res.persona) {
+              people.selectPersona(res.persona.id)
+              setSettingsFor(res.persona)
+            }
+            return { ok: res.ok }
+          }}
+          onDelete={people.deletePersona}
+          onClose={() => setSettingsFor(null)}
+        />
+      ) : null}
+
+      {people.error ? (
+        <div className="cc-persona-error">{people.error}</div>
       ) : null}
 
       {/* 召回详情：按模块分段。⚠️ 各模块的正文服务端还没回传（见组件内注释） */}
