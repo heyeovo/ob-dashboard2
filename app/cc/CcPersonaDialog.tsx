@@ -44,6 +44,7 @@ export default function CcPersonaDialog({
   const [tab, setTab] = useState<TabKey>('identity')
   const [draft, setDraft] = useState<CcPersona>(persona)
   const [entryInput, setEntryInput] = useState('')
+  const [dirInput, setDirInput] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [hint, setHint] = useState('')
 
@@ -68,6 +69,17 @@ export default function CcPersonaDialog({
     if (!text) return
     patch('memoryEntries', [...draft.memoryEntries, text])
     setEntryInput('')
+  }
+
+  const addDir = () => {
+    const text = dirInput.trim()
+    if (!text) return
+    if (draft.dirs.includes(text)) {
+      setDirInput('')
+      return
+    }
+    patch('dirs', [...draft.dirs, text])
+    setDirInput('')
   }
 
   const save = async () => {
@@ -197,6 +209,57 @@ export default function CcPersonaDialog({
                 />
               </label>
 
+              <div className="cc-field border-t border-[var(--color-border-light)] pt-3.5">
+                <span className="cc-field-label">能访问哪些目录</span>
+                <span className="cc-field-hint">
+                  一行一个绝对路径。第一个当工作目录，其余是附加目录。
+                  留空就只有看板仓库本身。
+                </span>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {draft.dirs.length === 0 ? (
+                    <div className="cc-recall-empty">没配，就只能读看板仓库</div>
+                  ) : (
+                    draft.dirs.map((dir, i) => (
+                      <div key={`${i}-${dir.slice(-12)}`} className="cc-entry-row">
+                        <span className="min-w-0 flex-1 break-all font-mono text-[11px]">{dir}</span>
+                        <button
+                          type="button"
+                          aria-label="删掉这个目录"
+                          className="cc-entry-del"
+                          onClick={() => patch('dirs', draft.dirs.filter((_, idx) => idx !== i))}
+                        >
+                          删
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="cc-input flex-1 font-mono text-[11px]"
+                    value={dirInput}
+                    onChange={e => setDirInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addDir()
+                      }
+                    }}
+                    placeholder="C:\\Users\\yangh\\OneDrive\\Desktop\\Ombre-Brain"
+                  />
+                  <button type="button" className="cc-btn-ghost" onClick={addDir}>
+                    添加
+                  </button>
+                </div>
+                <p className="cc-note mt-2">
+                  密钥类文件（<code>.env</code>、<code>*.key</code>、<code>id_rsa</code>、
+                  <code>.ssh/</code> 这些）<b>跟这份清单无关，永远读不到</b> ——
+                  服务端按文件名硬拦，没有开关。要给 TA 看里面的值，你自己贴进对话。
+                  <br />
+                  这一版只放开<b>读</b>。写文件的范围等第 5 步单独配。改完同样是新对话一定生效。
+                </p>
+              </div>
+
               {canDelete ? (
                 <div className="border-t border-[var(--color-border-light)] pt-3.5">
                   {confirmDelete ? (
@@ -245,7 +308,8 @@ export default function CcPersonaDialog({
                 走 systemPrompt 的 append，<b>不会</b>拼进你说的那句话里 —— 拼进用户原话会稀释语义、
                 把记忆召回压到 0 条（第 2 步实测过）。
                 <br />
-                改完只对<b>之后新建的对话</b>生效，正在聊的那个子进程已经带着老提示词起来了。
+                改完<b>新对话</b>一定生效。老对话看运气：刚聊过的还带着老提示词
+                （后台那个进程还活着），放一会儿再回去就换新的了。
               </p>
             </div>
           ) : null}
@@ -362,8 +426,8 @@ export default function CcPersonaDialog({
                 </button>
               ))}
               <p className="cc-note">
-                改引擎只对<b>之后新建的对话</b>生效。额度是子进程的启动参数，中途换要重起进程、
-                丢上下文，所以不做热切。
+                改引擎<b>新对话</b>一定生效，老对话同上（看后台进程还在不在）。额度是启动参数，
+                中途换要重起进程、丢上下文，所以不做热切。
                 <br />
                 模型选择在主页侧边栏，不在这里。
               </p>

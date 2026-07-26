@@ -30,6 +30,7 @@ const SEED_PERSONA: PersonaPatch = {
   description: '',
   prompt: '',
   memory_entries: [],
+  dirs: [],
   recall_on: true,
   semantic_on: true,
   engine: 'api',
@@ -78,9 +79,10 @@ export async function POST(request: NextRequest) {
     const n = Number(input.sort_order)
     patch.sort_order = Number.isFinite(n) ? Math.trunc(n) : 0
   }
-  if ('memory_entries' in input) {
-    const raw = input.memory_entries
-    patch.memory_entries = Array.isArray(raw)
+  for (const key of ['memory_entries', 'dirs'] as const) {
+    if (!(key in input)) continue
+    const raw = input[key]
+    patch[key] = Array.isArray(raw)
       ? raw.map((item) => String(item ?? '').trim()).filter(Boolean)
       : []
   }

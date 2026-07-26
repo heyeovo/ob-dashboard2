@@ -27,6 +27,11 @@ export type CcMessage = {
   createdAt: number
   /** 来自 Haven 的历史消息（不可重发/编辑） */
   fromHistory?: boolean
+  /**
+   * 这一轮是谁回的（协作者 id）。从 Haven 的 client 列解出来（`ob2-chat/<id>`）。
+   * 空串 = 4.5b 之前的老消息或 Polaris 写的，退回按当前选中的那个显示。
+   */
+  personaId?: string
 }
 
 /**

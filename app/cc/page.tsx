@@ -84,8 +84,15 @@ export default function CcChatPage() {
           <span>只读模式</span>
           <span>·</span>
           <span>{chat.stats.turnCount} 轮</span>
-          <span>·</span>
-          <span>{formatCost(chat.stats.totalCostUsd)}</span>
+          {/* 花费只在这个进程还活着时显示。读回来的历史算不出钱 ——
+              不同中转站、不同模型价格不一样，要一张价格表，见 HANDOFF 待办。
+              这时候显示 $0 是在骗人，不如不显示。 */}
+          {chat.stats.totalCostUsd > 0 ? (
+            <>
+              <span>·</span>
+              <span>{formatCost(chat.stats.totalCostUsd)}</span>
+            </>
+          ) : null}
           {cacheLeft ? (
             <>
               <span>·</span>
@@ -126,7 +133,10 @@ export default function CcChatPage() {
             <CcMessageRow
               key={m.id}
               message={m}
-              persona={people.active}
+              // 按那一轮记下的人画头像名字；老消息没记就用当前选中的
+              persona={
+                (m.personaId && people.personas.find(p => p.id === m.personaId)) || people.active
+              }
               onCopy={copy}
               onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
               onOpenRecall={setRecallDetail}
@@ -189,8 +199,12 @@ export default function CcChatPage() {
           activeId={people.activeId}
           loading={people.loading}
           onPick={id => {
-            people.selectPersona(id)
             setPersonaRailOpen(false)
+            if (id === people.activeId) return
+            people.selectPersona(id)
+            // 换人 = 换一整套对话。开着的那个属于上一个协作者，留在屏幕上会串，
+            // 直接开一个新的空对话。
+            chat.startNewSession()
           }}
           onNew={() => {
             setPersonaRailOpen(false)

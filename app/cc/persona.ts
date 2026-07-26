@@ -35,6 +35,12 @@ export type CcPersona = {
   recallOn: boolean
   /** 关掉只做关键词匹配，不跑向量检索（快，但召回少） */
   semanticOn: boolean
+  /**
+   * 能读哪些目录。第一个当工作目录，其余作附加目录。空 = 只有仓库本身。
+   * ⚠️ 密钥类文件（.env / *.key / id_rsa 等）跟这份清单无关，服务端一律硬拦，
+   * 见 app/lib/ccDirs.ts。这里配的只是「看得到多大范围」。
+   */
+  dirs: string[]
   engine: CcEngine
 }
 
@@ -51,6 +57,7 @@ export const FALLBACK_PERSONA: CcPersona = {
   memoryEntries: [],
   recallOn: true,
   semanticOn: true,
+  dirs: [],
   engine: 'api',
 }
 
@@ -58,6 +65,7 @@ export const FALLBACK_PERSONA: CcPersona = {
 export function personaFromHaven(row: Record<string, unknown>): CcPersona {
   const engine = String(row.engine || 'api')
   const entries = Array.isArray(row.memory_entries) ? row.memory_entries : []
+  const dirs = Array.isArray(row.dirs) ? row.dirs : []
   return {
     id: String(row.id || ''),
     name: String(row.name || '') || '未命名',
@@ -70,6 +78,7 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
     memoryEntries: entries.map(item => String(item ?? '')).filter(Boolean),
     recallOn: row.recall_on !== false,
     semanticOn: row.semantic_on !== false,
+    dirs: dirs.map(item => String(item ?? '').trim()).filter(Boolean),
     engine: engine === 'subscription' || engine === 'selfhost' ? engine : 'api',
   }
 }
@@ -88,6 +97,7 @@ export function personaToPayload(persona: CcPersona): Record<string, unknown> {
     memory_entries: persona.memoryEntries,
     recall_on: persona.recallOn,
     semantic_on: persona.semanticOn,
+    dirs: persona.dirs,
     engine: persona.engine,
   }
 }

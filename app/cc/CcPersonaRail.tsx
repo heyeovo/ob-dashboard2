@@ -88,7 +88,7 @@ export default function CcPersonaRail({
       </div>
 
       <p className="border-t border-[var(--color-border-light)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
-        换协作者只影响之后新建的对话 —— 正在聊的那个背后已经起好子进程了，提示词和额度换不了。
+        每个协作者有自己的一套对话。换人会开一个新对话，原来那个留在上一个人名下。
       </p>
     </div>
   )

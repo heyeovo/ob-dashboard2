@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import type { SDKMessage, SDKUserMessage, Options } from '@anthropic-ai/claude-agent-sdk'
+import { isDeniedPath, pathsFromToolInput, resolveDirs } from '@/app/lib/ccDirs'
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
@@ -102,6 +103,9 @@ export async function POST(request: NextRequest) {
   })
 
   const personaAppend = buildPersonaAppend(persona)
+  // 能读哪些目录：协作者自己配的，没配就是仓库根。
+  // 敏感文件的拦截跟这个无关，是下面 PreToolUse 那道硬规则。
+  const { cwd, additionalDirectories } = resolveDirs(persona?.dirs)
 
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -134,7 +138,8 @@ export async function POST(request: NextRequest) {
         systemPrompt: personaAppend
           ? { type: 'preset', preset: 'claude_code', append: personaAppend }
           : { type: 'preset', preset: 'claude_code' },
-        cwd: process.cwd(),
+        cwd,
+        additionalDirectories,
         allowedTools: READ_ONLY_TOOLS,
         // 只读工具直接放行，其余一律拒。第 5 步换成 canUseTool 挂长连接等用户点按钮。
         permissionMode: 'dontAsk',
@@ -143,6 +148,35 @@ export async function POST(request: NextRequest) {
         resume: resumeFrom || undefined,
         env: buildCcEnv(cred),
         hooks: {
+          // 敏感文件硬拦。不是配置项，没有放行开关，任何协作者都一样。
+          //
+          // 为什么不做成「开放目录时问一次」：那是一次性决定，之后每个对话都按它走。
+          // 而真正的风险点不是「读到」，是读到之后内容进了上下文 —— 上下文要发去
+          // 中转站，那一刻密钥就出门了，事后撤不回来。
+          PreToolUse: [
+            {
+              hooks: [
+                async input => {
+                  const { tool_name: toolName, tool_input: toolInput } =
+                    input as { tool_name?: string; tool_input?: unknown }
+                  const hit = pathsFromToolInput(toolInput).find(isDeniedPath)
+                  if (!hit) return {}
+                  const item = { name: String(toolName || '工具'), id: `deny-${Date.now()}`, denied: hit }
+                  toolEvents.push(item)
+                  send('tool', item)
+                  return {
+                    hookSpecificOutput: {
+                      hookEventName: 'PreToolUse' as const,
+                      permissionDecision: 'deny' as const,
+                      permissionDecisionReason:
+                        `这个路径含密钥/凭据，前端一律不给读（${hit}）。` +
+                        '需要里面的值就直接问用户，别自己找别的路子读。',
+                    },
+                  }
+                },
+              ],
+            },
+          ],
           UserPromptSubmit: [
             {
               // Haven 开语义检索单次 4-6 秒，给 30 秒余量。超时 SDK 放弃这个 hook
@@ -291,7 +325,10 @@ export async function POST(request: NextRequest) {
             userText: text,
             assistantText,
             model: String(initInfo?.model || model || ''),
-            client: 'ob2-chat',
+            // client 里带上协作者 id：会话列表接口只回 client 不回 raw_json，
+            // 靠它做「这个对话属于谁」的过滤，不用为此再改一次 Haven。
+            // 这一列只有这条路由写，没别人读，可以这么用。权威记录仍是下面 raw.persona_id。
+            client: persona?.id ? `ob2-chat/${persona.id}` : 'ob2-chat',
             route: '/api/cc-chat',
             source: 'cc',
             raw: {

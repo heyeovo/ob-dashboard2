@@ -37,6 +37,8 @@ export type HavenPersona = {
   description: string
   prompt: string
   memory_entries: string[]
+  /** 能读哪些目录。第一个当 cwd，其余作附加目录。空 = 用默认（仓库根） */
+  dirs: string[]
   recall_on: boolean
   semantic_on: boolean
   engine: string
@@ -56,6 +58,7 @@ export type PersonaPatch = {
   description?: string
   prompt?: string
   memory_entries?: string[]
+  dirs?: string[]
   recall_on?: boolean
   semantic_on?: boolean
   engine?: CcEngine
