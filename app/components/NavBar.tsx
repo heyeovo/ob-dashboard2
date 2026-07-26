@@ -14,6 +14,7 @@ const TAB_LINKS = [
 
 const PAGE_LINKS = [
   { slug: 'chat', href: '/', label: '聊天' },
+  { slug: 'cc', href: '/cc', label: 'cc 聊天' },
   { slug: 'breath-sim', href: '/breath-sim', label: '模拟 Breath' },
   { slug: 'graph', href: '/graph', label: '关系图谱' },
   { slug: 'journal', href: '/journal', label: '日记' },

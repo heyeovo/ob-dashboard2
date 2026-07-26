@@ -11,6 +11,9 @@ const TABS = [
 ]
 
 const MORE_ITEMS = [
+  // cc 聊天页的临时入口。导航重构那一轮会把它挪到中间那个突起的按钮上
+  // （届时 / 的 Polaris iframe 退场）。现在两个并存，先放这里不动 5 个 Tab。
+  { slug: 'cc',      label: 'cc 聊天',  href: '/cc' },
   { slug: 'journal', label: '日记',      href: '/journal' },
   { slug: 'graph',   label: '关系图谱',  href: '/graph' },
   { slug: 'import',  label: '导入',      href: '/import' },

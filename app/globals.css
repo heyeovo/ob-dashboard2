@@ -98,6 +98,32 @@ html {
 
   /* ---- Layout / 布局 ---- */
   --page-width:             1152px;
+
+  /* ---- Chat / 聊天页专用 ----
+     沿用上面的色板，但另开一套尺度：圆角更大、边框更少、行距更松。
+     现有页面偏"工具风"（小圆角 + 到处是边框），聊天这块先按新尺度做，
+     以后整体调整时反过来照它改别的页面。 */
+  --chat-bubble-radius:     20px;
+  --chat-user-fill:         #F2EAE4;
+  --chat-user-text:         #3A3836;
+  --chat-assistant-width:   760px;
+  --chat-line-height:       1.72;
+  --chat-stream-bar:        linear-gradient(180deg, rgba(217,119,87,.62), rgba(217,119,87,.18));
+  --chat-rail-width:        264px;
+  --chat-composer-max-h:    120px;
+  --chat-shadow-soft:       0 8px 28px rgba(58, 56, 54, 0.05);
+
+  /* 4.5 追加（只加不改，上面的值一个没动） */
+  --chat-page-tint:         radial-gradient(120% 78% at 12% -8%, rgba(217, 119, 87, 0.045) 0%, rgba(217, 119, 87, 0) 58%),
+                            radial-gradient(96% 62% at 96% 4%, rgba(140, 152, 168, 0.05) 0%, rgba(140, 152, 168, 0) 62%);
+  --chat-avatar-tint:       linear-gradient(150deg, #E6A886, #D97757);
+  --chat-code-bg:           #FAF7F5;
+  --chat-code-border:       rgba(58, 56, 54, 0.08);
+  --chat-inline-code-bg:    rgba(217, 119, 87, 0.08);
+  --chat-think-bg:          rgba(140, 152, 168, 0.06);
+  --chat-think-bar:         rgba(140, 152, 168, 0.32);
+  --chat-modal-shadow:      0 24px 64px rgba(58, 56, 54, 0.16);
+  --chat-glass:             rgba(255, 253, 252, 0.78);
 }
 
 /* ---- Tailwind theme bridge ---- */
@@ -118,3 +144,468 @@ body {
 /* ---- Utility: hide scrollbar ---- */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ============================================ */
+/* Chat（/cc 聊天页）                            */
+/* ============================================ */
+
+/* 用户气泡：实心、大圆角、贴右。不画边框。 */
+.cc-bubble-user {
+  align-self: flex-end;
+  max-width: min(100%, 620px);
+  padding: 11px 16px;
+  border-radius: var(--chat-bubble-radius);
+  background: var(--chat-user-fill);
+  color: var(--chat-user-text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+/* 助手侧：不给底色不给边框，内容直接摊在页面上。
+   ⚠️ 这里**不能有** white-space: pre-wrap —— 正文走 markdown 渲染了，
+   留着会让段落间距翻倍、代码块缩进变双份。换行由 .cc-md 里的块元素负责。 */
+.cc-bubble-assistant {
+  align-self: flex-start;
+  width: 100%;
+  max-width: min(100%, var(--chat-assistant-width));
+  line-height: var(--chat-line-height);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* 流式中：左侧一道橙色渐变竖条，答完淡出。 */
+.cc-bubble-assistant.streaming {
+  position: relative;
+  padding-left: 14px;
+}
+.cc-bubble-assistant.streaming::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--chat-stream-bar);
+}
+
+/* 行内操作按钮：默认隐形，hover 到那一行才浮现。手机端常显（没有 hover）。 */
+.cc-row-actions {
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-standard);
+}
+.cc-row:hover .cc-row-actions,
+.cc-row:focus-within .cc-row-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .cc-row-actions { opacity: 1; }
+}
+
+/* 输入框外壳 */
+.cc-composer {
+  border-radius: var(--chat-bubble-radius);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--chat-shadow-soft);
+  transition: border-color var(--duration-normal) var(--ease-standard);
+}
+.cc-composer:focus-within {
+  border-color: rgba(217, 119, 87, 0.34);
+}
+.cc-composer textarea {
+  max-height: var(--chat-composer-max-h);
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+}
+
+/* 生成中的三点 */
+.cc-dots span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 3px;
+  border-radius: 999px;
+  background: var(--color-text-disabled);
+  animation: ccDot 1.1s infinite ease-in-out;
+}
+.cc-dots span:nth-child(2) { animation-delay: .15s; }
+.cc-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes ccDot {
+  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+  30%           { opacity: .9;  transform: translateY(-2px); }
+}
+
+/* 会话列表项 */
+.cc-rail-item {
+  border-radius: var(--radius-lg);
+  transition: background var(--duration-normal) var(--ease-standard);
+}
+.cc-rail-item:hover { background: var(--color-surface-secondary); }
+.cc-rail-item.active { background: var(--color-primary-soft); }
+
+/* ============================================ */
+/* Chat 4.5 — markdown / 质感 / thinking / 弹窗   */
+/* 只作用在 /cc，上面 :root 的原有 token 一个没改   */
+/* ============================================ */
+
+/* ---- 页面底纹：极轻的两团渐变，不改 body ---- */
+.cc-page {
+  background-color: var(--color-bg);
+  background-image: var(--chat-page-tint);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+.cc-topbar {
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--chat-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.cc-rail-pane {
+  border-right: 1px solid var(--color-border-light);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+/* ---- 助手侧名字行 ---- */
+.cc-assistant-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: min(100%, var(--chat-assistant-width));
+}
+.cc-namerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cc-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  flex-shrink: 0;
+}
+.cc-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-heading);
+}
+.cc-time {
+  font-size: 11px;
+  color: var(--color-text-disabled);
+  font-variant-numeric: tabular-nums;
+}
+.cc-recall-btn {
+  margin-left: auto;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  padding: 2px 9px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  transition: color var(--duration-normal) var(--ease-standard),
+              border-color var(--duration-normal) var(--ease-standard);
+}
+.cc-recall-btn:hover {
+  color: var(--color-primary);
+  border-color: rgba(217, 119, 87, 0.3);
+}
+
+/* ---- thinking：流式中跟着输出，答完保持展开（跟 Polaris 不同，用户要的） ---- */
+.cc-think-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  transition: color var(--duration-normal) var(--ease-standard);
+}
+.cc-think-toggle:hover { color: var(--color-text-secondary); }
+.cc-think-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform var(--duration-normal) var(--ease-standard);
+}
+.cc-think-caret.open { transform: rotate(90deg) translateX(1px); }
+.cc-think-body {
+  margin-top: 6px;
+  border-left: 2px solid var(--chat-think-bar);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--chat-think-bg);
+  padding: 10px 13px;
+  font-size: 12.5px;
+  line-height: 1.68;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 流式光标：正文末尾一道竖条 ---- */
+.cc-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.16em;
+  border-radius: 1px;
+  background: var(--color-primary);
+  animation: ccCaret 1.05s steps(1, end) infinite;
+}
+@keyframes ccCaret {
+  0%, 45%   { opacity: 1; }
+  46%, 100% { opacity: 0; }
+}
+
+/* ---- 工具调用条 ---- */
+.cc-toolstrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+.cc-toolchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  padding: 4px 11px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  transition: border-color var(--duration-normal) var(--ease-standard),
+              background var(--duration-normal) var(--ease-standard);
+}
+.cc-toolchip:hover {
+  border-color: rgba(217, 119, 87, 0.28);
+  background: var(--color-primary-muted);
+}
+.cc-toolchip-name { font-family: var(--font-mono); }
+.cc-toolchip-hint { color: var(--color-text-disabled); }
+.cc-tool-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* ---- 用户气泡的长按菜单 ---- */
+.cc-popmenu {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  padding: 4px;
+  box-shadow: var(--chat-shadow-soft);
+}
+.cc-popmenu-item {
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.cc-popmenu-item:hover { background: var(--color-surface-secondary); }
+
+/* ---- 弹窗（工具详情 / 召回详情共用） ---- */
+.cc-modal-scrim { background: rgba(43, 41, 39, 0.22); backdrop-filter: blur(2px); }
+.cc-modal {
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--chat-modal-shadow);
+  overflow: hidden;
+}
+.cc-modal-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--color-text-tertiary);
+}
+.cc-modal-pre {
+  margin-top: 7px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--chat-code-border);
+  background: var(--chat-code-bg);
+  padding: 11px 13px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.66;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cc-recall-section + .cc-recall-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border-light);
+}
+.cc-recall-empty {
+  margin-top: 7px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border);
+  padding: 10px 13px;
+  font-size: 11.5px;
+  color: var(--color-text-disabled);
+}
+.cc-recall-tag {
+  border-radius: 999px;
+  background: var(--color-surface-tertiary);
+  padding: 2px 9px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+/* ---- markdown 正文排版 ----
+   助手回复的全部排版都在这一段。Tailwind 的 preflight 把 h1/ul/p 的默认样式
+   清零了，所以这里必须显式给回来，否则 markdown 渲染出来还是一坨。 */
+.cc-md > :first-child { margin-top: 0; }
+.cc-md > :last-child  { margin-bottom: 0; }
+
+.cc-md p {
+  margin: 0 0 0.85em;
+  line-height: var(--chat-line-height);
+}
+
+.cc-md h1, .cc-md h2, .cc-md h3, .cc-md h4 {
+  margin: 1.5em 0 0.55em;
+  color: var(--color-text-heading);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.cc-md h1 { font-size: 1.22em; }
+.cc-md h2 { font-size: 1.12em; }
+.cc-md h3 { font-size: 1.02em; }
+.cc-md h4 { font-size: 0.96em; color: var(--color-text-secondary); }
+
+.cc-md strong { font-weight: 600; color: var(--color-text-heading); }
+.cc-md em     { font-style: italic; }
+.cc-md del    { color: var(--color-text-disabled); }
+
+.cc-md ul, .cc-md ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.35em;
+}
+.cc-md ul { list-style: disc; }
+.cc-md ol { list-style: decimal; }
+.cc-md li { margin: 0.24em 0; line-height: var(--chat-line-height); }
+.cc-md li::marker { color: var(--color-text-disabled); }
+.cc-md li > ul, .cc-md li > ol { margin: 0.24em 0 0.3em; }
+
+/* GFM 任务列表：去掉缩进标记，勾选框跟文字对齐 */
+.cc-md li.task-list-item { list-style: none; margin-left: -1.15em; }
+.cc-md li.task-list-item input { margin-right: 0.5em; vertical-align: -0.08em; }
+
+.cc-md blockquote {
+  margin: 0 0 0.9em;
+  border-left: 2px solid var(--color-border);
+  padding: 0.1em 0 0.1em 0.9em;
+  color: var(--color-text-secondary);
+}
+.cc-md blockquote p:last-child { margin-bottom: 0; }
+
+.cc-md hr {
+  margin: 1.4em 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.cc-md-link {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: rgba(217, 119, 87, 0.32);
+  text-underline-offset: 2px;
+}
+.cc-md-link:hover { text-decoration-color: var(--color-primary); }
+
+/* 行内代码 */
+.cc-md :not(.cc-md-pre) > code {
+  border-radius: 5px;
+  background: var(--chat-inline-code-bg);
+  padding: 0.13em 0.38em;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: #A8543A;
+  overflow-wrap: anywhere;
+}
+
+/* 代码块：外壳 + 顶栏（语言名 / 复制）+ 正文 */
+.cc-md-codewrap {
+  margin: 0 0 0.95em;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--chat-code-border);
+  background: var(--chat-code-bg);
+  overflow: hidden;
+}
+.cc-md-codebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--chat-code-border);
+  padding: 5px 12px;
+}
+.cc-md-codelang {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  color: var(--color-text-disabled);
+}
+.cc-md-codecopy {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  transition: color var(--duration-normal) var(--ease-standard);
+}
+.cc-md-codecopy:hover { color: var(--color-primary); }
+.cc-md-pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: var(--color-text-primary);
+}
+.cc-md-pre code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  white-space: pre;
+}
+
+/* 表格（remark-gfm） */
+.cc-md-tablewrap {
+  margin: 0 0 0.95em;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+}
+.cc-md-tablewrap table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cc-md-tablewrap th,
+.cc-md-tablewrap td {
+  border-bottom: 1px solid var(--color-border-light);
+  padding: 7px 11px;
+  text-align: left;
+  vertical-align: top;
+}
+.cc-md-tablewrap th {
+  background: var(--color-surface-secondary);
+  font-weight: 500;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+.cc-md-tablewrap tr:last-child td { border-bottom: 0; }
