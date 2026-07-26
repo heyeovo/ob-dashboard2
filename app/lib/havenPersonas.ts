@@ -39,6 +39,11 @@ export type HavenPersona = {
   memory_entries: string[]
   /** 能读哪些目录。第一个当 cwd，其余作附加目录。空 = 用默认（仓库根） */
   dirs: string[]
+  /**
+   * 能**写**哪些目录。跟上面那份的规则相反：**空 = 一个文件都不许写**。
+   * 读错了只是浪费钱，写错了会把文件改坏，所以默认值站在保守那一边。
+   */
+  write_dirs: string[]
   recall_on: boolean
   semantic_on: boolean
   engine: string
@@ -59,6 +64,7 @@ export type PersonaPatch = {
   prompt?: string
   memory_entries?: string[]
   dirs?: string[]
+  write_dirs?: string[]
   recall_on?: boolean
   semantic_on?: boolean
   engine?: CcEngine

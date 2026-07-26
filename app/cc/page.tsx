@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
+import { CcPermCard } from './CcPermCard'
 import CcPersonaDialog from './CcPersonaDialog'
 import CcPersonaRail from './CcPersonaRail'
 import CcRecallDialog from './CcRecallDialog'
@@ -80,10 +81,10 @@ export default function CcChatPage() {
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // 新消息进来滚到底
+  // 新消息进来滚到底。批准卡片出现时也滚 —— 不滚就可能在屏幕外，人不知道在等他
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [chat.messages])
+  }, [chat.messages, chat.pending.length])
 
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text)
@@ -179,6 +180,23 @@ export default function CcChatPage() {
             />
           ))
         )}
+        {/* 等着点批准的操作。放在消息流最后 —— 那一轮正停在这里等，
+            它就是「现在该看的东西」。刷新页面不会丢（队列在服务端）。 */}
+        {chat.pending.map(req => (
+          <CcPermCard key={req.id} request={req} onAnswer={chat.answerPermission} />
+        ))}
+        {chat.autoAllowEdits ? (
+          <div className="cc-auto-allow">
+            <span>这次对话里改文件不再一条条问了（跑命令仍然每次都问）</span>
+            <button
+              type="button"
+              className="ml-auto shrink-0 underline"
+              onClick={() => void chat.stopAutoAllow()}
+            >
+              改回每次都问
+            </button>
+          </div>
+        ) : null}
         {chat.error ? (
           <div className="rounded-[var(--radius-lg)] bg-[#FCEEED] px-3.5 py-2.5 text-xs text-[var(--color-danger)]">
             {chat.error}

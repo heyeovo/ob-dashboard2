@@ -14,6 +14,7 @@
 // 从会话第一句活到闲置回收，中间每句话往那个 iterable 里 push 一条 user 消息。
 
 import { query, type Query, type SDKMessage, type SDKUserMessage, type Options } from '@anthropic-ai/claude-agent-sdk'
+import { cancelAllPending, hasPending } from './ccChannel'
 
 /** 闲置多久回收子进程。跟 prompt cache 的 5 分钟没关系，纯粹是别让子进程无限堆着。 */
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -103,6 +104,13 @@ function createMessageQueue() {
 function armIdleTimer(live: LiveSession) {
   if (live.idleTimer) clearTimeout(live.idleTimer)
   live.idleTimer = setTimeout(() => {
+    // ⚠️ 有操作还挂着等批准就不能收 —— 那一轮正停在 canUseTool 上等人点按钮，
+    // 而批准的等待窗口（30 分钟）比这个闲置时限（10 分钟）长。收掉子进程等于
+    // 「你去泡杯茶回来，要批准的东西没了，那一轮也白跑了」。往后顺延接着等。
+    if (hasPending(live.sessionId)) {
+      armIdleTimer(live)
+      return
+    }
     // 闲置到点就收掉子进程。下次发言会重新起一个（靠 resume 接上下文）。
     dropSession(live.sessionId)
   }, IDLE_TTL_MS)
@@ -115,6 +123,8 @@ function armIdleTimer(live: LiveSession) {
 export function dropSession(sessionId: string) {
   const live = registry.get(sessionId)
   if (!live) return
+  // 挂着等批准的先全拒掉，不然那些 await 永远不返回，子进程也退不干净
+  cancelAllPending(sessionId, '会话已经结束了，这个操作取消。')
   registry.delete(sessionId)
   if (live.idleTimer) clearTimeout(live.idleTimer)
   try {
@@ -167,6 +177,17 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
   registry.set(input.sessionId, live)
   armIdleTimer(live)
   return live
+}
+
+/**
+ * 只看一眼，不新建。
+ *
+ * 工作台的「回退」要用它 —— 回退走的是子进程里的文件备份（rewindFiles），
+ * 进程不在了就没得回退，这时候必须能区分「没有这个会话」和「新建一个」，
+ * 不能像 ensureSession 那样顺手起一个新进程（那会白付一次缓存，而且备份还是没有）。
+ */
+export function peekSession(sessionId: string): LiveSession | null {
+  return registry.get(sessionId) || null
 }
 
 /** 会话被回收后，记住 claude code 的 session id，下次好 resume 接上。 */

@@ -1,6 +1,14 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CcMessage, CcRecallInfo, CcSessionListItem, CcSessionStats, CcToolEvent } from './types'
+import type {
+  CcMessage,
+  CcPermDecided,
+  CcPermRequest,
+  CcRecallInfo,
+  CcSessionListItem,
+  CcSessionStats,
+  CcToolEvent,
+} from './types'
 import { EMPTY_STATS } from './types'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
@@ -12,6 +20,14 @@ import { EMPTY_STATS } from './types'
 // claude code 自己的 session id 在服务端另存（做 resume 用），前端不管。
 
 const NEW_SESSION_PREFIX = 'ob2-'
+
+/**
+ * 当前在聊哪个会话，写进 localStorage 给工作台读。
+ *
+ * 为什么用 localStorage：工作台是另一个页面（/workbench），它得知道「现在」是哪个会话
+ * 才能显示待批准 / 改过的文件。服务端不知道你在看哪个（同时可以有好几个活会话）。
+ */
+export const ACTIVE_SESSION_KEY = 'ob2-cc-active-session'
 
 function newSessionId() {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -114,6 +130,12 @@ export function useCcChat(personaId = '') {
   // 读历史时数出来的轮数。进程被回收后 stats.turnCount 归零，用它兜底
   const [historyTurnCount, setHistoryTurnCount] = useState(0)
   const [error, setError] = useState('')
+  // 第 5 步：正在等点批准的操作。
+  // ⚠️ 它的权威副本在服务端队列里 —— 刷新页面 / 换设备打开都靠下面那个轮询拉回来，
+  // 不是只靠 SSE 推。SSE 只是让它当场出现。
+  const [pending, setPending] = useState<CcPermRequest[]>([])
+  const [decided, setDecided] = useState<CcPermDecided[]>([])
+  const [autoAllowEdits, setAutoAllowEdits] = useState(false)
 
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
@@ -123,6 +145,16 @@ export function useCcChat(personaId = '') {
   useEffect(() => {
     setSessionId(newSessionId())
   }, [])
+
+  // 工作台靠这个知道现在在聊哪个会话
+  useEffect(() => {
+    if (!sessionId) return
+    try {
+      window.localStorage.setItem(ACTIVE_SESSION_KEY, sessionId)
+    } catch {
+      /* 隐私模式下写不了，工作台会退回「先去聊天页」的空态 */
+    }
+  }, [sessionId])
 
   // 会话列表按协作者隔离：只显示属于当前这个的。
   // 4.5b 之前的老对话没归属，服务端一律算给第一个协作者（ombre），用户拍板的。
@@ -170,6 +202,82 @@ export function useCcChat(personaId = '') {
     }
   }, [sessionId])
 
+  /**
+   * 把「现在等着谁点」拉回来。
+   *
+   * 为什么要轮询而不只靠 SSE：那一轮停在服务端等答复，SSE 流可能早断了
+   *（手机切走、页面刷新、发送请求本身被 abort）。5 秒一次，够用又不吵。
+   * 有东西挂着时才轮 —— 没挂着的时候页面是安静的。
+   */
+  const refreshPending = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      const res = await fetch(`/api/cc-permission?session_id=${encodeURIComponent(sessionId)}`, {
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (!data.ok) return
+      setPending((data.pending || []) as CcPermRequest[])
+      setDecided((data.decided || []) as CcPermDecided[])
+      setAutoAllowEdits(data.auto_allow_edits === true)
+    } catch {
+      /* 拉不到就等下一次 */
+    }
+  }, [sessionId])
+
+  useEffect(() => {
+    if (!sessionId) return
+    void refreshPending()
+    const timer = setInterval(refreshPending, 5_000)
+    return () => clearInterval(timer)
+  }, [sessionId, refreshPending])
+
+  /** 点批准 / 拒绝。remember 只影响 Edit / Write，Bash 永远一条一条问。 */
+  const answerPermission = useCallback(
+    async (id: string, allow: boolean, opts?: { remember?: boolean; reason?: string }) => {
+      // 先本地摘掉，按钮点下去立刻有反应（服务端 409 时下一次轮询会把它拉回来）
+      setPending(prev => prev.filter(p => p.id !== id))
+      try {
+        const res = await fetch('/api/cc-permission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            id,
+            decision: allow ? 'allow' : 'deny',
+            remember: opts?.remember === true,
+            reason: opts?.reason,
+          }),
+        })
+        const data = await res.json()
+        if (!data.ok) {
+          setError(String(data.error || '这条批准没送到'))
+          void refreshPending()
+          return
+        }
+        setPending((data.pending || []) as CcPermRequest[])
+        setDecided((data.decided || []) as CcPermDecided[])
+        setAutoAllowEdits(data.auto_allow_edits === true)
+      } catch (e) {
+        setError((e as Error).message || '这条批准没送到')
+        void refreshPending()
+      }
+    },
+    [sessionId, refreshPending],
+  )
+
+  /** 关掉「本会话 Edit / Write 都放行」。 */
+  const stopAutoAllow = useCallback(async () => {
+    setAutoAllowEdits(false)
+    try {
+      await fetch(`/api/cc-permission?session_id=${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+      })
+    } catch {
+      /* 关不掉下次轮询会显示真实状态 */
+    }
+  }, [sessionId])
+
   const switchSession = useCallback(
     async (nextId: string) => {
       if (nextId === sessionId) return
@@ -183,6 +291,10 @@ export function useCcChat(personaId = '') {
       setMessages([])
       setStats(EMPTY_STATS)
       setHistoryTurnCount(0)
+      // 待批准是按会话分的，切走先清空，轮询会把新会话那份拉回来
+      setPending([])
+      setDecided([])
+      setAutoAllowEdits(false)
 
       setHistoryLoading(true)
       try {
@@ -219,6 +331,9 @@ export function useCcChat(personaId = '') {
     setError('')
     setStats(EMPTY_STATS)
     setHistoryTurnCount(0)
+    setPending([])
+    setDecided([])
+    setAutoAllowEdits(false)
   }, [sessionId, draft])
 
   const stop = useCallback(() => {
@@ -310,6 +425,15 @@ export function useCcChat(personaId = '') {
             } else if (eventName === 'tool') {
               const tool = payload as unknown as CcToolEvent
               patch(m => ({ ...m, tools: [...(m.tools || []), tool] }))
+            } else if (eventName === 'permission') {
+              // 有东西要批准了。对话流当场弹卡片（这一轮正停在服务端等）
+              const req = payload as unknown as CcPermRequest
+              setPending(prev => (prev.some(p => p.id === req.id) ? prev : [...prev, req]))
+            } else if (eventName === 'permission_resolved') {
+              // 别的设备点了 / 超时了 —— 把卡片撤掉
+              const id = String(payload.id || '')
+              setPending(prev => prev.filter(p => p.id !== id))
+              void refreshPending()
             } else if (eventName === 'done') {
               patch(m => ({ ...m, streaming: false }))
               if (payload.stats) setStats(payload.stats as CcSessionStats)
@@ -356,5 +480,12 @@ export function useCcChat(personaId = '') {
     stop,
     switchSession,
     startNewSession,
+    // 第 5 步
+    pending,
+    decided,
+    autoAllowEdits,
+    answerPermission,
+    stopAutoAllow,
+    refreshPending,
   }
 }

@@ -1,6 +1,31 @@
+import { randomUUID } from 'node:crypto'
 import { NextRequest } from 'next/server'
 import type { SDKMessage, SDKUserMessage, Options } from '@anthropic-ai/claude-agent-sdk'
-import { isDeniedPath, pathsFromToolInput, resolveDirs } from '@/app/lib/ccDirs'
+import {
+  attachSend,
+  detachSend,
+  emit,
+  autoAllowEdits,
+  recordCheckpoint,
+  recordCommand,
+  recordFileChange,
+  requestPermission,
+  resetChannel,
+  turnSnapshot,
+  type CcPermKind,
+} from '@/app/lib/ccChannel'
+import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
+import {
+  EXEC_TOOLS,
+  GREP_EXCLUDE_GLOB,
+  WRITE_TOOLS,
+  isDeniedPath,
+  isWritablePath,
+  pathsFromToolInput,
+  resolveDirs,
+  resolveWriteDirs,
+  scrubDeniedLines,
+} from '@/app/lib/ccDirs'
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
@@ -12,7 +37,7 @@ import {
   getSessionStats,
 } from '@/app/lib/ccSession'
 
-// 第 4 步：聊天页的流式路由。
+// 聊天页的流式路由（第 4 步建，第 5 步加写权限）。
 //
 //   POST /api/cc-chat   body: { session_id, text, cred?, model?, semantic? }
 //   → text/event-stream，逐字吐 delta
@@ -26,7 +51,19 @@ import {
 //      （第 2 步实测）。第一版**不做截取**，改成把召回结果回给前端显示，
 //      真出现「时好时坏」时能立刻看到是哪一句。
 //
-// 第一版工具权限：只读（Read / Grep / Glob）。写文件和跑命令要等第 5 步的 diff 批准界面。
+// ── 第 5 步加的三件事 ─────────────────────────────────────────────
+//
+//   写权限：Write / Edit / NotebookEdit / Bash 不再一律拒，走 canUseTool 停住
+//           等浏览器点批准（队列在 ccChannel.ts，不在这个闭包里）
+//
+//   ⚠️ 为什么 hook 和 canUseTool 都不能直接用下面那个 `send`：
+//   buildOptions **只在会话第一轮**跑一次（ccSession.ts 里已有会话就复用），
+//   所以闭包里的 send 永远是第一轮那个流的。第 2 轮起推进去全落进已关闭的流 ——
+//   4.5b 那个「召回信息第二轮不刷新、写库的 raw.recall 是空的」就是这么来的。
+//   现在统一走 ccChannel 的 emit：每轮开头 attachSend、结尾 detachSend。
+//
+//   同理，`recallInfo` / `toolEvents` 这些**当轮变量**也不能在 hook 里直接写，
+//   要经 turnRef 拿「当前这一轮」的那份。
 
 export const runtime = 'nodejs'
 // ⚠️ 300 是 Vercel Hobby 计划的上限，写 600 会让线上部署直接失败
@@ -38,7 +75,23 @@ export const runtime = 'nodejs'
 // 「线上部署要处理的事」一节，导航重构那轮一起做。
 export const maxDuration = 300
 
+/** 直接放行、不弹批准卡的只读工具。 */
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
+
+/**
+ * 模型手上有哪些工具。
+ *
+ * 只列这几个而不是给 preset 全套：TodoWrite / WebSearch / Agent 那些在这个
+ * 界面里没有对应的显示，出现了只会让人看不懂发生了什么。要加是以后的事
+ *（MCP 是第 7 步）。
+ */
+const SESSION_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
+
+/** 这一轮的收集口。hook 和 canUseTool 都从 turnRef.current 拿，不捕获局部变量。 */
+type TurnBucket = {
+  recallInfo: Record<string, unknown> | null
+  toolEvents: Array<Record<string, unknown>>
+}
 
 type ChatBody = {
   session_id?: string
@@ -63,6 +116,54 @@ function sse(event: string, data: unknown) {
 // 「注入 OB 记忆 / 语义检索」就能当场生效 —— 提示词和引擎做不到这点
 // （那是子进程的启动参数，界面上也是这么写的）。
 const recallPrefs = new Map<string, { recall: boolean; semantic: boolean }>()
+
+/**
+ * 这个会话「当前那一轮」的收集口，和上面那张表同一个道理：
+ * hook 的闭包是第一轮建的，要拿到第 N 轮的 recallInfo / toolEvents 就得每轮重查。
+ */
+const turnBuckets = new Map<string, TurnBucket>()
+
+/** 这个会话能写哪些目录。同样每轮重读 —— 改完配置开新对话生效，跟提示词一致。 */
+const writeDirsBySession = new Map<string, string[]>()
+
+function toolKind(toolName: string): CcPermKind {
+  if (toolName === 'Edit' || toolName === 'NotebookEdit') return 'edit'
+  if (toolName === 'Write') return 'write'
+  if (EXEC_TOOLS.includes(toolName)) return 'bash'
+  return 'other'
+}
+
+/**
+ * 往「这一轮」的工具记录里加一条，同时推给前端。
+ * hook 里必须用这个，不能碰局部变量 —— 见文件头那段说明。
+ */
+function pushToolEvent(sessionId: string, item: Record<string, unknown>) {
+  turnBuckets.get(sessionId)?.toolEvents.push(item)
+  emit(sessionId, 'tool', item)
+}
+
+/** 从工具结果里抠出文本。不同工具的 tool_response 形状不一样，都兜一下。 */
+function toolResponseText(res: unknown): string {
+  if (typeof res === 'string') return res
+  if (!res || typeof res !== 'object') return ''
+  const r = res as Record<string, unknown>
+  for (const key of ['stdout', 'output', 'text', 'content', 'result']) {
+    const v = r[key]
+    if (typeof v === 'string') return v
+  }
+  if (Array.isArray(r.content)) {
+    return r.content
+      .map(b => (b && typeof b === 'object' ? String((b as Record<string, unknown>).text || '') : ''))
+      .join('\n')
+  }
+  return ''
+}
+
+/** 数一下 Edit / Write 实际动了多少行，工作台「改了哪些文件」那格要显示。 */
+function countLines(text: string): number {
+  if (!text) return 0
+  return text.split('\n').length
+}
 
 export async function POST(request: NextRequest) {
   let body: ChatBody
@@ -106,6 +207,10 @@ export async function POST(request: NextRequest) {
   // 能读哪些目录：协作者自己配的，没配就是仓库根。
   // 敏感文件的拦截跟这个无关，是下面 PreToolUse 那道硬规则。
   const { cwd, additionalDirectories } = resolveDirs(persona?.dirs)
+  // 能写哪些目录：另一份更窄的清单，**空 = 一个字都不许写**（跟读的规则相反）。
+  // 每轮重存，所以配置改完立刻生效 —— 不像提示词要等新对话。
+  const writeDirs = resolveWriteDirs(persona?.write_dirs)
+  writeDirsBySession.set(sessionId, writeDirs)
 
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -122,13 +227,77 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 这一轮的记录
+      // 这一轮的记录。
+      // ⚠️ recallInfo / toolEvents 放进 turnBuckets，不留在这个闭包里 ——
+      // hook 是第一轮建的，只有走那张表才拿得到「当前这一轮」的那份。
       let assistantText = ''
       let thinkingText = ''
-      let recallInfo: Record<string, unknown> | null = null
-      const toolEvents: Array<Record<string, unknown>> = []
       let resultInfo: Record<string, unknown> | null = null
       let initInfo: Record<string, unknown> | null = null
+      const bucket: TurnBucket = { recallInfo: null, toolEvents: [] }
+      turnBuckets.set(sessionId, bucket)
+      // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
+      attachSend(sessionId, send)
+
+      /**
+       * 写文件 / 跑命令之前停在这里，等浏览器点按钮。
+       *
+       * ⚠️ 这个回调也是第一轮建的，所以里面**只用 sessionId 去查**当前状态
+       *（写目录、放行开关），不捕获任何当轮变量。
+       *
+       * 挂住期间：那一轮的 for-await 停着不动，子进程不会被回收（ccSession 里
+       * hasPending 会让闲置计时器顺延）。30 分钟没人点就按拒绝收场。
+       */
+      const askPermission: NonNullable<Options['canUseTool']> = async (toolName, input, meta) => {
+        const kind = toolKind(toolName)
+        const dirs = writeDirsBySession.get(sessionId) || []
+        const filePath = String(
+          (input as Record<string, unknown>).file_path ||
+            (input as Record<string, unknown>).notebook_path ||
+            '',
+        )
+
+        // 写清单之外的一律硬拒，不弹卡片 —— 这不是「要不要批准」的问题，
+        // 是根本没配。空清单时这里会拒掉所有写操作，界面上会提示去哪加。
+        if (WRITE_TOOLS.includes(toolName) && !isWritablePath(filePath, dirs)) {
+          return {
+            behavior: 'deny',
+            message: dirs.length
+              ? `这个路径不在允许写的目录里（${filePath}）。能写的是：${dirs.join('、')}。` +
+                '别改别处的文件，也别绕道用命令写。'
+              : '这个协作者还没配「能写哪些目录」，所以现在一个文件都不能改。' +
+                '把你想改什么、改成什么说出来，让用户自己决定要不要开写权限。',
+          }
+        }
+
+        // 「本会话 Edit / Write 都放行」。⚠️ 只覆盖改文件，Bash 永远问。
+        if (WRITE_TOOLS.includes(toolName) && autoAllowEdits(sessionId)) {
+          return { behavior: 'allow' }
+        }
+
+        // diff / 命令原文由服务端拼好，前端只渲染
+        let diff = null
+        if (toolName === 'Edit') diff = await diffForEdit(input as Record<string, unknown>)
+        else if (toolName === 'Write') diff = await diffForWrite(input as Record<string, unknown>)
+        else if (toolName === 'NotebookEdit') {
+          diff = diffPlaceholder(filePath, 'notebook 改动没有行级预览，看下面的参数')
+        }
+
+        const decision = await requestPermission(sessionId, {
+          id: meta.requestId,
+          toolName,
+          kind,
+          // SDK 自己渲染好的那句话优先（.d.ts 里明说别自己拼）
+          title: meta.title || `${toolName} 要执行一个操作`,
+          description: meta.description || meta.decisionReason || '',
+          filePath,
+          command: String((input as Record<string, unknown>).command || ''),
+          diff,
+        })
+        return decision.behavior === 'allow'
+          ? { behavior: 'allow' }
+          : { behavior: 'deny', message: decision.message }
+      }
 
       const buildOptions = (resumeFrom: string | null): Options => ({
         model,
@@ -140,9 +309,16 @@ export async function POST(request: NextRequest) {
           : { type: 'preset', preset: 'claude_code' },
         cwd,
         additionalDirectories,
+        tools: SESSION_TOOLS,
+        // 只读的三个自动放行；写和跑命令**不在**这里，于是落到 canUseTool 上等批准。
         allowedTools: READ_ONLY_TOOLS,
-        // 只读工具直接放行，其余一律拒。第 5 步换成 canUseTool 挂长连接等用户点按钮。
-        permissionMode: 'dontAsk',
+        // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
+        // 根本走不到 canUseTool，也就没有批准这回事了。
+        permissionMode: 'default',
+        canUseTool: askPermission,
+        // 回退点要它：把改动前的文件备份下来，rewindFiles 才有东西可还原。
+        // ⚠️ 备份活在子进程里，进程被回收后这些点就失效了（界面上照实说）。
+        enableFileCheckpointing: true,
         settingSources: [],
         includePartialMessages: true,
         resume: resumeFrom || undefined,
@@ -160,19 +336,123 @@ export async function POST(request: NextRequest) {
                   const { tool_name: toolName, tool_input: toolInput } =
                     input as { tool_name?: string; tool_input?: unknown }
                   const hit = pathsFromToolInput(toolInput).find(isDeniedPath)
-                  if (!hit) return {}
-                  const item = { name: String(toolName || '工具'), id: `deny-${Date.now()}`, denied: hit }
-                  toolEvents.push(item)
-                  send('tool', item)
-                  return {
-                    hookSpecificOutput: {
-                      hookEventName: 'PreToolUse' as const,
-                      permissionDecision: 'deny' as const,
-                      permissionDecisionReason:
-                        `这个路径含密钥/凭据，前端一律不给读（${hit}）。` +
-                        '需要里面的值就直接问用户，别自己找别的路子读。',
-                    },
+                  if (hit) {
+                    const item = {
+                      name: String(toolName || '工具'),
+                      id: `deny-${Date.now()}`,
+                      denied: hit,
+                    }
+                    pushToolEvent(sessionId, item)
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        permissionDecision: 'deny' as const,
+                        permissionDecisionReason:
+                          `这个路径含密钥/凭据，前端一律不给读（${hit}）。` +
+                          '需要里面的值就直接问用户，别自己找别的路子读。',
+                      },
+                    }
                   }
+
+                  // Grep 的口子（4.5b 遗留）：Grep 不点名文件，上面那条按路径拦的
+                  // 规则一条都碰不到，`grep -r "sk-"` 就能把密钥值捞进上下文。
+                  // 第一道：没写 glob 就替它加上排除清单。
+                  //（写了 glob 的情况碰不了 —— 覆盖掉会改变它要找的范围。
+                  //  那种情况靠下面 PostToolUse 把命中行擦掉。）
+                  if (toolName === 'Grep') {
+                    const gi = (toolInput || {}) as Record<string, unknown>
+                    if (!gi.glob && !gi.type) {
+                      return {
+                        hookSpecificOutput: {
+                          hookEventName: 'PreToolUse' as const,
+                          updatedInput: { ...gi, glob: GREP_EXCLUDE_GLOB },
+                        },
+                      }
+                    }
+                  }
+
+                  // 写和跑命令：强制走「问一次」。
+                  //
+                  // ⚠️ 光靠 permissionMode: 'default' + 不放进 allowedTools 是不够的 ——
+                  // SDK 自己有一层「安全命令」判定，`echo hello` 这类它直接放行，
+                  // canUseTool 根本不会被调用（实测：第一版就这么漏出去了）。
+                  // 这里显式把决定改成 'ask'，才真的落到 canUseTool 上等浏览器点。
+                  if (WRITE_TOOLS.includes(String(toolName)) || toolName === 'Bash') {
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        permissionDecision: 'ask' as const,
+                        permissionDecisionReason: '这一步要用户在浏览器里点批准。',
+                      },
+                    }
+                  }
+                  return {}
+                },
+              ],
+            },
+          ],
+          // 工具跑完：① 密钥行从输出里擦掉（Grep 那道的第二层）
+          //          ② 记进工作台的「改了哪些文件 / 命令输出」
+          PostToolUse: [
+            {
+              hooks: [
+                async input => {
+                  const {
+                    tool_name: toolName,
+                    tool_input: toolInput,
+                    tool_response: toolResponse,
+                    tool_use_id: toolUseId,
+                  } = input as {
+                    tool_name?: string
+                    tool_input?: unknown
+                    tool_response?: unknown
+                    tool_use_id?: string
+                  }
+                  const ti = (toolInput || {}) as Record<string, unknown>
+                  const name = String(toolName || '')
+
+                  if (WRITE_TOOLS.includes(name)) {
+                    const path = String(ti.file_path || ti.notebook_path || '')
+                    // 行数只是给人看个量级，不追求跟 git diff 一致
+                    const added =
+                      name === 'Write'
+                        ? countLines(String(ti.content || ''))
+                        : countLines(String(ti.new_string || ''))
+                    const removed =
+                      name === 'Write' ? 0 : countLines(String(ti.old_string || ''))
+                    if (path) recordFileChange(sessionId, { path, tool: name, added, removed })
+                    return {}
+                  }
+
+                  if (name === 'Bash') {
+                    const out = toolResponseText(toolResponse)
+                    recordCommand(sessionId, {
+                      id: String(toolUseId || `cmd-${Date.now()}`),
+                      command: String(ti.command || ''),
+                      output: out,
+                      failed: /\berror\b|not recognized|command not found/i.test(out),
+                    })
+                    return {}
+                  }
+
+                  if (name === 'Grep') {
+                    const out = toolResponseText(toolResponse)
+                    if (!out) return {}
+                    const { text, removed } = scrubDeniedLines(out)
+                    if (!removed) return {}
+                    pushToolEvent(sessionId, {
+                      name: 'Grep',
+                      id: `scrub-${Date.now()}`,
+                      scrubbed: removed,
+                    })
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PostToolUse' as const,
+                        updatedToolOutput: text,
+                      },
+                    }
+                  }
+                  return {}
                 },
               ],
             },
@@ -193,7 +473,7 @@ export async function POST(request: NextRequest) {
                     semantic: prefs ? prefs.semantic : true,
                     signal,
                   })
-                  recallInfo = {
+                  const info = {
                     ok: recall.ok,
                     error: recall.error || undefined,
                     card_count: recall.cardCount,
@@ -203,9 +483,14 @@ export async function POST(request: NextRequest) {
                     recalled_ids: recall.recalledIds,
                     injected: recall.ok && recall.chars > 0,
                   }
+                  // ⚠️ 写进「当轮」的桶、推给「当轮」的流。
+                  // 以前这里是直接赋值给闭包变量 + 闭包里的 send，于是第 2 轮起
+                  // 界面上召回信息不刷新、写库的 raw.recall 是空的。
+                  const b = turnBuckets.get(sessionId)
+                  if (b) b.recallInfo = info
                   // 前端顶部要显示「这一轮召回了几条 / 多少字」，作为「召回时好时坏」
                   // 的现场证据。注入正文暂不回传（下一轮做存库 + 点开查看）。
-                  send('recall', recallInfo)
+                  emit(sessionId, 'recall', info)
                   if (!recall.ok || !recall.additionalContext) return {}
                   return {
                     hookSpecificOutput: {
@@ -233,14 +518,19 @@ export async function POST(request: NextRequest) {
       live.busy = true
       live.lastModelCallAt = Date.now()
 
+      // 自己给这句话编个 id：回退（rewindFiles）要的就是「回到哪句话之前」，
+      // 而它认的是消息 uuid。不自己编就没有可回退的锚点。
+      const turnUuid = randomUUID()
       const userMessage: SDKUserMessage = {
         type: 'user',
         message: { role: 'user', content: text },
         parent_tool_use_id: null,
+        uuid: turnUuid,
       }
 
       try {
         live.push(userMessage)
+        recordCheckpoint(sessionId, turnUuid, text)
         send('start', { session_id: sessionId, at: startedAt })
 
         // 一个 query() 跨多轮，所以这里读到 result 就停 —— 那是「这一轮」的边界。
@@ -284,13 +574,12 @@ export async function POST(request: NextRequest) {
           if (msg.type === 'assistant') {
             for (const block of msg.message.content) {
               if (block.type === 'tool_use') {
-                const item = {
+                bucket.toolEvents.push({
                   name: block.name,
                   id: block.id,
                   input: block.input,
-                }
-                toolEvents.push(item)
-                send('tool', item)
+                })
+                send('tool', { name: block.name, id: block.id, input: block.input })
               }
             }
             continue
@@ -337,9 +626,12 @@ export async function POST(request: NextRequest) {
               persona_id: persona?.id || undefined,
               persona_name: persona?.name || undefined,
               thinking: thinkingText || undefined,
-              recall: recallInfo,
-              tools: toolEvents,
+              recall: bucket.recallInfo,
+              tools: bucket.toolEvents,
               result: resultInfo,
+              // 第 5 步：改了哪些文件、跑了哪些命令、批了/拒了什么。
+              // 子进程回收后工作台就靠这份重建（历史消息读回来也能看见）。
+              work: turnSnapshot(sessionId),
             },
           })
           storeInfo = {
@@ -366,6 +658,9 @@ export async function POST(request: NextRequest) {
         send('error', { message: err.message || String(err) })
       } finally {
         live.busy = false
+        // 这一轮的口子摘掉，免得下一轮的 hook 往已经关掉的流里推
+        detachSend(sessionId, send)
+        turnBuckets.delete(sessionId)
         closed = true
         try {
           controller.close()
@@ -399,5 +694,9 @@ export async function DELETE(request: NextRequest) {
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
   dropSession(sessionId)
   recallPrefs.delete(sessionId)
+  turnBuckets.delete(sessionId)
+  writeDirsBySession.delete(sessionId)
+  // 工作台那四格跟着清 —— 回退点已经随子进程失效了，留着只会骗人
+  resetChannel(sessionId, '会话被手动收掉了，这个操作取消。')
   return Response.json({ ok: true })
 }

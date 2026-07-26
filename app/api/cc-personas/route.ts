@@ -31,6 +31,8 @@ const SEED_PERSONA: PersonaPatch = {
   prompt: '',
   memory_entries: [],
   dirs: [],
+  // 空 = 不能写。种子协作者也一样，写权限要用户自己去配
+  write_dirs: [],
   recall_on: true,
   semantic_on: true,
   engine: 'api',
@@ -79,7 +81,8 @@ export async function POST(request: NextRequest) {
     const n = Number(input.sort_order)
     patch.sort_order = Number.isFinite(n) ? Math.trunc(n) : 0
   }
-  for (const key of ['memory_entries', 'dirs'] as const) {
+  // write_dirs 是第 5 步加的「能改哪些目录」，跟 dirs 一样是路径数组
+  for (const key of ['memory_entries', 'dirs', 'write_dirs'] as const) {
     if (!(key in input)) continue
     const raw = input[key]
     patch[key] = Array.isArray(raw)

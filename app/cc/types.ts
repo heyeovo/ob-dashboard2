@@ -58,6 +58,106 @@ export type CcRecallInfo = {
   modules?: CcRecallModule[]
 }
 
+/* ────────────── 第 5 步：写权限 / 工作台 ────────────── */
+
+export type CcPermKind = 'edit' | 'write' | 'bash' | 'other'
+
+export type CcDiffLine = { tag: ' ' | '-' | '+'; text: string; n?: number }
+
+export type CcDiffPreview = {
+  path: string
+  lines: CcDiffLine[]
+  added: number
+  removed: number
+  truncated: boolean
+  note: string
+}
+
+/**
+ * 一条等着点批准的操作。服务端把 diff / 命令原文都拼好了，这里只渲染。
+ * ⚠️ 它活在服务端队列里，不只活在 SSE 里 —— 页面刷新后靠 GET 重新拉。
+ */
+export type CcPermRequest = {
+  id: string
+  sessionId: string
+  toolName: string
+  kind: CcPermKind
+  title: string
+  description: string
+  filePath: string
+  command: string
+  diff: CcDiffPreview | null
+  createdAt: number
+  expiresAt: number
+}
+
+export type CcPermDecided = {
+  id: string
+  toolName: string
+  kind: CcPermKind
+  title: string
+  filePath: string
+  command: string
+  /** allow | deny | expired | cancelled */
+  outcome: string
+  at: number
+}
+
+export type CcFileChange = {
+  path: string
+  tool: string
+  added: number
+  removed: number
+  count: number
+  at: number
+}
+
+export type CcCommandRun = {
+  id: string
+  command: string
+  output: string
+  at: number
+  truncated: boolean
+  failed: boolean
+}
+
+export type CcCheckpoint = { uuid: string; label: string; at: number }
+
+/** 工作台四格的一份快照（GET /api/cc-workbench）。 */
+export type CcWorkbench = {
+  session_id: string
+  /** 子进程还活着吗。false = 回退那一格不可用（备份随进程没了） */
+  live: boolean
+  pending: CcPermRequest[]
+  decided: CcPermDecided[]
+  files: CcFileChange[]
+  commands: CcCommandRun[]
+  checkpoints: CcCheckpoint[]
+  auto_allow_edits: boolean
+  stats: CcSessionStats
+  at: number
+}
+
+export const EMPTY_WORKBENCH: CcWorkbench = {
+  session_id: '',
+  live: false,
+  pending: [],
+  decided: [],
+  files: [],
+  commands: [],
+  checkpoints: [],
+  auto_allow_edits: false,
+  stats: {
+    live: false,
+    turnCount: 0,
+    totalCostUsd: 0,
+    cacheRemainingMs: 0,
+    ccSessionId: '',
+    startedAt: null,
+  },
+  at: 0,
+}
+
 export type CcSessionStats = {
   live: boolean
   turnCount: number

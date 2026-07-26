@@ -41,6 +41,15 @@ export type CcPersona = {
    * 见 app/lib/ccDirs.ts。这里配的只是「看得到多大范围」。
    */
   dirs: string[]
+  /**
+   * 能**写**哪些目录。跟上面那份规则相反：**空 = 一个文件都不许改**。
+   *
+   * 为什么分两份：看错了只是浪费钱，写错了会把文件改坏。读可以给宽（要理解上下文），
+   * 写必须给窄（只在你真的在做的那个项目里）。
+   * ⚠️ 就算某个目录在这份清单里，每次改文件仍然要点批准 —— 这份清单管的是
+   *「哪些地方**可以**被批准」，不是「不用问了」。
+   */
+  writeDirs: string[]
   engine: CcEngine
 }
 
@@ -58,6 +67,7 @@ export const FALLBACK_PERSONA: CcPersona = {
   recallOn: true,
   semanticOn: true,
   dirs: [],
+  writeDirs: [],
   engine: 'api',
 }
 
@@ -66,6 +76,7 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
   const engine = String(row.engine || 'api')
   const entries = Array.isArray(row.memory_entries) ? row.memory_entries : []
   const dirs = Array.isArray(row.dirs) ? row.dirs : []
+  const writeDirs = Array.isArray(row.write_dirs) ? row.write_dirs : []
   return {
     id: String(row.id || ''),
     name: String(row.name || '') || '未命名',
@@ -79,6 +90,7 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
     recallOn: row.recall_on !== false,
     semanticOn: row.semantic_on !== false,
     dirs: dirs.map(item => String(item ?? '').trim()).filter(Boolean),
+    writeDirs: writeDirs.map(item => String(item ?? '').trim()).filter(Boolean),
     engine: engine === 'subscription' || engine === 'selfhost' ? engine : 'api',
   }
 }
@@ -98,6 +110,7 @@ export function personaToPayload(persona: CcPersona): Record<string, unknown> {
     recall_on: persona.recallOn,
     semantic_on: persona.semanticOn,
     dirs: persona.dirs,
+    write_dirs: persona.writeDirs,
     engine: persona.engine,
   }
 }

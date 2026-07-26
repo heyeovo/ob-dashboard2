@@ -826,3 +826,152 @@ body {
   font-size: 11.5px;
   color: #fff;
 }
+
+/* ========================================================================
+   第 5 步：批准卡片 + 工作台四格
+   只用现成 token，没有新增 :root 变量。
+   ======================================================================== */
+
+/* 对话流里那张「要批准吗」的卡片。橙边框 —— 全站只有它是「等你动作」的状态 */
+.cc-perm-card {
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+  overflow: hidden;
+}
+.cc-perm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px 9px;
+}
+.cc-perm-kind {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--color-primary);
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #fff;
+}
+.cc-perm-kind.bash { background: var(--color-text-heading); }
+.cc-perm-title {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-text-primary);
+}
+.cc-perm-path {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
+}
+.cc-perm-body {
+  margin: 0 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--chat-code-border);
+  background: var(--chat-code-bg);
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.65;
+  max-height: 340px;
+  overflow: auto;
+}
+.cc-perm-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 13px 11px;
+}
+.cc-perm-expire {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--color-text-disabled);
+}
+
+/* diff 的三种行。加/减用底色区分，不靠符号 —— 手机上符号太细看不清 */
+.cc-diff-line { display: flex; gap: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-diff-n {
+  flex-shrink: 0;
+  width: 2.6em;
+  text-align: right;
+  color: var(--color-text-disabled);
+  user-select: none;
+}
+.cc-diff-line.add { background: rgba(107, 155, 122, 0.13); color: var(--color-text-primary); }
+.cc-diff-line.del { background: rgba(198, 93, 78, 0.11); color: var(--color-text-tertiary); }
+.cc-diff-line.gap { color: var(--color-text-disabled); }
+
+/* 「本会话都放行」开着时顶部那条提示 */
+.cc-auto-allow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-primary);
+  background: var(--color-primary-muted);
+  padding: 6px 11px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+/* --- 工作台四格 --- */
+.cc-wb-card {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.cc-wb-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border-light);
+  padding: 10px 13px;
+}
+.cc-wb-title { font-size: 12.5px; font-weight: 500; color: var(--color-text-heading); }
+.cc-wb-count {
+  border-radius: 999px;
+  background: var(--color-surface-tertiary);
+  padding: 1px 8px;
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+}
+.cc-wb-count.hot { background: var(--color-primary); color: #fff; }
+.cc-wb-body { padding: 11px 13px; }
+.cc-wb-empty { font-size: 11.5px; line-height: 1.7; color: var(--color-text-disabled); }
+.cc-wb-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+}
+.cc-wb-row + .cc-wb-row { border-top: 1px solid var(--color-border-light); }
+.cc-wb-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.cc-wb-delta { flex-shrink: 0; margin-left: auto; font-size: 10.5px; font-family: var(--font-mono); }
+.cc-wb-add { color: #4F7C5E; }
+.cc-wb-del { color: var(--color-danger); }
+.cc-wb-pre {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--chat-code-border);
+  background: var(--chat-code-bg);
+  padding: 9px 11px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+}

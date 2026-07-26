@@ -45,6 +45,7 @@ export default function CcPersonaDialog({
   const [draft, setDraft] = useState<CcPersona>(persona)
   const [entryInput, setEntryInput] = useState('')
   const [dirInput, setDirInput] = useState('')
+  const [writeDirInput, setWriteDirInput] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [hint, setHint] = useState('')
 
@@ -80,6 +81,17 @@ export default function CcPersonaDialog({
     }
     patch('dirs', [...draft.dirs, text])
     setDirInput('')
+  }
+
+  const addWriteDir = () => {
+    const text = writeDirInput.trim()
+    if (!text) return
+    if (draft.writeDirs.includes(text)) {
+      setWriteDirInput('')
+      return
+    }
+    patch('writeDirs', [...draft.writeDirs, text])
+    setWriteDirInput('')
   }
 
   const save = async () => {
@@ -255,8 +267,62 @@ export default function CcPersonaDialog({
                   密钥类文件（<code>.env</code>、<code>*.key</code>、<code>id_rsa</code>、
                   <code>.ssh/</code> 这些）<b>跟这份清单无关，永远读不到</b> ——
                   服务端按文件名硬拦，没有开关。要给 TA 看里面的值，你自己贴进对话。
+                </p>
+              </div>
+
+              {/* 写权限（第 5 步）。故意跟上面那份分开：读可以宽，写必须窄 */}
+              <div className="cc-field border-t border-[var(--color-border-light)] pt-3.5">
+                <span className="cc-field-label">能改哪些目录里的文件</span>
+                <span className="cc-field-hint">
+                  跟上面那份规则相反：<b>留空 = 一个文件都不能改</b>。
+                  只填你现在真的在做的那个项目。
+                </span>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {draft.writeDirs.length === 0 ? (
+                    <div className="cc-recall-empty">没配，所以现在只能看不能改</div>
+                  ) : (
+                    draft.writeDirs.map((dir, i) => (
+                      <div key={`w${i}-${dir.slice(-12)}`} className="cc-entry-row">
+                        <span className="min-w-0 flex-1 break-all font-mono text-[11px]">{dir}</span>
+                        <button
+                          type="button"
+                          aria-label="删掉这个目录"
+                          className="cc-entry-del"
+                          onClick={() =>
+                            patch('writeDirs', draft.writeDirs.filter((_, idx) => idx !== i))
+                          }
+                        >
+                          删
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="cc-input flex-1 font-mono text-[11px]"
+                    value={writeDirInput}
+                    onChange={e => setWriteDirInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addWriteDir()
+                      }
+                    }}
+                    placeholder="C:\\Users\\yangh\\OneDrive\\Desktop\\ob-dashboard2"
+                  />
+                  <button type="button" className="cc-btn-ghost" onClick={addWriteDir}>
+                    添加
+                  </button>
+                </div>
+                <p className="cc-note mt-2">
+                  这份清单管的是「哪些地方<b>可以</b>被批准」，不是「不用问了」——
+                  每次改文件都会在聊天页弹一张卡片，写着改哪个文件、改成什么样，点了才动。
                   <br />
-                  这一版只放开<b>读</b>。写文件的范围等第 5 步单独配。改完同样是新对话一定生效。
+                  跑命令（build、git status 这些）<b>每一条都要单独点</b>，
+                  没有「都放行」——命令能干的事没有边界。
+                  <br />
+                  改完这两份清单要<b>开新对话</b>才生效。
                 </p>
               </div>
 
