@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.220",
     "next": "16.2.4",
     "postcss": "^8.5.14",
     "react": "19.2.4",
