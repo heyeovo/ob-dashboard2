@@ -24,8 +24,12 @@ const ENGINE_ENTRIES: Entry[] = [
 ]
 
 const MODEL_ENTRIES: Entry[] = [
-  { key: 'upstream', label: '上游模型配置', desc: '订阅：模型 + effort；API：中转站 + 模型', todo: true },
-  { key: 'provider', label: 'API Provider', desc: '中转站清单与 key（第 7 步）', todo: true },
+  {
+    key: 'upstream',
+    label: '上游模型配置',
+    desc: '中转站清单 + 模型名；新对话的默认模型 / 力度',
+    href: '/settings/upstream',
+  },
   { key: 'ui', label: 'UI 设置', desc: '主题 / 字体 / 字号，等新风格铺开后做', todo: true },
 ]
 

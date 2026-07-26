@@ -13,6 +13,8 @@ import { useCcChat } from './useCcChat'
 import { useIsRemote } from './useIsRemote'
 import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
+import CcWindowSettings from './CcWindowSettings'
+import { MODE_HINT, MODE_LABEL } from '@/app/lib/ccModes'
 
 // 第 4 步的聊天页。
 //
@@ -34,6 +36,14 @@ function formatCacheLeft(ms: number) {
   const sec = Math.round(ms / 1000)
   if (sec < 60) return `${sec}s`
   return `${Math.floor(sec / 60)}m${sec % 60 ? `${sec % 60}s` : ''}`
+}
+
+/** 「23.4k / 1M」。上下文用量胶囊用。 */
+function formatTokens(n: number) {
+  if (n <= 0) return '0'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`
+  return String(n)
 }
 
 function CcRemoteNotice() {
@@ -79,6 +89,7 @@ export default function CcChatPage() {
   const [personaRailOpen, setPersonaRailOpen] = useState(false)
   const [settingsFor, setSettingsFor] = useState<CcPersona | null>(null)
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
+  const [winSetOpen, setWinSetOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // 新消息进来滚到底。批准卡片出现时也滚 —— 不滚就可能在屏幕外，人不知道在等他
@@ -90,7 +101,14 @@ export default function CcChatPage() {
     void navigator.clipboard?.writeText(text)
   }
 
-  const cacheLeft = formatCacheLeft(chat.stats.cacheRemainingMs)
+  // 缓存两档分开显示。5 分钟一过不是「缓存没了」—— 系统提示那几万字走 1h 档还在，
+  // 以前一刀切按 5 分钟显示，比真实情况悲观，会催着人赶紧说话。
+  const cacheSession = formatCacheLeft(chat.stats.cacheRemainingMs)
+  const cacheSystem = formatCacheLeft(chat.stats.cacheSystemRemainingMs)
+  // 顶部显示实际在跑的那个模型（stats.model 来自服务端）；进程没起来就显示这一窗选的
+  const shownModel = chat.stats.model || chat.pick.model
+  const ctxMax = chat.stats.contextMaxTokens
+  const totalChars = chat.messages.reduce((n, m) => n + m.text.length, 0)
 
   const header = (
     <div className="cc-topbar flex items-center gap-3 px-4 py-2.5">
@@ -117,30 +135,58 @@ export default function CcChatPage() {
         <div className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
           {chat.messages.find(m => m.role === 'user')?.text.slice(0, 40) || '新对话'}
         </div>
-        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--color-text-disabled)]">
-          <span>只读模式</span>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-text-disabled)]">
+          <span>{MODE_LABEL[chat.mode]}模式</span>
+          {shownModel ? (
+            <>
+              <span>·</span>
+              <span className="max-w-[11rem] truncate" title={shownModel}>
+                {shownModel}
+              </span>
+            </>
+          ) : null}
           <span>·</span>
           <span>{chat.stats.turnCount} 轮</span>
+          {/* 上下文用量。上限拿不到（进程还没起）就不显示分母，别编一个 */}
+          {chat.stats.contextTokens > 0 ? (
+            <>
+              <span>·</span>
+              <span title="这个对话现在占了多少上下文">
+                {formatTokens(chat.stats.contextTokens)}
+                {ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}
+              </span>
+            </>
+          ) : null}
           {/* 花费只在这个进程还活着时显示。读回来的历史算不出钱 ——
               不同中转站、不同模型价格不一样，要一张价格表，见 HANDOFF 待办。
               这时候显示 $0 是在骗人，不如不显示。 */}
-          {chat.stats.totalCostUsd > 0 ? (
+          {chat.stats.totalCostUsd > 0 && chat.pick.kind !== 'subscription' ? (
             <>
               <span>·</span>
               <span>{formatCost(chat.stats.totalCostUsd)}</span>
             </>
           ) : null}
-          {cacheLeft ? (
+          {cacheSystem ? (
             <>
               <span>·</span>
-              <span title="Anthropic prompt cache 剩余有效时间。过期后下一句要重付一次缓存写入（≈$0.27）">
-                缓存 {cacheLeft}
+              <span title="Anthropic prompt cache 两档：系统提示 + 工具说明进 1 小时档，会话消息进 5 分钟档。5 分钟过了不等于缓存全没，接着聊仍然便宜。">
+                缓存 {cacheSystem}
+                {cacheSession ? ` / 会话 ${cacheSession}` : ' / 会话已过期'}
               </span>
             </>
           ) : null}
         </div>
       </div>
-      {/* 右：配当前这个协作者 */}
+      {/* 右：本窗口设置（这一个对话的模型/供应商）+ 协作者设置（跨对话的人设） */}
+      <button
+        type="button"
+        onClick={() => setWinSetOpen(true)}
+        aria-label="本窗口设置"
+        title="本窗口设置：模型 / 力度 / 供应商"
+        className="cc-icon-btn"
+      >
+        本窗
+      </button>
       <button
         type="button"
         onClick={() => setSettingsFor(people.active)}
@@ -163,6 +209,20 @@ export default function CcChatPage() {
             <div className="text-sm text-[var(--color-text-secondary)]">开始一段对话</div>
             <div className="mt-1.5 text-xs text-[var(--color-text-disabled)]">
               记忆会在你发言时自动注入，回复下方能看到召回了什么
+            </div>
+            {/* 模式只能在这里选：第一句话一发，systemPrompt 和工具就随子进程定死了 */}
+            <div className="cc-mode-pick">
+              {(['chat', 'work'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  className={chat.mode === m ? 'is-on' : ''}
+                  onClick={() => chat.setMode(m)}
+                >
+                  <span className="cc-mode-pick-name">{MODE_LABEL[m]}</span>
+                  <span className="cc-mode-pick-hint">{MODE_HINT[m]}</span>
+                </button>
+              ))}
             </div>
           </div>
         ) : (
@@ -337,6 +397,24 @@ export default function CcChatPage() {
 
       {people.error ? (
         <div className="cc-persona-error">{people.error}</div>
+      ) : null}
+
+      {/* 本窗口设置：只管这一个对话。模型/力度/思考当场生效，供应商要新建对话 */}
+      {winSetOpen ? (
+        <CcWindowSettings
+          sessionId={chat.sessionId}
+          stats={chat.stats}
+          totalChars={totalChars}
+          upstream={chat.upstream}
+          pick={chat.pick}
+          onPick={next => void chat.applyPick(next)}
+          locked={chat.modeLocked}
+          note={chat.settingsNote}
+          onClose={() => {
+            setWinSetOpen(false)
+            chat.setSettingsNote('')
+          }}
+        />
       ) : null}
 
       {/* 召回详情：按模块分段。⚠️ 各模块的正文服务端还没回传（见组件内注释） */}

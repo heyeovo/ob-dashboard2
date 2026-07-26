@@ -8,8 +8,12 @@ import type {
   CcSessionListItem,
   CcSessionStats,
   CcToolEvent,
+  CcTurnUsage,
 } from './types'
 import { EMPTY_STATS } from './types'
+import type { CcMode } from '@/app/lib/ccModes'
+import type { CcUpstreamConfig, CcUpstreamPick } from './upstream'
+import { EMPTY_UPSTREAM, modelsFor, pickFromConfig, upstreamFromHaven } from './upstream'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -68,8 +72,9 @@ function parseTurnRaw(rawJson: string | undefined): {
   thinking: string
   tools: CcToolEvent[]
   recall: CcRecallInfo | null
+  usage: CcTurnUsage | null
 } {
-  const empty = { thinking: '', tools: [] as CcToolEvent[], recall: null }
+  const empty = { thinking: '', tools: [] as CcToolEvent[], recall: null, usage: null }
   if (!rawJson) return empty
   let raw: Record<string, unknown>
   try {
@@ -90,7 +95,29 @@ function parseTurnRaw(rawJson: string | undefined): {
     })),
     recall:
       raw.recall && typeof raw.recall === 'object' ? (raw.recall as unknown as CcRecallInfo) : null,
+    // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
+    usage:
+      raw.usage && typeof raw.usage === 'object' ? (raw.usage as unknown as CcTurnUsage) : null,
   }
+}
+
+/**
+ * 这个会话是什么模式：看最后一轮 raw 里的 mode。
+ * 5.2 之前的老会话没这个字段 —— 一律算工作模式（那时候只有这一种行为）。
+ */
+function modeOfTurns(turns: HavenTurnRow[]): CcMode {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const rawJson = turns[i]?.raw_json
+    if (!rawJson) continue
+    try {
+      const parsed = JSON.parse(rawJson) as Record<string, unknown>
+      if (parsed?.mode === 'chat') return 'chat'
+      if (parsed?.mode === 'work') return 'work'
+    } catch {
+      /* 解不出来接着往前找 */
+    }
+  }
+  return 'work'
 }
 
 function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
@@ -112,6 +139,7 @@ function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         thinking: extra.thinking || undefined,
         tools: extra.tools.length ? extra.tools : undefined,
         recall: extra.recall,
+        usage: extra.usage,
       })
     }
   }
@@ -137,9 +165,54 @@ export function useCcChat(personaId = '') {
   const [decided, setDecided] = useState<CcPermDecided[]>([])
   const [autoAllowEdits, setAutoAllowEdits] = useState(false)
 
+  /* ── 5.2：模式 + 上游选择 ── */
+  // 闲聊 / 工作。**只在这个会话还没开口之前能改** —— systemPrompt 和 tools 是子进程
+  // 启动参数，第一句话一发就定死了。
+  const [mode, setMode] = useState<CcMode>('chat')
+  const [upstream, setUpstream] = useState<CcUpstreamConfig>(EMPTY_UPSTREAM)
+  const [upstreamLoaded, setUpstreamLoaded] = useState(false)
+  // 这个窗口选的那套上游。model / effort / thinking 能中途改，kind / providerId 不能
+  const [pick, setPick] = useState<CcUpstreamPick>(() => pickFromConfig(EMPTY_UPSTREAM))
+  const [settingsNote, setSettingsNote] = useState('')
+  /**
+   * 订阅还是 api：是「有人真的定过」还是只是我这边的默认值？
+   *
+   * ⚠️ 没定过就**不往请求里塞 cred** —— 那样服务端会照协作者自己的 engine 走（4.5b 的行为）。
+   * 塞了的话，Haven 里还没配上游的时候，所有协作者都会被拽到 api 那边去。
+   */
+  const [credChosen, setCredChosen] = useState(false)
+
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
+  // 这一轮 thinking 的起止，用来显示「深度思考 (2.3s)」。
+  // ⚠️ 算的是前端收到第一个 thinking 片段到收到第一个正文片段之间的时间 ——
+  // 服务端没单独报思考耗时，这个口径最接近用户感知的「它想了多久」。
+  const thinkStartRef = useRef(0)
+
+  // 上游配置：进页面拉一次。拉不到就用空配置（引擎层会退回 .env.local）
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/cc-upstream', { cache: 'no-store' })
+        const data = await res.json()
+        if (cancelled || !data.ok) return
+        const config = upstreamFromHaven(data.config as Record<string, unknown>)
+        setUpstream(config)
+        setPick(pickFromConfig(config))
+        // 配过东西（有中转站 / 填过订阅模型）才算「定过」，空配置不抢协作者的 engine
+        if (config.providers.length > 0 || config.subscriptionModels.length > 0) setCredChosen(true)
+      } catch {
+        /* 没配置也能聊，走 .env.local 那条老路 */
+      } finally {
+        if (!cancelled) setUpstreamLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // 首次进页面：开一个新会话 id + 拉会话列表
   useEffect(() => {
@@ -311,6 +384,8 @@ export function useCcChat(personaId = '') {
           // 进程没了内存里的轮数就归零，用库里的行数补上。
           // 花费补不了（要价格表），保持 0。
           setHistoryTurnCount(turns.length)
+          // 老会话是什么模式就照它显示，别让它看起来能改
+          setMode(modeOfTurns(turns))
         }
       } catch {
         setError('历史消息读取失败')
@@ -334,7 +409,70 @@ export function useCcChat(personaId = '') {
     setPending([])
     setDecided([])
     setAutoAllowEdits(false)
-  }, [sessionId, draft])
+    setSettingsNote('')
+    // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
+    setPick(pickFromConfig(upstream))
+  }, [sessionId, draft, upstream])
+
+  /**
+   * 改本窗口设置。
+   *
+   * 三档待遇，界面上要说清楚：
+   *   · model / effort / thinking → 打 /api/cc-session-settings，当场生效（换模型会清缓存）
+   *   · kind（订阅↔api）/ providerId（换中转站）→ 只存在前端，下一个新对话才生效
+   *   · 已经开口的会话换 kind / provider → 拦住，提示新建对话
+   */
+  const applyPick = useCallback(
+    async (next: Partial<CcUpstreamPick>) => {
+      const merged: CcUpstreamPick = { ...pick, ...next }
+      const started = messages.length > 0
+      const switchedUpstream = merged.kind !== pick.kind || merged.providerId !== pick.providerId
+
+      if (switchedUpstream) {
+        // 换站/换凭据会换掉子进程的环境变量，跑着的进程改不了
+        const models = modelsFor(upstream, merged.kind, merged.providerId)
+        if (!models.includes(merged.model)) merged.model = models[0] || ''
+        setPick(merged)
+        // 用户亲手点过订阅 / api，从这里开始按他选的送
+        setCredChosen(true)
+        setSettingsNote(
+          started ? '换供应商要新建对话才生效（这一窗还是原来那套）' : '已选好，这一窗生效',
+        )
+        return
+      }
+
+      setPick(merged)
+      if (!started) {
+        setSettingsNote('已选好，发第一句时生效')
+        return
+      }
+
+      try {
+        const res = await fetch('/api/cc-session-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            model: merged.model,
+            effort: merged.effort,
+            thinking: merged.thinking,
+          }),
+        })
+        const data = await res.json()
+        if (!data.ok) {
+          setSettingsNote(String(data.error || '这次没改上，等这一轮说完再试'))
+          return
+        }
+        if (data.stats) setStats(data.stats as CcSessionStats)
+        setSettingsNote(
+          data.applied === false ? String(data.note || '下一句话时生效') : '已生效',
+        )
+      } catch {
+        setSettingsNote('设置没送到，等下再试')
+      }
+    },
+    [pick, messages.length, upstream, sessionId],
+  )
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -365,6 +503,7 @@ export function useCcChat(personaId = '') {
 
       const ac = new AbortController()
       abortRef.current = ac
+      thinkStartRef.current = 0
 
       const patch = (fn: (m: CcMessage) => CcMessage) => {
         setMessages(prev => prev.map(m => (m.id === assistantId ? fn(m) : m)))
@@ -376,7 +515,21 @@ export function useCcChat(personaId = '') {
           headers: { 'Content-Type': 'application/json' },
           // persona_id 每轮都带上：服务端按它取提示词/记忆/引擎。
           // 会话中途换人不生效（子进程已经起来了），服务端会沿用第一轮那个。
-          body: JSON.stringify({ session_id: sessionId, text, persona_id: personaId }),
+          //
+          // 5.2 起还带这一窗选的那套上游。同样是「第一轮定死」的那几项
+          //（mode / cred / provider_id）后面几轮送过去也不会改，服务端沿用启动时那份。
+          body: JSON.stringify({
+            session_id: sessionId,
+            text,
+            persona_id: personaId,
+            mode,
+            // 没人定过就不送 cred，让服务端照协作者的 engine 走
+            ...(credChosen ? { cred: pick.kind === 'subscription' ? 'subscription' : 'api' } : {}),
+            provider_id: pick.providerId,
+            model: pick.model,
+            effort: pick.effort,
+            thinking: pick.thinking,
+          }),
           signal: ac.signal,
         })
         if (!res.ok || !res.body) {
@@ -416,9 +569,17 @@ export function useCcChat(personaId = '') {
 
             if (eventName === 'delta') {
               const chunk = String(payload.text || '')
-              patch(m => ({ ...m, text: m.text + chunk }))
+              // 第一个正文片段 = 思考结束。之后再来正文不重复计时
+              if (thinkStartRef.current) {
+                const ms = Date.now() - thinkStartRef.current
+                thinkStartRef.current = 0
+                patch(m => ({ ...m, thinkingMs: ms, text: m.text + chunk }))
+              } else {
+                patch(m => ({ ...m, text: m.text + chunk }))
+              }
             } else if (eventName === 'thinking') {
               const chunk = String(payload.text || '')
+              if (!thinkStartRef.current) thinkStartRef.current = Date.now()
               patch(m => ({ ...m, thinking: (m.thinking || '') + chunk }))
             } else if (eventName === 'recall') {
               patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
@@ -435,7 +596,16 @@ export function useCcChat(personaId = '') {
               setPending(prev => prev.filter(p => p.id !== id))
               void refreshPending()
             } else if (eventName === 'done') {
-              patch(m => ({ ...m, streaming: false }))
+              const usage = (payload.usage || null) as CcTurnUsage | null
+              // 思考完直接结束（一句话没说）时也把耗时补上
+              const thinkMs = thinkStartRef.current ? Date.now() - thinkStartRef.current : 0
+              thinkStartRef.current = 0
+              patch(m => ({
+                ...m,
+                streaming: false,
+                usage,
+                thinkingMs: m.thinkingMs || thinkMs || undefined,
+              }))
               if (payload.stats) setStats(payload.stats as CcSessionStats)
               void refreshSessions()
             } else if (eventName === 'error') {
@@ -454,7 +624,7 @@ export function useCcChat(personaId = '') {
         setSending(false)
       }
     },
-    [sessionId, sending, personaId, refreshSessions],
+    [sessionId, sending, personaId, refreshSessions, mode, pick, credChosen],
   )
 
   // 轮数取两者的大者：进程活着时它自己的计数是准的（这一轮刚加完，库还没写）；
@@ -480,6 +650,17 @@ export function useCcChat(personaId = '') {
     stop,
     switchSession,
     startNewSession,
+    // 5.2：模式 + 本窗口设置
+    mode,
+    setMode,
+    /** 这个会话已经开口了 —— 模式和供应商都不能再改 */
+    modeLocked: messages.length > 0,
+    upstream,
+    upstreamLoaded,
+    pick,
+    applyPick,
+    settingsNote,
+    setSettingsNote,
     // 第 5 步
     pending,
     decided,

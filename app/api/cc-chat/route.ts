@@ -30,12 +30,17 @@ import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import { recordTurn } from '@/app/lib/havenTurns'
+import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import {
   ensureSession,
   dropSession,
   rememberResumePoint,
   getSessionStats,
+  recordTurnCost,
+  refreshContextUsage,
+  type TurnUsage,
 } from '@/app/lib/ccSession'
+import { CHAT_MODE_PROMPT, isCcMode, type CcMode } from '@/app/lib/ccModes'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限）。
 //
@@ -103,6 +108,14 @@ type ChatBody = {
   recall?: boolean
   /** 4.5b：用哪个协作者。提示词 / 记忆条目 / 两个召回开关 / 引擎都从它来 */
   persona_id?: string
+  /** 5.2：chat = 闲聊（零工具），work = 工作。只在会话第一轮生效 */
+  mode?: string
+  /** 5.2：哪个中转站（api 时）。只在第一轮生效，服务端翻成 baseUrl + token */
+  provider_id?: string
+  /** 5.2：reasoning effort。第一轮生效，之后走 /api/cc-session-settings 中途改 */
+  effort?: string
+  /** 5.2：开不开 thinking */
+  thinking?: boolean
 }
 
 function sse(event: string, data: unknown) {
@@ -165,6 +178,38 @@ function countLines(text: string): number {
   return text.split('\n').length
 }
 
+/**
+ * result 事件里的 usage → 消息右下角那个面板要显示的几个数（5.2）。
+ *
+ * 缓存写入分两档，`cache_creation` 里分开给：
+ *   ephemeral_1h_input_tokens = 系统提示那部分（cc 自己判定它最稳定）
+ *   ephemeral_5m_input_tokens = 会话消息那部分
+ * 加起来才等于 cache_creation_input_tokens。分开显示的意义在于：5 分钟一过
+ * 只有后者失效，前者还活着，接着聊仍然便宜。
+ */
+function usageFromResult(
+  usage: unknown,
+  durationMs: number | undefined,
+  costUsd: number | undefined,
+): TurnUsage {
+  const u = (usage || {}) as Record<string, unknown>
+  const creation = (u.cache_creation || {}) as Record<string, unknown>
+  const num = (v: unknown) => Number(v || 0) || 0
+  const outputTokens = num(u.output_tokens)
+  const ms = Number(durationMs || 0) || 0
+  return {
+    inputTokens: num(u.input_tokens),
+    outputTokens,
+    cacheReadTokens: num(u.cache_read_input_tokens),
+    cacheWriteTokens: num(u.cache_creation_input_tokens),
+    cacheWrite1hTokens: num(creation.ephemeral_1h_input_tokens),
+    cacheWrite5mTokens: num(creation.ephemeral_5m_input_tokens),
+    durationMs: ms,
+    tokensPerSec: ms > 0 ? Math.round((outputTokens / (ms / 1000)) * 10) / 10 : 0,
+    costUsd: Number(costUsd || 0) || 0,
+  }
+}
+
 export async function POST(request: NextRequest) {
   let body: ChatBody
   try {
@@ -189,13 +234,39 @@ export async function POST(request: NextRequest) {
   // 引擎 → 额度。selfhost 是第 7 步的自建引擎，走到这里一律按中转站算。
   const engine = persona?.engine || ''
   const credFromEngine: CredMode = engine === 'subscription' ? 'subscription' : 'api'
-  // body 里显式传的优先（调试用），否则听协作者
+  // body 里显式传的优先（本窗口设置选的），否则听协作者
   const cred: CredMode = body.cred === 'subscription'
     ? 'subscription'
     : body.cred === 'api'
       ? 'api'
       : credFromEngine
-  const model = body.model || process.env.ANTHROPIC_MODEL || undefined
+
+  // 5.2 闲聊 / 工作。默认工作 —— 4.5b 之前的老会话和不带这个字段的调用都按老行为走。
+  const mode: CcMode = isCcMode(body.mode) ? body.mode : 'work'
+
+  // 5.2 上游：走 Haven 那份「上游模型配置」。
+  // ⚠️ token 只在服务端出现，前端送的是 provider_id。读不到配置就退回 .env.local
+  // 那一条（第 4 步起的行为），不能让聊天页因为配置拿不到就发不了话。
+  let providerId = ''
+  let providerLabel = ''
+  let envOverrides: { baseUrl?: string; authToken?: string } = {}
+  let model = body.model || ''
+  let effort = String(body.effort || '')
+  let thinking = body.thinking !== false
+  if (cred === 'api') {
+    const up = await loadUpstreamConfig()
+    if (up.ok) {
+      const hit = resolveProvider(up.config, String(body.provider_id || ''))
+      if (hit) {
+        providerId = String(body.provider_id || up.config.default_provider_id || '')
+        providerLabel = hit.label
+        envOverrides = { baseUrl: hit.baseUrl, authToken: hit.authToken }
+      }
+      if (!model) model = String(up.config.default_model || '')
+      if (!effort) effort = String(up.config.default_effort || '')
+    }
+  }
+  if (!model) model = process.env.ANTHROPIC_MODEL || ''
 
   // 两个召回开关同样是 body 优先、协作者兜底，存进表让 hook 每轮重读
   recallPrefs.set(sessionId, {
@@ -234,6 +305,8 @@ export async function POST(request: NextRequest) {
       let thinkingText = ''
       let resultInfo: Record<string, unknown> | null = null
       let initInfo: Record<string, unknown> | null = null
+      /** 这一轮的用量，消息右下角那个面板要显示 */
+      let turnUsage: TurnUsage | null = null
       const bucket: TurnBucket = { recallInfo: null, toolEvents: [] }
       turnBuckets.set(sessionId, bucket)
       // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
@@ -300,18 +373,26 @@ export async function POST(request: NextRequest) {
       }
 
       const buildOptions = (resumeFrom: string | null): Options => ({
-        model,
-        // 协作者的人设接在 claude code 自带系统提示**后面**，不替换它 ——
-        // 那段里有工具怎么用、路径怎么写，换掉工具就废了。
-        // append 为空时不带这个键，保持第 4 步的行为不变。
-        systemPrompt: personaAppend
-          ? { type: 'preset', preset: 'claude_code', append: personaAppend }
-          : { type: 'preset', preset: 'claude_code' },
+        model: model || undefined,
+        effort: (effort || undefined) as Options['effort'],
+        maxThinkingTokens: thinking ? undefined : 0,
+        // 工作模式：协作者人设接在 claude code 自带系统提示**后面**，不替换它 ——
+        //   那段里有工具怎么用、路径怎么写，换掉工具就废了。
+        // 闲聊模式：整段替换成用户自己写的那段（见 ccModes.ts），人设照旧接在后面 ——
+        //   不接的话切协作者就没意义了（谁都一样）。
+        systemPrompt:
+          mode === 'chat'
+            ? [CHAT_MODE_PROMPT, personaAppend].filter(Boolean).join('\n\n')
+            : personaAppend
+              ? { type: 'preset', preset: 'claude_code', append: personaAppend }
+              : { type: 'preset', preset: 'claude_code' },
         cwd,
         additionalDirectories,
-        tools: SESSION_TOOLS,
+        // 闲聊模式零工具。以后接的 MCP 要给（那是记忆 / 联网），但 cc 这 7 个不给 ——
+        // 不然它会去读文件，而闲聊模式的 prompt 里没有"怎么用工具"那套规矩。
+        tools: mode === 'chat' ? [] : SESSION_TOOLS,
         // 只读的三个自动放行；写和跑命令**不在**这里，于是落到 canUseTool 上等批准。
-        allowedTools: READ_ONLY_TOOLS,
+        allowedTools: mode === 'chat' ? [] : READ_ONLY_TOOLS,
         // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
         // 根本走不到 canUseTool，也就没有批准这回事了。
         permissionMode: 'default',
@@ -322,7 +403,9 @@ export async function POST(request: NextRequest) {
         settingSources: [],
         includePartialMessages: true,
         resume: resumeFrom || undefined,
-        env: buildCcEnv(cred),
+        // 中转站地址和 token 从 Haven 那份配置里来（api 模式）。
+        // ⚠️ 这是子进程的环境变量，spawn 时定死 —— 换中转站 / 换订阅只能新建对话。
+        env: buildCcEnv(cred, envOverrides),
         hooks: {
           // 敏感文件硬拦。不是配置项，没有放行开关，任何协作者都一样。
           //
@@ -508,7 +591,16 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      const live = ensureSession({ sessionId, buildOptions })
+      const live = ensureSession({
+        sessionId,
+        buildOptions,
+        // 这几项只在**新建**会话时记下 —— 已有会话沿用它启动时那套。
+        // 界面上「本窗口设置」显示的是这份，不是前端最新的选择。
+        boot: { mode, credKind: cred, providerId, providerLabel },
+        model,
+        effort,
+        thinking,
+      })
 
       if (live.busy) {
         send('error', { message: '这个会话上一轮还没跑完' })
@@ -601,6 +693,8 @@ export async function POST(request: NextRequest) {
             live.totalCostUsd += Number(msg.total_cost_usd || 0)
             live.turnCount += 1
             live.lastModelCallAt = Date.now()
+            recordTurnCost(sessionId, Number(msg.total_cost_usd || 0))
+            turnUsage = usageFromResult(msg.usage, msg.duration_ms, msg.total_cost_usd)
             break
           }
         }
@@ -623,6 +717,11 @@ export async function POST(request: NextRequest) {
             raw: {
               engine: 'claude-code-agent-sdk',
               cred_mode: cred,
+              // 5.2：这一轮是闲聊还是工作、走的哪个中转站、用量明细。
+              // 历史消息读回来时右下角那个 token 面板靠 usage 重建。
+              mode,
+              provider_id: providerId || undefined,
+              usage: turnUsage || undefined,
               persona_id: persona?.id || undefined,
               persona_name: persona?.name || undefined,
               thinking: thinkingText || undefined,
@@ -645,9 +744,15 @@ export async function POST(request: NextRequest) {
           storeInfo = { ok: false, stored: false, error: '模型没有文本输出，不写库' }
         }
 
+        // 上下文用量：这一轮答完了才拉（getContextUsage 要走一次控制请求，
+        // 这一轮还占着 iterator 的时候拿不到）。顶部那个「x / 1M」胶囊用它。
+        // ⚠️ 带 force —— busy 还没摘（要挡住下一个请求挤进来），但 iterator 已经空了。
+        await refreshContextUsage(sessionId, true)
+
         send('done', {
           result: resultInfo,
           store: storeInfo,
+          usage: turnUsage,
           stats: getSessionStats(sessionId),
           elapsed_ms: Date.now() - startedAt,
         })

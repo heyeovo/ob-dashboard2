@@ -44,6 +44,8 @@ export default function CcMessageRow({
   // 默认展开。流式中跟着输出，结束后不自动收 —— 只有用户点了才收。
   const [thinkingOpen, setThinkingOpen] = useState(true)
   const [openTool, setOpenTool] = useState<CcToolEvent | null>(null)
+  // 这一轮的 token 明细，默认收着
+  const [usageOpen, setUsageOpen] = useState(false)
   const timerRef = useRef<number | null>(null)
   const frameRef = useRef<HTMLDivElement>(null)
 
@@ -140,6 +142,8 @@ export default function CcMessageRow({
   // 历史消息不记「当时是谁回的」，一律按当前协作者显示。要按轮存 persona 是以后的事。
   const persona = personaProp || FALLBACK_PERSONA
   const tools = message.tools || []
+  // 5.2 之前的老消息没有 usage，那就不显示（不编 0）
+  const usage = message.usage || null
 
   return (
     <div className="cc-row flex flex-col" data-role="assistant">
@@ -170,7 +174,13 @@ export default function CcMessageRow({
           <div className="cc-think">
             <button type="button" className="cc-think-toggle" onClick={() => setThinkingOpen(v => !v)}>
               <span className={`cc-think-caret${thinkingOpen ? ' open' : ''}`} aria-hidden="true" />
-              {message.streaming && !message.text ? '正在思考' : `思考 ${message.thinking.length} 字`}
+              {/* 显示思考用了多久而不是多少字 —— 字数对人没意义，用户明确要的。
+                  老消息没记时长（5.2 之前），退回字数，不编一个秒数。 */}
+              {message.streaming && !message.text
+                ? '正在思考'
+                : message.thinkingMs
+                  ? `深度思考 (${(message.thinkingMs / 1000).toFixed(1)}s)`
+                  : `深度思考 ${message.thinking.length} 字`}
             </button>
             {thinkingOpen ? <div className="cc-think-body">{message.thinking}</div> : null}
           </div>
@@ -205,12 +215,59 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
-        {/* 行内操作：hover 才出 */}
+        {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}
         {!message.streaming && message.text ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
             <button type="button" className="hover:text-[var(--color-text-secondary)]" onClick={() => onCopy(message.text)}>
               复制
             </button>
+            {usage ? (
+              <button
+                type="button"
+                className="ml-auto tabular-nums hover:text-[var(--color-text-secondary)]"
+                onClick={() => setUsageOpen(v => !v)}
+                title="这一轮的 token 用量"
+              >
+                {(usage.inputTokens + usage.cacheReadTokens + usage.outputTokens).toLocaleString()} tok
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
+        {usage && usageOpen ? (
+          <div className="cc-usage">
+            <div className="cc-usage-grid">
+              <span>↑ 输入</span>
+              <b>{usage.inputTokens.toLocaleString()}</b>
+              <span>↓ 输出</span>
+              <b>{usage.outputTokens.toLocaleString()}</b>
+              <span>缓存读</span>
+              <b>{usage.cacheReadTokens.toLocaleString()}</b>
+              <span>缓存写</span>
+              <b>
+                {usage.cacheWriteTokens.toLocaleString()}
+                {usage.cacheWrite1hTokens || usage.cacheWrite5mTokens ? (
+                  <em>
+                    {' '}
+                    (1h {usage.cacheWrite1hTokens.toLocaleString()} · 5m{' '}
+                    {usage.cacheWrite5mTokens.toLocaleString()})
+                  </em>
+                ) : null}
+              </b>
+              {usage.durationMs ? (
+                <>
+                  <span>时长</span>
+                  <b>{(usage.durationMs / 1000).toFixed(1)}s</b>
+                </>
+              ) : null}
+              {usage.tokensPerSec ? (
+                <>
+                  <span>速度</span>
+                  <b>{usage.tokensPerSec.toFixed(1)} tok/s</b>
+                </>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>

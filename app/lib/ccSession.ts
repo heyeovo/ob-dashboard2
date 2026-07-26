@@ -19,8 +19,68 @@ import { cancelAllPending, hasPending } from './ccChannel'
 /** 闲置多久回收子进程。跟 prompt cache 的 5 分钟没关系，纯粹是别让子进程无限堆着。 */
 const IDLE_TTL_MS = 10 * 60 * 1000
 
-/** Anthropic prompt cache 的 TTL，用来算「缓存还有多久过期」给界面显示。 */
-export const PROMPT_CACHE_TTL_MS = 5 * 60 * 1000
+/**
+ * prompt cache 分两档，不是一刀切 5 分钟（5.2 修正）。
+ *
+ * 实测返回里两个数字是分开的：
+ *   cache_creation: { ephemeral_1h_input_tokens: 8837, ephemeral_5m_input_tokens: 11546 }
+ *
+ * cc 自己在分配：最稳定的那部分（系统提示 + 工具定义）进 1h 档，
+ * 会话消息进 5m 档。所以 5 分钟一过**不是「缓存没了」** —— 那几万字系统提示
+ * 还活着，接着聊仍然便宜。以前按 5 分钟一刀切显示，比真实情况悲观，会催着人赶紧说话。
+ *
+ * ⚠️ 哪部分内容进哪档我们说不上话（SDK 没暴露这个开关），只能照实显示分了多少。
+ */
+export const CACHE_TTL_SYSTEM_MS = 60 * 60 * 1000
+export const CACHE_TTL_SESSION_MS = 5 * 60 * 1000
+
+/** 一轮的用量。每条消息右下角那个 token 面板要的就是这些。 */
+export type TurnUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  /** 1h 档写了多少（cache_creation.ephemeral_1h_input_tokens） */
+  cacheWrite1hTokens: number
+  /** 5m 档写了多少 */
+  cacheWrite5mTokens: number
+  durationMs: number
+  /** 输出速度，output / 秒 */
+  tokensPerSec: number
+  costUsd: number
+}
+
+export const EMPTY_TURN_USAGE: TurnUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  cacheWrite1hTokens: 0,
+  cacheWrite5mTokens: 0,
+  durationMs: 0,
+  tokensPerSec: 0,
+  costUsd: 0,
+}
+
+/**
+ * 这个会话启动时定死的那些参数。
+ *
+ * ⚠️ 为什么要记下来：`systemPrompt` / `tools` / `env`（= 凭据和中转站地址）
+ * 都是子进程 spawn 时定的，中途改不了。界面上「本窗口设置」要照实显示
+ * 现在跑的是哪一套，就得有个地方存 —— 不能拿前端最新的选择去显示，
+ * 那会显示成用户刚点的、而不是实际在跑的。
+ *
+ * 能中途改的只有 model / effort / thinking（SDK 的 setModel、setMaxThinkingTokens）。
+ */
+export type SessionBoot = {
+  /** chat = 闲聊模式（不带 preset、零工具），work = 工作模式（preset + 7 个工具） */
+  mode: 'chat' | 'work'
+  /** subscription | api */
+  credKind: string
+  /** 哪个中转站（api 时有值），显示用 */
+  providerId: string
+  providerLabel: string
+}
 
 /** 一个会话在服务端的活体状态。 */
 type LiveSession = {
@@ -40,6 +100,19 @@ type LiveSession = {
   turnCount: number
   /** 最后一次真正打到模型的时间，用来算 prompt cache 还有多久过期 */
   lastModelCallAt: number
+  /** 启动时定死的那几项（模式 / 凭据 / 中转站），界面照实显示用 */
+  boot: SessionBoot
+  /** 现在跑的模型名。setModel 换过就跟着变，所以不能只看 boot */
+  model: string
+  /** 现在的 effort */
+  effort: string
+  /** thinking 开着吗 */
+  thinking: boolean
+  /** 近 10 轮的花费，「本窗口设置」里显示。进程被回收就没了（内存态） */
+  recentCostUsd: number[]
+  /** 上下文用量，getContextUsage() 拉回来缓存一份 */
+  contextTokens: number
+  contextMaxTokens: number
   /** 正在跑一轮吗 —— 同一个会话不允许并发发言（一个 iterator 只能一个消费者） */
   busy: boolean
   idleTimer: ReturnType<typeof setTimeout> | null
@@ -143,6 +216,11 @@ export type EnsureSessionInput = {
   sessionId: string
   /** query() 的 options，只在**新建**会话时生效（已有会话沿用建它时的配置） */
   buildOptions: (resumeFrom: string | null) => Options
+  /** 启动时定死的那几项，同样只在新建时记下 */
+  boot: SessionBoot
+  model: string
+  effort: string
+  thinking: boolean
 }
 
 /** 拿到（或新建）一个活着的会话。已有的直接复用，不重付缓存。 */
@@ -171,6 +249,13 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     totalCostUsd: 0,
     turnCount: 0,
     lastModelCallAt: 0,
+    boot: input.boot,
+    model: input.model,
+    effort: input.effort,
+    thinking: input.thinking,
+    recentCostUsd: [],
+    contextTokens: 0,
+    contextMaxTokens: 0,
     busy: false,
     idleTimer: null,
   }
@@ -205,34 +290,129 @@ export type SessionStats = {
   live: boolean
   turnCount: number
   totalCostUsd: number
-  /** prompt cache 还剩多少毫秒有效（<=0 表示已过期，下一句要重付全款） */
+  /**
+   * 会话那档缓存（5m）还剩多少毫秒。
+   * ⚠️ 别再把它当「缓存没了」—— 系统提示那部分走 1h 档，见下面那个字段。
+   */
   cacheRemainingMs: number
+  /** 系统提示那档缓存（1h）还剩多少毫秒 */
+  cacheSystemRemainingMs: number
   ccSessionId: string
   startedAt: number | null
+  /** 启动时定死的那几项。进程不在时是 null */
+  boot: SessionBoot | null
+  model: string
+  effort: string
+  thinking: boolean
+  /** 近 10 轮花费，新的在后面 */
+  recentCostUsd: number[]
+  contextTokens: number
+  contextMaxTokens: number
+}
+
+export const EMPTY_SESSION_STATS: SessionStats = {
+  live: false,
+  turnCount: 0,
+  totalCostUsd: 0,
+  cacheRemainingMs: 0,
+  cacheSystemRemainingMs: 0,
+  ccSessionId: '',
+  startedAt: null,
+  boot: null,
+  model: '',
+  effort: '',
+  thinking: false,
+  recentCostUsd: [],
+  contextTokens: 0,
+  contextMaxTokens: 0,
 }
 
 export function getSessionStats(sessionId: string): SessionStats {
   const live = registry.get(sessionId)
   if (!live) {
-    return {
-      live: false,
-      turnCount: 0,
-      totalCostUsd: 0,
-      cacheRemainingMs: 0,
-      ccSessionId: resumeHints.get(sessionId) || '',
-      startedAt: null,
-    }
+    return { ...EMPTY_SESSION_STATS, ccSessionId: resumeHints.get(sessionId) || '' }
   }
-  const remaining = live.lastModelCallAt
-    ? Math.max(0, PROMPT_CACHE_TTL_MS - (Date.now() - live.lastModelCallAt))
-    : 0
+  const since = live.lastModelCallAt ? Date.now() - live.lastModelCallAt : 0
   return {
     live: true,
     turnCount: live.turnCount,
     totalCostUsd: live.totalCostUsd,
-    cacheRemainingMs: remaining,
+    cacheRemainingMs: live.lastModelCallAt ? Math.max(0, CACHE_TTL_SESSION_MS - since) : 0,
+    cacheSystemRemainingMs: live.lastModelCallAt ? Math.max(0, CACHE_TTL_SYSTEM_MS - since) : 0,
     ccSessionId: live.ccSessionId,
     startedAt: live.createdAt,
+    boot: live.boot,
+    model: live.model,
+    effort: live.effort,
+    thinking: live.thinking,
+    recentCostUsd: live.recentCostUsd,
+    contextTokens: live.contextTokens,
+    contextMaxTokens: live.contextMaxTokens,
+  }
+}
+
+/** 记一轮的花费，只留近 10 轮。 */
+export function recordTurnCost(sessionId: string, costUsd: number) {
+  const live = registry.get(sessionId)
+  if (!live) return
+  live.recentCostUsd = [...live.recentCostUsd, Number(costUsd) || 0].slice(-10)
+}
+
+/**
+ * 中途换模型 / effort / thinking。
+ *
+ * 能改的只有这三项 —— systemPrompt、tools、凭据（订阅还是哪个中转站）都是
+ * 子进程 spawn 时定死的，要换只能新建对话。
+ *
+ * ⚠️ 换模型会让 prompt cache 整个作废（不同模型不共享缓存，换回来也不恢复），
+ * 所以换完那一轮要重付一次缓存写入。界面上得说这句话。
+ */
+export async function applyRuntimeSettings(
+  sessionId: string,
+  patch: { model?: string; effort?: string; thinking?: boolean },
+): Promise<{ ok: boolean; error: string }> {
+  const live = registry.get(sessionId)
+  if (!live) return { ok: false, error: '这个对话的进程已经不在了，下一句话会用新设置重开' }
+  if (live.busy) return { ok: false, error: '这一轮还没答完，等它结束再换' }
+
+  try {
+    if (patch.model !== undefined && patch.model !== live.model) {
+      await live.q.setModel(patch.model || undefined)
+      live.model = patch.model
+      // 换模型 = 缓存作废，缓存倒计时从头开始算才不骗人
+      live.lastModelCallAt = 0
+    }
+    if (patch.effort !== undefined && patch.effort !== live.effort) {
+      await live.q.applyFlagSettings({ effortLevel: (patch.effort || null) as never })
+      live.effort = patch.effort
+    }
+    if (patch.thinking !== undefined && patch.thinking !== live.thinking) {
+      // 关掉 = 不给 thinking 预算；打开 = 交回模型自己按 effort 决定（传 null 清掉上限）
+      await live.q.setMaxThinkingTokens(patch.thinking ? null : 0, patch.thinking ? null : 'omitted')
+      live.thinking = patch.thinking
+    }
+    return { ok: true, error: '' }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message || '设置没换成功' }
+  }
+}
+
+/**
+ * 拉一次上下文用量，缓存到 live 上给顶部那个「x / 1M」胶囊用。
+ *
+ * `force` 给「这一轮刚答完但 busy 还没摘」的那个位置用 —— 那时候 iterator 已经不占了，
+ * 但 busy 得留着，不然下一个请求会挤进来跟正在收尾的这一轮抢 turnBuckets。
+ */
+export async function refreshContextUsage(sessionId: string, force = false): Promise<void> {
+  const live = registry.get(sessionId)
+  if (!live) return
+  if (live.busy && !force) return
+  try {
+    const usage = await live.q.getContextUsage()
+    live.contextTokens = Number(usage?.totalTokens || 0)
+    live.contextMaxTokens = Number(usage?.maxTokens || 0)
+  } catch {
+    /* 拿不到就保持上一次的值，不影响聊天 */
   }
 }
 

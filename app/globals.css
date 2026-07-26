@@ -975,3 +975,182 @@ body {
   max-height: 260px;
   overflow: auto;
 }
+
+/* ===== 5.2 闲聊/工作双模式 + 本窗口设置 ===== */
+
+/* 空对话时的模式二选一。只有这里能选 —— 第一句话一发就定死了 */
+.cc-mode-pick {
+  display: flex;
+  gap: 10px;
+  margin: 26px auto 0;
+  max-width: 460px;
+  text-align: left;
+}
+.cc-mode-pick button {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 11px 13px;
+  transition: border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+.cc-mode-pick button:hover { border-color: var(--color-primary); }
+.cc-mode-pick button.is-on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+}
+.cc-mode-pick-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-heading);
+}
+.cc-mode-pick-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--color-text-tertiary);
+}
+
+/* 每轮右下角那个 token 明细 */
+.cc-usage {
+  margin-top: 4px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  padding: 8px 11px;
+}
+.cc-usage-grid {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+.cc-usage-grid b {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.cc-usage-grid em { font-style: normal; color: var(--color-text-disabled); }
+
+/* 本窗口设置浮层：桌面端贴右上，手机端从底部上来 */
+.cc-winset {
+  position: absolute;
+  right: 12px;
+  top: 52px;
+  z-index: 1;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(76vh, 640px);
+  overflow-y: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl, 16px);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, .12));
+  padding: 13px 14px 15px;
+}
+@media (max-width: 767px) {
+  .cc-winset {
+    right: 8px;
+    left: 8px;
+    top: auto;
+    bottom: 12px;
+    width: auto;
+  }
+}
+.cc-winset-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+  margin-bottom: 9px;
+}
+.cc-winset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+}
+.cc-winset-row > span:first-child { flex-shrink: 0; }
+.cc-winset-row > span:last-child,
+.cc-winset-row > code {
+  color: var(--color-text-secondary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.cc-winset-mono { font-family: var(--font-mono); font-size: 10.5px; }
+.cc-winset-sep {
+  height: 1px;
+  background: var(--color-border-light);
+  margin: 10px 0 9px;
+}
+.cc-winset-label {
+  font-size: 11px;
+  color: var(--color-text-disabled);
+  margin-bottom: 5px;
+}
+.cc-winset-seg {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.cc-winset-seg button {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 6px 4px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+}
+.cc-winset-seg button.is-on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+  color: var(--color-text-heading);
+}
+.cc-winset-seg button:disabled { opacity: .5; }
+.cc-winset-seg-5 button { padding: 5px 2px; font-size: 11px; }
+.cc-winset-select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
+}
+.cc-winset-empty,
+.cc-winset-hint,
+.cc-winset-note {
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--color-text-disabled);
+  margin-bottom: 8px;
+}
+.cc-winset-note { color: var(--color-primary); }
+.cc-winset-toggle { padding: 6px 0; }
+.cc-winset-dot {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-disabled);
+}
+.cc-winset-dot.is-on {
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+}
+.cc-winset-handoff {
+  width: 100%;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 7px;
+  font-size: 11.5px;
+  color: var(--color-text-disabled);
+}

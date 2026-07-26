@@ -11,6 +11,19 @@ export type CcToolEvent = {
   result?: string
 }
 
+/** 一轮的 token 用量。每条助手消息右下角那个小面板要的就是这些。 */
+export type CcTurnUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  cacheWrite1hTokens: number
+  cacheWrite5mTokens: number
+  durationMs: number
+  tokensPerSec: number
+  costUsd: number
+}
+
 export type CcMessage = {
   /** 前端本地 id，不是 Haven 的 turn_id */
   id: string
@@ -18,6 +31,10 @@ export type CcMessage = {
   text: string
   /** 助手侧的 thinking，可折叠 */
   thinking?: string
+  /** 思考用了多久（毫秒）。显示成「深度思考 (2.3s)」 */
+  thinkingMs?: number
+  /** 这一轮的用量（只有助手消息有；老消息没有就是 undefined，不显示） */
+  usage?: CcTurnUsage | null
   /** 助手这一轮调过的工具 */
   tools?: CcToolEvent[]
   /** 这一轮召回了什么（只有助手消息有） */
@@ -138,6 +155,23 @@ export type CcWorkbench = {
   at: number
 }
 
+export const EMPTY_STATS: CcSessionStats = {
+  live: false,
+  turnCount: 0,
+  totalCostUsd: 0,
+  cacheRemainingMs: 0,
+  cacheSystemRemainingMs: 0,
+  ccSessionId: '',
+  startedAt: null,
+  boot: null,
+  model: '',
+  effort: '',
+  thinking: false,
+  recentCostUsd: [],
+  contextTokens: 0,
+  contextMaxTokens: 0,
+}
+
 export const EMPTY_WORKBENCH: CcWorkbench = {
   session_id: '',
   live: false,
@@ -147,24 +181,40 @@ export const EMPTY_WORKBENCH: CcWorkbench = {
   commands: [],
   checkpoints: [],
   auto_allow_edits: false,
-  stats: {
-    live: false,
-    turnCount: 0,
-    totalCostUsd: 0,
-    cacheRemainingMs: 0,
-    ccSessionId: '',
-    startedAt: null,
-  },
+  stats: EMPTY_STATS,
   at: 0,
+}
+
+/**
+ * 这个会话启动时定死的那几项。
+ * ⚠️ 模式 / 凭据 / 中转站都是子进程启动参数，中途改不了 —— 界面照实显示这里的值，
+ * 不显示用户刚点的那个（那还没生效）。
+ */
+export type CcSessionBoot = {
+  mode: 'chat' | 'work'
+  credKind: string
+  providerId: string
+  providerLabel: string
 }
 
 export type CcSessionStats = {
   live: boolean
   turnCount: number
   totalCostUsd: number
+  /** 会话那档缓存（5m）剩多少毫秒 */
   cacheRemainingMs: number
+  /** 系统提示那档缓存（1h）剩多少毫秒 */
+  cacheSystemRemainingMs: number
   ccSessionId: string
   startedAt: number | null
+  boot: CcSessionBoot | null
+  model: string
+  effort: string
+  thinking: boolean
+  /** 近 10 轮花费，新的在后面 */
+  recentCostUsd: number[]
+  contextTokens: number
+  contextMaxTokens: number
 }
 
 /** 会话列表项。来自 /api/cc-turns（Haven 的 conversation_turns）。 */
@@ -178,13 +228,4 @@ export type CcSessionListItem = {
   client: string
   route: string
   source: string
-}
-
-export const EMPTY_STATS: CcSessionStats = {
-  live: false,
-  turnCount: 0,
-  totalCostUsd: 0,
-  cacheRemainingMs: 0,
-  ccSessionId: '',
-  startedAt: null,
 }
