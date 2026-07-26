@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import NavBar from '../components/NavBar'
 import { FilterPill } from '../components/FilterBar'
 
 type Bucket = {
@@ -122,7 +121,7 @@ export default function ReviewPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white">
-      <NavBar activeSlug="review" />{queue.length > 0 && (
+      {queue.length > 0 && (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 text-xs text-[var(--color-text-disabled)]">
           ← <a href="/memory" className="hover:text-[var(--color-text-primary)]">返回</a> · {current + 1}/{queue.length}
         </div>

@@ -1,6 +1,5 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import NavBar from '../components/NavBar'
 import Link from 'next/link'
 import Stat from '../components/Stat'
 
@@ -129,7 +128,6 @@ export default function ImportPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
-      <NavBar activeSlug="import" />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
         <h1 className="text-2xl font-bold mb-2 text-[var(--color-text-heading)]">导入记忆</h1>

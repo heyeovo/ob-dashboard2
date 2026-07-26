@@ -5,12 +5,11 @@ import { Suspense, useEffect, useState, useMemo, useCallback, useRef } from 'rea
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
-import NavBar from '../components/NavBar'
+import MemoryViewSwitch from '../components/MemoryViewSwitch'
 import StatusBadge, { statusLabel } from '../components/StatusBadge'
 import DetailPanel from '../components/DetailPanel'
 import KnobRow from '../components/KnobRow'
 import Card from '../components/Card'
-import MobileViewSwitch from '../components/MobileViewSwitch'
 import SearchBar from '../components/SearchBar'
 import FilterBar, { FilterPill } from '../components/FilterBar'
 import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
@@ -897,7 +896,6 @@ function HomeClient() {
 
   if (loading && buckets.length === 0) return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      <NavBar activeSlug="timeline" />
       <main className="max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10 pb-20">
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -915,16 +913,22 @@ function HomeClient() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      <NavBar activeSlug={activeTab} onTabClick={(tab) => router.replace(`/memory?tab=${tab}`, { scroll: false })} />
-
-      {/* Mobile-only header */}
+      {/* Mobile-only header。切换器改成三格（时间线/记忆格/待处理）——
+          底部 Tab 里原来那个「审阅」格 4.6 之后没了，入口收进这里 */}
       <header className="md:hidden sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)] px-3 h-12 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
-          <span className="text-sm font-semibold text-[var(--color-text-primary)]">Ombre Brain</span>
+          <span className="text-sm font-semibold text-[var(--color-text-primary)]">记忆库</span>
         </div>
-        {activeTab !== 'review' && <MobileViewSwitch />}
+        <MemoryViewSwitch size="sm" />
       </header>
+
+      {/* 桌面端：顶部横条撤了，三格切换器搬进页面 */}
+      <div className="hidden md:block sticky top-0 z-10 border-b border-[var(--color-border)] bg-white/50 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
+          <MemoryViewSwitch />
+        </div>
+      </div>
 
       <main className={`max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10 ${activeTab === 'review' ? 'flex flex-col flex-1 min-h-0 pb-4' : ''}`}>
         {activeTab !== 'review' && (

@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import NavBar from '../components/NavBar'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import StatusBadge, { statusLabel as getStatus } from '../components/StatusBadge'
 import Card from '../components/Card'
@@ -78,7 +77,6 @@ export default function BreathSimPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
-      <NavBar activeSlug="breath-sim" />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
 
         <div className="flex gap-1 mb-6 bg-[var(--color-surface-tertiary)] rounded-xl p-1 w-fit">

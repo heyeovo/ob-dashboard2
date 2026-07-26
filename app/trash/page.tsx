@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import NavBar from '../components/NavBar'
 
 interface TrashItem {
   id: string
@@ -67,7 +66,6 @@ export default function TrashPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
-      <NavBar activeSlug="trash" />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
         <div className="flex items-center justify-between mb-6">

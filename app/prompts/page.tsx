@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import NavBar from '../components/NavBar'
 import DetailPanel from '../components/DetailPanel'
 import Card from '../components/Card'
 
@@ -144,7 +143,6 @@ export default function PromptsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
-      <NavBar activeSlug="prompts" />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
         <div className="hidden md:block mb-6 sm:mb-8">

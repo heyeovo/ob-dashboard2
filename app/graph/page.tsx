@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
-import NavBar from '../components/NavBar'
 import Card from '../components/Card'
 import SearchBar from '../components/SearchBar'
 import { FilterPill } from '../components/FilterBar'
@@ -540,7 +539,6 @@ export default function GraphPage() {
     <>
       <style>{NEUMORPHIC}</style>
       <div className="graph-page pb-24 md:pb-10">
-        <NavBar activeSlug="graph" />
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           {loadError ? (

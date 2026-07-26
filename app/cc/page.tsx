@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import NavBar from '../components/NavBar'
+import Link from 'next/link'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
 import CcPersonaDialog from './CcPersonaDialog'
@@ -9,6 +9,7 @@ import CcRecallDialog from './CcRecallDialog'
 import CcSessionRail from './CcSessionRail'
 import { draftPersona, type CcPersona } from './persona'
 import { useCcChat } from './useCcChat'
+import { useIsRemote } from './useIsRemote'
 import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
 
@@ -34,7 +35,42 @@ function formatCacheLeft(ms: number) {
   return `${Math.floor(sec / 60)}m${sec % 60 ? `${sec % 60}s` : ''}`
 }
 
+function CcRemoteNotice() {
+  return (
+    <div className="cc-page flex min-h-screen items-center justify-center px-6 pb-24">
+      <div className="max-w-md rounded-2xl border border-[var(--color-border)] bg-white/80 px-6 py-7 text-center backdrop-blur-md">
+        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]">
+          <svg className="h-6 w-6" viewBox="0 0 20 20" fill="none" stroke="white" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3.5 9.5c0-3 2.9-5.5 6.5-5.5s6.5 2.5 6.5 5.5S13.6 15 10 15c-.8 0-1.6-.1-2.3-.3L4 16l.9-2.6c-.9-1-1.4-2.3-1.4-3.9Z" />
+          </svg>
+        </div>
+        <h1 className="mb-2 text-lg font-semibold text-[var(--color-text-heading)]">这一页要在家里的电脑上用</h1>
+        <p className="mb-5 text-sm leading-relaxed text-[var(--color-text-tertiary)]">
+          这个聊天页要在本机跑 claude code，线上服务器上起不来。
+          在家开着电脑的 dev server，用电脑或同一个 wifi 下的手机访问，就能正常聊。
+        </p>
+        <div className="space-y-2 text-left">
+          <Link
+            href="/polaris"
+            className="block rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm transition-all hover:border-[var(--color-primary)]/30 hover:shadow-md"
+          >
+            <span className="font-semibold text-[var(--color-text-heading)]">在外面先用 Polaris 聊 →</span>
+            <span className="mt-1 block text-xs text-[var(--color-text-tertiary)]">走 Haven，跟以前一样，记忆照旧</span>
+          </Link>
+          <Link
+            href="/"
+            className="block rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm transition-all hover:border-[var(--color-primary)]/30 hover:shadow-md"
+          >
+            <span className="font-semibold text-[var(--color-text-heading)]">回主页 →</span>
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CcChatPage() {
+  const isRemote = useIsRemote()
   const people = usePersonas()
   const chat = useCcChat(people.activeId)
   const [railOpen, setRailOpen] = useState(false)
@@ -216,11 +252,14 @@ export default function CcChatPage() {
     </div>
   ) : null
 
+  // 线上（Vercel）打开这一页：claude code 子进程起不来，给一句话说清楚，
+  // 别让人发一句话再对着报错猜。本地 / 局域网都照常走下面的完整界面。
+  if (isRemote) return <CcRemoteNotice />
+
   return (
     <>
-      {/* 桌面端：NavBar + 左会话列表 + 右对话 */}
+      {/* 桌面端：左会话列表 + 右对话（导航是全局左侧竖栏，这一页不带顶部横条） */}
       <div className="cc-page hidden h-screen flex-col md:flex">
-        <NavBar activeSlug="cc" />
         <div className="flex min-h-0 flex-1">
           <aside className="cc-rail-pane w-[var(--chat-rail-width)] shrink-0">{rail}</aside>
           <main className="flex min-w-0 flex-1 flex-col">

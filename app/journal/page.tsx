@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import NavBar from '../components/NavBar'
 import DetailPanel from '../components/DetailPanel'
 import SearchBar from '../components/SearchBar'
 import TagPill from '../components/TagPill'
@@ -263,7 +262,6 @@ export default function JournalPage() {
       `}</style>
 
       {/* ===== 顶部导航 ===== */}
-      <NavBar activeSlug="journal" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
 
