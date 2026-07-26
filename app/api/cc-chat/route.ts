@@ -27,7 +27,14 @@ import {
 // 第一版工具权限：只读（Read / Grep / Glob）。写文件和跑命令要等第 5 步的 diff 批准界面。
 
 export const runtime = 'nodejs'
-export const maxDuration = 600
+// ⚠️ 300 是 Vercel Hobby 计划的上限，写 600 会让线上部署直接失败
+//（Build Failed: invalid maxDuration ... must be between 1 and 300）。
+// 这个值只约束 Vercel 上的 serverless function，**本地 dev 不受它限制**，
+// 所以长会话在本地不受影响。
+// 而且这条路由在线上本来就跑不起来（serverless 没有 claude code 二进制、
+// 不能长驻子进程）—— 真正的解法是让它不进线上构建，见 handoff 文档
+// 「线上部署要处理的事」一节，导航重构那轮一起做。
+export const maxDuration = 300
 
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
 
