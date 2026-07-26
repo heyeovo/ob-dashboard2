@@ -398,22 +398,33 @@ export async function applyRuntimeSettings(
 }
 
 /**
- * 拉一次上下文用量，缓存到 live 上给顶部那个「x / 1M」胶囊用。
+ * 记这一轮的上下文用量，给顶部那个「x / 200k」胶囊用。
  *
- * `force` 给「这一轮刚答完但 busy 还没摘」的那个位置用 —— 那时候 iterator 已经不占了，
- * 但 busy 得留着，不然下一个请求会挤进来跟正在收尾的这一轮抢 turnBuckets。
+ * 数字直接从 result 消息的 usage 里加出来：喂进模型的上下文 =
+ * 新输入 + 缓存命中 + 这轮新写的缓存。三项互不重叠，加起来就是这一轮的输入总量。
+ *
+ * ⚠️ 别改回 `q.getContextUsage()`。那条控制请求实测每轮往上游多发 4 个非流请求
+ * （按 opus 计费），而且两次分段计时都等满 3s 超时不回 —— 顶部数字一直是旧值。
+ * 详见 HANDOFF「一条消息 5 个请求」那节（2026-07-26 已定论）。
  */
-export async function refreshContextUsage(sessionId: string, force = false): Promise<void> {
+export function noteContextUsage(sessionId: string, inputTotal: number, model: string) {
   const live = registry.get(sessionId)
   if (!live) return
-  if (live.busy && !force) return
-  try {
-    const usage = await live.q.getContextUsage()
-    live.contextTokens = Number(usage?.totalTokens || 0)
-    live.contextMaxTokens = Number(usage?.maxTokens || 0)
-  } catch {
-    /* 拿不到就保持上一次的值，不影响聊天 */
-  }
+  live.contextTokens = Number(inputTotal) || 0
+  live.contextMaxTokens = contextLimitFor(model)
+}
+
+/**
+ * 上下文上限。中转站不报这个值，按模型名认。
+ * 认不出来就给 0 —— 前端拿 0 会只显示实际数字、不显示「/ 上限」。
+ */
+export function contextLimitFor(model: string): number {
+  const m = (model || '').toLowerCase()
+  if (!m) return 0
+  if (m.includes('haiku')) return 200_000
+  if (m.includes('sonnet')) return m.includes('[1m]') ? 1_000_000 : 200_000
+  if (m.includes('opus') || m.includes('fable') || m.includes('mythos')) return 200_000
+  return 200_000
 }
 
 export type { LiveSession }

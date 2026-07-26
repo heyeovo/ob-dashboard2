@@ -37,7 +37,7 @@ import {
   rememberResumePoint,
   getSessionStats,
   recordTurnCost,
-  refreshContextUsage,
+  noteContextUsage,
   type TurnUsage,
 } from '@/app/lib/ccSession'
 import { CHAT_MODE_PROMPT, isCcMode, type CcMode } from '@/app/lib/ccModes'
@@ -212,8 +212,6 @@ function usageFromResult(
 
 /** 写库最多等这么久，超了就放弃这一轮的存档，不拖着对话 */
 const STORE_TIMEOUT_MS = 8000
-/** 拉上下文用量最多等这么久，超了就用上一次的数字 */
-const CTX_TIMEOUT_MS = 3000
 
 /**
  * 等一个 promise，超时就返回 fallback。
@@ -740,6 +738,12 @@ export async function POST(request: NextRequest) {
             live.lastModelCallAt = Date.now()
             recordTurnCost(sessionId, Number(msg.total_cost_usd || 0))
             turnUsage = usageFromResult(msg.usage, msg.duration_ms, msg.total_cost_usd)
+            // 顶部上下文胶囊：就用这一轮的输入总量，不再去问子进程（见 noteContextUsage 的注释）
+            noteContextUsage(
+              sessionId,
+              turnUsage.inputTokens + turnUsage.cacheReadTokens + turnUsage.cacheWriteTokens,
+              live.model,
+            )
             break
           }
         }
@@ -818,9 +822,6 @@ export async function POST(request: NextRequest) {
         // 超时就用上一次的值：这只是个显示用的数字，不值得让人多等。
         // 不带 force —— 锁上面已经摘了，这时候 busy 还是 true 就说明用户又发了一句，
         // 那正在占着 iterator，这个数字下一轮再拿。
-        await withTimeout(refreshContextUsage(sessionId), CTX_TIMEOUT_MS, null)
-        stamp('上下文用量完')
-
         send('after', {
           store: storeInfo,
           stats: getSessionStats(sessionId),
