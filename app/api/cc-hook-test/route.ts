@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { UserPromptSubmitHookInput } from '@anthropic-ai/claude-agent-sdk'
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 import { recallForPrompt, type HavenRecallResult } from '@/app/lib/havenRecall'
+import { recordTurn } from '@/app/lib/havenTurns'
 
 // 第 2 步验证：UserPromptSubmit hook → Haven /api/hook/recall → additionalContext。
 //
@@ -12,6 +13,10 @@ import { recallForPrompt, type HavenRecallResult } from '@/app/lib/havenRecall'
 // 两个都要看：只有 1 说明 Haven 通了但不一定进了 prompt；只有 2 不可信。
 //
 // 第 1 步的 /api/cc-test 保持原样不动，出问题时可以回归对比。
+//
+// 第 3 步追加：整轮跑完后把这一轮写回 Haven 的 conversation_turns（source='cc'，
+// raw_json 存 SDK 原始事件摘要）。写的是**现有那张表**，所以跨窗口注入、date_recall、
+// 人格引擎取近期对话立刻能看到 cc 引擎产生的对话。加 ?store=0 可以跳过写库。
 
 export const runtime = 'nodejs'
 export const maxDuration = 180
@@ -41,6 +46,7 @@ export async function GET(request: NextRequest) {
   const forcedSessionId = sp.get('session_id') || undefined
   const semantic = sp.get('semantic') !== '0'
   const includeDebug = sp.get('debug') === '1'
+  const store = sp.get('store') !== '0'
 
   const startedAt = Date.now()
   const events: Array<Record<string, unknown>> = []
@@ -49,6 +55,9 @@ export async function GET(request: NextRequest) {
   let initInfo: Record<string, unknown> | null = null
   let resultInfo: Record<string, unknown> | null = null
   let text = ''
+  // 写库用的分组键，跟 hook 送去 Haven 的那个必须是同一个值，
+  // 否则召回按 A 分组、对话存进 B 分组，跨窗口注入就串了。
+  let effectiveSessionId = forcedSessionId || ''
 
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), 170_000)
@@ -84,6 +93,7 @@ export async function GET(request: NextRequest) {
                 async (input, _toolUseId, { signal }) => {
                   const hookInput = input as UserPromptSubmitHookInput
                   const sessionId = forcedSessionId || hookInput.session_id || 'cc-hook-test'
+                  effectiveSessionId = sessionId
                   let recall: HavenRecallResult
                   try {
                     recall = await recallForPrompt(hookInput.prompt, {
@@ -153,6 +163,8 @@ export async function GET(request: NextRequest) {
           session_id: msg.session_id,
           permissionMode: msg.permissionMode,
         }
+        // hook 没触发时的兜底（比如 hook 超时），保证写库还有分组键
+        if (!effectiveSessionId) effectiveSessionId = msg.session_id
       }
 
       if (msg.type === 'assistant') {
@@ -176,6 +188,55 @@ export async function GET(request: NextRequest) {
     }
 
     const injected = hookCalls.some((c) => c.injected === true)
+
+    // ── 第 3 步：写回 conversation_turns ────────────────────────────────
+    // 只在整轮成功且有回复时写。round_id 交给 Haven 自己接（同 session MAX+1）。
+    let storeInfo: Record<string, unknown> | null = null
+    const sessionIdForStore = effectiveSessionId || 'cc-hook-test'
+    if (store && resultInfo && !resultInfo.is_error && text.trim()) {
+      const rec = await recordTurn({
+        sessionId: sessionIdForStore,
+        userText: prompt,
+        assistantText: text,
+        model: String(initInfo?.model || model || ''),
+        client: 'cc-hook-test',
+        route: '/api/cc-hook-test',
+        source: 'cc',
+        // 原始 JSON 原样留一份：这一轮的 SDK 事件序列 + 注入了什么 + 用量。
+        // 将来发现转换丢了东西（工具调用、附件）能从这里重来。
+        raw: {
+          engine: 'claude-code-agent-sdk',
+          cred_mode: cred,
+          prompt,
+          init: initInfo,
+          result: resultInfo,
+          events,
+          hook_calls: hookCalls,
+        },
+      })
+      storeInfo = {
+        attempted: true,
+        ok: rec.ok,
+        stored: rec.stored,
+        turn_id: rec.turnId,
+        round_id: rec.roundId,
+        session_id: sessionIdForStore,
+        elapsed_ms: rec.elapsedMs,
+        error: rec.error || undefined,
+        http_status: rec.httpStatus,
+      }
+    } else {
+      storeInfo = {
+        attempted: false,
+        reason: !store
+          ? 'store=0'
+          : !resultInfo || resultInfo.is_error
+            ? '这一轮没成功'
+            : '模型没有文本输出',
+        session_id: sessionIdForStore,
+      }
+    }
+
     return Response.json({
       ok: !!resultInfo && !resultInfo.is_error,
       hook_fired: hookCalls.length > 0,
@@ -192,6 +253,7 @@ export async function GET(request: NextRequest) {
       requested_model: model ?? null,
       semantic,
       text,
+      store: storeInfo,
       hook_calls: hookCalls,
       init: initInfo,
       result: resultInfo,
