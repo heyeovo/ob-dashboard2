@@ -607,6 +607,10 @@ export function useCcChat(personaId = '') {
                 thinkingMs: m.thinkingMs || thinkMs || undefined,
               }))
               if (payload.stats) setStats(payload.stats as CcSessionStats)
+            } else if (eventName === 'after') {
+              // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
+              // 这个事件只更新顶部那几个数字和会话列表。
+              if (payload.stats) setStats(payload.stats as CcSessionStats)
               void refreshSessions()
             } else if (eventName === 'error') {
               setError(String(payload.message || '出错了'))

@@ -210,7 +210,33 @@ function usageFromResult(
   }
 }
 
+/** 写库最多等这么久，超了就放弃这一轮的存档，不拖着对话 */
+const STORE_TIMEOUT_MS = 8000
+/** 拉上下文用量最多等这么久，超了就用上一次的数字 */
+const CTX_TIMEOUT_MS = 3000
+
+/**
+ * 等一个 promise，超时就返回 fallback。
+ * ⚠️ 只是不再等它，原来那个 promise 还在后台跑（写库该写的还会写进去）。
+ */
+async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      // 超时之后它才炸的话没人接，会变成 unhandled rejection，先接住
+      p.catch(() => fallback),
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => resolve(fallback), ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export async function POST(request: NextRequest) {
+  // 计时基点放在最前面 —— 读协作者配置要去 Zeabur，那一步也算「等回复」的时间
+  const reqAt = Date.now()
   let body: ChatBody
   try {
     body = (await request.json()) as ChatBody
@@ -284,7 +310,19 @@ export async function POST(request: NextRequest) {
   writeDirsBySession.set(sessionId, writeDirs)
 
   const encoder = new TextEncoder()
-  const startedAt = Date.now()
+  const startedAt = reqAt
+
+  // 慢在哪一段：每个节点打一行「距开始多少毫秒」到 dev 控制台。
+  // 前半段（发出去半天不出字）多半是召回要去 Zeabur 查，跟模型无关，靠这几行能分清。
+  let lastStampAt = startedAt
+  const stamp = (label: string) => {
+    const now = Date.now()
+    console.log(
+      `[cc-chat ${sessionId.slice(0, 8)}] ${label} +${now - startedAt}ms (上一步用了 ${now - lastStampAt}ms)`,
+    )
+    lastStampAt = now
+  }
+  stamp('配置读完（协作者 / 目录，这一步要去 Zeabur）')
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -609,6 +647,7 @@ export async function POST(request: NextRequest) {
       }
       live.busy = true
       live.lastModelCallAt = Date.now()
+      stamp(live.turnCount > 0 ? '沿用已有子进程' : '子进程建好了')
 
       // 自己给这句话编个 id：回退（rewindFiles）要的就是「回到哪句话之前」，
       // 而它认的是消息 uuid。不自己编就没有可回退的锚点。
@@ -620,10 +659,14 @@ export async function POST(request: NextRequest) {
         uuid: turnUuid,
       }
 
+      /** 锁是不是已经在正常路径上摘过了（收尾前就摘，让人能马上发下一句） */
+      let busyReleased = false
+
       try {
         live.push(userMessage)
         recordCheckpoint(sessionId, turnUuid, text)
         send('start', { session_id: sessionId, at: startedAt })
+        stamp('这句话交给子进程了')
 
         // 一个 query() 跨多轮，所以这里读到 result 就停 —— 那是「这一轮」的边界。
         // iterator 留着不关，下一句继续从它读。
@@ -653,9 +696,11 @@ export async function POST(request: NextRequest) {
             }
             if (ev.type === 'content_block_delta' && ev.delta) {
               if (ev.delta.type === 'text_delta' && ev.delta.text) {
+                if (!assistantText) stamp('模型吐出第一个字')
                 assistantText += ev.delta.text
                 send('delta', { text: ev.delta.text })
               } else if (ev.delta.type === 'thinking_delta' && ev.delta.thinking) {
+                if (!thinkingText) stamp('模型开始思考')
                 thinkingText += ev.delta.thinking
                 send('thinking', { text: ev.delta.thinking })
               }
@@ -699,11 +744,31 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        stamp('模型说完了')
+
+        // 这一轮对模型的占用到此为止（iterator 已经空了），提前把锁摘掉 ——
+        // 不然收尾这一秒里用户又发一句，会被顶回「上一轮还没跑完」。
+        // ⚠️ 摘锁到下面读 bucket / turnSnapshot 之间不许有 await，
+        // 否则新的一轮会把 turnBuckets 换掉，这一轮就存错召回记录。
+        live.busy = false
+        busyReleased = true
+
+        // ⚠️ 顺序是故意的：先把 done 发出去，再做写库和上下文用量。
+        // 这两步都要走网络（Haven 在 Zeabur / 子进程一次控制请求），
+        // 放在 done 前面会让浏览器一直停在「回复中」——第 5.2 步就是这么慢的。
+        // 收尾做完再补一个 after 事件，只用来刷新顶部那几个数字。
+        send('done', {
+          result: resultInfo,
+          usage: turnUsage,
+          stats: getSessionStats(sessionId),
+          elapsed_ms: Date.now() - startedAt,
+        })
+
         // ── 写回 Haven 的 conversation_turns ────────────────────────────
         // sessionId 跟 hook 用的是同一个值（同一个变量），不会分组串。
         let storeInfo: Record<string, unknown>
         if (assistantText.trim()) {
-          const rec = await recordTurn({
+          const rec = await withTimeout(recordTurn({
             sessionId,
             userText: text,
             assistantText,
@@ -732,27 +797,32 @@ export async function POST(request: NextRequest) {
               // 子进程回收后工作台就靠这份重建（历史消息读回来也能看见）。
               work: turnSnapshot(sessionId),
             },
-          })
-          storeInfo = {
-            ok: rec.ok,
-            stored: rec.stored,
-            turn_id: rec.turnId,
-            round_id: rec.roundId,
-            error: rec.error || undefined,
-          }
+          }), STORE_TIMEOUT_MS, null)
+          storeInfo = rec
+            ? {
+                ok: rec.ok,
+                stored: rec.stored,
+                turn_id: rec.turnId,
+                round_id: rec.roundId,
+                error: rec.error || undefined,
+              }
+            : { ok: false, stored: false, error: `写库超过 ${STORE_TIMEOUT_MS / 1000}s 没回，这一轮没存上` }
         } else {
           storeInfo = { ok: false, stored: false, error: '模型没有文本输出，不写库' }
         }
+        stamp('写库完')
 
         // 上下文用量：这一轮答完了才拉（getContextUsage 要走一次控制请求，
         // 这一轮还占着 iterator 的时候拿不到）。顶部那个「x / 1M」胶囊用它。
         // ⚠️ 带 force —— busy 还没摘（要挡住下一个请求挤进来），但 iterator 已经空了。
-        await refreshContextUsage(sessionId, true)
+        // 超时就用上一次的值：这只是个显示用的数字，不值得让人多等。
+        // 不带 force —— 锁上面已经摘了，这时候 busy 还是 true 就说明用户又发了一句，
+        // 那正在占着 iterator，这个数字下一轮再拿。
+        await withTimeout(refreshContextUsage(sessionId), CTX_TIMEOUT_MS, null)
+        stamp('上下文用量完')
 
-        send('done', {
-          result: resultInfo,
+        send('after', {
           store: storeInfo,
-          usage: turnUsage,
           stats: getSessionStats(sessionId),
           elapsed_ms: Date.now() - startedAt,
         })
@@ -762,10 +832,13 @@ export async function POST(request: NextRequest) {
         dropSession(sessionId)
         send('error', { message: err.message || String(err) })
       } finally {
-        live.busy = false
+        // 正常路径上面已经摘过了（为了让人能立刻发下一句）。
+        // 这里兜出错的情况；已经摘过就别再动 —— 那可能是下一轮占的锁。
+        if (!busyReleased) live.busy = false
         // 这一轮的口子摘掉，免得下一轮的 hook 往已经关掉的流里推
         detachSend(sessionId, send)
-        turnBuckets.delete(sessionId)
+        // 只删自己那份：收尾这一秒里可能已经有新的一轮把它换掉了
+        if (turnBuckets.get(sessionId) === bucket) turnBuckets.delete(sessionId)
         closed = true
         try {
           controller.close()

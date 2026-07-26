@@ -111,7 +111,7 @@ export default function CcChatPage() {
   const totalChars = chat.messages.reduce((n, m) => n + m.text.length, 0)
 
   const header = (
-    <div className="cc-topbar flex items-center gap-3 px-4 py-2.5">
+    <div className="cc-topbar flex items-center gap-2 px-3 py-2.5 md:gap-3 md:px-4">
       <button
         type="button"
         onClick={() => setRailOpen(true)}
@@ -129,18 +129,22 @@ export default function CcChatPage() {
         <span className="cc-avatar" style={{ background: people.active.tint }} aria-hidden="true">
           {people.active.initial}
         </span>
-        <span className="max-w-[7rem] truncate">{people.active.name}</span>
+        {/* 手机上只留头像，名字省掉 —— 顶栏横向就那么点地方 */}
+        <span className="hidden max-w-[7rem] truncate md:inline">{people.active.name}</span>
       </button>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
           {chat.messages.find(m => m.role === 'user')?.text.slice(0, 40) || '新对话'}
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--color-text-disabled)]">
+        {/* ⚠️ 一行到底不换行：手机上换行会把整条顶栏顶成半屏高。
+            手机只留「模式 · N 轮」，其余（模型名 / 上下文 / 花费 / 缓存）
+            md 以上才出现，手机想看去「本窗」弹窗里看。 */}
+        <div className="mt-0.5 flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-[var(--color-text-disabled)]">
           <span>{MODE_LABEL[chat.mode]}模式</span>
           {shownModel ? (
             <>
-              <span>·</span>
-              <span className="max-w-[11rem] truncate" title={shownModel}>
+              <span className="hidden md:inline">·</span>
+              <span className="hidden max-w-[11rem] truncate md:inline" title={shownModel}>
                 {shownModel}
               </span>
             </>
@@ -150,8 +154,8 @@ export default function CcChatPage() {
           {/* 上下文用量。上限拿不到（进程还没起）就不显示分母，别编一个 */}
           {chat.stats.contextTokens > 0 ? (
             <>
-              <span>·</span>
-              <span title="这个对话现在占了多少上下文">
+              <span className="hidden md:inline">·</span>
+              <span className="hidden md:inline" title="这个对话现在占了多少上下文">
                 {formatTokens(chat.stats.contextTokens)}
                 {ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}
               </span>
@@ -162,14 +166,17 @@ export default function CcChatPage() {
               这时候显示 $0 是在骗人，不如不显示。 */}
           {chat.stats.totalCostUsd > 0 && chat.pick.kind !== 'subscription' ? (
             <>
-              <span>·</span>
-              <span>{formatCost(chat.stats.totalCostUsd)}</span>
+              <span className="hidden md:inline">·</span>
+              <span className="hidden md:inline">{formatCost(chat.stats.totalCostUsd)}</span>
             </>
           ) : null}
           {cacheSystem ? (
             <>
-              <span>·</span>
-              <span title="Anthropic prompt cache 两档：系统提示 + 工具说明进 1 小时档，会话消息进 5 分钟档。5 分钟过了不等于缓存全没，接着聊仍然便宜。">
+              <span className="hidden md:inline">·</span>
+              <span
+                className="hidden md:inline"
+                title="Anthropic prompt cache 两档：系统提示 + 工具说明进 1 小时档，会话消息进 5 分钟档。5 分钟过了不等于缓存全没，接着聊仍然便宜。"
+              >
                 缓存 {cacheSystem}
                 {cacheSession ? ` / 会话 ${cacheSession}` : ' / 会话已过期'}
               </span>
@@ -178,24 +185,26 @@ export default function CcChatPage() {
         </div>
       </div>
       {/* 右：本窗口设置（这一个对话的模型/供应商）+ 协作者设置（跨对话的人设） */}
-      <button
-        type="button"
-        onClick={() => setWinSetOpen(true)}
-        aria-label="本窗口设置"
-        title="本窗口设置：模型 / 力度 / 供应商"
-        className="cc-icon-btn"
-      >
-        本窗
-      </button>
-      <button
-        type="button"
-        onClick={() => setSettingsFor(people.active)}
-        aria-label="协作者设置"
-        title="协作者设置"
-        className="cc-icon-btn"
-      >
-        设置
-      </button>
+      <div className="flex shrink-0 items-center gap-1 md:gap-2">
+        <button
+          type="button"
+          onClick={() => setWinSetOpen(true)}
+          aria-label="本窗口设置"
+          title="本窗口设置：模型 / 力度 / 供应商"
+          className="cc-icon-btn"
+        >
+          本窗
+        </button>
+        <button
+          type="button"
+          onClick={() => setSettingsFor(people.active)}
+          aria-label="协作者设置"
+          title="协作者设置"
+          className="cc-icon-btn"
+        >
+          设置
+        </button>
+      </div>
     </div>
   )
 
@@ -206,21 +215,29 @@ export default function CcChatPage() {
           <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史</div>
         ) : chat.messages.length === 0 ? (
           <div className="py-16 text-center">
-            <div className="text-sm text-[var(--color-text-secondary)]">开始一段对话</div>
-            <div className="mt-1.5 text-xs text-[var(--color-text-disabled)]">
+            <div className="text-[13.5px] font-medium text-[var(--color-text-heading)]">开始一段对话</div>
+            <div className="mt-1.5 text-[11.5px] text-[var(--color-text-disabled)]">
               记忆会在你发言时自动注入，回复下方能看到召回了什么
             </div>
             {/* 模式只能在这里选：第一句话一发，systemPrompt 和工具就随子进程定死了 */}
-            <div className="cc-mode-pick">
+            <div className="mx-auto mt-7 flex max-w-[420px] gap-2.5 text-left">
               {(['chat', 'work'] as const).map(m => (
                 <button
                   key={m}
                   type="button"
-                  className={chat.mode === m ? 'is-on' : ''}
                   onClick={() => chat.setMode(m)}
+                  className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-3 transition-colors ${
+                    chat.mode === m
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
+                      : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'
+                  }`}
                 >
-                  <span className="cc-mode-pick-name">{MODE_LABEL[m]}</span>
-                  <span className="cc-mode-pick-hint">{MODE_HINT[m]}</span>
+                  <span className="block text-[12.5px] font-medium text-[var(--color-text-heading)]">
+                    {MODE_LABEL[m]}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                    {MODE_HINT[m]}
+                  </span>
                 </button>
               ))}
             </div>

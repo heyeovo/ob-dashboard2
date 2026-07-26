@@ -24,18 +24,15 @@ import {
  * ⚠️ 模型名要人工填 —— 中转站基本都不给可靠的模型列表接口。
  */
 
-function linesToList(text: string) {
-  return text
-    .split(/[\n,，]/)
-    .map(s => s.trim())
-    .filter(Boolean)
-}
+/** 一次测试的结果。key 是 `${providerId}::${模型名}` —— 同一个站不同模型通断情况不一样 */
+type TestState = { state: 'running' | 'ok' | 'fail'; note: string }
 
 export default function UpstreamSettingsPage() {
   const [config, setConfig] = useState<CcUpstreamConfig>(EMPTY_UPSTREAM)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [note, setNote] = useState('')
+  const [tests, setTests] = useState<Record<string, TestState>>({})
 
   useEffect(() => {
     ;(async () => {
@@ -59,6 +56,49 @@ export default function UpstreamSettingsPage() {
       ...prev,
       providers: prev.providers.map(p => (p.id === id ? { ...p, ...next } : p)),
     }))
+
+  /** 改某个中转站的第 i 个模型名。空字符串留着 —— 那是刚点「加一个」还没填的行 */
+  const setModelAt = (providerId: string, i: number, value: string) =>
+    setConfig(prev => ({
+      ...prev,
+      providers: prev.providers.map(p =>
+        p.id === providerId ? { ...p, models: p.models.map((m, j) => (j === i ? value : m)) } : p,
+      ),
+    }))
+
+  const removeModelAt = (providerId: string, i: number) =>
+    setConfig(prev => ({
+      ...prev,
+      providers: prev.providers.map(p =>
+        p.id === providerId ? { ...p, models: p.models.filter((_, j) => j !== i) } : p,
+      ),
+    }))
+
+  /**
+   * 测这个站的这个模型通不通。
+   * ⚠️ 会真发一句（max_tokens: 1）—— 中转站的模型列表接口大多是假的，不发不知道。
+   * ⚠️ 测的是**服务端存的那份**配置，所以刚改完的 URL / token 要先保存。
+   */
+  const testModel = async (providerId: string, model: string) => {
+    const key = `${providerId}::${model}`
+    setTests(prev => ({ ...prev, [key]: { state: 'running', note: '' } }))
+    try {
+      const res = await fetch('/api/cc-upstream-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider_id: providerId, model }),
+      })
+      const data = await res.json()
+      setTests(prev => ({
+        ...prev,
+        [key]: data.ok
+          ? { state: 'ok', note: data.elapsed_ms ? `通 ${Math.round(data.elapsed_ms)}ms` : '通' }
+          : { state: 'fail', note: String(data.error || '不通') },
+      }))
+    } catch {
+      setTests(prev => ({ ...prev, [key]: { state: 'fail', note: '请求没发出去' } }))
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -152,7 +192,7 @@ export default function UpstreamSettingsPage() {
                         </button>
                       </div>
 
-                      <label className={label}>Base URL</label>
+                      <label className={label}>Base URL（中转站原始地址，不用加 /v1）</label>
                       <input
                         className={`${box} mb-3`}
                         value={p.baseUrl}
@@ -168,14 +208,62 @@ export default function UpstreamSettingsPage() {
                         onChange={e => patchProvider(p.id, { token: e.target.value })}
                       />
 
-                      <label className={label}>模型名，一行一个</label>
-                      <textarea
-                        className={`${box} font-mono text-xs`}
-                        rows={3}
-                        value={p.models.join('\n')}
-                        placeholder={'claude-opus-4-6\nclaude-sonnet-4-5'}
-                        onChange={e => patchProvider(p.id, { models: linesToList(e.target.value) })}
-                      />
+                      <label className={label}>模型名，一个一行</label>
+                      <div className="space-y-2">
+                        {p.models.map((m, i) => {
+                          const t = tests[`${p.id}::${m}`]
+                          return (
+                            <div key={i}>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  className={`${box} flex-1 font-mono text-xs`}
+                                  value={m}
+                                  placeholder="[别名]claude-opus-4-6-thinking"
+                                  onChange={e => setModelAt(p.id, i, e.target.value)}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={!m.trim() || t?.state === 'running'}
+                                  onClick={() => void testModel(p.id, m.trim())}
+                                  className="shrink-0 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2.5 py-2 text-xs text-[var(--color-text-secondary)] disabled:opacity-40"
+                                >
+                                  {t?.state === 'running' ? '测…' : '测试'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeModelAt(p.id, i)}
+                                  className="shrink-0 px-1 text-xs text-[var(--color-danger)]"
+                                  aria-label="删除这个模型"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                              {t && t.state !== 'running' ? (
+                                <div
+                                  className={`mt-1 text-[11px] leading-relaxed ${
+                                    t.state === 'ok'
+                                      ? 'text-[#4F7C5E]'
+                                      : 'text-[var(--color-danger)]'
+                                  }`}
+                                >
+                                  {t.state === 'ok' ? `✓ ${t.note}` : `✗ ${t.note}`}
+                                </div>
+                              ) : null}
+                            </div>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => patchProvider(p.id, { models: [...p.models, ''] })}
+                          className="w-full rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] py-1.5 text-xs text-[var(--color-text-tertiary)]"
+                        >
+                          加一个模型
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                        测试会真发一句话（1 token），这是唯一能确认这个模型在这个站上能用的办法。
+                        改完 URL 或 token 要先点下面的保存，测试读的是已保存的那份。
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -188,14 +276,48 @@ export default function UpstreamSettingsPage() {
                 订阅（本机 claude 登录态）
               </h2>
               <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4">
-                <label className={label}>能选的模型名，一行一个（留空就用 claude 自己的默认）</label>
-                <textarea
-                  className={`${box} font-mono text-xs`}
-                  rows={3}
-                  value={config.subscriptionModels.join('\n')}
-                  placeholder={'opus\nsonnet'}
-                  onChange={e => patch({ subscriptionModels: linesToList(e.target.value) })}
-                />
+                <label className={label}>能选的模型名，一个一行（留空就用 claude 自己的默认）</label>
+                <div className="space-y-2">
+                  {config.subscriptionModels.map((m, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <input
+                        className={`${box} flex-1 font-mono text-xs`}
+                        value={m}
+                        placeholder="opus"
+                        onChange={e =>
+                          patch({
+                            subscriptionModels: config.subscriptionModels.map((x, j) =>
+                              j === i ? e.target.value : x,
+                            ),
+                          })
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          patch({
+                            subscriptionModels: config.subscriptionModels.filter((_, j) => j !== i),
+                          })
+                        }
+                        className="shrink-0 px-1 text-xs text-[var(--color-danger)]"
+                        aria-label="删除这个模型"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => patch({ subscriptionModels: [...config.subscriptionModels, ''] })}
+                    className="w-full rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] py-1.5 text-xs text-[var(--color-text-tertiary)]"
+                  >
+                    加一个模型
+                  </button>
+                </div>
+                {/* 订阅侧没有可用的 key（凭据在 claude code 手里），所以测不了通断 */}
+                <p className="mt-2 text-[11px] text-[var(--color-text-disabled)]">
+                  订阅侧没法测通断 —— 凭据在本机 claude 自己手里，这边拿不到
+                </p>
               </div>
             </section>
 

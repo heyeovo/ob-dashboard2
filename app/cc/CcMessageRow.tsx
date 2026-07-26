@@ -16,6 +16,9 @@ import type { CcMessage, CcToolEvent } from './types'
 
 const LONG_PRESS_MS = 360
 
+/** token 明细里的数字：等宽对齐，不加粗到抢眼 */
+const USAGE_NUM = 'font-medium tabular-nums text-[var(--color-text-secondary)]'
+
 function formatTime(ms: number) {
   const d = new Date(ms)
   const hh = String(d.getHours()).padStart(2, '0')
@@ -236,35 +239,35 @@ export default function CcMessageRow({
 
         {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
         {usage && usageOpen ? (
-          <div className="cc-usage">
-            <div className="cc-usage-grid">
+          <div className="mt-1 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-2">
+            <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-2.5 gap-y-1 text-[11px] text-[var(--color-text-tertiary)]">
               <span>↑ 输入</span>
-              <b>{usage.inputTokens.toLocaleString()}</b>
+              <b className={USAGE_NUM}>{usage.inputTokens.toLocaleString()}</b>
               <span>↓ 输出</span>
-              <b>{usage.outputTokens.toLocaleString()}</b>
+              <b className={USAGE_NUM}>{usage.outputTokens.toLocaleString()}</b>
               <span>缓存读</span>
-              <b>{usage.cacheReadTokens.toLocaleString()}</b>
+              <b className={USAGE_NUM}>{usage.cacheReadTokens.toLocaleString()}</b>
               <span>缓存写</span>
-              <b>
+              <b className={USAGE_NUM}>
                 {usage.cacheWriteTokens.toLocaleString()}
                 {usage.cacheWrite1hTokens || usage.cacheWrite5mTokens ? (
-                  <em>
+                  <span className="font-normal text-[var(--color-text-disabled)]">
                     {' '}
                     (1h {usage.cacheWrite1hTokens.toLocaleString()} · 5m{' '}
                     {usage.cacheWrite5mTokens.toLocaleString()})
-                  </em>
+                  </span>
                 ) : null}
               </b>
               {usage.durationMs ? (
                 <>
                   <span>时长</span>
-                  <b>{(usage.durationMs / 1000).toFixed(1)}s</b>
+                  <b className={USAGE_NUM}>{(usage.durationMs / 1000).toFixed(1)}s</b>
                 </>
               ) : null}
               {usage.tokensPerSec ? (
                 <>
                   <span>速度</span>
-                  <b>{usage.tokensPerSec.toFixed(1)} tok/s</b>
+                  <b className={USAGE_NUM}>{usage.tokensPerSec.toFixed(1)} tok/s</b>
                 </>
               ) : null}
             </div>
