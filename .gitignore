@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# cc 缓存排查临时日志
+/.cc-debug/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
