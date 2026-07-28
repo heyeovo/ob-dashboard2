@@ -31,6 +31,7 @@ type Props = {
   /** 已经开口了：供应商那两个框只能看不能换 */
   locked: boolean
   note: string
+  onHandoff: () => void
   onClose: () => void
 }
 
@@ -66,6 +67,7 @@ export default function CcWindowSettings({
   onPick,
   locked,
   note,
+  onHandoff,
   onClose,
 }: Props) {
   const models = modelsFor(upstream, pick.kind, pick.providerId)
@@ -251,15 +253,14 @@ export default function CcWindowSettings({
             <div className="mt-2 text-[10.5px] leading-relaxed text-[var(--color-primary)]">{note}</div>
           ) : null}
 
-          {/* ── 换窗：5.3 接 handoff，这一版只有按钮 ── */}
+          {/* ── 换窗 ── */}
           <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
           <button
             type="button"
-            disabled
-            title="换窗 handoff 还没接（5.3）"
-            className="w-full rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] py-2 text-[11.5px] text-[var(--color-text-disabled)]"
+            onClick={onHandoff}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-[11.5px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-text-heading)]"
           >
-            换窗（还没接）
+            换窗
           </button>
         </div>
       </div>

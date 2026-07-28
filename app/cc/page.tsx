@@ -14,7 +14,8 @@ import { useIsRemote } from './useIsRemote'
 import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
 import CcWindowSettings from './CcWindowSettings'
-import { MODE_HINT, MODE_LABEL } from '@/app/lib/ccModes'
+import CcHandoffDialog, { type HandoffPayload } from './CcHandoffDialog'
+import { MODE_LABEL } from '@/app/lib/ccModes'
 
 // 第 4 步的聊天页。
 //
@@ -90,6 +91,7 @@ export default function CcChatPage() {
   const [settingsFor, setSettingsFor] = useState<CcPersona | null>(null)
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const [winSetOpen, setWinSetOpen] = useState(false)
+  const [handoffOpen, setHandoffOpen] = useState<{ fromSessionId: string | null } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // 新消息进来滚到底。批准卡片出现时也滚 —— 不滚就可能在屏幕外，人不知道在等他
@@ -219,43 +221,36 @@ export default function CcChatPage() {
             <div className="mt-1.5 text-[11.5px] text-[var(--color-text-disabled)]">
               记忆会在你发言时自动注入，回复下方能看到召回了什么
             </div>
-            {/* 模式只能在这里选：第一句话一发，systemPrompt 和工具就随子进程定死了 */}
-            <div className="mx-auto mt-7 flex max-w-[420px] gap-2.5 text-left">
-              {(['chat', 'work'] as const).map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => chat.setMode(m)}
-                  className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-3 transition-colors ${
-                    chat.mode === m
-                      ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
-                      : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'
-                  }`}
-                >
-                  <span className="block text-[12.5px] font-medium text-[var(--color-text-heading)]">
-                    {MODE_LABEL[m]}
-                  </span>
-                  <span className="mt-1 block text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
-                    {MODE_HINT[m]}
-                  </span>
-                </button>
-              ))}
+            <div className="mt-2 text-[11px] text-[var(--color-text-disabled)]">
+              当前：{MODE_LABEL[chat.mode]}模式
             </div>
           </div>
         ) : (
-          chat.messages.map(m => (
-            <CcMessageRow
-              key={m.id}
-              message={m}
-              // 按那一轮记下的人画头像名字；老消息没记就用当前选中的
-              persona={
-                (m.personaId && people.personas.find(p => p.id === m.personaId)) || people.active
-              }
-              onCopy={copy}
-              onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
-              onOpenRecall={setRecallDetail}
-            />
-          ))
+          chat.messages.map(m =>
+            m.handoff ? (
+              // 换窗带过来的上一窗原文：淡色、只作衔接语境，不走消息气泡
+              <div key={m.id} className="opacity-55">
+                <div className="mb-0.5 text-[10.5px] font-mono text-[var(--color-text-disabled)]">
+                  role: {m.role}
+                </div>
+                <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--color-text-secondary)]">
+                  {m.text}
+                </div>
+              </div>
+            ) : (
+              <CcMessageRow
+                key={m.id}
+                message={m}
+                // 按那一轮记下的人画头像名字；老消息没记就用当前选中的
+                persona={
+                  (m.personaId && people.personas.find(p => p.id === m.personaId)) || people.active
+                }
+                onCopy={copy}
+                onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
+                onOpenRecall={setRecallDetail}
+              />
+            ),
+          )
         )}
         {/* 等着点批准的操作。放在消息流最后 —— 那一轮正停在这里等，
             它就是「现在该看的东西」。刷新页面不会丢（队列在服务端）。 */}
@@ -309,7 +304,7 @@ export default function CcChatPage() {
       }}
       onNew={() => {
         setRailOpen(false)
-        chat.startNewSession()
+        setHandoffOpen({ fromSessionId: null })
       }}
     />
   )
@@ -427,10 +422,27 @@ export default function CcChatPage() {
           onPick={next => void chat.applyPick(next)}
           locked={chat.modeLocked}
           note={chat.settingsNote}
+          onHandoff={() => {
+            setWinSetOpen(false)
+            setHandoffOpen({ fromSessionId: chat.sessionId })
+          }}
           onClose={() => {
             setWinSetOpen(false)
             chat.setSettingsNote('')
           }}
+        />
+      ) : null}
+
+      {/* 换窗 / 新对话弹窗 */}
+      {handoffOpen ? (
+        <CcHandoffDialog
+          fromSessionId={handoffOpen.fromSessionId}
+          currentMode={chat.mode}
+          onConfirm={payload => {
+            setHandoffOpen(null)
+            chat.startWithHandoff(payload)
+          }}
+          onClose={() => setHandoffOpen(null)}
         />
       ) : null}
 

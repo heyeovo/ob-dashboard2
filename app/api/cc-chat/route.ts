@@ -29,7 +29,8 @@ import {
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
-import { recordTurn } from '@/app/lib/havenTurns'
+import { recordTurn, listTurns } from '@/app/lib/havenTurns'
+import { getBucket } from '@/app/lib/api'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import {
   ensureSession,
@@ -122,6 +123,14 @@ type ChatBody = {
    * 只在服务端进程已丢（重启 / 回收）时用来接回上下文；已有活进程则忽略。
    */
   resume_hint?: string
+  /**
+   * 5.5 换窗 handoff：只随新会话首条带一次，之后几轮不带。
+   *   handoff_bucket_ids   勾选的记忆桶 id → 服务端拉正文，拼进 systemPrompt（全程稳定、可缓存）
+   *   handoff_from_session 源会话 id + handoff_turns 轮数 → 服务端拉原文，拼进首条 user 正文
+   */
+  handoff_bucket_ids?: string[]
+  handoff_turns?: number
+  handoff_from_session?: string
 }
 
 function sse(event: string, data: unknown) {
@@ -307,7 +316,36 @@ export async function POST(request: NextRequest) {
     semantic: body.semantic !== undefined ? body.semantic !== false : persona?.semantic_on !== false,
   })
 
-  const personaAppend = buildPersonaAppend(persona)
+  let personaAppend = buildPersonaAppend(persona)
+
+  // 5.5 换窗 handoff：勾选的记忆桶拼进 systemPrompt.append。
+  // 为什么进系统提示而不是 user 正文：这批桶是「带过来的稳定背景」，希望它全程都在、
+  //   而且属于可缓存前缀（1h 档），不像召回是每轮变的。只有新会话首条才带 —— 已有进程
+  //   的 systemPrompt 是启动时定死的，中途送来也改不了，所以这里只在没活进程时才拉。
+  // 任何失败都不拦发话：拉不到就当没带这批桶。
+  const handoffBucketIds = Array.isArray(body.handoff_bucket_ids) ? body.handoff_bucket_ids : []
+  if (handoffBucketIds.length > 0 && !peekSession(sessionId)) {
+    const parts: string[] = []
+    for (const id of handoffBucketIds.slice(0, 10)) {
+      try {
+        const b = await getBucket(String(id))
+        const title = String(b?.name || b?.title || id)
+        const content = String(b?.content || '').trim()
+        if (content) parts.push(`【${title}】\n${content}`)
+      } catch {
+        // 单个桶拉不到就跳过，不影响其余
+      }
+    }
+    if (parts.length > 0) {
+      const block =
+        '<换窗记忆>\n' +
+        '以下是用户从上一个窗口带过来的记忆，作为本次对话的稳定背景。\n\n' +
+        parts.join('\n\n') +
+        '\n</换窗记忆>'
+      personaAppend = [personaAppend, block].filter(Boolean).join('\n\n')
+    }
+  }
+
   // 能读哪些目录：协作者自己配的，没配就是仓库根。
   // 敏感文件的拦截跟这个无关，是下面 PreToolUse 那道硬规则。
   const { cwd, additionalDirectories } = resolveDirs(persona?.dirs)
@@ -696,6 +734,36 @@ export async function POST(request: NextRequest) {
             text
         }
         stamp('召回回来了')
+      }
+
+      /* ── 5.5 换窗 handoff：上个窗口最近 N 轮原文，拼进首条 user 正文最前面 ──
+       * 只在会话第一轮带（live.turnCount===0），之后几轮前端也不再送。
+       * 跟召回同一条路：拼进正文而不走 additionalContext hook，避免被包成
+       * role:"system" 被中转站丢掉。放在召回块前面 —— 它是「上文」，比这一轮召回更靠前。
+       * 拉不到不影响这一轮：listTurns 自己不抛异常。 */
+      const handoffTurnCount = Number(body.handoff_turns) || 0
+      const handoffFrom = String(body.handoff_from_session || '').trim()
+      if (live.turnCount === 0 && handoffTurnCount > 0 && handoffFrom) {
+        const r = await listTurns(handoffFrom, { limit: handoffTurnCount, signal: request.signal })
+        if (r.ok && r.turns.length > 0) {
+          // listTurns 返回时间正序（旧→新），正文直接顺着拼。
+          // 说话人用真名：用户 = 协作者配置里的 user_name（小羊），助手 = 协作者自己的名字。
+          const userName = String(persona?.user_name || '小羊')
+          const assistantName = String(persona?.name || '助手')
+          const lines: string[] = []
+          for (const t of r.turns) {
+            if (t.user_text?.trim()) lines.push(`${userName}：${t.user_text.trim()}`)
+            if (t.assistant_text?.trim()) lines.push(`${assistantName}：${t.assistant_text.trim()}`)
+          }
+          if (lines.length > 0) {
+            content =
+              '【上次聊到这里】\n\n' +
+              lines.join('\n\n') +
+              '\n\n---\n\n' +
+              content
+          }
+        }
+        stamp('换窗原文拉回来了')
       }
 
       const userMessage: SDKUserMessage = {

@@ -14,6 +14,7 @@ import { EMPTY_STATS } from './types'
 import type { CcMode } from '@/app/lib/ccModes'
 import type { CcUpstreamConfig, CcUpstreamPick } from './upstream'
 import { EMPTY_UPSTREAM, modelsFor, pickFromConfig, upstreamFromHaven } from './upstream'
+import type { HandoffPayload } from './CcHandoffDialog'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -233,6 +234,9 @@ export function useCcChat(personaId = '') {
   // ⚠️ 算的是前端收到第一个 thinking 片段到收到第一个正文片段之间的时间 ——
   // 服务端没单独报思考耗时，这个口径最接近用户感知的「它想了多久」。
   const thinkStartRef = useRef(0)
+
+  // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
+  const handoffRef = useRef<{ bucketIds: string[]; turns: number; fromSessionId: string | null } | null>(null)
 
   // 上游配置：进页面拉一次。拉不到就用空配置（引擎层会退回 .env.local）
   useEffect(() => {
@@ -476,6 +480,67 @@ export function useCcChat(personaId = '') {
     setPick(pickFromConfig(upstream))
   }, [sessionId, draft, upstream])
 
+  const startWithHandoff = useCallback(
+    async (payload: HandoffPayload) => {
+      // 先做 startNewSession 同款重置
+      draftsRef.current.set(sessionId, draft)
+      abortRef.current?.abort()
+      setSending(false)
+      const nextId = newSessionId()
+      setSessionId(nextId)
+      setMessages([])
+      setDraft('')
+      setError('')
+      setStats(EMPTY_STATS)
+      setHistoryTurnCount(0)
+      setPending([])
+      setDecided([])
+      setAutoAllowEdits(false)
+      setSettingsNote('')
+      resumeHintRef.current = ''
+      setPick(pickFromConfig(upstream))
+      setMode(payload.mode)
+
+      // 存 handoff 数据，首条 send 时带走
+      handoffRef.current = {
+        bucketIds: payload.bucketIds,
+        turns: payload.turns,
+        fromSessionId: payload.fromSessionId,
+      }
+
+      // 要带对话原文：拉回来转成「淡色历史消息」铺在消息流最前面。
+      // 走 messages 数组（不再用独立状态）—— 跟真消息同一条渲染路径，发消息后不会消失，
+      // 顺序天然正序（旧在上、最新贴着第一句）。标 handoff+fromHistory：淡色显示、不可重发。
+      if (payload.turns > 0 && payload.fromSessionId) {
+        try {
+          const res = await fetch(
+            `/api/cc-turns?session_id=${encodeURIComponent(payload.fromSessionId)}&limit=${payload.turns}`,
+            { cache: 'no-store' },
+          )
+          const data = await res.json()
+          if (data.ok && Array.isArray(data.turns)) {
+            const msgs: CcMessage[] = []
+            // cc-turns 返回就是时间正序（旧→新），直接铺，最新那条在最下面贴着第一句
+            for (const t of data.turns) {
+              const at = Date.parse(t.created_at) || Date.now()
+              if (t.user_text?.trim()) {
+                msgs.push({ id: `ho${t.id}u`, role: 'user', text: t.user_text, createdAt: at, fromHistory: true, handoff: true })
+              }
+              if (t.assistant_text?.trim()) {
+                msgs.push({ id: `ho${t.id}a`, role: 'assistant', text: t.assistant_text, createdAt: at, fromHistory: true, handoff: true })
+              }
+            }
+            // 只在还没发第一句时铺（用户可能已抢先发言，不覆盖真消息）
+            setMessages(prev => (prev.length === 0 ? msgs : prev))
+          }
+        } catch {
+          // 拉不到不影响新对话
+        }
+      }
+    },
+    [sessionId, draft, upstream],
+  )
+
   /**
    * 改本窗口设置。
    *
@@ -593,6 +658,12 @@ export function useCcChat(personaId = '') {
             thinking: pick.thinking,
             // 第 5 条：进程已丢时靠它 resume 接回上下文；有活进程服务端会忽略
             ...(resumeHintRef.current ? { resume_hint: resumeHintRef.current } : {}),
+            // 5.5 换窗 handoff：首条消息带桶 id 和源会话 id，服务端拉内容注入
+            ...(handoffRef.current ? {
+              handoff_bucket_ids: handoffRef.current.bucketIds,
+              handoff_turns: handoffRef.current.turns,
+              handoff_from_session: handoffRef.current.fromSessionId,
+            } : {}),
           }),
           signal: ac.signal,
         })
@@ -600,6 +671,9 @@ export function useCcChat(personaId = '') {
           const detail = await res.text().catch(() => '')
           throw new Error(detail.slice(0, 200) || `HTTP ${res.status}`)
         }
+
+        // 5.5：handoff 只随首条带一次，发出去就清
+        if (handoffRef.current) handoffRef.current = null
 
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
@@ -736,5 +810,7 @@ export function useCcChat(personaId = '') {
     answerPermission,
     stopAutoAllow,
     refreshPending,
+    // 5.5 换窗 handoff
+    startWithHandoff,
   }
 }
