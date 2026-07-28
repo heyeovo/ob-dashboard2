@@ -54,9 +54,9 @@ export type CcMessage = {
 }
 
 /**
- * 召回详情弹窗里的一段。key 对应 Haven 那边的子系统
- * （memory_card / date_recall / handoff / cross_window）。
- * ⚠️ `text` 现在恒为空：服务端还没回传注入正文，见 CcRecallDialog 的注释。
+ * 召回详情弹窗里的一段。key 对应真正走动态召回的两类子系统：
+ * memory_card（桶检索）/ date_recall（按日期捞当天原文）。
+ * `text` 是服务端从 additional_context 切出来的注入正文（第 6 步接上）。
  */
 export type CcRecallModule = {
   key: string

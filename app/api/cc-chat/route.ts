@@ -137,6 +137,49 @@ function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
+/**
+ * 把 Haven 回的 additional_context 拆成弹窗要的分模块明细（第 6 步）。
+ *
+ * 真实格式（探针实测）：一整段纯文本，靠方括号标签分段 ——
+ *   [Ombre Gateway Hook Recall]           固定说明头，丢掉不显示
+ *   [date_recall] ... [/date_recall]       当天对话原文，最多一块
+ *   [memory_card id=.. source=..] ... [/memory_card]   命中的桶，可多块
+ *
+ * date_recall 和 memory_card 并存（文档 动态召回逻辑.md）。这里把 date_recall
+ * 合成一段、所有 memory_card 合成一段，各自带正文和条数，喂给 CcRecallDialog。
+ * 切不出东西（格式变了 / 空正文）时返回 []，弹窗退回原来的合成空态，不会崩。
+ */
+function splitRecallModules(
+  additionalContext: string,
+  cardCount: number,
+): Array<{ key: string; card_count: number; chars: number; text: string }> {
+  const ctx = additionalContext || ''
+  if (!ctx.trim()) return []
+  const modules: Array<{ key: string; card_count: number; chars: number; text: string }> = []
+
+  // 日期召回：整块原样取出（含标签内正文，不含标签本身）
+  const dateMatch = ctx.match(/\[date_recall\]([\s\S]*?)\[\/date_recall\]/)
+  if (dateMatch) {
+    const text = dateMatch[1].trim()
+    if (text) modules.push({ key: 'date_recall', card_count: 0, chars: text.length, text })
+  }
+
+  // 记忆桶：可能有多块，逐块取出正文，中间用空行隔开合成一段
+  const cardTexts: string[] = []
+  const cardRe = /\[memory_card[^\]]*\]([\s\S]*?)\[\/memory_card\]/g
+  let m: RegExpExecArray | null
+  while ((m = cardRe.exec(ctx)) !== null) {
+    const t = m[1].trim()
+    if (t) cardTexts.push(t)
+  }
+  if (cardTexts.length > 0) {
+    const text = cardTexts.join('\n\n')
+    modules.push({ key: 'memory_card', card_count: cardCount, chars: text.length, text })
+  }
+
+  return modules
+}
+
 // 这个会话的两个召回开关。
 //
 // 为什么要一张表：下面那个 UserPromptSubmit hook 的闭包只在会话**第一轮**建起来，
@@ -718,6 +761,9 @@ export async function POST(request: NextRequest) {
           domains: recall.domains,
           recalled_ids: recall.recalledIds,
           injected: recall.ok && recall.chars > 0,
+          // 第 6 步：把注入正文按标签切成分模块明细，弹窗直接读它。
+          // 同时进 emit（当轮显示）和 raw_json（历史读回），一处改两处生效。
+          modules: recall.ok ? splitRecallModules(recall.additionalContext, recall.cardCount) : [],
         }
         // bucket 就是这一轮的桶（上面刚 set 的），不用再 get 一次
         bucket.recallInfo = info

@@ -4,17 +4,15 @@ import type { CcMessage, CcRecallModule } from './types'
 
 // 这一轮动态召回的详情，按模块分段。
 //
-// ⚠️ 正文数据这一版拿不到：/api/cc-chat 的 recall 事件只发条数/字数/耗时/领域，
-// 注入正文（Haven 的 additional_context）没回传，也没存进 conversation_turns。
-// 要显示正文得给 Haven 补一列 → **改 Haven 就要重新部署 Zeabur**，是下一轮的活。
-// 所以这里：结构按模块摆好，有正文就渲染，没有就在那一段显示空态。
+// 正文来自服务端：/api/cc-chat 把 Haven 的 additional_context 按标签切成 modules[]，
+// 既走 recall 事件（当轮显示），也存进 conversation_turns 的 raw_json（历史读回）。
+// 纯前端，不用改 Haven。切不出内容时退回按统计合成的空态。
 
-/** Haven 那边的模块名 → 界面上的段标题和说明 */
+/** Haven 那边的模块名 → 界面上的段标题和说明。
+ *  只列真正走「动态召回」这条路的两类；换窗（handoff / cross_window）不是召回，不在这。 */
 const MODULE_META: Record<string, { title: string; hint: string }> = {
   memory_card: { title: '记忆桶', hint: 'BM25 + 语义检索命中的记忆卡片' },
   date_recall: { title: '日期召回', hint: '「昨天/前天/某月某日」捞出的当天对话原文' },
-  handoff: { title: 'Handoff', hint: '新会话首条消息时拼的近期上下文' },
-  cross_window: { title: '跨窗口原文', hint: '前一个会话最后几轮' },
 }
 
 function metaOf(key: string) {
@@ -113,8 +111,8 @@ export default function CcRecallDialog({
           ) : null}
 
           <p className="mt-5 border-t border-[var(--color-border-light)] pt-3 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
-            注入正文要等 Haven 给 conversation_turns 补一列存下来才能在这里读（改后端要重新部署）。
-            现在能看的是各模块的条数和字数 —— 出现「召回时好时坏」时，靠这里定位是哪一句、哪一段没出内容。
+            这里是这一轮真正注入模型的记忆正文，按类型分段。
+            出现「召回时好时坏」时，靠这里看是哪一句、哪一段召回了什么、有没有出内容。
           </p>
         </div>
       </div>
