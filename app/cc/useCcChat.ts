@@ -120,6 +120,47 @@ function modeOfTurns(turns: HavenTurnRow[]): CcMode {
   return 'work'
 }
 
+/**
+ * 从历史最后一轮 raw 里取回「本窗配置」和 resume 接回点。
+ *   · settings（第 4 条）：切回旧会话时右上角本窗口设置照它恢复
+ *   · cc_session_id（第 5 条）：进程已丢时随下一句带回服务端，接上上下文
+ * 老会话没这两个字段 —— 返回 null，界面就保持默认，不编数字。
+ */
+function metaOfTurns(turns: HavenTurnRow[]): {
+  settings: {
+    cred?: string
+    providerId?: string
+    model?: string
+    effort?: string
+    thinkingOn?: boolean
+  } | null
+  ccSessionId: string
+} {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const rawJson = turns[i]?.raw_json
+    if (!rawJson) continue
+    try {
+      const parsed = JSON.parse(rawJson) as Record<string, unknown>
+      const s = parsed?.settings as Record<string, unknown> | undefined
+      const settings = s
+        ? {
+            cred: typeof s.cred === 'string' ? s.cred : undefined,
+            providerId: typeof s.provider_id === 'string' ? s.provider_id : undefined,
+            model: typeof s.model === 'string' ? s.model : undefined,
+            effort: typeof s.effort === 'string' ? s.effort : undefined,
+            thinkingOn: typeof s.thinking_on === 'boolean' ? s.thinking_on : undefined,
+          }
+        : null
+      const ccSessionId = typeof parsed?.cc_session_id === 'string' ? parsed.cc_session_id : ''
+      // 只要这轮带了任一新字段就用它；否则接着往前找老一点的轮
+      if (settings || ccSessionId) return { settings, ccSessionId }
+    } catch {
+      /* 解不出来接着往前找 */
+    }
+  }
+  return { settings: null, ccSessionId: '' }
+}
+
 function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   const out: CcMessage[] = []
   for (const t of turns) {
@@ -185,6 +226,9 @@ export function useCcChat(personaId = '') {
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
+  // 第 5 条 resume：切回旧会话时从历史最后一轮读出的 cc session id。
+  // 进程已丢时随下一句带给服务端接回上下文；服务端有活进程会忽略它。
+  const resumeHintRef = useRef('')
   // 这一轮 thinking 的起止，用来显示「深度思考 (2.3s)」。
   // ⚠️ 算的是前端收到第一个 thinking 片段到收到第一个正文片段之间的时间 ——
   // 服务端没单独报思考耗时，这个口径最接近用户感知的「它想了多久」。
@@ -386,6 +430,22 @@ export function useCcChat(personaId = '') {
           setHistoryTurnCount(turns.length)
           // 老会话是什么模式就照它显示，别让它看起来能改
           setMode(modeOfTurns(turns))
+          // 第 4 + 5 条：从最后一轮读回本窗配置和 resume 接回点
+          const meta = metaOfTurns(turns)
+          resumeHintRef.current = meta.ccSessionId
+          if (meta.settings) {
+            const s = meta.settings
+            setPick(prev => ({
+              ...prev,
+              kind: s.cred === 'subscription' ? 'subscription' : s.cred === 'api' ? 'api' : prev.kind,
+              providerId: s.providerId ?? prev.providerId,
+              model: s.model ?? prev.model,
+              effort: (s.effort as CcUpstreamPick['effort']) ?? prev.effort,
+              thinking: s.thinkingOn ?? prev.thinking,
+            }))
+            // 存过 cred 就当「有人定过」，右上角照它显示订阅 / api
+            if (s.cred === 'subscription' || s.cred === 'api') setCredChosen(true)
+          }
         }
       } catch {
         setError('历史消息读取失败')
@@ -410,6 +470,8 @@ export function useCcChat(personaId = '') {
     setDecided([])
     setAutoAllowEdits(false)
     setSettingsNote('')
+    // 新对话没有接回点
+    resumeHintRef.current = ''
     // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
     setPick(pickFromConfig(upstream))
   }, [sessionId, draft, upstream])
@@ -529,6 +591,8 @@ export function useCcChat(personaId = '') {
             model: pick.model,
             effort: pick.effort,
             thinking: pick.thinking,
+            // 第 5 条：进程已丢时靠它 resume 接回上下文；有活进程服务端会忽略
+            ...(resumeHintRef.current ? { resume_hint: resumeHintRef.current } : {}),
           }),
           signal: ac.signal,
         })

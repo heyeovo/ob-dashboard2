@@ -33,6 +33,7 @@ import { recordTurn } from '@/app/lib/havenTurns'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import {
   ensureSession,
+  peekSession,
   dropSession,
   rememberResumePoint,
   getSessionStats,
@@ -116,6 +117,11 @@ type ChatBody = {
   effort?: string
   /** 5.2：开不开 thinking */
   thinking?: boolean
+  /**
+   * 第 5 条 resume：前端从历史最后一轮读出的 claude code session id。
+   * 只在服务端进程已丢（重启 / 回收）时用来接回上下文；已有活进程则忽略。
+   */
+  resume_hint?: string
 }
 
 function sse(event: string, data: unknown) {
@@ -616,6 +622,14 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      // 第 5 条 resume：进程已丢（重启 / 闲置回收）而前端带来了上次的 cc session id，
+      // 就先记下这个接回点，紧接着 ensureSession 新建进程时会用它接上上下文。
+      // ⚠️ 只在没有活进程时才认前端这份 —— 有活进程时以服务端内存里那份为准，
+      // 不让一份陈旧的 hint 覆盖正在跑的会话。
+      if (!peekSession(sessionId) && body.resume_hint) {
+        rememberResumePoint(sessionId, String(body.resume_hint))
+      }
+
       const live = ensureSession({
         sessionId,
         buildOptions,
@@ -824,6 +838,18 @@ export async function POST(request: NextRequest) {
               // 历史消息读回来时右下角那个 token 面板靠 usage 重建。
               mode,
               provider_id: providerId || undefined,
+              // 第 5 条 resume：这一轮的 claude code session id。进程回收 / 重启后，
+              // 前端读回历史时把最后一轮这个值带回来，服务端用它 resume 接上上下文。
+              cc_session_id: live.ccSessionId || undefined,
+              // 第 4 条本窗配置：切回旧会话时右上角「本窗口设置」照这份恢复。
+              // 存的是这一轮真正生效的那套（服务端解析后的值）。
+              settings: {
+                cred,
+                provider_id: providerId || undefined,
+                model: String(initInfo?.model || model || '') || undefined,
+                effort: effort || undefined,
+                thinking_on: thinking,
+              },
               usage: turnUsage || undefined,
               persona_id: persona?.id || undefined,
               persona_name: persona?.name || undefined,
