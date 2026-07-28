@@ -2,6 +2,7 @@
 import { memo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import type { Components } from 'react-markdown'
 
 // 助手回复的 markdown 渲染。
@@ -78,7 +79,7 @@ const COMPONENTS: Components = {
 function CcMarkdownInner({ text }: { text: string }) {
   return (
     <div className="cc-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={COMPONENTS}>
         {text}
       </ReactMarkdown>
     </div>
