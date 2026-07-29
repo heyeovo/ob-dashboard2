@@ -39,6 +39,9 @@ yarn-error.log*
 # cc 缓存排查临时日志
 /.cc-debug/
 
+# 本机 cc / MCP 配置（可能含 token、header、env）
+/.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -4,6 +4,7 @@ import type {
   CcMessage,
   CcPermDecided,
   CcPermRequest,
+  CcProcessEvent,
   CcRecallInfo,
   CcSessionListItem,
   CcSessionStats,
@@ -44,6 +45,27 @@ function localId() {
   return `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`
 }
 
+function closeOpenThinking(
+  process: CcProcessEvent[] | undefined,
+  endedAt = Date.now(),
+): CcProcessEvent[] {
+  const next = [...(process || [])]
+  const last = next.at(-1)
+  if (last?.type !== 'thinking' || last.durationMs != null) return next
+  next[next.length - 1] = {
+    ...last,
+    durationMs: Math.max(0, endedAt - (last.startedAt || endedAt)),
+  }
+  return next
+}
+
+function thinkingDuration(process: CcProcessEvent[] | undefined) {
+  return (process || []).reduce(
+    (total, event) => total + (event.type === 'thinking' ? event.durationMs || 0 : 0),
+    0,
+  )
+}
+
 /** Haven 的一轮（user + assistant 一行）拆成界面上的两条消息。 */
 type HavenTurnRow = {
   id: number
@@ -67,15 +89,22 @@ function personaOfClient(client: string | undefined): string {
  *
  * ⚠️ 纯前端显示，**不进 prompt**。那段 thinking 是模型自己的草稿，
  * 塞回上下文等于同一段话以「用户资料」的身份出现两遍，会污染它对自己说过什么的判断。
- * ⚠️ 工具只有调用参数，没有返回结果 —— 引擎层还没回传 tool_result（见 types.ts）。
+ * MCP 日常工具会带返回结果；Read/Grep/Bash 等工作工具仍只留调用参数。
  */
 function parseTurnRaw(rawJson: string | undefined): {
   thinking: string
   tools: CcToolEvent[]
+  process: CcProcessEvent[]
   recall: CcRecallInfo | null
   usage: CcTurnUsage | null
 } {
-  const empty = { thinking: '', tools: [] as CcToolEvent[], recall: null, usage: null }
+  const empty = {
+    thinking: '',
+    tools: [] as CcToolEvent[],
+    process: [] as CcProcessEvent[],
+    recall: null,
+    usage: null,
+  }
   if (!rawJson) return empty
   let raw: Record<string, unknown>
   try {
@@ -86,14 +115,52 @@ function parseTurnRaw(rawJson: string | undefined): {
     // Haven 侧超长会存成带 _truncated 的存根，解不出来就当没有
     return empty
   }
+  const parseTool = (t: Record<string, unknown>, fallbackId: string): CcToolEvent => ({
+    name: String(t.name || '工具'),
+    id: String(t.id || fallbackId),
+    input: t.input,
+    status:
+      t.status === 'running' ||
+      t.status === 'completed' ||
+      t.status === 'error' ||
+      t.status === 'denied'
+        ? t.status
+        : undefined,
+    startedAt: typeof t.startedAt === 'number' ? t.startedAt : undefined,
+    durationMs: typeof t.durationMs === 'number' ? t.durationMs : undefined,
+    error: typeof t.error === 'string' ? t.error : undefined,
+    result: typeof t.result === 'string' ? t.result : undefined,
+  })
   const rawTools = Array.isArray(raw.tools) ? (raw.tools as Record<string, unknown>[]) : []
+  const tools = rawTools.map((tool, index) => parseTool(tool, `t${index}`))
+  const toolsById = new Map(tools.map(tool => [tool.id, tool]))
+  const rawProcess = Array.isArray(raw.process)
+    ? (raw.process as Record<string, unknown>[])
+    : []
+  const process = rawProcess.flatMap((item, index): CcProcessEvent[] => {
+    if (item.type === 'thinking' && typeof item.text === 'string') {
+      return [{
+        type: 'thinking',
+        id: String(item.id || `thinking-${index}`),
+        text: item.text,
+        startedAt: typeof item.startedAt === 'number' ? item.startedAt : undefined,
+        durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
+      }]
+    }
+    if (item.type === 'tool' && item.tool && typeof item.tool === 'object') {
+      const parsed = parseTool(item.tool as Record<string, unknown>, `process-tool-${index}`)
+      return [{
+        type: 'tool',
+        id: String(item.id || `process-${parsed.id}`),
+        tool: toolsById.get(parsed.id) || parsed,
+      }]
+    }
+    return []
+  })
   return {
     thinking: typeof raw.thinking === 'string' ? raw.thinking : '',
-    tools: rawTools.map((t, i) => ({
-      name: String(t.name || '工具'),
-      id: String(t.id || `t${i}`),
-      input: t.input,
-    })),
+    tools,
+    process,
     recall:
       raw.recall && typeof raw.recall === 'object' ? (raw.recall as unknown as CcRecallInfo) : null,
     // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
@@ -180,6 +247,7 @@ function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         personaId: personaOfClient(t.client),
         thinking: extra.thinking || undefined,
         tools: extra.tools.length ? extra.tools : undefined,
+        process: extra.process.length ? extra.process : undefined,
         recall: extra.recall,
         usage: extra.usage,
       })
@@ -230,11 +298,6 @@ export function useCcChat(personaId = '') {
   // 第 5 条 resume：切回旧会话时从历史最后一轮读出的 cc session id。
   // 进程已丢时随下一句带给服务端接回上下文；服务端有活进程会忽略它。
   const resumeHintRef = useRef('')
-  // 这一轮 thinking 的起止，用来显示「深度思考 (2.3s)」。
-  // ⚠️ 算的是前端收到第一个 thinking 片段到收到第一个正文片段之间的时间 ——
-  // 服务端没单独报思考耗时，这个口径最接近用户感知的「它想了多久」。
-  const thinkStartRef = useRef(0)
-
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
   const handoffRef = useRef<{ bucketIds: string[]; turns: number; fromSessionId: string | null } | null>(null)
 
@@ -622,6 +685,7 @@ export function useCcChat(personaId = '') {
         createdAt: Date.now(),
         streaming: true,
         tools: [],
+        process: [],
       }
       setMessages(prev => [...prev, userMsg, assistantMsg])
       setDraft('')
@@ -630,11 +694,11 @@ export function useCcChat(personaId = '') {
 
       const ac = new AbortController()
       abortRef.current = ac
-      thinkStartRef.current = 0
 
       const patch = (fn: (m: CcMessage) => CcMessage) => {
         setMessages(prev => prev.map(m => (m.id === assistantId ? fn(m) : m)))
       }
+      let terminalEvent: 'done' | 'error' | null = null
 
       try {
         const res = await fetch('/api/cc-chat', {
@@ -707,23 +771,90 @@ export function useCcChat(personaId = '') {
 
             if (eventName === 'delta') {
               const chunk = String(payload.text || '')
-              // 第一个正文片段 = 思考结束。之后再来正文不重复计时
-              if (thinkStartRef.current) {
-                const ms = Date.now() - thinkStartRef.current
-                thinkStartRef.current = 0
-                patch(m => ({ ...m, thinkingMs: ms, text: m.text + chunk }))
-              } else {
-                patch(m => ({ ...m, text: m.text + chunk }))
-              }
+              patch(m => {
+                const process = closeOpenThinking(m.process)
+                return {
+                  ...m,
+                  process,
+                  thinkingMs: thinkingDuration(process) || undefined,
+                  text: m.text + chunk,
+                }
+              })
             } else if (eventName === 'thinking') {
               const chunk = String(payload.text || '')
-              if (!thinkStartRef.current) thinkStartRef.current = Date.now()
-              patch(m => ({ ...m, thinking: (m.thinking || '') + chunk }))
+              const id = String(payload.id || `thinking-${Date.now()}`)
+              const startedAt =
+                typeof payload.startedAt === 'number' ? payload.startedAt : Date.now()
+              patch(m => {
+                const process = [...(m.process || [])]
+                const last = process.at(-1)
+                if (last?.type === 'thinking' && last.id === id) {
+                  process[process.length - 1] = { ...last, text: last.text + chunk }
+                } else {
+                  process.push({ type: 'thinking', id, text: chunk, startedAt })
+                }
+                return {
+                  ...m,
+                  thinking: (m.thinking || '') + chunk,
+                  process,
+                }
+              })
             } else if (eventName === 'recall') {
               patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
             } else if (eventName === 'tool') {
               const tool = payload as unknown as CcToolEvent
-              patch(m => ({ ...m, tools: [...(m.tools || []), tool] }))
+              patch(m => ({
+                ...m,
+                process: [
+                  ...closeOpenThinking(m.process, tool.startedAt || Date.now()),
+                  { type: 'tool', id: `process-${tool.id}`, tool },
+                ],
+                tools: [...(m.tools || []), tool],
+              }))
+            } else if (eventName === 'tool_result') {
+              const id = String(payload.id || '')
+              const result =
+                typeof payload.result === 'string' && payload.result
+                  ? payload.result
+                  : undefined
+              const error =
+                typeof payload.error === 'string' && payload.error
+                  ? payload.error
+                  : undefined
+              const status =
+                payload.status === 'error' || payload.status === 'denied'
+                  ? payload.status
+                  : 'completed'
+              const durationMs =
+                typeof payload.durationMs === 'number' ? payload.durationMs : undefined
+              patch(m => ({
+                ...m,
+                tools: (m.tools || []).map(tool =>
+                  tool.id === id
+                    ? {
+                        ...tool,
+                        result: result || tool.result,
+                        error,
+                        status,
+                        durationMs,
+                      }
+                    : tool,
+                ),
+                process: (m.process || []).map(event =>
+                  event.type === 'tool' && event.tool.id === id
+                    ? {
+                        ...event,
+                        tool: {
+                          ...event.tool,
+                          result: result || event.tool.result,
+                          error,
+                          status,
+                          durationMs,
+                        },
+                      }
+                    : event,
+                ),
+              }))
             } else if (eventName === 'permission') {
               // 有东西要批准了。对话流当场弹卡片（这一轮正停在服务端等）
               const req = payload as unknown as CcPermRequest
@@ -734,16 +865,18 @@ export function useCcChat(personaId = '') {
               setPending(prev => prev.filter(p => p.id !== id))
               void refreshPending()
             } else if (eventName === 'done') {
+              terminalEvent = 'done'
               const usage = (payload.usage || null) as CcTurnUsage | null
-              // 思考完直接结束（一句话没说）时也把耗时补上
-              const thinkMs = thinkStartRef.current ? Date.now() - thinkStartRef.current : 0
-              thinkStartRef.current = 0
-              patch(m => ({
-                ...m,
-                streaming: false,
-                usage,
-                thinkingMs: m.thinkingMs || thinkMs || undefined,
-              }))
+              patch(m => {
+                const process = closeOpenThinking(m.process)
+                return {
+                  ...m,
+                  process,
+                  streaming: false,
+                  usage,
+                  thinkingMs: thinkingDuration(process) || undefined,
+                }
+              })
               if (payload.stats) setStats(payload.stats as CcSessionStats)
             } else if (eventName === 'after') {
               // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
@@ -751,16 +884,26 @@ export function useCcChat(personaId = '') {
               if (payload.stats) setStats(payload.stats as CcSessionStats)
               void refreshSessions()
             } else if (eventName === 'error') {
+              terminalEvent = 'error'
               setError(String(payload.message || '出错了'))
-              patch(m => ({ ...m, streaming: false }))
+              // API / SDK 错误不是助手回复：页面只留错误提示，不留一条假消息。
+              setMessages(prev => prev.filter(message => message.id !== assistantId))
             }
           }
         }
-        patch(m => (m.streaming ? { ...m, streaming: false } : m))
+        if (!terminalEvent) {
+          throw new Error('连接提前结束，没有收到这一轮的完成结果')
+        }
       } catch (e) {
         const err = e as Error
         if (err.name !== 'AbortError') setError(err.message || String(err))
-        patch(m => (m.streaming ? { ...m, streaming: false } : m))
+        setMessages(prev => prev.filter(message => message.id !== assistantId))
+        // 浏览器断流时服务端的 iterator 可能还在等；主动回收，避免 busy 锁残留。
+        if (!terminalEvent) {
+          void fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, {
+            method: 'DELETE',
+          }).catch(() => undefined)
+        }
       } finally {
         abortRef.current = null
         setSending(false)

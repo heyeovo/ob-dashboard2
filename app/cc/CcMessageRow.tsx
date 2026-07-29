@@ -3,12 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 import CcMarkdown from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
-import type { CcMessage, CcToolEvent } from './types'
+import type { CcMessage, CcProcessEvent, CcToolEvent } from './types'
 
 // 一条消息。
 //
 // 用户侧：实心气泡贴右，纯文本（用户说的话不当 markdown 解析）。长按 360ms / 右键出菜单。
-// 助手侧：名字行（头像 + persona 名 + 时间 + 最右召回按钮）→ thinking → 正文 → 工具框。
+// 助手侧：名字行（头像 + persona 名 + 时间 + 最右召回按钮）→ thinking / 工具过程 → 正文。
 //
 // thinking 的行为（跟 Polaris 不同，用户明确要的）：
 //   流式中自动展开跟着输出，答完**保持展开**，只能手动收起。
@@ -24,6 +24,19 @@ function formatTime(ms: number) {
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${hh}:${mm}`
+}
+
+function shortToolName(name: string) {
+  const parts = name.split('__')
+  return parts.length >= 3 ? parts.slice(2).join('__') : name
+}
+
+function toolStatusLabel(tool: CcToolEvent, streaming: boolean) {
+  const status = tool.status || (streaming ? 'running' : 'completed')
+  if (status === 'running') return '调用中'
+  if (status === 'error') return '失败'
+  if (status === 'denied') return '已拒绝'
+  return tool.durationMs != null ? `${(tool.durationMs / 1000).toFixed(1)}s` : '已完成'
 }
 
 type Props = {
@@ -46,7 +59,7 @@ export default function CcMessageRow({
   const [menuOpen, setMenuOpen] = useState(false)
   // 默认展开。流式中跟着输出，结束后不自动收 —— 只有用户点了才收。
   const [thinkingOpen, setThinkingOpen] = useState(true)
-  const [openTool, setOpenTool] = useState<CcToolEvent | null>(null)
+  const [openToolId, setOpenToolId] = useState<string | null>(null)
   // 这一轮的 token 明细，默认收着
   const [usageOpen, setUsageOpen] = useState(false)
   const timerRef = useRef<number | null>(null)
@@ -144,7 +157,30 @@ export default function CcMessageRow({
   /* ---------- 助手侧 ---------- */
   // 历史消息不记「当时是谁回的」，一律按当前协作者显示。要按轮存 persona 是以后的事。
   const persona = personaProp || FALLBACK_PERSONA
-  const tools = message.tools || []
+  const savedProcess = message.process || []
+  const tools =
+    message.tools?.length
+      ? message.tools
+      : savedProcess.flatMap(event => event.type === 'tool' ? [event.tool] : [])
+  const process: CcProcessEvent[] =
+    savedProcess.length > 0
+      ? savedProcess
+      : [
+          ...(message.thinking
+            ? [{
+                type: 'thinking' as const,
+                id: `legacy-thinking-${message.id}`,
+                text: message.thinking,
+                durationMs: message.thinkingMs,
+              }]
+            : []),
+          ...tools.map(tool => ({
+            type: 'tool' as const,
+            id: `legacy-tool-${tool.id}`,
+            tool,
+          })),
+        ]
+  const openTool = openToolId ? tools.find(tool => tool.id === openToolId) || null : null
   // 5.2 之前的老消息没有 usage，那就不显示（不编 0）
   const usage = message.usage || null
 
@@ -172,20 +208,64 @@ export default function CcMessageRow({
           ) : null}
         </div>
 
-        {/* thinking：流式中跟着输出，答完保持展开 */}
-        {message.thinking ? (
-          <div className="cc-think">
-            <button type="button" className="cc-think-toggle" onClick={() => setThinkingOpen(v => !v)}>
-              <span className={`cc-think-caret${thinkingOpen ? ' open' : ''}`} aria-hidden="true" />
-              {/* 显示思考用了多久而不是多少字 —— 字数对人没意义，用户明确要的。
-                  老消息没记时长（5.2 之前），退回字数，不编一个秒数。 */}
-              {message.streaming && !message.text
-                ? '正在思考'
-                : message.thinkingMs
-                  ? `深度思考 (${(message.thinkingMs / 1000).toFixed(1)}s)`
-                  : `深度思考 ${message.thinking.length} 字`}
-            </button>
-            {thinkingOpen ? <div className="cc-think-body">{message.thinking}</div> : null}
+        {/* Thinking 与工具按真实发生顺序展示，最终回答固定放在过程区之后。 */}
+        {process.length > 0 ? (
+          <div className="cc-process">
+            {process.map((event, index) => {
+              if (event.type === 'thinking') {
+                const thinkingIndex =
+                  process.slice(0, index).filter(item => item.type === 'thinking').length
+                const isActive =
+                  Boolean(message.streaming) &&
+                  index === process.length - 1 &&
+                  event.durationMs == null
+                const title = thinkingIndex === 0 ? '深度思考' : '继续思考'
+                return (
+                  <div className="cc-think" key={event.id}>
+                    <button
+                      type="button"
+                      className="cc-think-toggle"
+                      onClick={() => setThinkingOpen(value => !value)}
+                    >
+                      <span className="cc-process-icon" aria-hidden="true">◉</span>
+                      <span
+                        className={`cc-think-caret${thinkingOpen ? ' open' : ''}`}
+                        aria-hidden="true"
+                      />
+                      {isActive
+                        ? '正在思考'
+                        : event.durationMs != null
+                          ? `${title} (${(event.durationMs / 1000).toFixed(1)}s)`
+                          : `${title} ${event.text.length} 字`}
+                    </button>
+                    {thinkingOpen
+                      ? <div className="cc-think-body">{event.text}</div>
+                      : null}
+                  </div>
+                )
+              }
+
+              const tool = event.tool
+              const status = tool.status || (message.streaming ? 'running' : 'completed')
+              return (
+                <div className="cc-toolstrip" key={event.id}>
+                  <button
+                    type="button"
+                    className="cc-toolchip"
+                    onClick={() => setOpenToolId(tool.id)}
+                  >
+                    <span className="cc-tool-wrench" aria-hidden="true">⌁</span>
+                    <span className="cc-toolchip-name">
+                      调用工具：{shortToolName(tool.name)}
+                    </span>
+                    <span className={`cc-tool-status ${status}`}>
+                      {toolStatusLabel(tool, Boolean(message.streaming))}
+                    </span>
+                    <span className="cc-tool-chevron" aria-hidden="true">›</span>
+                  </button>
+                </div>
+              )
+            })}
           </div>
         ) : null}
 
@@ -204,19 +284,6 @@ export default function CcMessageRow({
             ) : null
           ) : null}
         </div>
-
-        {/* 工具调用：一行一个框，点开看参数和结果 */}
-        {tools.length > 0 ? (
-          <div className="cc-toolstrip">
-            {tools.map(tool => (
-              <button key={tool.id} type="button" className="cc-toolchip" onClick={() => setOpenTool(tool)}>
-                <span className="cc-tool-dot" />
-                <span className="cc-toolchip-name">{tool.name}</span>
-                <span className="cc-toolchip-hint">查看</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
 
         {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}
         {!message.streaming && message.text ? (
@@ -275,7 +342,7 @@ export default function CcMessageRow({
         ) : null}
       </div>
 
-      {openTool ? <CcToolDialog tool={openTool} onClose={() => setOpenTool(null)} /> : null}
+      {openTool ? <CcToolDialog tool={openTool} onClose={() => setOpenToolId(null)} /> : null}
     </div>
   )
 }

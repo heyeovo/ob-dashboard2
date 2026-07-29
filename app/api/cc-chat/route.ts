@@ -27,6 +27,14 @@ import {
   scrubDeniedLines,
 } from '@/app/lib/ccDirs'
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
+import {
+  disabledMcpTools,
+  isMcpTool,
+  loadMcpConfig,
+  mcpPermissionForTool,
+  shouldSaveMcpResult,
+  toSdkMcpServers,
+} from '@/app/lib/ccMcp'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import { recordTurn, listTurns } from '@/app/lib/havenTurns'
@@ -40,6 +48,7 @@ import {
   getSessionStats,
   recordTurnCost,
   noteContextUsage,
+  flushPendingMcpServers,
   type TurnUsage,
 } from '@/app/lib/ccSession'
 import { CHAT_MODE_PROMPT, isCcMode, type CcMode } from '@/app/lib/ccModes'
@@ -98,6 +107,7 @@ const SESSION_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
 type TurnBucket = {
   recallInfo: Record<string, unknown> | null
   toolEvents: Array<Record<string, unknown>>
+  processEvents: Array<Record<string, unknown>>
 }
 
 type ChatBody = {
@@ -135,6 +145,36 @@ type ChatBody = {
 
 function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+function nextSdkMessage(
+  iterator: AsyncIterator<SDKMessage>,
+  signal: AbortSignal,
+): Promise<IteratorResult<SDKMessage>> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      callback()
+    }
+    const onAbort = () => {
+      const error = new Error('浏览器连接已经中断')
+      error.name = 'AbortError'
+      finish(() => reject(error))
+    }
+
+    if (signal.aborted) {
+      onAbort()
+      return
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    void iterator.next().then(
+      step => finish(() => resolve(step)),
+      error => finish(() => reject(error)),
+    )
+  })
 }
 
 /**
@@ -212,8 +252,47 @@ function toolKind(toolName: string): CcPermKind {
 const stderrSeen = new Map<string, number>()
 
 function pushToolEvent(sessionId: string, item: Record<string, unknown>) {
-  turnBuckets.get(sessionId)?.toolEvents.push(item)
+  const bucket = turnBuckets.get(sessionId)
+  if (bucket) {
+    closeThinkingProcess(bucket, Date.now())
+    bucket.toolEvents.push(item)
+    bucket.processEvents.push({
+      type: 'tool',
+      id: `process-${String(item.id || Date.now())}`,
+      tool: item,
+    })
+  }
   emit(sessionId, 'tool', item)
+}
+
+function closeThinkingProcess(bucket: TurnBucket, endedAt: number) {
+  const last = bucket.processEvents.at(-1)
+  if (!last || last.type !== 'thinking' || typeof last.durationMs === 'number') return
+  last.durationMs = Math.max(0, endedAt - Number(last.startedAt || endedAt))
+}
+
+function appendThinkingProcess(
+  bucket: TurnBucket,
+  text: string,
+): { id: string; startedAt: number } {
+  const last = bucket.processEvents.at(-1)
+  if (last?.type === 'thinking' && typeof last.durationMs !== 'number') {
+    last.text = String(last.text || '') + text
+    return {
+      id: String(last.id),
+      startedAt: Number(last.startedAt || Date.now()),
+    }
+  }
+
+  const startedAt = Date.now()
+  const item = {
+    type: 'thinking',
+    id: `thinking-${startedAt}-${bucket.processEvents.length}`,
+    text,
+    startedAt,
+  }
+  bucket.processEvents.push(item)
+  return { id: item.id, startedAt }
 }
 
 /** 从工具结果里抠出文本。不同工具的 tool_response 形状不一样，都兜一下。 */
@@ -231,6 +310,21 @@ function toolResponseText(res: unknown): string {
       .join('\n')
   }
   return ''
+}
+
+/** MCP 返回值留给日常回看；限制体积，避免一个网页/搜索结果把整轮 raw_json 撑爆。 */
+function storedMcpResult(res: unknown): string {
+  let text = toolResponseText(res)
+  if (!text && res != null) {
+    try {
+      text = JSON.stringify(res, null, 2)
+    } catch {
+      text = String(res)
+    }
+  }
+  const limit = 20_000
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit)}\n\n… 余下 ${text.length - limit} 字未保存`
 }
 
 /** 数一下 Edit / Write 实际动了多少行，工作台「改了哪些文件」那格要显示。 */
@@ -337,7 +431,7 @@ export async function POST(request: NextRequest) {
   let envOverrides: { baseUrl?: string; authToken?: string } = {}
   let model = body.model || ''
   let effort = String(body.effort || '')
-  let thinking = body.thinking !== false
+  const thinking = body.thinking !== false
   if (cred === 'api') {
     const up = await loadUpstreamConfig()
     if (up.ok) {
@@ -352,6 +446,8 @@ export async function POST(request: NextRequest) {
     }
   }
   if (!model) model = process.env.ANTHROPIC_MODEL || ''
+  const mcpConfig = await loadMcpConfig()
+  const sdkMcpServers = toSdkMcpServers(mcpConfig)
 
   // 两个召回开关同样是 body 优先、协作者兜底，存进表让 hook 每轮重读
   recallPrefs.set(sessionId, {
@@ -433,7 +529,7 @@ export async function POST(request: NextRequest) {
       let initInfo: Record<string, unknown> | null = null
       /** 这一轮的用量，消息右下角那个面板要显示 */
       let turnUsage: TurnUsage | null = null
-      const bucket: TurnBucket = { recallInfo: null, toolEvents: [] }
+      const bucket: TurnBucket = { recallInfo: null, toolEvents: [], processEvents: [] }
       turnBuckets.set(sessionId, bucket)
       // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
       attachSend(sessionId, send)
@@ -448,6 +544,14 @@ export async function POST(request: NextRequest) {
        * hasPending 会让闲置计时器顺延）。30 分钟没人点就按拒绝收场。
        */
       const askPermission: NonNullable<Options['canUseTool']> = async (toolName, input, meta) => {
+        if (isMcpTool(toolName)) {
+          const policy = mcpPermissionForTool(toolName)
+          if (policy === 'allow') return { behavior: 'allow' }
+          if (policy === 'deny') {
+            return { behavior: 'deny', message: '这个 MCP 服务当前设为禁止使用。' }
+          }
+        }
+
         const kind = toolKind(toolName)
         const dirs = writeDirsBySession.get(sessionId) || []
         const filePath = String(
@@ -517,6 +621,14 @@ export async function POST(request: NextRequest) {
         // 闲聊模式零工具。以后接的 MCP 要给（那是记忆 / 联网），但 cc 这 7 个不给 ——
         // 不然它会去读文件，而闲聊模式的 prompt 里没有"怎么用工具"那套规矩。
         tools: mode === 'chat' ? [] : SESSION_TOOLS,
+        // MCP 跟 Claude Code 内置工具是两条独立通道：闲聊模式 tools=[] 只关内置工具，
+        // 记忆 / 联网 MCP 仍然在。strict 保证实际工具集跟 Home 管理页完全一致，
+        // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
+        mcpServers: sdkMcpServers,
+        strictMcpConfig: true,
+        // 关闭的工具连名称/说明/参数结构都从模型上下文移除；开启的 MCP 服务
+        // 在 ccMcp.ts 里设为 alwaysLoad，所以工具定义固定放在消息历史之前。
+        disallowedTools: disabledMcpTools(mcpConfig),
         // 只读的三个自动放行；写和跑命令**不在**这里，于是落到 canUseTool 上等批准。
         allowedTools: mode === 'chat' ? [] : READ_ONLY_TOOLS,
         // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
@@ -554,6 +666,26 @@ export async function POST(request: NextRequest) {
                 async input => {
                   const { tool_name: toolName, tool_input: toolInput } =
                     input as { tool_name?: string; tool_input?: unknown }
+                  const name = String(toolName || '')
+
+                  // MCP 权限以 Home 管理页为准。显式在 hook 层定 allow/ask/deny，
+                  // 避免 SDK 把某些“看起来安全”的工具直接放行、绕过 canUseTool。
+                  if (isMcpTool(name)) {
+                    const policy = mcpPermissionForTool(name)
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        permissionDecision: policy,
+                        permissionDecisionReason:
+                          policy === 'allow'
+                            ? '这个 MCP 服务已设为自动允许。'
+                            : policy === 'deny'
+                              ? '这个 MCP 服务已被禁用。'
+                              : '这个 MCP 服务设为每次询问。',
+                      },
+                    }
+                  }
+
                   const hit = pathsFromToolInput(toolInput).find(isDeniedPath)
                   if (hit) {
                     const item = {
@@ -728,18 +860,24 @@ export async function POST(request: NextRequest) {
         return
       }
       live.busy = true
-      live.lastModelCallAt = Date.now()
-      stamp(live.turnCount > 0 ? '沿用已有子进程' : '子进程建好了')
+      /** 锁是不是已经在正常路径上摘过了（收尾前就摘，让人能马上发下一句） */
+      let busyReleased = false
 
-      // 自己给这句话编个 id：回退（rewindFiles）要的就是「回到哪句话之前」，
-      // 而它认的是消息 uuid。不自己编就没有可回退的锚点。
-      const turnUuid = randomUUID()
+      // 从占用 busy 开始，召回、模型流和写库前收尾都必须落进同一个 finally。
+      // 否则浏览器在召回阶段断开，也会留下永远无法发送下一句的死锁。
+      try {
+        live.lastModelCallAt = Date.now()
+        stamp(live.turnCount > 0 ? '沿用已有子进程' : '子进程建好了')
 
-      // 先告诉前端这一轮开始了，再去等召回 —— 召回开语义要 4-6 秒，
-      // 放在 start 前面的话这几秒界面上什么都没有。
-      send('start', { session_id: sessionId, at: startedAt })
+        // 自己给这句话编个 id：回退（rewindFiles）要的就是「回到哪句话之前」，
+        // 而它认的是消息 uuid。不自己编就没有可回退的锚点。
+        const turnUuid = randomUUID()
 
-      /* ── 召回：发送前做，结果拼进 user 正文 ──
+        // 先告诉前端这一轮开始了，再去等召回 —— 召回开语义要 4-6 秒，
+        // 放在 start 前面的话这几秒界面上什么都没有。
+        send('start', { session_id: sessionId, at: startedAt })
+
+        /* ── 召回：发送前做，结果拼进 user 正文 ──
        * 不走 UserPromptSubmit hook：那条路返回的 additionalContext 会被 SDK
        * 包成 messages 里的 role:"system"，中转站静默丢掉，模型收不到。
        * 拼进正文后 role 全程合法，而且记忆卡进了历史消息，下一轮属于可缓存前缀。
@@ -819,10 +957,6 @@ export async function POST(request: NextRequest) {
         uuid: turnUuid,
       }
 
-      /** 锁是不是已经在正常路径上摘过了（收尾前就摘，让人能马上发下一句） */
-      let busyReleased = false
-
-      try {
         live.push(userMessage)
         // 存用户原话，不含记忆卡 —— 回退锚点要显示的是人说的话
         recordCheckpoint(sessionId, turnUuid, text)
@@ -831,8 +965,10 @@ export async function POST(request: NextRequest) {
         // 一个 query() 跨多轮，所以这里读到 result 就停 —— 那是「这一轮」的边界。
         // iterator 留着不关，下一句继续从它读。
         for (;;) {
-          const step = await live.iterator.next()
-          if (step.done) break
+          const step = await nextSdkMessage(live.iterator, request.signal)
+          if (step.done) {
+            throw new Error('模型连接提前结束，没有返回这一轮的完成结果')
+          }
           const msg = step.value as SDKMessage
 
           if (msg.type === 'system' && msg.subtype === 'init') {
@@ -857,12 +993,14 @@ export async function POST(request: NextRequest) {
             if (ev.type === 'content_block_delta' && ev.delta) {
               if (ev.delta.type === 'text_delta' && ev.delta.text) {
                 if (!assistantText) stamp('模型吐出第一个字')
+                closeThinkingProcess(bucket, Date.now())
                 assistantText += ev.delta.text
                 send('delta', { text: ev.delta.text })
               } else if (ev.delta.type === 'thinking_delta' && ev.delta.thinking) {
                 if (!thinkingText) stamp('模型开始思考')
                 thinkingText += ev.delta.thinking
-                send('thinking', { text: ev.delta.thinking })
+                const segment = appendThinkingProcess(bucket, ev.delta.thinking)
+                send('thinking', { text: ev.delta.thinking, ...segment })
               }
             }
             continue
@@ -871,18 +1009,63 @@ export async function POST(request: NextRequest) {
           if (msg.type === 'assistant') {
             for (const block of msg.message.content) {
               if (block.type === 'tool_use') {
-                bucket.toolEvents.push({
+                const startedAt = Date.now()
+                closeThinkingProcess(bucket, startedAt)
+                const toolEvent = {
                   name: block.name,
                   id: block.id,
                   input: block.input,
+                  status: 'running',
+                  startedAt,
+                }
+                bucket.toolEvents.push(toolEvent)
+                bucket.processEvents.push({
+                  type: 'tool',
+                  id: `process-${block.id}`,
+                  tool: toolEvent,
                 })
-                send('tool', { name: block.name, id: block.id, input: block.input })
+                send('tool', toolEvent)
               }
             }
             continue
           }
 
+          // SDK 把工具结果作为 synthetic user message 送回来。只保留 MCP 的结果：
+          // 日常记忆/联网以后能重新打开看；Read/Grep/Bash 等工作输出仍照旧不进聊天历史。
+          if (msg.type === 'user') {
+            const blocks = Array.isArray(msg.message.content) ? msg.message.content : []
+            for (const rawBlock of blocks) {
+              if (!rawBlock || typeof rawBlock !== 'object') continue
+              const block = rawBlock as unknown as Record<string, unknown>
+              if (block.type !== 'tool_result') continue
+              const toolUseId = String(block.tool_use_id || '')
+              const tool = bucket.toolEvents.find(item => String(item.id || '') === toolUseId)
+              const toolName = String(tool?.name || '')
+              if (!tool) continue
+              const endedAt = Date.now()
+              const durationMs = Math.max(0, endedAt - Number(tool.startedAt || endedAt))
+              const isError = block.is_error === true
+              const rawResult = storedMcpResult(msg.tool_use_result ?? block.content)
+              const keepResult =
+                isMcpTool(toolName) && shouldSaveMcpResult(toolName) && rawResult
+
+              tool.status = isError ? 'error' : 'completed'
+              tool.durationMs = durationMs
+              if (keepResult) tool.result = rawResult
+              if (isError && rawResult) tool.error = rawResult
+              send('tool_result', {
+                id: toolUseId,
+                result: keepResult || undefined,
+                error: isError ? rawResult || '工具调用失败' : undefined,
+                status: tool.status,
+                durationMs,
+              })
+            }
+            continue
+          }
+
           if (msg.type === 'result') {
+            closeThinkingProcess(bucket, Date.now())
             resultInfo = {
               subtype: msg.subtype,
               is_error: msg.is_error,
@@ -891,8 +1074,16 @@ export async function POST(request: NextRequest) {
               total_cost_usd: msg.total_cost_usd,
               usage: msg.usage,
             }
+            if (msg.is_error || msg.subtype !== 'success') {
+              const failed = msg as SDKMessage & { result?: string }
+              throw new Error(
+                failed.result?.trim() ||
+                  assistantText.trim() ||
+                  `模型请求失败（${msg.subtype}）`,
+              )
+            }
             // result 里的 result 字段是这一轮的完整文本，用它兜底
-            if (msg.subtype === 'success' && !assistantText.trim()) {
+            if (!assistantText.trim()) {
               assistantText = msg.result
             }
             live.totalCostUsd += Number(msg.total_cost_usd || 0)
@@ -916,6 +1107,9 @@ export async function POST(request: NextRequest) {
         // 不然收尾这一秒里用户又发一句，会被顶回「上一轮还没跑完」。
         // ⚠️ 摘锁到下面读 bucket / turnSnapshot 之间不许有 await，
         // 否则新的一轮会把 turnBuckets 换掉，这一轮就存错召回记录。
+        // 管理页若在生成期间保存了 MCP，这里先热更新，再放下一句话进来。
+        // 没有 pending 时是同步空操作，不影响正常回复。
+        await flushPendingMcpServers(sessionId)
         live.busy = false
         busyReleased = true
 
@@ -968,6 +1162,7 @@ export async function POST(request: NextRequest) {
               persona_id: persona?.id || undefined,
               persona_name: persona?.name || undefined,
               thinking: thinkingText || undefined,
+              process: bucket.processEvents,
               recall: bucket.recallInfo,
               tools: bucket.toolEvents,
               result: resultInfo,

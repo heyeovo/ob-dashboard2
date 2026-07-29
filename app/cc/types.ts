@@ -2,14 +2,37 @@
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
 
 export type CcRole = 'user' | 'assistant'
+export type CcToolStatus = 'running' | 'completed' | 'error' | 'denied'
 
 export type CcToolEvent = {
   name: string
   id: string
   input?: unknown
-  /** 工具的输出结果。⚠️ 引擎层还没回传 tool_result，现在恒为空 */
+  status?: CcToolStatus
+  startedAt?: number
+  durationMs?: number
+  error?: string
+  /** MCP 日常工具会保存输出；Read/Grep/Bash 等工作工具仍然不保存。 */
   result?: string
 }
+
+/**
+ * 助手正文前的真实过程顺序。
+ * 一轮可以是：thinking → tool → thinking → tool；不要再把两类内容拆开后重排。
+ */
+export type CcProcessEvent =
+  | {
+      type: 'thinking'
+      id: string
+      text: string
+      startedAt?: number
+      durationMs?: number
+    }
+  | {
+      type: 'tool'
+      id: string
+      tool: CcToolEvent
+    }
 
 /** 一轮的 token 用量。每条助手消息右下角那个小面板要的就是这些。 */
 export type CcTurnUsage = {
@@ -37,6 +60,8 @@ export type CcMessage = {
   usage?: CcTurnUsage | null
   /** 助手这一轮调过的工具 */
   tools?: CcToolEvent[]
+  /** thinking / 工具按实际发生顺序组成的过程时间线 */
+  process?: CcProcessEvent[]
   /** 这一轮召回了什么（只有助手消息有） */
   recall?: CcRecallInfo | null
   /** 正在流式输出中 */

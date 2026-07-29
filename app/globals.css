@@ -325,6 +325,21 @@ body {
 }
 
 /* ---- thinking：流式中跟着输出，答完保持展开（跟 Polaris 不同，用户要的） ---- */
+.cc-process {
+  margin-top: 4px;
+  border: 1px solid rgba(156, 143, 181, 0.12);
+  border-radius: var(--radius-xl);
+  background: var(--chat-think-bg);
+  padding: 12px 14px;
+}
+.cc-process-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  color: var(--color-primary);
+  font-size: 12px;
+}
 .cc-think-toggle {
   display: inline-flex;
   align-items: center;
@@ -344,11 +359,9 @@ body {
 }
 .cc-think-caret.open { transform: rotate(90deg) translateX(1px); }
 .cc-think-body {
-  margin-top: 6px;
+  margin: 8px 0 2px 8px;
   border-left: 2px solid var(--chat-think-bar);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  background: var(--chat-think-bg);
-  padding: 10px 13px;
+  padding: 6px 12px;
   font-size: 12.5px;
   line-height: 1.68;
   color: var(--color-text-secondary);
@@ -375,29 +388,57 @@ body {
 /* ---- 工具调用条 ---- */
 .cc-toolstrip {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 2px;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 7px;
 }
 .cc-toolchip {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   align-items: center;
-  gap: 7px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-light);
-  background: var(--color-surface);
-  padding: 4px 11px;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  padding: 8px 7px;
   font-size: 11.5px;
   color: var(--color-text-secondary);
-  transition: border-color var(--duration-normal) var(--ease-standard),
-              background var(--duration-normal) var(--ease-standard);
+  text-align: left;
+  transition: background var(--duration-normal) var(--ease-standard);
 }
 .cc-toolchip:hover {
-  border-color: rgba(217, 119, 87, 0.28);
-  background: var(--color-primary-muted);
+  background: rgba(255, 255, 255, 0.58);
 }
-.cc-toolchip-name { font-family: var(--font-mono); }
-.cc-toolchip-hint { color: var(--color-text-disabled); }
+.cc-toolchip-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+.cc-tool-wrench {
+  flex-shrink: 0;
+  color: var(--color-primary);
+  font-size: 18px;
+  line-height: 1;
+}
+.cc-tool-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-disabled);
+  font-size: 20px;
+  line-height: 1;
+}
+.cc-tool-status {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(88, 83, 78, 0.07);
+  padding: 2px 7px;
+  font-size: 9.5px;
+  color: var(--color-text-tertiary);
+}
+.cc-tool-status.running { color: #9a6b22; background: #fff6df; }
+.cc-tool-status.error,
+.cc-tool-status.denied { color: #b44a4a; background: #fff0f0; }
+.cc-tool-status.completed { color: #3c7b61; background: #eaf7f0; }
 .cc-tool-dot {
   width: 5px;
   height: 5px;
@@ -430,6 +471,17 @@ body {
   box-shadow: var(--chat-modal-shadow);
   overflow: hidden;
 }
+.cc-tool-sheet {
+  border-radius: 24px 24px 0 0;
+  animation: ccSheetUp 180ms var(--ease-standard) both;
+}
+@keyframes ccSheetUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (min-width: 640px) {
+  .cc-tool-sheet { border-radius: var(--radius-xl); }
+}
 .cc-modal-label {
   font-size: 11px;
   font-weight: 500;
@@ -448,6 +500,15 @@ body {
   color: var(--color-text-secondary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* ---- Home 左侧功能导航 ---- */
+.home-nav-drawer {
+  animation: homeDrawerIn 180ms var(--ease-standard) both;
+}
+@keyframes homeDrawerIn {
+  from { transform: translateX(-24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 .cc-recall-section + .cc-recall-section {
   margin-top: 18px;

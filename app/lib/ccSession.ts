@@ -13,8 +13,15 @@
 // 实现方式：streaming input（prompt 传 AsyncIterable<SDKUserMessage>）。一个 query()
 // 从会话第一句活到闲置回收，中间每句话往那个 iterable 里 push 一条 user 消息。
 
-import { query, type Query, type SDKMessage, type SDKUserMessage, type Options } from '@anthropic-ai/claude-agent-sdk'
+import {
+  query,
+  type Query,
+  type SDKMessage,
+  type SDKUserMessage,
+  type Options,
+} from '@anthropic-ai/claude-agent-sdk'
 import { cancelAllPending, hasPending } from './ccChannel'
+import type { CcMcpApplySummary } from './ccMcpTypes'
 
 /** 闲置多久回收子进程。跟 prompt cache 的 5 分钟没关系，纯粹是别让子进程无限堆着。 */
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -115,6 +122,8 @@ type LiveSession = {
   contextMaxTokens: number
   /** 正在跑一轮吗 —— 同一个会话不允许并发发言（一个 iterator 只能一个消费者） */
   busy: boolean
+  /** 保存 MCP 时若这轮还在生成，结果边界一到回收 query，下一句话用新前缀 resume。 */
+  pendingMcpRestart: boolean
   idleTimer: ReturnType<typeof setTimeout> | null
 }
 
@@ -257,6 +266,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     contextTokens: 0,
     contextMaxTokens: 0,
     busy: false,
+    pendingMcpRestart: false,
     idleTimer: null,
   }
   registry.set(input.sessionId, live)
@@ -273,6 +283,33 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
  */
 export function peekSession(sessionId: string): LiveSession | null {
   return registry.get(sessionId) || null
+}
+
+/**
+ * MCP 工具集合是 query 启动时写进 prompt 前缀的，单纯 setMcpServers 无法同时
+ * 更新 disallowedTools。配置保存后回收空闲 query；下一句话靠 resume 接回原上下文，
+ * 并用新的「只含开启工具」前缀重建。正在回答的会话等本轮结果边界再回收。
+ */
+export async function applyMcpServersToLiveSessions(): Promise<CcMcpApplySummary> {
+  const summary: CcMcpApplySummary = { applied: 0, queued: 0, errors: [] }
+  for (const live of [...registry.values()]) {
+    if (live.busy) {
+      live.pendingMcpRestart = true
+      summary.queued += 1
+      continue
+    }
+    dropSession(live.sessionId)
+    summary.applied += 1
+  }
+  return summary
+}
+
+/** 一轮结束、还没解 busy 锁之前调用；返回 true 表示 query 已回收。 */
+export async function flushPendingMcpServers(sessionId: string): Promise<void> {
+  const live = registry.get(sessionId)
+  if (!live?.pendingMcpRestart) return
+  live.pendingMcpRestart = false
+  dropSession(sessionId)
 }
 
 /** 会话被回收后，记住 claude code 的 session id，下次好 resume 接上。 */
