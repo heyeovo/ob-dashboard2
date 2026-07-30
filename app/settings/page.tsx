@@ -35,6 +35,12 @@ const MODEL_ENTRIES: Entry[] = [
     desc: '中转站清单 + 模型名；新对话的默认模型 / 力度',
     href: '/settings/upstream',
   },
+  {
+    key: 'memory-models',
+    label: '召回与自动记忆模型',
+    desc: '主域哨兵 / 召回模型；自动记忆生成模型',
+    href: '/settings/models',
+  },
   { key: 'ui', label: 'UI 设置', desc: '主题 / 字体 / 字号，等新风格铺开后做', todo: true },
 ]
 
