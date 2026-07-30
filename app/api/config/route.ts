@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { BASE_URL, getSessionCookie } from '../../lib/api'
 
+async function relayResponse(res: Response) {
+  const body = await res.text()
+  const contentType = res.headers.get('content-type')
+
+  return new NextResponse(body, {
+    status: res.status,
+    headers: contentType ? { 'Content-Type': contentType } : undefined,
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -10,9 +20,9 @@ export async function POST(req: NextRequest) {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    return NextResponse.json(await res.json())
+    return relayResponse(res)
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 502 })
   }
 }
 
@@ -21,9 +31,10 @@ export async function GET() {
     const cookie = await getSessionCookie()
     const res = await fetch(`${BASE_URL}/api/config`, {
       headers: { Cookie: cookie },
+      cache: 'no-store',
     })
-    return NextResponse.json(await res.json())
+    return relayResponse(res)
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: String(e) }, { status: 502 })
   }
 }

@@ -19,7 +19,12 @@ const ENGINE_ENTRIES: Entry[] = [
   { key: 'prompts', label: '权重配置', desc: 'Prompt 与评分权重', href: '/prompts' },
   { key: 'breath', label: '模拟 Breath', desc: '四维评分与检索追溯', href: '/breath-sim' },
   { key: 'recall', label: '记忆浮现配置', desc: '搬 dashboard.html', todo: true },
-  { key: 'pipeline', label: '脱水打标 / 向量 / 重排序', desc: '搬 dashboard.html', todo: true },
+  {
+    key: 'pipeline',
+    label: '记忆处理',
+    desc: '脱水打标 / 向量 / 重排序',
+    href: '/settings/memory-processing',
+  },
   { key: 'persona-state', label: 'Persona State', desc: '搬 dashboard.html', todo: true },
 ]
 
