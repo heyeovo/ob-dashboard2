@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
 import {
@@ -12,8 +12,15 @@ import {
   type CcMcpTransport,
 } from './ccMcpTypes'
 
-const DATA_DIR = path.join(process.cwd(), '.data')
-const CONFIG_PATH = path.join(DATA_DIR, 'cc-mcp.json')
+const LEGACY_CONFIG_PATH = path.join(process.cwd(), '.data', 'cc-mcp.json')
+const HAVEN_BASE = (
+  process.env.HAVEN_GATEWAY_URL ||
+  process.env.OMBRE_BASE_URL ||
+  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
+  'https://foryan.zeabur.app'
+).replace(/\/+$/, '')
+const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
+const HAVEN_MCP_PATH = '/gateway/api/cc/mcp'
 
 // 用户现有的 OB MCP（Ombre-Brain-Haven/.mcp.json）作为第一条默认配置。
 // 它是本机 HTTP 服务，不带密钥；没启动时只会显示连接失败，不影响聊天。
@@ -248,38 +255,96 @@ export function publicMcpConfig(config: CcMcpConfig): CcMcpConfig {
   }
 }
 
-async function writeConfigFile(config: CcMcpConfig): Promise<void> {
-  await mkdir(DATA_DIR, { recursive: true })
-  const tempPath = `${CONFIG_PATH}.${process.pid}.tmp`
-  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
-  await rename(tempPath, CONFIG_PATH)
+type HavenMcpResult = {
+  ok: boolean
+  payload: Record<string, unknown>
+  error: string
+}
+
+async function havenMcpFetch(
+  method: 'GET' | 'POST',
+  config?: CcMcpConfig,
+): Promise<HavenMcpResult> {
+  if (!GATEWAY_TOKEN) {
+    return {
+      ok: false,
+      payload: {},
+      error: 'OMBRE_GATEWAY_TOKEN 未配置，MCP 配置无法持久化到 Haven',
+    }
+  }
+
+  const ac = new AbortController()
+  const timer = setTimeout(() => ac.abort(), 15_000)
+  try {
+    const res = await fetch(`${HAVEN_BASE}${HAVEN_MCP_PATH}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${GATEWAY_TOKEN}`,
+        ...(config ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: config ? JSON.stringify(config) : undefined,
+      signal: ac.signal,
+      cache: 'no-store',
+    })
+    const raw = await res.text()
+    if (!res.ok) {
+      return { ok: false, payload: {}, error: `HTTP ${res.status}: ${raw.slice(0, 300)}` }
+    }
+    try {
+      return { ok: true, payload: JSON.parse(raw) as Record<string, unknown>, error: '' }
+    } catch {
+      return { ok: false, payload: {}, error: `非 JSON 响应: ${raw.slice(0, 200)}` }
+    }
+  } catch (error) {
+    const err = error as Error
+    return {
+      ok: false,
+      payload: {},
+      error: err.name === 'AbortError' ? 'MCP 配置请求 Haven 超时' : String(err.message || err),
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function legacyOrDefaultConfig(): Promise<CcMcpConfig> {
+  try {
+    const text = await readFile(LEGACY_CONFIG_PATH, 'utf8')
+    return validateConfig(JSON.parse(text))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[cc-mcp] 旧配置迁移读取失败，使用默认配置：', (error as Error).message)
+    }
+    return cloneConfig(DEFAULT_CONFIG)
+  }
 }
 
 export async function loadMcpConfig(): Promise<CcMcpConfig> {
-  if (state.config) {
-    const clean = validateConfig(state.config)
-    if (JSON.stringify(clean) !== JSON.stringify(state.config)) {
-      await writeConfigFile(clean)
-    }
-    state.config = clean
-    return cloneConfig(clean)
-  }
   if (state.loading) return cloneConfig(await state.loading)
 
   state.loading = (async () => {
-    try {
-      const text = await readFile(CONFIG_PATH, 'utf8')
-      const raw = JSON.parse(text)
-      const clean = validateConfig(raw)
-      if (JSON.stringify(clean) !== JSON.stringify(raw)) {
-        await writeConfigFile(clean)
+    const loaded = await havenMcpFetch('GET')
+    if (loaded.ok) {
+      const remote = loaded.payload.config
+      if (
+        remote &&
+        typeof remote === 'object' &&
+        !Array.isArray(remote) &&
+        Array.isArray((remote as Record<string, unknown>).servers)
+      ) {
+        return validateConfig(remote)
       }
-      return clean
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return cloneConfig(DEFAULT_CONFIG)
-      console.warn('[cc-mcp] 配置读取失败，退回默认配置：', (error as Error).message)
-      return cloneConfig(DEFAULT_CONFIG)
+
+      // Haven 第一次部署还没有这一行：优先迁移旧本机文件；Vercel 没旧文件时写入默认值。
+      const initial = await legacyOrDefaultConfig()
+      const seeded = await havenMcpFetch('POST', initial)
+      if (seeded.ok) return validateConfig(seeded.payload.config)
+      console.warn('[cc-mcp] 初始配置写入 Haven 失败：', seeded.error)
+      return initial
     }
+
+    console.warn('[cc-mcp] Haven 配置读取失败，临时使用当前进程缓存：', loaded.error)
+    return state.config ? validateConfig(state.config) : legacyOrDefaultConfig()
   })()
 
   try {
@@ -293,9 +358,10 @@ export async function loadMcpConfig(): Promise<CcMcpConfig> {
 export async function saveMcpConfig(value: unknown): Promise<CcMcpConfig> {
   const previous = await loadMcpConfig()
   const clean = mergeMaskedSecrets(validateConfig(value), previous)
-  await writeConfigFile(clean)
-  state.config = clean
-  return cloneConfig(clean)
+  const saved = await havenMcpFetch('POST', clean)
+  if (!saved.ok) throw new Error(`MCP 配置保存到 Haven 失败：${saved.error}`)
+  state.config = validateConfig(saved.payload.config)
+  return cloneConfig(state.config)
 }
 
 export function toSdkMcpServers(config: CcMcpConfig): Record<string, McpServerConfig> {
