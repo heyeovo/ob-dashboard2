@@ -95,6 +95,17 @@ export const maxDuration = 300
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
 
 /**
+ * 中转站要求收到自己的模型 ID，但 Claude Code 需要认识模型身份才能采用正确上下文。
+ * `opus[1m]` 会在子进程内按 Opus 1M 管理上下文，再由 ANTHROPIC_DEFAULT_OPUS_MODEL
+ * 映射回中转原始 ID。只识别明确的 Opus 4.6，其他名称保持原样。
+ */
+function sdkModelForProvider(providerModel: string): string {
+  const model = providerModel.trim()
+  if (/(?:^|[-_.])opus[-_.]?4[-_.]?6(?:$|[-_.])/i.test(model)) return 'opus[1m]'
+  return model
+}
+
+/**
  * 模型手上有哪些工具。
  *
  * 只列这几个而不是给 preset 全套：TodoWrite / WebSearch / Agent 那些在这个
@@ -248,9 +259,6 @@ function toolKind(toolName: string): CcPermKind {
  * 往「这一轮」的工具记录里加一条，同时推给前端。
  * hook 里必须用这个，不能碰局部变量 —— 见文件头那段说明。
  */
-/** 缓存排查用：每个会话 stderr 收到多少行，分清「没触发」和「管子没通」。 */
-const stderrSeen = new Map<string, number>()
-
 function pushToolEvent(sessionId: string, item: Record<string, unknown>) {
   const bucket = turnBuckets.get(sessionId)
   if (bucket) {
@@ -446,6 +454,7 @@ export async function POST(request: NextRequest) {
     }
   }
   if (!model) model = process.env.ANTHROPIC_MODEL || ''
+  const sdkModel = sdkModelForProvider(model)
   const mcpConfig = await loadMcpConfig()
   const sdkMcpServers = toSdkMcpServers(mcpConfig)
 
@@ -603,7 +612,7 @@ export async function POST(request: NextRequest) {
       }
 
       const buildOptions = (resumeFrom: string | null): Options => ({
-        model: model || undefined,
+        model: sdkModel || undefined,
         effort: (effort || undefined) as Options['effort'],
         maxThinkingTokens: thinking ? undefined : 0,
         // 工作模式：协作者人设接在 claude code 自带系统提示**后面**，不替换它 ——
@@ -643,7 +652,7 @@ export async function POST(request: NextRequest) {
         resume: resumeFrom || undefined,
         // 中转站地址和 token 从 Haven 那份配置里来（api 模式）。
         // ⚠️ 这是子进程的环境变量，spawn 时定死 —— 换中转站 / 换订阅只能新建对话。
-        env: buildCcEnv(cred, envOverrides),
+        env: buildCcEnv(cred, { ...envOverrides, mainModel: model }),
         // ↓ 缓存排查用（见 OB基础知识/HANDOFF-cc缓存排查-第2版.md）。
         //
         // 症状：缓存读钉死在静态段，缓存写随历史一路涨 —— 消息段每轮重写、从不读回。
@@ -653,7 +662,6 @@ export async function POST(request: NextRequest) {
         // 两条都是 sticky（直到 /clear 或 /compact）。2026-07-27 实测四轮零触发，
         // 所以中转站没在拒断点 —— 这条已排除，日志留着是为了下次能一眼看见，不是待查项。
         // ⚠️ 只观察，不改任何断点逻辑。嫌终端吵就把这行和下面的 stderr 回调一起删。
-        debug: true,
         hooks: {
           // 敏感文件硬拦。不是配置项，没有放行开关，任何协作者都一样。
           //
@@ -813,25 +821,6 @@ export async function POST(request: NextRequest) {
           // role:"system" 消息，中转站不认这种 role，静默丢掉 —— 模型压根收不到
           // 记忆卡（中转日志里那几条 s163/s191/s234 就是它，字数/token≈3.7 对得上）。
           // 现在改成把记忆卡拼进 user 消息正文，role 全程合法。
-        },
-        stderr: (data) => {
-          // 缓存排查用，查完连 debug / debugFile 一起删。只打到 dev 终端，不回传浏览器。
-          //
-          // 先自检管道：正则一行都不匹配时，「没触发」和「stderr 压根是空的」长得一样。
-          // 所以无论匹配与否都先记数、头 5 行原样打出来。
-          const tag = `[cc-cache ${sessionId.slice(0, 8)}]`
-          const lines = data.split('\n').filter((l) => l.trim())
-          const before = stderrSeen.get(sessionId) || 0
-          stderrSeen.set(sessionId, before + lines.length)
-          if (before === 0 && lines.length) {
-            console.warn(`${tag} stderr 通了，本次收到 ${lines.length} 行，样本：`)
-            for (const l of lines.slice(0, 5)) console.warn(`${tag}   | ${l.trim().slice(0, 300)}`)
-          }
-          for (const line of lines) {
-            if (/mid-conv-system|api_midconv_cache_proxy|cache_control|cache strategy|systemPromptChanged/i.test(line)) {
-              console.warn(`${tag} ★ ${line.trim()}`)
-            }
-          }
         },
       })
 
@@ -1095,7 +1084,7 @@ export async function POST(request: NextRequest) {
             noteContextUsage(
               sessionId,
               turnUsage.inputTokens + turnUsage.cacheReadTokens + turnUsage.cacheWriteTokens,
-              live.model,
+              sdkModelForProvider(live.model),
             )
             break
           }

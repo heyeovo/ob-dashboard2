@@ -18,7 +18,12 @@ const DATA_ENTRIES: Entry[] = [
 const ENGINE_ENTRIES: Entry[] = [
   { key: 'prompts', label: '权重配置', desc: 'Prompt 与评分权重', href: '/prompts' },
   { key: 'breath', label: '模拟 Breath', desc: '四维评分与检索追溯', href: '/breath-sim' },
-  { key: 'recall', label: '记忆浮现配置', desc: '搬 dashboard.html', todo: true },
+  {
+    key: 'recall',
+    label: '记忆浮现配置',
+    desc: '注入节奏 / 上下文预算 / 召回策略 / 图扩散',
+    href: '/settings/recall',
+  },
   {
     key: 'pipeline',
     label: '记忆处理',

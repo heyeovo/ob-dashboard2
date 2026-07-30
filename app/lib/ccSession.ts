@@ -458,10 +458,11 @@ export function noteContextUsage(sessionId: string, inputTotal: number, model: s
 export function contextLimitFor(model: string): number {
   const m = (model || '').toLowerCase()
   if (!m) return 0
+  if (m.includes('[1m]')) return 1_000_000
   if (m.includes('haiku')) return 200_000
-  if (m.includes('sonnet')) return m.includes('[1m]') ? 1_000_000 : 200_000
+  if (m.includes('sonnet')) return 200_000
   if (m.includes('opus') || m.includes('fable') || m.includes('mythos')) return 200_000
-  return 200_000
+  return 0
 }
 
 export type { LiveSession }

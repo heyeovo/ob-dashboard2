@@ -20,7 +20,7 @@ const PARENT_SESSION_PREFIXES = ['CLAUDE_CODE_', 'OTEL_']
 
 export function buildCcEnv(
   mode: CredMode,
-  overrides: { baseUrl?: string; authToken?: string } = {},
+  overrides: { baseUrl?: string; authToken?: string; mainModel?: string } = {},
 ): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...process.env }
 
@@ -34,12 +34,26 @@ export function buildCcEnv(
     delete env.ANTHROPIC_BASE_URL
     delete env.ANTHROPIC_AUTH_TOKEN
     delete env.ANTHROPIC_API_KEY
-    return env
+  } else {
+    const baseUrl = overrides.baseUrl || process.env.ANTHROPIC_BASE_URL
+    const authToken = overrides.authToken || process.env.ANTHROPIC_AUTH_TOKEN
+    if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl
+    if (authToken) env.ANTHROPIC_AUTH_TOKEN = authToken
   }
 
-  const baseUrl = overrides.baseUrl || process.env.ANTHROPIC_BASE_URL
-  const authToken = overrides.authToken || process.env.ANTHROPIC_AUTH_TOKEN
-  if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl
-  if (authToken) env.ANTHROPIC_AUTH_TOKEN = authToken
+  // 辅助调用和 Claude Code 内部的 family alias 都跟随当次主模型。
+  // 不能继承 .env.local 里的固定 Sonnet，否则换中转 / 换模型后辅助请求仍会跑旧模型。
+  const mainModel = overrides.mainModel?.trim()
+  delete env.ANTHROPIC_SMALL_FAST_MODEL
+  delete env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  delete env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  delete env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  if (mainModel) {
+    env.ANTHROPIC_SMALL_FAST_MODEL = mainModel
+    env.ANTHROPIC_DEFAULT_OPUS_MODEL = mainModel
+    env.ANTHROPIC_DEFAULT_SONNET_MODEL = mainModel
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = mainModel
+  }
+
   return env
 }
