@@ -420,6 +420,10 @@ export default function CcChatPage() {
           upstream={chat.upstream}
           pick={chat.pick}
           onPick={next => void chat.applyPick(next)}
+          web={chat.webSettings}
+          onWebChange={chat.applyWebSettings}
+          onSaveWebDefaults={() => void chat.saveWebDefaults()}
+          webSaving={chat.webSaving}
           locked={chat.modeLocked}
           note={chat.settingsNote}
           onHandoff={() => {

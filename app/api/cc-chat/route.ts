@@ -41,6 +41,10 @@ import { recordTurn, listTurns } from '@/app/lib/havenTurns'
 import { getBucket } from '@/app/lib/api'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import {
+  loadPermanentPermissionRules,
+  permissionRuleStrings,
+} from '@/app/lib/havenPermissions'
+import {
   ensureSession,
   peekSession,
   dropSession,
@@ -52,6 +56,7 @@ import {
   type TurnUsage,
 } from '@/app/lib/ccSession'
 import { CHAT_MODE_PROMPT, isCcMode, type CcMode } from '@/app/lib/ccModes'
+import { normalizeWebSettings, type CcWebSettings } from '@/app/cc/webSettings'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限）。
 //
@@ -108,17 +113,18 @@ function sdkModelForProvider(providerModel: string): string {
 /**
  * 模型手上有哪些工具。
  *
- * 只列这几个而不是给 preset 全套：TodoWrite / WebSearch / Agent 那些在这个
- * 界面里没有对应的显示，出现了只会让人看不懂发生了什么。要加是以后的事
- *（MCP 是第 7 步）。
+ * 只列界面能说明和展示的工具；WebSearch / WebFetch 在两种模式都开放，
+ * 其余工作工具只在工作模式开放。
  */
-const SESSION_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
+const WORK_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
 
 /** 这一轮的收集口。hook 和 canUseTool 都从 turnRef.current 拿，不捕获局部变量。 */
 type TurnBucket = {
   recallInfo: Record<string, unknown> | null
   toolEvents: Array<Record<string, unknown>>
   processEvents: Array<Record<string, unknown>>
+  webSearchCount: number
+  webFetchCount: number
 }
 
 type ChatBody = {
@@ -139,6 +145,14 @@ type ChatBody = {
   effort?: string
   /** 5.2：开不开 thinking */
   thinking?: boolean
+  web_search_enabled?: boolean
+  web_fetch_enabled?: boolean
+  web_max_searches?: number
+  web_max_fetches?: number
+  web_fetch_target_tokens?: number
+  web_max_sources?: number
+  web_domain_mode?: string
+  web_domains?: string[]
   /**
    * 第 5 条 resume：前端从历史最后一轮读出的 claude code session id。
    * 只在服务端进程已丢（重启 / 回收）时用来接回上下文；已有活进程则忽略。
@@ -252,7 +266,30 @@ function toolKind(toolName: string): CcPermKind {
   if (toolName === 'Edit' || toolName === 'NotebookEdit') return 'edit'
   if (toolName === 'Write') return 'write'
   if (EXEC_TOOLS.includes(toolName)) return 'bash'
+  if (toolName === 'WebFetch') return 'web'
   return 'other'
+}
+
+function isWebTool(toolName: string): boolean {
+  return toolName === 'WebSearch' || toolName === 'WebFetch'
+}
+
+function domainMatches(hostname: string, domain: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '')
+  const rule = domain.toLowerCase().replace(/\.$/, '')
+  return host === rule || host.endsWith(`.${rule}`)
+}
+
+function fetchDomainAllowed(rawUrl: unknown, settings: CcWebSettings): boolean {
+  if (settings.domainMode === 'all') return true
+  let hostname = ''
+  try {
+    hostname = new URL(String(rawUrl || '')).hostname
+  } catch {
+    return false
+  }
+  const matched = settings.domains.some(domain => domainMatches(hostname, domain))
+  return settings.domainMode === 'allow' ? matched : !matched
 }
 
 /**
@@ -321,7 +358,7 @@ function toolResponseText(res: unknown): string {
 }
 
 /** MCP 返回值留给日常回看；限制体积，避免一个网页/搜索结果把整轮 raw_json 撑爆。 */
-function storedMcpResult(res: unknown): string {
+function storedMcpResult(res: unknown, limit = 20_000): string {
   let text = toolResponseText(res)
   if (!text && res != null) {
     try {
@@ -330,9 +367,45 @@ function storedMcpResult(res: unknown): string {
       text = String(res)
     }
   }
-  const limit = 20_000
   if (text.length <= limit) return text
   return `${text.slice(0, limit)}\n\n… 余下 ${text.length - limit} 字未保存`
+}
+
+function limitSearchSources(value: unknown, maxSources: number): unknown {
+  let remaining = maxSources
+  const visit = (node: unknown): unknown => {
+    if (Array.isArray(node)) {
+      const sourceArray =
+        node.length > 0 &&
+        node.every(item => item && typeof item === 'object' && 'url' in item)
+      const items = sourceArray ? node.slice(0, Math.max(0, remaining)) : node
+      if (sourceArray) remaining = Math.max(0, remaining - items.length)
+      return items.map(visit)
+    }
+    if (!node || typeof node !== 'object') return node
+    return Object.fromEntries(
+      Object.entries(node as Record<string, unknown>).map(([key, item]) => [key, visit(item)]),
+    )
+  }
+  return visit(value)
+}
+
+function storedWebResult(res: unknown, toolName: string, settings: CcWebSettings): string {
+  let safe = res
+  if (toolName === 'WebSearch') {
+    if (typeof res === 'string') {
+      try {
+        safe = limitSearchSources(JSON.parse(res), settings.maxDisplayedSources)
+      } catch {
+        safe = res
+      }
+    } else {
+      safe = limitSearchSources(res, settings.maxDisplayedSources)
+    }
+  }
+  const limit =
+    toolName === 'WebFetch' ? Math.max(2_000, settings.fetchTargetTokens * 4) : 20_000
+  return storedMcpResult(safe, limit)
 }
 
 /** 数一下 Edit / Write 实际动了多少行，工作台「改了哪些文件」那格要显示。 */
@@ -430,6 +503,20 @@ export async function POST(request: NextRequest) {
 
   // 5.2 闲聊 / 工作。默认工作 —— 4.5b 之前的老会话和不带这个字段的调用都按老行为走。
   const mode: CcMode = isCcMode(body.mode) ? body.mode : 'work'
+  const webSettings = normalizeWebSettings({
+    search_enabled: body.web_search_enabled,
+    fetch_enabled: body.web_fetch_enabled,
+    max_searches_per_turn: body.web_max_searches,
+    max_fetches_per_turn: body.web_max_fetches,
+    fetch_target_tokens: body.web_fetch_target_tokens,
+    max_displayed_sources: body.web_max_sources,
+    domain_mode: body.web_domain_mode,
+    domains: body.web_domains,
+  })
+  const activeWebTools = [
+    ...(webSettings.searchEnabled ? ['WebSearch'] : []),
+    ...(webSettings.fetchEnabled ? ['WebFetch'] : []),
+  ]
 
   // 5.2 上游：走 Haven 那份「上游模型配置」。
   // ⚠️ token 只在服务端出现，前端送的是 provider_id。读不到配置就退回 .env.local
@@ -457,6 +544,10 @@ export async function POST(request: NextRequest) {
   const sdkModel = sdkModelForProvider(model)
   const mcpConfig = await loadMcpConfig()
   const sdkMcpServers = toSdkMcpServers(mcpConfig)
+  const permanentPermissions = await loadPermanentPermissionRules()
+  const permanentAllowRules = permanentPermissions.ok
+    ? permissionRuleStrings(permanentPermissions.rules)
+    : []
 
   // 两个召回开关同样是 body 优先、协作者兜底，存进表让 hook 每轮重读
   recallPrefs.set(sessionId, {
@@ -538,7 +629,13 @@ export async function POST(request: NextRequest) {
       let initInfo: Record<string, unknown> | null = null
       /** 这一轮的用量，消息右下角那个面板要显示 */
       let turnUsage: TurnUsage | null = null
-      const bucket: TurnBucket = { recallInfo: null, toolEvents: [], processEvents: [] }
+      const bucket: TurnBucket = {
+        recallInfo: null,
+        toolEvents: [],
+        processEvents: [],
+        webSearchCount: 0,
+        webFetchCount: 0,
+      }
       turnBuckets.set(sessionId, bucket)
       // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
       attachSend(sessionId, send)
@@ -605,6 +702,7 @@ export async function POST(request: NextRequest) {
           filePath,
           command: String((input as Record<string, unknown>).command || ''),
           diff,
+          suggestions: meta.suggestions || [],
         })
         return decision.behavior === 'allow'
           ? { behavior: 'allow' }
@@ -627,23 +725,36 @@ export async function POST(request: NextRequest) {
               : { type: 'preset', preset: 'claude_code' },
         cwd,
         additionalDirectories,
-        // 闲聊模式零工具。以后接的 MCP 要给（那是记忆 / 联网），但 cc 这 7 个不给 ——
-        // 不然它会去读文件，而闲聊模式的 prompt 里没有"怎么用工具"那套规矩。
-        tools: mode === 'chat' ? [] : SESSION_TOOLS,
-        // MCP 跟 Claude Code 内置工具是两条独立通道：闲聊模式 tools=[] 只关内置工具，
-        // 记忆 / 联网 MCP 仍然在。strict 保证实际工具集跟 Home 管理页完全一致，
+        // 闲聊模式只给本窗口开启的联网工具；工作模式再加读写、搜索文件与 Bash。
+        tools: mode === 'chat' ? activeWebTools : [...WORK_TOOLS, ...activeWebTools],
+        // MCP 跟 Claude Code 内置工具是两条独立通道。strict 保证实际工具集
+        // 跟 Home 管理页完全一致，
         // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
         mcpServers: sdkMcpServers,
         strictMcpConfig: true,
         // 关闭的工具连名称/说明/参数结构都从模型上下文移除；开启的 MCP 服务
         // 在 ccMcp.ts 里设为 alwaysLoad，所以工具定义固定放在消息历史之前。
         disallowedTools: disabledMcpTools(mcpConfig),
-        // 只读的三个自动放行；写和跑命令**不在**这里，于是落到 canUseTool 上等批准。
-        allowedTools: mode === 'chat' ? [] : READ_ONLY_TOOLS,
+        // 本地只读和 WebSearch 自动放行。WebFetch 按域名问；Bash 走 SDK 标准规则，
+        // 用户可在卡片上选仅一次 / 本次对话 / 始终允许。
+        allowedTools:
+          mode === 'chat'
+            ? webSettings.searchEnabled
+              ? ['WebSearch']
+              : []
+            : [
+                ...READ_ONLY_TOOLS,
+                ...(webSettings.searchEnabled ? ['WebSearch'] : []),
+              ],
         // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
         // 根本走不到 canUseTool，也就没有批准这回事了。
         permissionMode: 'default',
         canUseTool: askPermission,
+        settings: {
+          permissions: {
+            allow: permanentAllowRules,
+          },
+        },
         // 回退点要它：把改动前的文件备份下来，rewindFiles 才有东西可还原。
         // ⚠️ 备份活在子进程里，进程被回收后这些点就失效了（界面上照实说）。
         enableFileCheckpointing: true,
@@ -694,6 +805,103 @@ export async function POST(request: NextRequest) {
                     }
                   }
 
+                  if (name === 'WebSearch' || name === 'WebFetch') {
+                    const current = turnBuckets.get(sessionId)
+                    const webInput = (toolInput || {}) as Record<string, unknown>
+
+                    if (name === 'WebSearch') {
+                      if (!webSettings.searchEnabled) {
+                        return {
+                          hookSpecificOutput: {
+                            hookEventName: 'PreToolUse' as const,
+                            permissionDecision: 'deny' as const,
+                            permissionDecisionReason: '这个窗口已关闭 Web Search。',
+                          },
+                        }
+                      }
+                      if (current && current.webSearchCount >= webSettings.maxSearchesPerTurn) {
+                        return {
+                          hookSpecificOutput: {
+                            hookEventName: 'PreToolUse' as const,
+                            permissionDecision: 'deny' as const,
+                            permissionDecisionReason:
+                              `这一轮最多搜索 ${webSettings.maxSearchesPerTurn} 次，已经用完。`,
+                          },
+                        }
+                      }
+                      if (webSettings.domainMode === 'allow' && webSettings.domains.length === 0) {
+                        return {
+                          hookSpecificOutput: {
+                            hookEventName: 'PreToolUse' as const,
+                            permissionDecision: 'deny' as const,
+                            permissionDecisionReason: '本窗口选择了域名白名单，但还没有填写允许域名。',
+                          },
+                        }
+                      }
+                      if (current) current.webSearchCount += 1
+                      const domainPatch =
+                        webSettings.domainMode === 'allow' && webSettings.domains.length > 0
+                          ? { allowed_domains: webSettings.domains }
+                          : webSettings.domainMode === 'block' && webSettings.domains.length > 0
+                            ? { blocked_domains: webSettings.domains }
+                            : {}
+                      return {
+                        hookSpecificOutput: {
+                          hookEventName: 'PreToolUse' as const,
+                          updatedInput: { ...webInput, ...domainPatch },
+                        },
+                      }
+                    }
+
+                    if (!webSettings.fetchEnabled) {
+                      return {
+                        hookSpecificOutput: {
+                          hookEventName: 'PreToolUse' as const,
+                          permissionDecision: 'deny' as const,
+                          permissionDecisionReason: '这个窗口已关闭 Web Fetch。',
+                        },
+                      }
+                    }
+                    if (!fetchDomainAllowed(webInput.url, webSettings)) {
+                      return {
+                        hookSpecificOutput: {
+                          hookEventName: 'PreToolUse' as const,
+                          permissionDecision: 'deny' as const,
+                          permissionDecisionReason:
+                            webSettings.domainMode === 'allow'
+                              ? '这个域名不在本窗口的允许清单中。'
+                              : '这个域名在本窗口的禁止清单中。',
+                        },
+                      }
+                    }
+                    if (current && current.webFetchCount >= webSettings.maxFetchesPerTurn) {
+                      return {
+                        hookSpecificOutput: {
+                          hookEventName: 'PreToolUse' as const,
+                          permissionDecision: 'deny' as const,
+                          permissionDecisionReason:
+                            `这一轮最多抓取 ${webSettings.maxFetchesPerTurn} 个网页，已经用完。`,
+                        },
+                      }
+                    }
+                    if (current) current.webFetchCount += 1
+                    const lengthInstruction =
+                      `只提取与用户当前问题直接相关的内容；` +
+                      `返回内容以约 ${webSettings.fetchTargetTokens} tokens 为目标上限。` +
+                      '这是长度目标，请优先保留事实、数字、结论和必要出处，省略导航、广告和重复内容。'
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse' as const,
+                        updatedInput: {
+                          ...webInput,
+                          prompt: [String(webInput.prompt || '').trim(), lengthInstruction]
+                            .filter(Boolean)
+                            .join('\n\n'),
+                        },
+                      },
+                    }
+                  }
+
                   const hit = pathsFromToolInput(toolInput).find(isDeniedPath)
                   if (hit) {
                     const item = {
@@ -730,13 +938,13 @@ export async function POST(request: NextRequest) {
                     }
                   }
 
-                  // 写和跑命令：强制走「问一次」。
+                  // 写文件：强制走「问一次」。
                   //
                   // ⚠️ 光靠 permissionMode: 'default' + 不放进 allowedTools 是不够的 ——
-                  // SDK 自己有一层「安全命令」判定，`echo hello` 这类它直接放行，
-                  // canUseTool 根本不会被调用（实测：第一版就这么漏出去了）。
-                  // 这里显式把决定改成 'ask'，才真的落到 canUseTool 上等浏览器点。
-                  if (WRITE_TOOLS.includes(String(toolName)) || toolName === 'Bash') {
+                  // SDK 会直接放行某些看起来安全的写操作。文件改动仍由现有按钮控制。
+                  // Bash 改回 Claude Code 标准权限引擎，才能让 SDK 的细粒度
+                  // “本次对话 / 始终允许”规则真正生效。
+                  if (WRITE_TOOLS.includes(String(toolName))) {
                     return {
                       hookSpecificOutput: {
                         hookEventName: 'PreToolUse' as const,
@@ -1034,9 +1242,13 @@ export async function POST(request: NextRequest) {
               const endedAt = Date.now()
               const durationMs = Math.max(0, endedAt - Number(tool.startedAt || endedAt))
               const isError = block.is_error === true
-              const rawResult = storedMcpResult(msg.tool_use_result ?? block.content)
+              const rawResult = isWebTool(toolName)
+                ? storedWebResult(msg.tool_use_result ?? block.content, toolName, webSettings)
+                : storedMcpResult(msg.tool_use_result ?? block.content)
               const keepResult =
-                isMcpTool(toolName) && shouldSaveMcpResult(toolName) && rawResult
+                ((isMcpTool(toolName) && shouldSaveMcpResult(toolName)) ||
+                  isWebTool(toolName)) &&
+                rawResult
 
               tool.status = isError ? 'error' : 'completed'
               tool.durationMs = durationMs
@@ -1146,6 +1358,7 @@ export async function POST(request: NextRequest) {
                 model: String(initInfo?.model || model || '') || undefined,
                 effort: effort || undefined,
                 thinking_on: thinking,
+                web: webSettings,
               },
               usage: turnUsage || undefined,
               persona_id: persona?.id || undefined,

@@ -104,7 +104,7 @@ export type CcRecallInfo = {
 
 /* ────────────── 第 5 步：写权限 / 工作台 ────────────── */
 
-export type CcPermKind = 'edit' | 'write' | 'bash' | 'other'
+export type CcPermKind = 'edit' | 'write' | 'bash' | 'web' | 'other'
 
 export type CcDiffLine = { tag: ' ' | '-' | '+'; text: string; n?: number }
 
@@ -131,6 +131,12 @@ export type CcPermRequest = {
   filePath: string
   command: string
   diff: CcDiffPreview | null
+  suggestions: Array<{
+    type: string
+    rules?: Array<{ toolName: string; ruleContent?: string }>
+    behavior?: string
+    destination?: string
+  }>
   createdAt: number
   expiresAt: number
 }

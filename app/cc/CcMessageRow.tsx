@@ -27,6 +27,8 @@ function formatTime(ms: number) {
 }
 
 function shortToolName(name: string) {
+  if (name === 'WebSearch') return '网页搜索'
+  if (name === 'WebFetch') return '读取网页'
   const parts = name.split('__')
   return parts.length >= 3 ? parts.slice(2).join('__') : name
 }

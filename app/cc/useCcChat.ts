@@ -16,6 +16,11 @@ import type { CcMode } from '@/app/lib/ccModes'
 import type { CcUpstreamConfig, CcUpstreamPick } from './upstream'
 import { EMPTY_UPSTREAM, modelsFor, pickFromConfig, upstreamFromHaven } from './upstream'
 import type { HandoffPayload } from './CcHandoffDialog'
+import {
+  DEFAULT_WEB_SETTINGS,
+  normalizeWebSettings,
+  type CcWebSettings,
+} from './webSettings'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -201,6 +206,7 @@ function metaOfTurns(turns: HavenTurnRow[]): {
     model?: string
     effort?: string
     thinkingOn?: boolean
+    web?: CcWebSettings
   } | null
   ccSessionId: string
 } {
@@ -217,6 +223,10 @@ function metaOfTurns(turns: HavenTurnRow[]): {
             model: typeof s.model === 'string' ? s.model : undefined,
             effort: typeof s.effort === 'string' ? s.effort : undefined,
             thinkingOn: typeof s.thinking_on === 'boolean' ? s.thinking_on : undefined,
+            web:
+              s.web && typeof s.web === 'object'
+                ? normalizeWebSettings(s.web as Record<string, unknown>)
+                : undefined,
           }
         : null
       const ccSessionId = typeof parsed?.cc_session_id === 'string' ? parsed.cc_session_id : ''
@@ -284,6 +294,9 @@ export function useCcChat(personaId = '') {
   // 这个窗口选的那套上游。model / effort / thinking 能中途改，kind / providerId 不能
   const [pick, setPick] = useState<CcUpstreamPick>(() => pickFromConfig(EMPTY_UPSTREAM))
   const [settingsNote, setSettingsNote] = useState('')
+  const [webDefaults, setWebDefaults] = useState<CcWebSettings>(DEFAULT_WEB_SETTINGS)
+  const [webSettings, setWebSettings] = useState<CcWebSettings>(DEFAULT_WEB_SETTINGS)
+  const [webSaving, setWebSaving] = useState(false)
   /**
    * 订阅还是 api：是「有人真的定过」还是只是我这边的默认值？
    *
@@ -318,6 +331,26 @@ export function useCcChat(personaId = '') {
         /* 没配置也能聊，走 .env.local 那条老路 */
       } finally {
         if (!cancelled) setUpstreamLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 联网工具默认值单独存 Haven。窗口内修改只改副本，用户明确点保存才覆盖默认值。
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/cc-web-settings', { cache: 'no-store' })
+        const data = await res.json()
+        if (cancelled || !data.ok) return
+        const settings = normalizeWebSettings(data.settings as Record<string, unknown>)
+        setWebDefaults(settings)
+        setWebSettings(settings)
+      } catch {
+        /* Haven 暂时不可用时沿用安全默认值，不阻断聊天 */
       }
     })()
     return () => {
@@ -416,9 +449,17 @@ export function useCcChat(personaId = '') {
     return () => clearInterval(timer)
   }, [sessionId, refreshPending])
 
-  /** 点批准 / 拒绝。remember 只影响 Edit / Write，Bash 永远一条一条问。 */
+  /** 点批准 / 拒绝。Bash / WebFetch 可按 SDK 的具体建议选择会话级或永久规则。 */
   const answerPermission = useCallback(
-    async (id: string, allow: boolean, opts?: { remember?: boolean; reason?: string }) => {
+    async (
+      id: string,
+      allow: boolean,
+      opts?: {
+        remember?: boolean
+        reason?: string
+        scope?: 'once' | 'session' | 'always'
+      },
+    ) => {
       // 先本地摘掉，按钮点下去立刻有反应（服务端 409 时下一次轮询会把它拉回来）
       setPending(prev => prev.filter(p => p.id !== id))
       try {
@@ -430,6 +471,7 @@ export function useCcChat(personaId = '') {
             id,
             decision: allow ? 'allow' : 'deny',
             remember: opts?.remember === true,
+            scope: opts?.scope || 'once',
             reason: opts?.reason,
           }),
         })
@@ -479,6 +521,7 @@ export function useCcChat(personaId = '') {
       setPending([])
       setDecided([])
       setAutoAllowEdits(false)
+      setWebSettings(webDefaults)
 
       setHistoryLoading(true)
       try {
@@ -512,6 +555,7 @@ export function useCcChat(personaId = '') {
             }))
             // 存过 cred 就当「有人定过」，右上角照它显示订阅 / api
             if (s.cred === 'subscription' || s.cred === 'api') setCredChosen(true)
+            if (s.web) setWebSettings(s.web)
           }
         }
       } catch {
@@ -520,7 +564,7 @@ export function useCcChat(personaId = '') {
         setHistoryLoading(false)
       }
     },
-    [sessionId, draft],
+    [sessionId, draft, webDefaults],
   )
 
   const startNewSession = useCallback(() => {
@@ -537,11 +581,12 @@ export function useCcChat(personaId = '') {
     setDecided([])
     setAutoAllowEdits(false)
     setSettingsNote('')
+    setWebSettings(webDefaults)
     // 新对话没有接回点
     resumeHintRef.current = ''
     // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
     setPick(pickFromConfig(upstream))
-  }, [sessionId, draft, upstream])
+  }, [sessionId, draft, upstream, webDefaults])
 
   const startWithHandoff = useCallback(
     async (payload: HandoffPayload) => {
@@ -560,6 +605,7 @@ export function useCcChat(personaId = '') {
       setDecided([])
       setAutoAllowEdits(false)
       setSettingsNote('')
+      setWebSettings(webDefaults)
       resumeHintRef.current = ''
       setPick(pickFromConfig(upstream))
       setMode(payload.mode)
@@ -601,7 +647,7 @@ export function useCcChat(personaId = '') {
         }
       }
     },
-    [sessionId, draft, upstream],
+    [sessionId, draft, upstream, webDefaults],
   )
 
   /**
@@ -612,10 +658,14 @@ export function useCcChat(personaId = '') {
    *   · kind（订阅↔api）/ providerId（换中转站）→ 只存在前端，下一个新对话才生效
    *   · 已经开口的会话换 kind / provider → 拦住，提示新建对话
    */
+  // 换窗带来的消息只是新会话的上下文，不代表这一窗已经开口。
+  // 旧会话从 Haven 读回时 historyTurnCount > 0；本窗发言后会出现非历史消息。
+  const sessionStarted =
+    historyTurnCount > 0 || messages.some(message => !message.fromHistory)
+
   const applyPick = useCallback(
     async (next: Partial<CcUpstreamPick>) => {
       const merged: CcUpstreamPick = { ...pick, ...next }
-      const started = messages.length > 0
       const switchedUpstream = merged.kind !== pick.kind || merged.providerId !== pick.providerId
 
       if (switchedUpstream) {
@@ -626,13 +676,13 @@ export function useCcChat(personaId = '') {
         // 用户亲手点过订阅 / api，从这里开始按他选的送
         setCredChosen(true)
         setSettingsNote(
-          started ? '换供应商要新建对话才生效（这一窗还是原来那套）' : '已选好，这一窗生效',
+          sessionStarted ? '换供应商要新建对话才生效（这一窗还是原来那套）' : '已选好，这一窗生效',
         )
         return
       }
 
       setPick(merged)
-      if (!started) {
+      if (!sessionStarted) {
         setSettingsNote('已选好，发第一句时生效')
         return
       }
@@ -661,8 +711,46 @@ export function useCcChat(personaId = '') {
         setSettingsNote('设置没送到，等下再试')
       }
     },
-    [pick, messages.length, upstream, sessionId],
+    [pick, sessionStarted, upstream, sessionId],
   )
+
+  const applyWebSettings = useCallback(
+    (next: Partial<CcWebSettings>) => {
+      if (sessionStarted) {
+        setSettingsNote('联网工具配置要新建对话才生效')
+        return
+      }
+      setWebSettings(current =>
+        normalizeWebSettings({ ...current, ...next } as Record<string, unknown>),
+      )
+      setSettingsNote('已应用到这一个窗口；要作为以后默认值，请点“保存为新窗口默认”')
+    },
+    [sessionStarted],
+  )
+
+  const saveWebDefaults = useCallback(async () => {
+    setWebSaving(true)
+    try {
+      const res = await fetch('/api/cc-web-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webSettings),
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        setSettingsNote(String(data.error || '联网工具默认值保存失败'))
+        return
+      }
+      const saved = normalizeWebSettings(data.settings as Record<string, unknown>)
+      setWebDefaults(saved)
+      setWebSettings(saved)
+      setSettingsNote('已保存为新窗口默认值')
+    } catch (error) {
+      setSettingsNote((error as Error).message || '联网工具默认值保存失败')
+    } finally {
+      setWebSaving(false)
+    }
+  }, [webSettings])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -720,6 +808,14 @@ export function useCcChat(personaId = '') {
             model: pick.model,
             effort: pick.effort,
             thinking: pick.thinking,
+            web_search_enabled: webSettings.searchEnabled,
+            web_fetch_enabled: webSettings.fetchEnabled,
+            web_max_searches: webSettings.maxSearchesPerTurn,
+            web_max_fetches: webSettings.maxFetchesPerTurn,
+            web_fetch_target_tokens: webSettings.fetchTargetTokens,
+            web_max_sources: webSettings.maxDisplayedSources,
+            web_domain_mode: webSettings.domainMode,
+            web_domains: webSettings.domains,
             // 第 5 条：进程已丢时靠它 resume 接回上下文；有活进程服务端会忽略
             ...(resumeHintRef.current ? { resume_hint: resumeHintRef.current } : {}),
             // 5.5 换窗 handoff：首条消息带桶 id 和源会话 id，服务端拉内容注入
@@ -909,7 +1005,7 @@ export function useCcChat(personaId = '') {
         setSending(false)
       }
     },
-    [sessionId, sending, personaId, refreshSessions, mode, pick, credChosen],
+    [sessionId, sending, personaId, refreshSessions, mode, pick, credChosen, webSettings],
   )
 
   // 轮数取两者的大者：进程活着时它自己的计数是准的（这一轮刚加完，库还没写）；
@@ -939,11 +1035,15 @@ export function useCcChat(personaId = '') {
     mode,
     setMode,
     /** 这个会话已经开口了 —— 模式和供应商都不能再改 */
-    modeLocked: messages.length > 0,
+    modeLocked: sessionStarted,
     upstream,
     upstreamLoaded,
     pick,
     applyPick,
+    webSettings,
+    applyWebSettings,
+    saveWebDefaults,
+    webSaving,
     settingsNote,
     setSettingsNote,
     // 第 5 步

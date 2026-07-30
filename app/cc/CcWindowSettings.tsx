@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import type { CcSessionStats } from './types'
 import { EFFORT_OPTIONS, modelsFor, type CcUpstreamConfig, type CcUpstreamPick } from './upstream'
+import type { CcWebSettings } from './webSettings'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
 //
@@ -28,6 +29,10 @@ type Props = {
   upstream: CcUpstreamConfig
   pick: CcUpstreamPick
   onPick: (next: Partial<CcUpstreamPick>) => void
+  web: CcWebSettings
+  onWebChange: (next: Partial<CcWebSettings>) => void
+  onSaveWebDefaults: () => void
+  webSaving: boolean
   /** 已经开口了：供应商那两个框只能看不能换 */
   locked: boolean
   note: string
@@ -65,6 +70,10 @@ export default function CcWindowSettings({
   upstream,
   pick,
   onPick,
+  web,
+  onWebChange,
+  onSaveWebDefaults,
+  webSaving,
   locked,
   note,
   onHandoff,
@@ -247,6 +256,140 @@ export default function CcWindowSettings({
             >
               {pick.thinking ? '开' : '关'}
             </span>
+          </button>
+
+          {/* ── 联网工具：首句后锁定；默认值由 Haven 保存 ── */}
+          <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
+          <div className={LABEL}>联网工具</div>
+          <div className="mb-2 grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              disabled={locked}
+              className={seg(web.searchEnabled)}
+              onClick={() => onWebChange({ searchEnabled: !web.searchEnabled })}
+            >
+              Web Search · {web.searchEnabled ? '开' : '关'}
+            </button>
+            <button
+              type="button"
+              disabled={locked}
+              className={seg(web.fetchEnabled)}
+              onClick={() => onWebChange({ fetchEnabled: !web.fetchEnabled })}
+            >
+              Web Fetch · {web.fetchEnabled ? '开' : '关'}
+            </button>
+          </div>
+          {locked ? (
+            <div className={HINT}>联网工具在会话启动时确定；这一窗已经开口，只能新建或换窗后调整</div>
+          ) : null}
+
+          <details className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3 py-2.5">
+            <summary className="cursor-pointer text-[11.5px] text-[var(--color-text-secondary)]">
+              高级选项
+            </summary>
+            <div className="mt-3 space-y-3">
+              <label className="block">
+                <span className={LABEL}>每轮最多 Search 次数</span>
+                <select
+                  className={SELECT}
+                  disabled={locked || !web.searchEnabled}
+                  value={web.maxSearchesPerTurn}
+                  onChange={e => onWebChange({ maxSearchesPerTurn: Number(e.target.value) })}
+                >
+                  {[1, 2, 3, 5, 8, 10].map(value => (
+                    <option key={value} value={value}>{value} 次</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className={LABEL}>每轮最多 Fetch 网页数</span>
+                <select
+                  className={SELECT}
+                  disabled={locked || !web.fetchEnabled}
+                  value={web.maxFetchesPerTurn}
+                  onChange={e => onWebChange({ maxFetchesPerTurn: Number(e.target.value) })}
+                >
+                  {[1, 2, 3, 5, 8, 10].map(value => (
+                    <option key={value} value={value}>{value} 个</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className={LABEL}>单页内容目标上限</span>
+                <select
+                  className={SELECT}
+                  disabled={locked || !web.fetchEnabled}
+                  value={web.fetchTargetTokens}
+                  onChange={e => onWebChange({ fetchTargetTokens: Number(e.target.value) })}
+                >
+                  {[1000, 2000, 4000, 8000, 16000].map(value => (
+                    <option key={value} value={value}>约 {fmtK(value)} tokens</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+                  这是附加给 Web Fetch 的目标说明，不是 SDK 硬上限；历史保存会另外硬截断。
+                </span>
+              </label>
+
+              <label className="block">
+                <span className={LABEL}>最多展示来源数</span>
+                <select
+                  className={SELECT}
+                  disabled={locked || !web.searchEnabled}
+                  value={web.maxDisplayedSources}
+                  onChange={e => onWebChange({ maxDisplayedSources: Number(e.target.value) })}
+                >
+                  {[1, 3, 5, 10, 20].map(value => (
+                    <option key={value} value={value}>{value} 条</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className={LABEL}>域名范围</span>
+                <select
+                  className={`${SELECT} mb-2`}
+                  disabled={locked}
+                  value={web.domainMode}
+                  onChange={e =>
+                    onWebChange({
+                      domainMode: e.target.value as CcWebSettings['domainMode'],
+                    })
+                  }
+                >
+                  <option value="all">不限制</option>
+                  <option value="allow">只允许以下域名</option>
+                  <option value="block">禁止以下域名</option>
+                </select>
+                {web.domainMode !== 'all' ? (
+                  <textarea
+                    className={`${SELECT} min-h-20 resize-y font-mono text-[10.5px]`}
+                    disabled={locked}
+                    value={web.domains.join('\n')}
+                    placeholder={'example.com\ndocs.example.org'}
+                    onChange={e =>
+                      onWebChange({
+                        domains: e.target.value.split(/[\n,]+/).map(item => item.trim()),
+                      })
+                    }
+                  />
+                ) : null}
+                <span className="mt-1 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+                  只填域名，不填 https://；同时约束 Search 和 Fetch。
+                </span>
+              </label>
+            </div>
+          </details>
+
+          <button
+            type="button"
+            disabled={webSaving}
+            onClick={onSaveWebDefaults}
+            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-[11.5px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)]/40 disabled:opacity-50"
+          >
+            {webSaving ? '保存中…' : '保存为新窗口默认'}
           </button>
 
           {note ? (

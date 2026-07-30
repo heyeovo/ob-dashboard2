@@ -1,4 +1,5 @@
 // 当轮通道 + 待批准队列 + 工作台状态（服务端专用，进程内单例）。
+import type { PermissionResult, PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 //
 // 为什么要单独一层，而不是像第 4 步那样写在 buildOptions 的闭包里：
 //
@@ -27,7 +28,7 @@ export const CMD_OUTPUT_LIMIT = 4000
 export type CcSend = (event: string, data: unknown) => void
 
 /** 批准卡片按哪种样子渲染 */
-export type CcPermKind = 'edit' | 'write' | 'bash' | 'other'
+export type CcPermKind = 'edit' | 'write' | 'bash' | 'web' | 'other'
 
 export type CcDiffLine = { tag: ' ' | '-' | '+'; text: string; n?: number }
 
@@ -55,12 +56,14 @@ export type CcPermRequest = {
   filePath: string
   command: string
   diff: CcDiffPreview | null
+  /** SDK 给出的细粒度权限建议；用于“本次对话 / 始终允许”，不自行猜规则。 */
+  suggestions: PermissionUpdate[]
   createdAt: number
   expiresAt: number
 }
 
 /** 答复。deny 一定要给句话，模型看得到。 */
-export type CcPermDecision = { behavior: 'allow' } | { behavior: 'deny'; message: string }
+export type CcPermDecision = PermissionResult
 
 /** 已经决定过的，工作台里留个尾巴（省得点完就消失，不知道刚才批了什么） */
 export type CcPermDecided = {
@@ -265,6 +268,10 @@ export function answerPermission(
   if (!ch || !ch.waiters.has(id)) return false
   settle(ch, id, decision, decision.behavior)
   return true
+}
+
+export function pendingPermission(sessionId: string, id: string): CcPermRequest | null {
+  return channels.get(sessionId)?.pending.find(item => item.id === id) || null
 }
 
 /** 会话要被收掉了：挂着的全部拒掉，不然那些 promise 永远不 resolve。 */

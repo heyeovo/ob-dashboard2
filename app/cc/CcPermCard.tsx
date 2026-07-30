@@ -7,13 +7,14 @@ import type { CcPermRequest } from './types'
 // 这一轮**正停在服务端**等这里点按钮 —— 不点它就一直挂着（30 分钟后自动按拒绝收场）。
 // 所以卡片上必须说清三件事：改哪个文件、具体改什么（diff）、还剩多久。
 //
-// ⚠️「本会话都放行」只对 Edit / Write 出现。Bash 每一条都要点，用户拍板的：
-// 命令能干的事没有边界（rm、git push、装东西），没法靠「这次批了下次也算」。
+// Edit / Write 沿用原有的本会话开关；Bash / WebFetch 只按 SDK 给出的细粒度规则
+// 显示会话级 / 永久批准，不放开整个工具。
 
 const KIND_LABEL: Record<string, string> = {
   edit: '改文件',
   write: '写文件',
   bash: '跑命令',
+  web: '访问网页',
   other: '操作',
 }
 
@@ -30,7 +31,11 @@ export function CcPermCard({
   onAnswer,
 }: {
   request: CcPermRequest
-  onAnswer: (id: string, allow: boolean, opts?: { remember?: boolean }) => void
+  onAnswer: (
+    id: string,
+    allow: boolean,
+    opts?: { remember?: boolean; scope?: 'once' | 'session' | 'always' },
+  ) => void
 }) {
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState(false)
@@ -42,12 +47,35 @@ export function CcPermCard({
   }, [])
 
   const isWriteTool = request.kind === 'edit' || request.kind === 'write'
+  const reusableRules = (request.suggestions || []).flatMap(update =>
+    update.type === 'addRules' && update.behavior === 'allow'
+      ? (update.rules || []).filter(rule => {
+          const content = String(rule.ruleContent || '').trim()
+          return (
+            (rule.toolName === 'Bash' && !!content) ||
+            (rule.toolName === 'WebFetch' && content.startsWith('domain:'))
+          )
+        })
+      : [],
+  )
+  const hasReusableRule =
+    reusableRules.length > 0 && (request.kind === 'bash' || request.kind === 'web')
+  const ruleLabel = reusableRules
+    .map(rule =>
+      rule.toolName === 'WebFetch'
+        ? `网页域名：${String(rule.ruleContent || '').replace(/^domain:/, '')}`
+        : `命令范围：${rule.ruleContent || ''}`,
+    )
+    .join('；')
   const diff = request.diff
 
-  const answer = (allow: boolean, remember = false) => {
+  const answer = (
+    allow: boolean,
+    opts: { remember?: boolean; scope?: 'once' | 'session' | 'always' } = {},
+  ) => {
     if (busy) return
     setBusy(true)
-    onAnswer(request.id, allow, { remember })
+    onAnswer(request.id, allow, opts)
   }
 
   return (
@@ -97,9 +125,20 @@ export function CcPermCard({
         </div>
       ) : null}
 
+      {hasReusableRule ? (
+        <div className="mt-2 rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+          {ruleLabel}
+        </div>
+      ) : null}
+
       <div className="cc-perm-foot">
-        <button type="button" className="cc-btn-primary" disabled={busy} onClick={() => answer(true)}>
-          批准
+        <button
+          type="button"
+          className="cc-btn-primary"
+          disabled={busy}
+          onClick={() => answer(true, { scope: 'once' })}
+        >
+          仅这次批准
         </button>
         <button type="button" className="cc-btn-ghost" disabled={busy} onClick={() => answer(false)}>
           拒绝
@@ -109,11 +148,33 @@ export function CcPermCard({
             type="button"
             className="cc-btn-ghost"
             disabled={busy}
-            onClick={() => answer(true, true)}
-            title="之后改文件不再一条条问。跑命令不受影响，永远都会问"
+            onClick={() => answer(true, { remember: true, scope: 'session' })}
+            title="之后改文件不再一条条问；Bash 和网页权限仍按各自规则处理"
           >
             本次对话都放行
           </button>
+        ) : null}
+        {hasReusableRule ? (
+          <>
+            <button
+              type="button"
+              className="cc-btn-ghost"
+              disabled={busy}
+              onClick={() => answer(true, { scope: 'session' })}
+              title={ruleLabel}
+            >
+              本次对话允许
+            </button>
+            <button
+              type="button"
+              className="cc-btn-ghost"
+              disabled={busy}
+              onClick={() => answer(true, { scope: 'always' })}
+              title={`${ruleLabel}。永久保存到 Haven，可在后续会话继续生效。`}
+            >
+              始终允许
+            </button>
+          </>
         ) : null}
         <span className="cc-perm-expire">{remainText(request.expiresAt, now)}</span>
       </div>
