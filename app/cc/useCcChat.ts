@@ -549,7 +549,7 @@ export function useCcChat(personaId = '') {
         // raw=1：thinking 和工具调用都在 raw_json 里，不要它历史就只剩正文。
         // 体积可控 —— 存的是工具的调用参数（文件路径、搜索词），不是返回结果。
         const res = await fetch(
-          `/api/cc-turns?session_id=${encodeURIComponent(nextId)}&limit=200&raw=1`,
+          `/api/cc-turns?session_id=${encodeURIComponent(nextId)}&limit=500&raw=1`,
           { cache: 'no-store' },
         )
         const data = await res.json()

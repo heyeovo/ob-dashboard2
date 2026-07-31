@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import type { CcSessionListItem } from './types'
 
 // 会话列表。数据来自 /api/cc-turns（Haven 的 conversation_turns）。
@@ -55,13 +56,16 @@ export default function CcSessionRail({ sessions, activeSessionId, loading, onPi
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <span className="text-xs font-medium text-[var(--color-text-tertiary)]">对话</span>
-        <button
-          type="button"
-          onClick={onNew}
-          className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[#FBE5DE]"
-        >
-          新对话
-        </button>
+        <div className="flex items-center gap-1.5">
+          <Link href="/cc/import" className="rounded-full px-2 py-1 text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]">导入</Link>
+          <button
+            type="button"
+            onClick={onNew}
+            className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[#FBE5DE]"
+          >
+            新对话
+          </button>
+        </div>
       </div>
 
       <div className="no-scrollbar flex-1 overflow-y-auto px-2 pb-3">
@@ -85,7 +89,7 @@ export default function CcSessionRail({ sessions, activeSessionId, loading, onPi
                       <span className="truncate text-[13px] text-[var(--color-text-primary)]">{s.title || s.session_id}</span>
                       {!isCc ? (
                         <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
-                          {s.source === 'gateway' ? 'Polaris' : s.source}
+                          {s.source === 'gateway' || s.source === 'polaris' ? 'Polaris' : s.source}
                         </span>
                       ) : null}
                     </div>

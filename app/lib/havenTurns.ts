@@ -1,7 +1,8 @@
 // Haven 的对话存储封装（服务端专用，带网关密码，不要在浏览器里用）。
 //
-// 打的是 Haven 的三条新接口（gateway.py handle_conversation_*）：
+// 打的是 Haven 的对话接口（gateway.py handle_conversation_*）：
 //   POST /gateway/api/conversation/turn      写一轮
+//   POST /gateway/api/conversation/import/polaris  批量导入 Polaris 历史
 //   GET  /gateway/api/conversation/sessions  会话列表
 //   GET  /gateway/api/conversation/turns     某会话的消息
 //
@@ -76,6 +77,12 @@ export type RecordTurnResult = {
   elapsedMs: number
   error: string
   httpStatus: number | null
+}
+
+export type PolarisImportPayload = {
+  format: 'polaris-export'
+  version: 1
+  conversations: unknown[]
 }
 
 type FetchOptions = {
@@ -200,6 +207,17 @@ export async function recordTurn(input: RecordTurnInput): Promise<RecordTurnResu
     error: '',
     httpStatus: res.httpStatus,
   }
+}
+
+export async function importPolarisConversations(
+  payload: PolarisImportPayload,
+): Promise<{ ok: boolean; payload: Record<string, unknown>; error: string; httpStatus: number | null }> {
+  return havenFetch({
+    method: 'POST',
+    path: '/gateway/api/conversation/import/polaris',
+    body: payload,
+    timeoutMs: 60_000,
+  })
 }
 
 /** 会话列表。source 传 'cc' 只看新前端的，不传是全部（含 Polaris 经 Haven 写的）。 */
