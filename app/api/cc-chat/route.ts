@@ -938,13 +938,13 @@ export async function POST(request: NextRequest) {
                     }
                   }
 
-                  // 写文件：强制走「问一次」。
+                  // 写文件 + Bash：强制走「问一次」。
                   //
                   // ⚠️ 光靠 permissionMode: 'default' + 不放进 allowedTools 是不够的 ——
-                  // SDK 会直接放行某些看起来安全的写操作。文件改动仍由现有按钮控制。
-                  // Bash 改回 Claude Code 标准权限引擎，才能让 SDK 的细粒度
-                  // “本次对话 / 始终允许”规则真正生效。
-                  if (WRITE_TOOLS.includes(String(toolName))) {
+                  // SDK 会直接放行某些看起来安全的写操作和”无害”命令（echo/ls）。
+                  // 在 hook 层显式 'ask'，所有写操作和命令都会走到 canUseTool 弹卡片，
+                  // SDK 的细粒度”本次对话 / 始终允许”规则才能真正生效。
+                  if (WRITE_TOOLS.includes(String(toolName)) || EXEC_TOOLS.includes(String(toolName))) {
                     return {
                       hookSpecificOutput: {
                         hookEventName: 'PreToolUse' as const,

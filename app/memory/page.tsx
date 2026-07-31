@@ -13,6 +13,7 @@ import Card from '../components/Card'
 import SearchBar from '../components/SearchBar'
 import FilterBar, { FilterPill } from '../components/FilterBar'
 import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
+import AutoMemoryQueue from './AutoMemoryQueue'
 
 // ==================== 类型定义 ====================
 interface Bucket {
@@ -502,6 +503,66 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
   )
 }
 // ==================== 主页组件 ====================
+function PendingSection({
+  buckets,
+  categoryMap,
+  setCategoryMap,
+  categories,
+  setCategories,
+  onRefresh,
+}: {
+  buckets: Bucket[]
+  categoryMap: Record<string, string>
+  setCategoryMap: (v: Record<string, string>) => void
+  categories: string[]
+  setCategories: React.Dispatch<React.SetStateAction<string[]>>
+  onRefresh: () => void
+}) {
+  const [queue, setQueue] = useState<'auto' | 'review'>('auto')
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="mb-5 flex flex-shrink-0 justify-center">
+        <div className="grid w-full max-w-md grid-cols-2 rounded-xl bg-[var(--color-surface-tertiary)] p-1 text-sm">
+          <button
+            onClick={() => setQueue('auto')}
+            className={`rounded-lg px-3 py-2 font-medium transition-colors ${
+              queue === 'auto'
+                ? 'bg-white text-[var(--color-text-primary)] shadow-sm'
+                : 'text-[var(--color-text-tertiary)]'
+            }`}
+          >
+            自动记忆候选
+          </button>
+          <button
+            onClick={() => setQueue('review')}
+            className={`rounded-lg px-3 py-2 font-medium transition-colors ${
+              queue === 'review'
+                ? 'bg-white text-[var(--color-text-primary)] shadow-sm'
+                : 'text-[var(--color-text-tertiary)]'
+            }`}
+          >
+            现有记忆审阅
+          </button>
+        </div>
+      </div>
+
+      {queue === 'auto' ? (
+        <AutoMemoryQueue onRefresh={onRefresh} />
+      ) : (
+        <ReviewSection
+          buckets={buckets}
+          categoryMap={categoryMap}
+          setCategoryMap={setCategoryMap}
+          categories={categories}
+          setCategories={setCategories}
+          onRefresh={onRefresh}
+        />
+      )}
+    </div>
+  )
+}
+
 function HomeClient() {
  
   const searchParams = useSearchParams()
@@ -945,7 +1006,7 @@ function HomeClient() {
         )}
 
         {activeTab === 'review' ? (
-          <ReviewSection 
+          <PendingSection
             buckets={buckets}
             categoryMap={categoryMap}
             setCategoryMap={setCategoryMap}
