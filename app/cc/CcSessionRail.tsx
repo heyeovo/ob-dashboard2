@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import type { CcSessionListItem } from './types'
 
 // 会话列表。数据来自 /api/cc-turns（Haven 的 conversation_turns）。
@@ -12,6 +13,8 @@ type Props = {
   loading: boolean
   onPick: (sessionId: string) => void
   onNew: () => void
+  onRename: (sessionId: string, title: string) => Promise<boolean>
+  onDelete: (sessionId: string) => Promise<boolean>
 }
 
 function relativeTime(iso: string) {
@@ -28,7 +31,26 @@ function relativeTime(iso: string) {
   return new Date(t).toLocaleDateString('zh-CN')
 }
 
-export default function CcSessionRail({ sessions, activeSessionId, loading, onPick, onNew }: Props) {
+export default function CcSessionRail({ sessions, activeSessionId, loading, onPick, onNew, onRename, onDelete }: Props) {
+  const [menuId, setMenuId] = useState('')
+
+  const copySessionId = async (sessionId: string) => {
+    await navigator.clipboard.writeText(sessionId)
+    setMenuId('')
+  }
+
+  const rename = async (session: CcSessionListItem) => {
+    const title = window.prompt('修改窗口标题', session.title || '')
+    if (!title?.trim()) return
+    if (await onRename(session.session_id, title)) setMenuId('')
+  }
+
+  const remove = async (session: CcSessionListItem) => {
+    const confirmed = window.confirm(`删除窗口“${session.title || session.session_id}”？\n\n窗口会从列表隐藏，对话原文和 Persona 历史仍会保留。`)
+    if (!confirmed) return
+    if (await onDelete(session.session_id)) setMenuId('')
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
@@ -51,28 +73,41 @@ export default function CcSessionRail({ sessions, activeSessionId, loading, onPi
           sessions.map(s => {
             const isCc = s.source === 'cc'
             return (
-              <button
+              <div
                 key={s.session_id}
-                type="button"
-                onClick={() => onPick(s.session_id)}
-                className={`cc-rail-item mb-0.5 block w-full px-2.5 py-2 text-left ${
+                className={`cc-rail-item relative mb-0.5 w-full px-2.5 py-2 ${
                   s.session_id === activeSessionId ? 'active' : ''
                 }`}
               >
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate text-[13px] text-[var(--color-text-primary)]">
-                    {s.title || s.session_id}
-                  </span>
-                  {!isCc ? (
-                    <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
-                      {s.source === 'gateway' ? 'Polaris' : s.source}
-                    </span>
-                  ) : null}
+                <div className="flex items-start gap-1">
+                  <button type="button" onClick={() => onPick(s.session_id)} className="min-w-0 flex-1 text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-[13px] text-[var(--color-text-primary)]">{s.title || s.session_id}</span>
+                      {!isCc ? (
+                        <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
+                          {s.source === 'gateway' ? 'Polaris' : s.source}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{s.turn_count} 轮 · {relativeTime(s.last_at)}</div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`管理 ${s.title || s.session_id}`}
+                    onClick={() => setMenuId(current => current === s.session_id ? '' : s.session_id)}
+                    className="rounded px-1.5 py-0.5 text-sm text-[var(--color-text-disabled)] hover:bg-white hover:text-[var(--color-text-secondary)]"
+                  >
+                    ⋯
+                  </button>
                 </div>
-                <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">
-                  {s.turn_count} 轮 · {relativeTime(s.last_at)}
-                </div>
-              </button>
+                {menuId === s.session_id ? (
+                  <div className="absolute right-1 top-8 z-30 w-36 rounded-xl border border-[var(--color-border)] bg-white p-1 text-xs shadow-lg">
+                    <button type="button" onClick={() => void rename(s)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-surface-secondary)]">重命名</button>
+                    <button type="button" onClick={() => void copySessionId(s.session_id)} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-surface-secondary)]">复制 Session ID</button>
+                    <button type="button" onClick={() => void remove(s)} className="block w-full rounded-lg px-3 py-2 text-left text-rose-600 hover:bg-rose-50">删除窗口</button>
+                  </div>
+                ) : null}
+              </div>
             )
           })
         )}

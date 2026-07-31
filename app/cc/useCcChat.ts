@@ -388,6 +388,27 @@ export function useCcChat(personaId = '') {
     }
   }, [personaId])
 
+  const renameSession = useCallback(async (targetSessionId: string, title: string) => {
+    const cleanedTitle = title.trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (!targetSessionId || !cleanedTitle) return false
+    try {
+      const res = await fetch('/api/cc-turns', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: targetSessionId, title: cleanedTitle }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(String(data.error || '重命名失败'))
+      setSessions(previous => previous.map(session => (
+        session.session_id === targetSessionId ? { ...session, title: cleanedTitle } : session
+      )))
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '重命名失败')
+      return false
+    }
+  }, [])
+
   useEffect(() => {
     void refreshSessions()
   }, [refreshSessions])
@@ -587,6 +608,29 @@ export function useCcChat(personaId = '') {
     // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
     setPick(pickFromConfig(upstream))
   }, [sessionId, draft, upstream, webDefaults])
+
+  const deleteSession = useCallback(async (targetSessionId: string) => {
+    if (!targetSessionId) return false
+    try {
+      const res = await fetch('/api/cc-turns', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: targetSessionId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(String(data.error || '删除窗口失败'))
+      void fetch(`/api/cc-chat?session_id=${encodeURIComponent(targetSessionId)}`, {
+        method: 'DELETE',
+      }).catch(() => undefined)
+      draftsRef.current.delete(targetSessionId)
+      setSessions(previous => previous.filter(session => session.session_id !== targetSessionId))
+      if (targetSessionId === sessionId) startNewSession()
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '删除窗口失败')
+      return false
+    }
+  }, [sessionId, startNewSession])
 
   const startWithHandoff = useCallback(
     async (payload: HandoffPayload) => {
@@ -1014,11 +1058,15 @@ export function useCcChat(personaId = '') {
     ...stats,
     turnCount: Math.max(stats.turnCount, historyTurnCount),
   }
+  const sessionTitle = sessions.find(session => session.session_id === sessionId)?.title
+    || messages.find(message => message.role === 'user' && !message.handoff)?.text.slice(0, 80)
+    || '新对话'
 
   return {
     sessionId,
     sessions,
     sessionsLoading,
+    sessionTitle,
     messages,
     historyLoading,
     draft,
@@ -1031,6 +1079,8 @@ export function useCcChat(personaId = '') {
     stop,
     switchSession,
     startNewSession,
+    renameSession,
+    deleteSession,
     // 5.2：模式 + 本窗口设置
     mode,
     setMode,

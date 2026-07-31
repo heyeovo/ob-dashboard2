@@ -135,9 +135,17 @@ export default function CcChatPage() {
         <span className="hidden max-w-[7rem] truncate md:inline">{people.active.name}</span>
       </button>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
-          {chat.messages.find(m => m.role === 'user')?.text.slice(0, 40) || '新对话'}
-        </div>
+        <button
+          type="button"
+          title="点击修改窗口标题"
+          onClick={() => {
+            const title = window.prompt('修改窗口标题', chat.sessionTitle === '新对话' ? '' : chat.sessionTitle)
+            if (title?.trim()) void chat.renameSession(chat.sessionId, title)
+          }}
+          className="block max-w-full truncate text-left text-[13px] font-medium text-[var(--color-text-primary)] hover:text-[var(--color-primary)]"
+        >
+          {chat.sessionTitle}
+        </button>
         {/* ⚠️ 一行到底不换行：手机上换行会把整条顶栏顶成半屏高。
             手机只留「模式 · N 轮」，其余（模型名 / 上下文 / 花费 / 缓存）
             md 以上才出现，手机想看去「本窗」弹窗里看。 */}
@@ -306,6 +314,8 @@ export default function CcChatPage() {
         setRailOpen(false)
         setHandoffOpen({ fromSessionId: null })
       }}
+      onRename={chat.renameSession}
+      onDelete={chat.deleteSession}
     />
   )
 

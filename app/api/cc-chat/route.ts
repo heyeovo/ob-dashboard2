@@ -37,7 +37,7 @@ import {
 } from '@/app/lib/ccMcp'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
-import { recordTurn, listTurns } from '@/app/lib/havenTurns'
+import { recordTurn, listTurns, updatePersonaFromExchange } from '@/app/lib/havenTurns'
 import { getBucket } from '@/app/lib/api'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import {
@@ -1328,6 +1328,7 @@ export async function POST(request: NextRequest) {
         // ── 写回 Haven 的 conversation_turns ────────────────────────────
         // sessionId 跟 hook 用的是同一个值（同一个变量），不会分组串。
         let storeInfo: Record<string, unknown>
+        let personaInfo: Record<string, unknown> = { ok: false, updated: false, skipped: 'conversation_not_stored' }
         if (assistantText.trim()) {
           const rec = await withTimeout(recordTurn({
             sessionId,
@@ -1382,6 +1383,23 @@ export async function POST(request: NextRequest) {
                 error: rec.error || undefined,
               }
             : { ok: false, stored: false, error: `写库超过 ${STORE_TIMEOUT_MS / 1000}s 没回，这一轮没存上` }
+          if (rec?.ok && rec.stored) {
+            const recalledMemoryIds = Array.isArray(bucket.recallInfo?.recalled_ids)
+              ? bucket.recallInfo.recalled_ids.map(String)
+              : []
+            const personaResult = await updatePersonaFromExchange({
+              sessionId,
+              userMessage: text,
+              assistantResponse: assistantText,
+              recalledMemoryIds,
+              toolSummary: bucket.toolEvents.map(item => String(item.name || '')).filter(Boolean).join(', '),
+            })
+            personaInfo = {
+              ok: personaResult.ok,
+              updated: personaResult.updated,
+              error: personaResult.error || undefined,
+            }
+          }
         } else {
           storeInfo = { ok: false, stored: false, error: '模型没有文本输出，不写库' }
         }
@@ -1395,6 +1413,7 @@ export async function POST(request: NextRequest) {
         // 那正在占着 iterator，这个数字下一轮再拿。
         send('after', {
           store: storeInfo,
+          persona: personaInfo,
           stats: getSessionStats(sessionId),
           elapsed_ms: Date.now() - startedAt,
         })

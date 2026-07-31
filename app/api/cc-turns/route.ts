@@ -1,5 +1,11 @@
 import { NextRequest } from 'next/server'
-import { listSessions, listTurns, type TurnSource } from '@/app/lib/havenTurns'
+import {
+  listSessions,
+  listTurns,
+  renameConversationSession,
+  softDeleteConversationSession,
+  type TurnSource,
+} from '@/app/lib/havenTurns'
 
 // 第 3 步的读回验证路由（也是第 4 步聊天页会话列表要用的那两个查询）。
 //
@@ -73,4 +79,31 @@ export async function GET(request: NextRequest) {
     count: sessions.length,
     sessions,
   })
+}
+
+export async function PATCH(request: NextRequest) {
+  const body = await request.json().catch(() => null) as { session_id?: string; title?: string } | null
+  const sessionId = (body?.session_id || '').trim()
+  const title = (body?.title || '').trim()
+  if (!sessionId || !title) {
+    return Response.json({ ok: false, error: 'session_id / title 不能为空' }, { status: 400 })
+  }
+  const result = await renameConversationSession(sessionId, title)
+  return Response.json(
+    { ok: result.ok, session_id: sessionId, title: result.title, error: result.error || undefined },
+    { status: result.ok ? 200 : 502 },
+  )
+}
+
+export async function DELETE(request: NextRequest) {
+  const body = await request.json().catch(() => null) as { session_id?: string } | null
+  const sessionId = (body?.session_id || '').trim()
+  if (!sessionId) {
+    return Response.json({ ok: false, error: 'session_id 不能为空' }, { status: 400 })
+  }
+  const result = await softDeleteConversationSession(sessionId)
+  return Response.json(
+    { ok: result.ok, session_id: sessionId, deleted: result.ok, error: result.error || undefined },
+    { status: result.ok ? 200 : 502 },
+  )
 }

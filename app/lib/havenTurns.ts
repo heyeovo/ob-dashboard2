@@ -79,7 +79,7 @@ export type RecordTurnResult = {
 }
 
 type FetchOptions = {
-  method: 'GET' | 'POST'
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   path: string
   sessionId?: string
   body?: unknown
@@ -247,5 +247,66 @@ export async function listTurns(
     ok: true,
     turns: Array.isArray(res.payload.turns) ? (res.payload.turns as HavenTurn[]) : [],
     error: '',
+  }
+}
+
+export async function renameConversationSession(
+  sessionId: string,
+  title: string,
+): Promise<{ ok: boolean; title: string; error: string }> {
+  const id = (sessionId || '').trim()
+  const cleanedTitle = (title || '').trim().replace(/\s+/g, ' ').slice(0, 120)
+  if (!id || !cleanedTitle) return { ok: false, title: '', error: 'session_id / title 不能为空' }
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId: id,
+    body: { session_id: id, title: cleanedTitle },
+  })
+  return { ok: res.ok, title: cleanedTitle, error: res.error }
+}
+
+export async function softDeleteConversationSession(
+  sessionId: string,
+): Promise<{ ok: boolean; error: string }> {
+  const id = (sessionId || '').trim()
+  if (!id) return { ok: false, error: 'session_id 不能为空' }
+  const res = await havenFetch({
+    method: 'DELETE',
+    path: '/gateway/api/conversation/session',
+    sessionId: id,
+    body: { session_id: id },
+  })
+  return { ok: res.ok, error: res.error }
+}
+
+export async function updatePersonaFromExchange(input: {
+  sessionId: string
+  userMessage: string
+  assistantResponse: string
+  recalledMemoryIds?: string[]
+  toolSummary?: string
+}): Promise<{ ok: boolean; updated: boolean; error: string }> {
+  const sessionId = (input.sessionId || '').trim()
+  if (!sessionId || !input.userMessage.trim() || !input.assistantResponse.trim()) {
+    return { ok: false, updated: false, error: 'Persona exchange 缺少完整对话' }
+  }
+  const res = await havenFetch({
+    method: 'POST',
+    path: '/gateway/api/persona/exchange',
+    sessionId,
+    timeoutMs: 30_000,
+    body: {
+      session_id: sessionId,
+      user_message: input.userMessage,
+      assistant_response: input.assistantResponse,
+      recalled_memory_ids: input.recalledMemoryIds || [],
+      tool_summary: input.toolSummary || '',
+    },
+  })
+  return {
+    ok: res.ok,
+    updated: res.ok && res.payload.updated === true,
+    error: res.error,
   }
 }
