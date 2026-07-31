@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { ComponentProps, FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import BucketDetailDrawer from '../components/BucketDetailDrawer'
 
 type ReminderStatus = 'active' | 'done' | 'archived'
 type Reminder = {
@@ -55,6 +56,8 @@ type TodoForm = {
   source_bucket: string
   context: string
 }
+
+type DrawerSelected = ComponentProps<typeof BucketDetailDrawer>['selected']
 
 const EMPTY_REMINDER: ReminderForm = {
   title: '', content: '', start_at: '', end_at: '', next_due_at: '',
@@ -252,6 +255,13 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<TodoItem | null>(null)
   const [form, setForm] = useState<TodoForm>(EMPTY_TODO)
+  const [selectedBucket, setSelectedBucket] = useState<DrawerSelected>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [drawerEditing, setDrawerEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [operating, setOperating] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
     const query = new URLSearchParams({ limit: '500' })
@@ -305,6 +315,66 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
     } catch (error) { onMessage(String(error)) }
   }
 
+  const fetchBucket = useCallback(async (id: string) => {
+    const response = await fetch(`/api/bucket/${encodeURIComponent(id)}`, { cache: 'no-store' })
+    const data = await response.json()
+    if (!response.ok || data.error) throw new Error(data.error || '桶详情加载失败')
+    return data
+  }, [])
+
+  async function openBucket(id: string) {
+    setDrawerEditing(false)
+    setDetailLoading(true)
+    try {
+      setSelectedBucket(await fetchBucket(id))
+    } catch (error) {
+      onMessage(String(error))
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  async function refreshSelected(id: string) {
+    setSelectedBucket(await fetchBucket(id))
+  }
+
+  async function traceOp(id: string, args: Record<string, unknown>) {
+    setOperating(true)
+    try {
+      const response = await fetch('/api/edit-bucket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...args }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data.error) throw new Error(data.error || '记忆修改失败')
+      await refreshSelected(id)
+      await load()
+    } catch (error) {
+      onMessage(String(error))
+    } finally {
+      setOperating(false)
+    }
+  }
+
+  async function saveBucketEdit() {
+    if (!selectedBucket) return
+    setSaving(true)
+    try {
+      await traceOp(selectedBucket.id, { content: editContent })
+      setDrawerEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function copyBucketId() {
+    if (!selectedBucket) return
+    await navigator.clipboard.writeText(selectedBucket.id)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-2">
@@ -332,12 +402,54 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
           <div className="flex items-start gap-3">
             <input aria-label={item.done ? '重新打开' : '标记完成'} type="checkbox" checked={item.done} onChange={() => void toggle(item)} className="mt-1 h-5 w-5 accent-[var(--color-primary)]" />
             <div className="min-w-0 flex-1"><p className={`whitespace-pre-wrap text-sm leading-6 ${item.done ? 'line-through' : ''}`}>{item.content}</p>{item.context && <p className="mt-2 text-xs leading-5 text-[var(--color-text-tertiary)]">{item.context}</p>}
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-tertiary)]"><span>{item.source === 'bucket' ? '桶 Todo' : '独立 Todo'}</span>{item.source_bucket && <Link href={`/bucket/${encodeURIComponent(item.source_bucket)}`} className="text-[var(--color-primary)]">{item.source_bucket_name || item.source_bucket}{item.source_bucket_name ? ` · ${item.source_bucket}` : ''}</Link>}</div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-tertiary)]"><span>{item.source === 'bucket' ? '桶 Todo' : '独立 Todo'}</span>{item.source_bucket && <button type="button" onClick={() => void openBucket(item.source_bucket)} className="text-[var(--color-primary)] hover:underline">{item.source_bucket_name || item.source_bucket}{item.source_bucket_name ? ` · ${item.source_bucket}` : ''}</button>}</div>
             </div>
             <button type="button" onClick={() => startEdit(item)} className="text-sm text-[var(--color-primary)]">编辑</button>
           </div>
         </article>)}</div>
       </div>)}
+
+    <BucketDetailDrawer
+      selected={selectedBucket}
+      detailLoading={detailLoading}
+      editing={drawerEditing}
+      editContent={editContent}
+      saving={saving}
+      operating={operating}
+      copied={copied}
+      onClose={() => { setSelectedBucket(null); setDrawerEditing(false) }}
+      onStartEdit={(content) => { setDrawerEditing(true); setEditContent(content) }}
+      onCancelEdit={() => setDrawerEditing(false)}
+      onSaveEdit={saveBucketEdit}
+      onTraceOp={traceOp}
+      onCopyId={copyBucketId}
+      onTouch={async (id) => {
+        const response = await fetch(`/api/touch/${encodeURIComponent(id)}`, { method: 'POST' })
+        if (!response.ok) throw new Error('轻触失败')
+        await refreshSelected(id)
+      }}
+      onArchive={async (id) => {
+        const isArchived = selectedBucket?.metadata?.type === 'archived'
+        setOperating(true)
+        try {
+          const endpoint = isArchived ? `/api/unarchive/${encodeURIComponent(id)}` : `/api/archive/${encodeURIComponent(id)}`
+          const response = await fetch(endpoint, { method: 'POST' })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok || !data.ok) throw new Error(data.error || '归档操作失败')
+          setSelectedBucket(null)
+          await load()
+        } catch (error) {
+          onMessage(String(error))
+        } finally {
+          setOperating(false)
+        }
+      }}
+      onActivate={async (id) => {
+        const response = await fetch(`/api/touch/${encodeURIComponent(id)}?ripple=true`, { method: 'POST' })
+        if (!response.ok) throw new Error('激活失败')
+        await refreshSelected(id)
+      }}
+    />
   </section>
 }
 
