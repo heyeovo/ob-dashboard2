@@ -292,6 +292,30 @@ function fetchDomainAllowed(rawUrl: unknown, settings: CcWebSettings): boolean {
   return settings.domainMode === 'allow' ? matched : !matched
 }
 
+const BEIJING_TIME_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+
+function beijingRuntimeContext(now = new Date()): string {
+  const parts = Object.fromEntries(
+    BEIJING_TIME_FORMATTER.formatToParts(now).map(part => [part.type, part.value]),
+  )
+  const timestamp = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
+  return (
+    '<运行时信息>\n' +
+    `当前北京时间：${timestamp} UTC+08:00（Asia/Shanghai）。` +
+    '这是系统提供的隐藏时间，不是用户消息。\n' +
+    '</运行时信息>'
+  )
+}
+
 /**
  * 往「这一轮」的工具记录里加一条，同时推给前端。
  * hook 里必须用这个，不能碰局部变量 —— 见文件头那段说明。
@@ -1146,6 +1170,10 @@ export async function POST(request: NextRequest) {
         }
         stamp('换窗原文拉回来了')
       }
+
+      // 当前时间只放在本轮 user 消息的动态尾部：前端气泡和 Haven user_text 仍保存用户原话；
+      // 下一轮它成为固定历史，不会改写旧时间，也不会让稳定的系统提示/历史缓存前缀失效。
+      content += `\n\n${beijingRuntimeContext()}`
 
       const userMessage: SDKUserMessage = {
         type: 'user',

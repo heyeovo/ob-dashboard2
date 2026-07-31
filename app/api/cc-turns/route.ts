@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
   if (sessionId) {
     const res = await listTurns(sessionId, {
       limit: Number(sp.get('limit') || 200),
+      beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
       includeRaw: sp.get('raw') === '1',
     })
     if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })

@@ -272,6 +272,9 @@ export function useCcChat(personaId = '') {
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [messages, setMessages] = useState<CcMessage[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [earlierHistoryLoading, setEarlierHistoryLoading] = useState(false)
+  const [historyBeforeId, setHistoryBeforeId] = useState<number | null>(null)
+  const [hasEarlierHistory, setHasEarlierHistory] = useState(false)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [stats, setStats] = useState<CcSessionStats>(EMPTY_STATS)
@@ -538,6 +541,8 @@ export function useCcChat(personaId = '') {
       setMessages([])
       setStats(EMPTY_STATS)
       setHistoryTurnCount(0)
+      setHistoryBeforeId(null)
+      setHasEarlierHistory(false)
       // 待批准是按会话分的，切走先清空，轮询会把新会话那份拉回来
       setPending([])
       setDecided([])
@@ -549,16 +554,19 @@ export function useCcChat(personaId = '') {
         // raw=1：thinking 和工具调用都在 raw_json 里，不要它历史就只剩正文。
         // 体积可控 —— 存的是工具的调用参数（文件路径、搜索词），不是返回结果。
         const res = await fetch(
-          `/api/cc-turns?session_id=${encodeURIComponent(nextId)}&limit=500&raw=1`,
+          `/api/cc-turns?session_id=${encodeURIComponent(nextId)}&limit=100&raw=1`,
           { cache: 'no-store' },
         )
         const data = await res.json()
         if (data.ok && Array.isArray(data.turns)) {
           const turns = data.turns as HavenTurnRow[]
           setMessages(turnsToMessages(turns))
+          setHistoryBeforeId(turns[0]?.id ?? null)
+          setHasEarlierHistory(turns.length === 100)
           // 进程没了内存里的轮数就归零，用库里的行数补上。
           // 花费补不了（要价格表），保持 0。
-          setHistoryTurnCount(turns.length)
+          const knownTurnCount = sessions.find(session => session.session_id === nextId)?.turn_count || 0
+          setHistoryTurnCount(Math.max(turns.length, knownTurnCount))
           // 老会话是什么模式就照它显示，别让它看起来能改
           setMode(modeOfTurns(turns))
           // 第 4 + 5 条：从最后一轮读回本窗配置和 resume 接回点
@@ -585,8 +593,31 @@ export function useCcChat(personaId = '') {
         setHistoryLoading(false)
       }
     },
-    [sessionId, draft, webDefaults],
+    [sessionId, draft, webDefaults, sessions],
   )
+
+  const loadEarlierHistory = useCallback(async () => {
+    if (!sessionId || !hasEarlierHistory || historyBeforeId == null || earlierHistoryLoading) return
+    setEarlierHistoryLoading(true)
+    try {
+      const res = await fetch(
+        `/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&limit=100&before_id=${historyBeforeId}&raw=1`,
+        { cache: 'no-store' },
+      )
+      const data = await res.json()
+      if (!data.ok || !Array.isArray(data.turns)) throw new Error('历史消息读取失败')
+      const turns = data.turns as HavenTurnRow[]
+      if (turns.length > 0) {
+        setMessages(previous => [...turnsToMessages(turns), ...previous])
+        setHistoryBeforeId(turns[0].id)
+      }
+      setHasEarlierHistory(turns.length === 100)
+    } catch {
+      setError('更早的历史消息读取失败')
+    } finally {
+      setEarlierHistoryLoading(false)
+    }
+  }, [sessionId, hasEarlierHistory, historyBeforeId, earlierHistoryLoading])
 
   const startNewSession = useCallback(() => {
     draftsRef.current.set(sessionId, draft)
@@ -598,6 +629,8 @@ export function useCcChat(personaId = '') {
     setError('')
     setStats(EMPTY_STATS)
     setHistoryTurnCount(0)
+    setHistoryBeforeId(null)
+    setHasEarlierHistory(false)
     setPending([])
     setDecided([])
     setAutoAllowEdits(false)
@@ -645,6 +678,8 @@ export function useCcChat(personaId = '') {
       setError('')
       setStats(EMPTY_STATS)
       setHistoryTurnCount(0)
+      setHistoryBeforeId(null)
+      setHasEarlierHistory(false)
       setPending([])
       setDecided([])
       setAutoAllowEdits(false)
@@ -1061,14 +1096,19 @@ export function useCcChat(personaId = '') {
   const sessionTitle = sessions.find(session => session.session_id === sessionId)?.title
     || messages.find(message => message.role === 'user' && !message.handoff)?.text.slice(0, 80)
     || '新对话'
+  const activeSessionSource = sessions.find(session => session.session_id === sessionId)?.source || ''
 
   return {
     sessionId,
     sessions,
     sessionsLoading,
     sessionTitle,
+    activeSessionSource,
     messages,
     historyLoading,
+    earlierHistoryLoading,
+    hasEarlierHistory,
+    loadEarlierHistory,
     draft,
     setDraft,
     sending,

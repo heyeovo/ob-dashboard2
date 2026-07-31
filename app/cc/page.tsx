@@ -221,6 +221,18 @@ export default function CcChatPage() {
   const thread = (
     <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-6">
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
+        {!chat.historyLoading && chat.messages.length > 0 && chat.hasEarlierHistory ? (
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => void chat.loadEarlierHistory()}
+              disabled={chat.earlierHistoryLoading}
+              className="rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-60"
+            >
+              {chat.earlierHistoryLoading ? '正在加载…' : '加载更早消息'}
+            </button>
+          </div>
+        ) : null}
         {chat.historyLoading ? (
           <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史</div>
         ) : chat.messages.length === 0 ? (
@@ -290,13 +302,26 @@ export default function CcChatPage() {
   const composer = (
     <div className="px-4 pb-4 pt-1">
       <div className="mx-auto max-w-[var(--chat-assistant-width)]">
-        <CcComposer
-          value={chat.draft}
-          onChange={chat.setDraft}
-          onSubmit={() => chat.send(chat.draft)}
-          onStop={chat.stop}
-          sending={chat.sending}
-        />
+        {chat.activeSessionSource && chat.activeSessionSource !== 'cc' ? (
+          <div className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-sm">
+            <div>这是历史归档，Claude Code 无法直接接回原来的 Polaris 运行会话。</div>
+            <button
+              type="button"
+              onClick={() => setHandoffOpen({ fromSessionId: chat.sessionId })}
+              className="mt-2 rounded-full bg-[var(--color-primary-soft)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary)]"
+            >
+              从这里换窗继续
+            </button>
+          </div>
+        ) : (
+          <CcComposer
+            value={chat.draft}
+            onChange={chat.setDraft}
+            onSubmit={() => chat.send(chat.draft)}
+            onStop={chat.stop}
+            sending={chat.sending}
+          />
+        )}
       </div>
     </div>
   )
