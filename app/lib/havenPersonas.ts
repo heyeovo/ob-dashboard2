@@ -133,7 +133,43 @@ async function havenFetch(
   }
 }
 
+// 协作者列表缓存。
+//
+// 为什么 60 分钟：配置页和聊天页共用一个 listPersonas，聊天页每轮都要读一次配置，
+// 直接打 Haven 慢 1.6-1.9s。60 分钟 TTL 覆盖一轮对话里几乎全部读取，平时不再碰 Haven。
+// 为什么敢拉这么长：savePersona / deletePersona 成功时主动清缓存（见下面两处调用），
+// 「改了配置下一秒生效」不受 TTL 影响 —— TTL 只是兜底，不是生效延迟。
+// 注意：挂在服务端内存，serverless 冷启动后缓存是空的（第一次读仍会打 Haven）。
+const PERSONA_CACHE_TTL_MS = 60 * 60 * 1000
+
+let personaCache:
+  | { at: number; personas: HavenPersona[] }
+  | null = null
+
+function clearPersonaCache() {
+  personaCache = null
+}
+
 export async function listPersonas(options?: {
+  signal?: AbortSignal
+}): Promise<{ ok: boolean; personas: HavenPersona[]; error: string }> {
+  if (options?.signal) {
+    // 带 AbortSignal 的调用是「用户主动刷新」那一路，不读缓存，避免读到过期列表
+    return listPersonasFresh(options)
+  }
+  const now = Date.now()
+  if (personaCache && now - personaCache.at < PERSONA_CACHE_TTL_MS) {
+    return { ok: true, personas: personaCache.personas, error: '' }
+  }
+  const res = await listPersonasFresh(options)
+  // 只缓存成功结果；失败照旧直连，不缓存错误（下次还能重试）
+  if (res.ok) {
+    personaCache = { at: now, personas: res.personas }
+  }
+  return res
+}
+
+async function listPersonasFresh(options?: {
   signal?: AbortSignal
 }): Promise<{ ok: boolean; personas: HavenPersona[]; error: string }> {
   const res = await havenFetch({ method: 'GET', path: PATH, signal: options?.signal })
@@ -159,6 +195,8 @@ export async function savePersona(
   })
   if (!res.ok) return { ok: false, persona: null, error: res.error }
   const persona = res.payload.persona
+  // 配置改过了，旧缓存立刻作废 —— 下次读就是新值，不用等 TTL
+  clearPersonaCache()
   return {
     ok: true,
     persona: persona && typeof persona === 'object' ? (persona as HavenPersona) : null,
@@ -178,6 +216,8 @@ export async function deletePersona(
     signal: options?.signal,
   })
   if (!res.ok) return { ok: false, deleted: false, error: res.error }
+  // 删掉一个协作者，缓存里的旧列表必须立刻作废
+  clearPersonaCache()
   return { ok: true, deleted: res.payload.deleted === true, error: '' }
 }
 
