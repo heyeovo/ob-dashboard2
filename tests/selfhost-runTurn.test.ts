@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createSelfhostStream,
   type PreparedSelfhostTurn,
+  type ReplaySelfhostTurn,
   type SelfhostRuntimeDependencies,
 } from '@/app/lib/selfhost/runSelfhostTurn'
 
@@ -41,7 +42,7 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
       recalledIds: ['new-bucket'], domains: [], error: '', httpStatus: 200,
     })),
     streamUpstream: vi.fn(async input => {
-      input.onThinking?.('先想')
+      input.onThinking?.('先想', 12_000)
       input.onText?.('最终回答')
       return {
         assistantText: '最终回答', thinkingText: '先想', stopReason: 'end_turn', url: 'https://relay.example/v1/messages',
@@ -50,7 +51,7 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
           cache_creation_input_tokens: 5, context_input_tokens: 125,
         },
         process: [
-          { type: 'thinking', text: '先想', id: 'thinking-0' },
+          { type: 'thinking', text: '先想', id: 'thinking-0', startedAt: 12_000, durationMs: 2_500 },
           { type: 'text', text: '最终回答', id: 'text-0' },
         ],
       }
@@ -60,6 +61,8 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
 }
 
 describe('runSelfhostTurn stream contract', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('emits usage, strictly persists, then emits done', async () => {
     const deps = dependencies({
       ok: true, stored: true, turnId: 9, roundId: 3, elapsedMs: 2, error: '', httpStatus: 200,
@@ -67,6 +70,7 @@ describe('runSelfhostTurn stream contract', () => {
     })
     const body = await new Response(createSelfhostStream(prepared(), undefined, deps)).text()
     expect(body.indexOf('event: usage')).toBeLessThan(body.indexOf('event: done'))
+    expect(body).toContain('"startedAt":12000')
     expect(body).toContain('"round_id":3')
     expect(body).not.toContain('event: error')
     expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({
@@ -83,6 +87,27 @@ describe('runSelfhostTurn stream contract', () => {
         { role: 'user', content: '现在的问题' },
       ],
     }))
+  })
+
+  it('restores persisted thinking duration during idempotent replay', async () => {
+    const ready = prepared()
+    const replay: ReplaySelfhostTurn = {
+      kind: 'replay',
+      request: ready.request,
+      turn: {
+        ...ready.history[0],
+        raw_json: JSON.stringify({
+          process: [
+            { type: 'thinking', text: '先想', id: 'thinking-0', startedAt: 12_000, durationMs: 2_500 },
+            { type: 'text', text: '最终回答', id: 'text-0' },
+          ],
+        }),
+      },
+    }
+    vi.spyOn(Date, 'now').mockReturnValue(10_000)
+    const body = await new Response(createSelfhostStream(replay)).text()
+    expect(body).toContain('"startedAt":7500')
+    expect(body).toContain('"idempotent_replay":true')
   })
 
   it('does not emit done when Haven rejects a cross-device race after generation', async () => {

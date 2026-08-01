@@ -204,6 +204,10 @@ export default function CcChatPage() {
     </div>
   )
 
+  const latestAssistantId = [...chat.messages]
+    .reverse()
+    .find(message => message.role === 'assistant' && !message.handoff)?.id
+
   const thread = (
     <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-6">
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
@@ -245,8 +249,9 @@ export default function CcChatPage() {
               </div>
             ) : (
               <CcMessageRow
-                key={m.id}
+                key={`${m.id}:${m.id === latestAssistantId ? 'current' : 'history'}`}
                 message={m}
+                isCurrentTurn={m.id === latestAssistantId}
                 // 按那一轮记下的人画头像名字；老消息没记就用当前选中的
                 persona={
                   (m.personaId && people.personas.find(p => p.id === m.personaId)) || people.active

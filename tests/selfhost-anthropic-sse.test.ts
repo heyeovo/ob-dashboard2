@@ -12,11 +12,20 @@ function chunked(parts: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('Anthropic-compatible SSE parser', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
 
   it('parses fragmented CRLF thinking, text, usage and ignores unknown events', async () => {
     const text: string[] = []
     const thinking: string[] = []
+    const thinkingStartedAt: number[] = []
+    let now = 1_000
+    vi.spyOn(Date, 'now').mockImplementation(() => {
+      now += 100
+      return now
+    })
     const raw = [
       'event: message_start\r\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":2,"cache_creation_input_tokens":3}}}\r\n\r\n',
       'event: future_event\r\ndata: {"type":"future_event","x":1}\r\n\r\n',
@@ -27,12 +36,20 @@ describe('Anthropic-compatible SSE parser', () => {
     ].join('')
     const result = await parseAnthropicSse(chunked([raw.slice(0, 17), raw.slice(17, 101), raw.slice(101)]), {
       onText: value => text.push(value),
-      onThinking: value => thinking.push(value),
+      onThinking: (value, startedAt) => {
+        thinking.push(value)
+        thinkingStartedAt.push(startedAt)
+      },
     })
     expect(thinking).toEqual(['想'])
+    expect(thinkingStartedAt).toHaveLength(1)
     expect(text).toEqual(['答'])
     expect(result.assistantText).toBe('答')
     expect(result.thinkingText).toBe('想')
+    expect(result.process).toEqual([
+      { type: 'thinking', text: '想', id: 'thinking-0', startedAt: thinkingStartedAt[0], durationMs: 100 },
+      { type: 'text', text: '答', id: 'text-0' },
+    ])
     expect(result.stopReason).toBe('end_turn')
     expect(result.usage).toEqual({
       input_tokens: 10,

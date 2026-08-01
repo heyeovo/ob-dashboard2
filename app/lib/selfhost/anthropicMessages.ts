@@ -92,7 +92,7 @@ export async function parseAnthropicSse(
   body: ReadableStream<Uint8Array>,
   callbacks?: {
     onText?: (text: string) => void
-    onThinking?: (text: string) => void
+    onThinking?: (text: string, startedAt: number) => void
   },
 ): Promise<Omit<AnthropicStreamResult, 'url'>> {
   const reader = body.getReader()
@@ -112,14 +112,31 @@ export async function parseAnthropicSse(
   const process: Array<Record<string, unknown>> = []
   let textPart = 0
   let thinkingPart = 0
+  let activeThinking: Record<string, unknown> | null = null
 
-  const appendProcessText = (type: 'text' | 'thinking', text: string) => {
+  const closeActiveThinking = (endedAt = Date.now()) => {
+    if (!activeThinking || typeof activeThinking.durationMs === 'number') return
+    const startedAt = typeof activeThinking.startedAt === 'number' ? activeThinking.startedAt : endedAt
+    activeThinking.durationMs = Math.max(0, endedAt - startedAt)
+    activeThinking = null
+  }
+
+  const appendProcessText = (type: 'text' | 'thinking', text: string): number | undefined => {
     const last = process.at(-1)
     if (last?.type === type) {
       last.text = String(last.text || '') + text
-      return
+      return type === 'thinking' && typeof last.startedAt === 'number' ? last.startedAt : undefined
     }
-    process.push({ type, text, id: type === 'text' ? `text-${textPart++}` : `thinking-${thinkingPart++}` })
+    if (type === 'text') {
+      closeActiveThinking()
+      process.push({ type, text, id: `text-${textPart++}` })
+      return undefined
+    }
+    closeActiveThinking()
+    const startedAt = Date.now()
+    activeThinking = { type, text, id: `thinking-${thinkingPart++}`, startedAt }
+    process.push(activeThinking)
+    return startedAt
   }
 
   const acceptUsage = (value: unknown) => {
@@ -157,9 +174,10 @@ export async function parseAnthropicSse(
         const text = String(item.thinking || '')
         if (!text) return
         thinkingText += text
-        appendProcessText('thinking', text)
-        callbacks?.onThinking?.(text)
+        const startedAt = appendProcessText('thinking', text) || Date.now()
+        callbacks?.onThinking?.(text, startedAt)
       } else if (deltaType === 'signature_delta') {
+        closeActiveThinking()
         process.push({ type: 'thinking_signature', signature: String(item.signature || '') })
       }
       return
@@ -205,6 +223,7 @@ export async function parseAnthropicSse(
   if (!sawMessageStop) {
     throw new AnthropicStreamError('上游连接在 message_stop 前结束', { code: 'upstream_stream_incomplete' })
   }
+  closeActiveThinking()
   return { assistantText, thinkingText, stopReason, usage, process }
 }
 
@@ -217,7 +236,7 @@ export async function streamAnthropicMessages(input: {
   maxTokens: number
   signal?: AbortSignal
   onText?: (text: string) => void
-  onThinking?: (text: string) => void
+  onThinking?: (text: string, startedAt: number) => void
 }): Promise<AnthropicStreamResult> {
   let lastError = new AnthropicStreamError('没有可用的上游地址')
   for (const url of candidateAnthropicUrls(input.baseUrl)) {

@@ -43,6 +43,8 @@ function toolStatusLabel(tool: CcToolEvent, streaming: boolean) {
 
 type Props = {
   message: CcMessage
+  /** 当前消息是否为消息流中最新的助手轮。新一轮出现时，上一轮 thinking 自动折叠。 */
+  isCurrentTurn: boolean
   /** 当前选中的协作者，只用来画名字行的头像和名字 */
   persona?: CcPersona
   onCopy: (text: string) => void
@@ -53,6 +55,7 @@ type Props = {
 
 export default function CcMessageRow({
   message,
+  isCurrentTurn,
   persona: personaProp,
   onCopy,
   onEditAndResend,
@@ -61,13 +64,17 @@ export default function CcMessageRow({
 }: Props) {
   const isUser = message.role === 'user'
   const [menuOpen, setMenuOpen] = useState(false)
-  // 默认展开。流式中跟着输出，结束后不自动收 —— 只有用户点了才收。
-  const [thinkingOpen, setThinkingOpen] = useState(true)
+  // 新生成的当前轮默认展开；从 Haven 读回的历史轮默认折叠。
+  // 状态只属于当前页面：实时轮结束后保持展开，刷新后会按历史规则重新折叠。
+  const [thinkingOpen, setThinkingOpen] = useState(isCurrentTurn && !message.fromHistory)
   const [openToolId, setOpenToolId] = useState<string | null>(null)
   // 这一轮的 token 明细，默认收着
   const [usageOpen, setUsageOpen] = useState(false)
+  // 上下文预算是诊断信息，收进图标浮窗，避免元数据行过长。
+  const [contextOpen, setContextOpen] = useState(false)
   const timerRef = useRef<number | null>(null)
   const frameRef = useRef<HTMLDivElement>(null)
+  const contextRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -78,6 +85,23 @@ export default function CcMessageRow({
     document.addEventListener('pointerdown', onOutside)
     return () => document.removeEventListener('pointerdown', onOutside)
   }, [menuOpen])
+
+  useEffect(() => {
+    if (!contextOpen) return
+    const onOutside = (e: PointerEvent) => {
+      if (e.target instanceof Node && contextRef.current?.contains(e.target)) return
+      setContextOpen(false)
+    }
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextOpen(false)
+    }
+    document.addEventListener('pointerdown', onOutside)
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.removeEventListener('pointerdown', onOutside)
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [contextOpen])
 
   useEffect(
     () => () => {
@@ -317,10 +341,45 @@ export default function CcMessageRow({
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
               {message.model ? <span>模型：{message.model}</span> : null}
               {message.context ? (
-                <span title={`历史 ${message.context.includedHistoryRounds} 轮，丢弃 ${message.context.omittedHistoryRounds} 轮；回复预留 ${message.context.replyReserveTokens.toLocaleString()} token`}>
-                  上下文估算：{message.context.inputTokensEstimated.toLocaleString()}
-                  {message.context.modelContextLimit ? ` / ${message.context.modelContextLimit.toLocaleString()}` : ''}
-                </span>
+                <div ref={contextRef} className="relative">
+                  <button
+                    type="button"
+                    aria-label="上下文详情"
+                    aria-expanded={contextOpen}
+                    title="上下文详情"
+                    onClick={() => setContextOpen(open => !open)}
+                    className="flex size-6 items-center justify-center rounded-full text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-secondary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4.9 19a9 9 0 1 1 14.2 0" />
+                      <path d="m12 14 3.5-3.5" />
+                      <path d="M12 5v1.5M5 12h1.5M17.5 12H19" />
+                    </svg>
+                  </button>
+                  {contextOpen ? (
+                    <div
+                      role="dialog"
+                      aria-label="上下文详情"
+                      className="absolute left-0 top-full z-30 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg"
+                    >
+                      <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
+                      <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                        <dt>本轮总输入估算</dt>
+                        <dd className={USAGE_NUM}>{message.context.inputTokensEstimated.toLocaleString()}</dd>
+                        <dt>带入历史</dt>
+                        <dd className={USAGE_NUM}>{message.context.includedHistoryRounds.toLocaleString()} 轮</dd>
+                        <dt>丢弃历史</dt>
+                        <dd className={USAGE_NUM}>{message.context.omittedHistoryRounds.toLocaleString()} 轮</dd>
+                        <dt>历史估算</dt>
+                        <dd className={USAGE_NUM}>{message.context.historyTokensEstimated.toLocaleString()} token</dd>
+                        <dt>模型名义上限</dt>
+                        <dd className={USAGE_NUM}>{message.context.modelContextLimit.toLocaleString()}</dd>
+                        <dt>回复预留</dt>
+                        <dd className={USAGE_NUM}>{message.context.replyReserveTokens.toLocaleString()} token</dd>
+                      </dl>
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             {message.deliveryNote ? (

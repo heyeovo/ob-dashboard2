@@ -221,7 +221,15 @@ function sendReplay(controller: ReadableStreamDefaultController<Uint8Array>, pre
     if (!part || typeof part !== 'object') continue
     const item = part as Record<string, unknown>
     const text = String(item.text || '')
-    if (item.type === 'thinking' && text) send('thinking', { text, id: String(item.id || 'thinking-0'), startedAt: Number(item.started_at || Date.now()) })
+    if (item.type === 'thinking' && text) {
+      const durationMs = typeof item.durationMs === 'number' ? item.durationMs : null
+      send('thinking', {
+        text,
+        id: String(item.id || 'thinking-0'),
+        // 历史重放发生在一瞬间；用已保存的持续时间还原开始点，避免显示成 0 / 0.1s。
+        startedAt: durationMs == null ? Date.now() : Date.now() - Math.max(0, durationMs),
+      })
+    }
     if (item.type === 'text' && text) {
       replayedText = true
       send('delta', { text, id: String(item.id || 'text-0') })
@@ -340,9 +348,9 @@ export function createSelfhostStream(
             hasOutput = true
             send('delta', { text, id: 'text-0' })
           },
-          onThinking: text => {
+          onThinking: (text, thinkingStartedAt) => {
             hasOutput = true
-            send('thinking', { text, id: 'thinking-0', startedAt })
+            send('thinking', { text, id: 'thinking-0', startedAt: thinkingStartedAt })
           },
         })
         generated = true
