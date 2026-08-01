@@ -1,0 +1,263 @@
+// /cc 聊天页的历史数据转换（9.5 从 useCcChat 原样抽出，纯函数，可单独测）。
+//
+// Haven 的一轮（user + assistant 一行）→ 界面上的消息；raw_json 里的
+// thinking / 工具 / 召回 / usage → 消息的附属字段。这些转换跟「页面状态」
+// 无关，第 10 步的自建引擎也要用同一份（它同样从 conversation_turns 读历史）。
+
+import type {
+  CcMessage,
+  CcProcessEvent,
+  CcRecallInfo,
+  CcToolEvent,
+  CcTurnUsage,
+} from './types'
+import type { CcMode } from '@/app/lib/ccModes'
+import { normalizeWebSettings, type CcWebSettings } from './webSettings'
+
+const NEW_SESSION_PREFIX = 'ob2-'
+
+/**
+ * 当前在聊哪个会话，写进 localStorage 给工作台读。
+ *
+ * 为什么用 localStorage：工作台是另一个页面（/workbench），它得知道「现在」是哪个会话
+ * 才能显示待批准 / 改过的文件。服务端不知道你在看哪个（同时可以有好几个活会话）。
+ */
+export const ACTIVE_SESSION_KEY = 'ob2-cc-active-session'
+
+export function newSessionId() {
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const rand = Math.random().toString(36).slice(2, 8)
+  return `${NEW_SESSION_PREFIX}${stamp}-${rand}`
+}
+
+export function localId() {
+  return `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`
+}
+
+export function closeOpenThinking(
+  process: CcProcessEvent[] | undefined,
+  endedAt = Date.now(),
+): CcProcessEvent[] {
+  const next = [...(process || [])]
+  const last = next.at(-1)
+  if (last?.type !== 'thinking' || last.durationMs != null) return next
+  next[next.length - 1] = {
+    ...last,
+    durationMs: Math.max(0, endedAt - (last.startedAt || endedAt)),
+  }
+  return next
+}
+
+export function thinkingDuration(process: CcProcessEvent[] | undefined) {
+  return (process || []).reduce(
+    (total, event) => total + (event.type === 'thinking' ? event.durationMs || 0 : 0),
+    0,
+  )
+}
+
+/** Haven 的一轮（user + assistant 一行）拆成界面上的两条消息。 */
+export type HavenTurnRow = {
+  id: number
+  user_text: string
+  assistant_text: string
+  created_at: string
+  source: string
+  client?: string
+  /** 写库时原样存的那份，thinking / 工具 / 召回都在里面。要 raw=1 才有 */
+  raw_json?: string
+}
+
+/** client 列形如 `ob2-chat/<persona_id>`（4.5b 起写）。解不出来就是无主的老消息。 */
+export function personaOfClient(client: string | undefined): string {
+  const value = (client || '').trim()
+  return value.startsWith('ob2-chat/') ? value.slice('ob2-chat/'.length).trim() : ''
+}
+
+/**
+ * 读回 raw_json 里那些「不是正文」的部分：thinking、工具调用、召回。
+ *
+ * ⚠️ 纯前端显示，**不进 prompt**。那段 thinking 是模型自己的草稿，
+ * 塞回上下文等于同一段话以「用户资料」的身份出现两遍，会污染它对自己说过什么的判断。
+ * MCP 日常工具会带返回结果；Read/Grep/Bash 等工作工具仍只留调用参数。
+ */
+export function parseTurnRaw(rawJson: string | undefined): {
+  thinking: string
+  tools: CcToolEvent[]
+  process: CcProcessEvent[]
+  recall: CcRecallInfo | null
+  usage: CcTurnUsage | null
+  interrupted: boolean
+} {
+  const empty = {
+    thinking: '',
+    tools: [] as CcToolEvent[],
+    process: [] as CcProcessEvent[],
+    recall: null,
+    usage: null,
+    interrupted: false,
+  }
+  if (!rawJson) return empty
+  let raw: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(rawJson)
+    if (!parsed || typeof parsed !== 'object') return empty
+    raw = parsed as Record<string, unknown>
+  } catch {
+    // Haven 侧超长会存成带 _truncated 的存根，解不出来就当没有
+    return empty
+  }
+  const parseTool = (t: Record<string, unknown>, fallbackId: string): CcToolEvent => ({
+    name: String(t.name || '工具'),
+    id: String(t.id || fallbackId),
+    input: t.input,
+    status:
+      t.status === 'running' ||
+      t.status === 'completed' ||
+      t.status === 'error' ||
+      t.status === 'denied'
+        ? t.status
+        : undefined,
+    startedAt: typeof t.startedAt === 'number' ? t.startedAt : undefined,
+    durationMs: typeof t.durationMs === 'number' ? t.durationMs : undefined,
+    error: typeof t.error === 'string' ? t.error : undefined,
+    result: typeof t.result === 'string' ? t.result : undefined,
+  })
+  const rawTools = Array.isArray(raw.tools) ? (raw.tools as Record<string, unknown>[]) : []
+  const tools = rawTools.map((tool, index) => parseTool(tool, `t${index}`))
+  const toolsById = new Map(tools.map(tool => [tool.id, tool]))
+  const rawProcess = Array.isArray(raw.process)
+    ? (raw.process as Record<string, unknown>[])
+    : []
+  const process = rawProcess.flatMap((item, index): CcProcessEvent[] => {
+    if (item.type === 'thinking' && typeof item.text === 'string') {
+      return [{
+        type: 'thinking',
+        id: String(item.id || `thinking-${index}`),
+        text: item.text,
+        startedAt: typeof item.startedAt === 'number' ? item.startedAt : undefined,
+        durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
+      }]
+    }
+    if (item.type === 'text' && typeof item.text === 'string') {
+      return [{
+        type: 'text',
+        id: String(item.id || `text-${index}`),
+        text: item.text,
+      }]
+    }
+    if (item.type === 'tool' && item.tool && typeof item.tool === 'object') {
+      const parsed = parseTool(item.tool as Record<string, unknown>, `process-tool-${index}`)
+      return [{
+        type: 'tool',
+        id: String(item.id || `process-${parsed.id}`),
+        tool: toolsById.get(parsed.id) || parsed,
+      }]
+    }
+    return []
+  })
+  return {
+    thinking: typeof raw.thinking === 'string' ? raw.thinking : '',
+    tools,
+    process,
+    recall:
+      raw.recall && typeof raw.recall === 'object' ? (raw.recall as unknown as CcRecallInfo) : null,
+    // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
+    usage:
+      raw.usage && typeof raw.usage === 'object' ? (raw.usage as unknown as CcTurnUsage) : null,
+    // 被中断的半截回复。老消息没有这个字段 —— 一律不算中断。
+    interrupted: raw.interrupted === true,
+  }
+}
+
+/**
+ * 这个会话是什么模式：看最后一轮 raw 里的 mode。
+ * 5.2 之前的老会话没这个字段 —— 一律算工作模式（那时候只有这一种行为）。
+ */
+export function modeOfTurns(turns: HavenTurnRow[]): CcMode {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const rawJson = turns[i]?.raw_json
+    if (!rawJson) continue
+    try {
+      const parsed = JSON.parse(rawJson) as Record<string, unknown>
+      if (parsed?.mode === 'chat') return 'chat'
+      if (parsed?.mode === 'work') return 'work'
+    } catch {
+      /* 解不出来接着往前找 */
+    }
+  }
+  return 'work'
+}
+
+/**
+ * 从历史最后一轮 raw 里取回「本窗配置」和 resume 接回点。
+ *   · settings（第 4 条）：切回旧会话时右上角本窗口设置照它恢复
+ *   · cc_session_id（第 5 条）：进程已丢时随下一句带回服务端，接上上下文
+ * 老会话没这两个字段 —— 返回 null，界面就保持默认，不编数字。
+ */
+export function metaOfTurns(turns: HavenTurnRow[]): {
+  settings: {
+    cred?: string
+    providerId?: string
+    model?: string
+    effort?: string
+    thinkingOn?: boolean
+    web?: CcWebSettings
+  } | null
+  ccSessionId: string
+} {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const rawJson = turns[i]?.raw_json
+    if (!rawJson) continue
+    try {
+      const parsed = JSON.parse(rawJson) as Record<string, unknown>
+      const s = parsed?.settings as Record<string, unknown> | undefined
+      const settings = s
+        ? {
+            cred: typeof s.cred === 'string' ? s.cred : undefined,
+            providerId: typeof s.provider_id === 'string' ? s.provider_id : undefined,
+            model: typeof s.model === 'string' ? s.model : undefined,
+            effort: typeof s.effort === 'string' ? s.effort : undefined,
+            thinkingOn: typeof s.thinking_on === 'boolean' ? s.thinking_on : undefined,
+            web:
+              s.web && typeof s.web === 'object'
+                ? normalizeWebSettings(s.web as Record<string, unknown>)
+                : undefined,
+          }
+        : null
+      const ccSessionId = typeof parsed?.cc_session_id === 'string' ? parsed.cc_session_id : ''
+      // 只要这轮带了任一新字段就用它；否则接着往前找老一点的轮
+      if (settings || ccSessionId) return { settings, ccSessionId }
+    } catch {
+      /* 解不出来接着往前找 */
+    }
+  }
+  return { settings: null, ccSessionId: '' }
+}
+
+export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
+  const out: CcMessage[] = []
+  for (const t of turns) {
+    const at = Date.parse(t.created_at) || Date.now()
+    if (t.user_text?.trim()) {
+      out.push({ id: `h${t.id}u`, role: 'user', text: t.user_text, createdAt: at, fromHistory: true })
+    }
+    if (t.assistant_text?.trim()) {
+      const extra = parseTurnRaw(t.raw_json)
+      out.push({
+        id: `h${t.id}a`,
+        role: 'assistant',
+        text: t.assistant_text,
+        createdAt: at,
+        fromHistory: true,
+        personaId: personaOfClient(t.client),
+        thinking: extra.thinking || undefined,
+        tools: extra.tools.length ? extra.tools : undefined,
+        process: extra.process.length ? extra.process : undefined,
+        recall: extra.recall,
+        usage: extra.usage,
+        interrupted: extra.interrupted || undefined,
+      })
+    }
+  }
+  return out
+}

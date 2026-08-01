@@ -30,7 +30,13 @@ const ENGINE_ENTRIES: Entry[] = [
     desc: '脱水打标 / 向量 / 重排序',
     href: '/settings/memory-processing',
   },
-  { key: 'persona-state', label: 'Persona State', desc: '搬 dashboard.html', todo: true },
+  { key: 'persona-state', label: 'Persona State', desc: '内在状态 + 画像查看', href: '/persona?tab=state' },
+  {
+    key: 'automation',
+    label: '自动化与状态',
+    desc: 'Persona / 夜梦 / 关系整理 / 每日画像 / 自我入口 / 合并阈值',
+    href: '/settings/automation',
+  },
 ]
 
 const MODEL_ENTRIES: Entry[] = [

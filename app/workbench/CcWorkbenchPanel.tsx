@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CcPermCard } from '../cc/CcPermCard'
-import { ACTIVE_SESSION_KEY } from '../cc/useCcChat'
+import { ACTIVE_SESSION_KEY } from '../cc/ccHistory'
 import { EMPTY_WORKBENCH, type CcWorkbench } from '../cc/types'
 
 // 工作台四格的内容（第 5 步）。

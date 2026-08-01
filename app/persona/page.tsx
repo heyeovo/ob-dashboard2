@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import PersonaTabs from './PersonaTabs'
+import PortraitView from './PortraitView'
 
 type NumberMap = Record<string, number | null | undefined>
 
@@ -265,15 +267,7 @@ function PersonaStateView() {
   }, [events, range])
 
   if (tab !== 'state') {
-    return (
-      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white p-10 text-center">
-          <h1 className="text-lg font-semibold">画像将在窗口 8 迁移</h1>
-          <p className="mt-2 text-sm text-[var(--color-text-tertiary)]">本窗口只实施 Persona 状态。</p>
-          <Link href="/persona?tab=state" className="mt-5 inline-flex rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm text-white">返回内在状态</Link>
-        </div>
-      </main>
-    )
+    return <PortraitView />
   }
 
   return (
@@ -308,10 +302,7 @@ function PersonaStateView() {
       </header>
 
       <main className="mx-auto max-w-6xl px-3 py-5 sm:px-6 lg:py-8">
-        <nav className="mb-5 flex gap-1 rounded-xl bg-[var(--color-surface-secondary)] p-1 text-sm">
-          <Link href="/persona?tab=state" className="rounded-lg bg-white px-4 py-2 font-medium text-[var(--color-text-heading)] shadow-sm">内在状态</Link>
-          <span className="cursor-not-allowed rounded-lg px-4 py-2 text-[var(--color-text-disabled)]" title="窗口 8">画像 · 待迁移</span>
-        </nav>
+        <PersonaTabs active="state" />
 
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>

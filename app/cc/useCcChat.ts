@@ -4,12 +4,9 @@ import type {
   CcMessage,
   CcPermDecided,
   CcPermRequest,
-  CcProcessEvent,
-  CcRecallInfo,
   CcSessionListItem,
   CcSessionStats,
   CcToolEvent,
-  CcTurnUsage,
 } from './types'
 import { EMPTY_STATS } from './types'
 import type { CcMode } from '@/app/lib/ccModes'
@@ -21,6 +18,18 @@ import {
   normalizeWebSettings,
   type CcWebSettings,
 } from './webSettings'
+import {
+  ACTIVE_SESSION_KEY,
+  closeOpenThinking,
+  localId,
+  metaOfTurns,
+  modeOfTurns,
+  newSessionId,
+  thinkingDuration,
+  turnsToMessages,
+  type HavenTurnRow,
+} from './ccHistory'
+import { consumeSseStream } from './ccSseConsumer'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -29,254 +38,11 @@ import {
 //   · 写回 conversation_turns 的分组键
 //   · 会话列表里认的那个 id
 // claude code 自己的 session id 在服务端另存（做 resume 用），前端不管。
-
-const NEW_SESSION_PREFIX = 'ob2-'
-
-/**
- * 当前在聊哪个会话，写进 localStorage 给工作台读。
- *
- * 为什么用 localStorage：工作台是另一个页面（/workbench），它得知道「现在」是哪个会话
- * 才能显示待批准 / 改过的文件。服务端不知道你在看哪个（同时可以有好几个活会话）。
- */
-export const ACTIVE_SESSION_KEY = 'ob2-cc-active-session'
-
-function newSessionId() {
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  const rand = Math.random().toString(36).slice(2, 8)
-  return `${NEW_SESSION_PREFIX}${stamp}-${rand}`
-}
-
-function localId() {
-  return `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`
-}
-
-function closeOpenThinking(
-  process: CcProcessEvent[] | undefined,
-  endedAt = Date.now(),
-): CcProcessEvent[] {
-  const next = [...(process || [])]
-  const last = next.at(-1)
-  if (last?.type !== 'thinking' || last.durationMs != null) return next
-  next[next.length - 1] = {
-    ...last,
-    durationMs: Math.max(0, endedAt - (last.startedAt || endedAt)),
-  }
-  return next
-}
-
-function thinkingDuration(process: CcProcessEvent[] | undefined) {
-  return (process || []).reduce(
-    (total, event) => total + (event.type === 'thinking' ? event.durationMs || 0 : 0),
-    0,
-  )
-}
-
-/** Haven 的一轮（user + assistant 一行）拆成界面上的两条消息。 */
-type HavenTurnRow = {
-  id: number
-  user_text: string
-  assistant_text: string
-  created_at: string
-  source: string
-  client?: string
-  /** 写库时原样存的那份，thinking / 工具 / 召回都在里面。要 raw=1 才有 */
-  raw_json?: string
-}
-
-/** client 列形如 `ob2-chat/<persona_id>`（4.5b 起写）。解不出来就是无主的老消息。 */
-function personaOfClient(client: string | undefined): string {
-  const value = (client || '').trim()
-  return value.startsWith('ob2-chat/') ? value.slice('ob2-chat/'.length).trim() : ''
-}
-
-/**
- * 读回 raw_json 里那些「不是正文」的部分：thinking、工具调用、召回。
- *
- * ⚠️ 纯前端显示，**不进 prompt**。那段 thinking 是模型自己的草稿，
- * 塞回上下文等于同一段话以「用户资料」的身份出现两遍，会污染它对自己说过什么的判断。
- * MCP 日常工具会带返回结果；Read/Grep/Bash 等工作工具仍只留调用参数。
- */
-function parseTurnRaw(rawJson: string | undefined): {
-  thinking: string
-  tools: CcToolEvent[]
-  process: CcProcessEvent[]
-  recall: CcRecallInfo | null
-  usage: CcTurnUsage | null
-  interrupted: boolean
-} {
-  const empty = {
-    thinking: '',
-    tools: [] as CcToolEvent[],
-    process: [] as CcProcessEvent[],
-    recall: null,
-    usage: null,
-    interrupted: false,
-  }
-  if (!rawJson) return empty
-  let raw: Record<string, unknown>
-  try {
-    const parsed = JSON.parse(rawJson)
-    if (!parsed || typeof parsed !== 'object') return empty
-    raw = parsed as Record<string, unknown>
-  } catch {
-    // Haven 侧超长会存成带 _truncated 的存根，解不出来就当没有
-    return empty
-  }
-  const parseTool = (t: Record<string, unknown>, fallbackId: string): CcToolEvent => ({
-    name: String(t.name || '工具'),
-    id: String(t.id || fallbackId),
-    input: t.input,
-    status:
-      t.status === 'running' ||
-      t.status === 'completed' ||
-      t.status === 'error' ||
-      t.status === 'denied'
-        ? t.status
-        : undefined,
-    startedAt: typeof t.startedAt === 'number' ? t.startedAt : undefined,
-    durationMs: typeof t.durationMs === 'number' ? t.durationMs : undefined,
-    error: typeof t.error === 'string' ? t.error : undefined,
-    result: typeof t.result === 'string' ? t.result : undefined,
-  })
-  const rawTools = Array.isArray(raw.tools) ? (raw.tools as Record<string, unknown>[]) : []
-  const tools = rawTools.map((tool, index) => parseTool(tool, `t${index}`))
-  const toolsById = new Map(tools.map(tool => [tool.id, tool]))
-  const rawProcess = Array.isArray(raw.process)
-    ? (raw.process as Record<string, unknown>[])
-    : []
-  const process = rawProcess.flatMap((item, index): CcProcessEvent[] => {
-    if (item.type === 'thinking' && typeof item.text === 'string') {
-      return [{
-        type: 'thinking',
-        id: String(item.id || `thinking-${index}`),
-        text: item.text,
-        startedAt: typeof item.startedAt === 'number' ? item.startedAt : undefined,
-        durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
-      }]
-    }
-    if (item.type === 'text' && typeof item.text === 'string') {
-      return [{
-        type: 'text',
-        id: String(item.id || `text-${index}`),
-        text: item.text,
-      }]
-    }
-    if (item.type === 'tool' && item.tool && typeof item.tool === 'object') {
-      const parsed = parseTool(item.tool as Record<string, unknown>, `process-tool-${index}`)
-      return [{
-        type: 'tool',
-        id: String(item.id || `process-${parsed.id}`),
-        tool: toolsById.get(parsed.id) || parsed,
-      }]
-    }
-    return []
-  })
-  return {
-    thinking: typeof raw.thinking === 'string' ? raw.thinking : '',
-    tools,
-    process,
-    recall:
-      raw.recall && typeof raw.recall === 'object' ? (raw.recall as unknown as CcRecallInfo) : null,
-    // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
-    usage:
-      raw.usage && typeof raw.usage === 'object' ? (raw.usage as unknown as CcTurnUsage) : null,
-    // 被中断的半截回复。老消息没有这个字段 —— 一律不算中断。
-    interrupted: raw.interrupted === true,
-  }
-}
-
-/**
- * 这个会话是什么模式：看最后一轮 raw 里的 mode。
- * 5.2 之前的老会话没这个字段 —— 一律算工作模式（那时候只有这一种行为）。
- */
-function modeOfTurns(turns: HavenTurnRow[]): CcMode {
-  for (let i = turns.length - 1; i >= 0; i -= 1) {
-    const rawJson = turns[i]?.raw_json
-    if (!rawJson) continue
-    try {
-      const parsed = JSON.parse(rawJson) as Record<string, unknown>
-      if (parsed?.mode === 'chat') return 'chat'
-      if (parsed?.mode === 'work') return 'work'
-    } catch {
-      /* 解不出来接着往前找 */
-    }
-  }
-  return 'work'
-}
-
-/**
- * 从历史最后一轮 raw 里取回「本窗配置」和 resume 接回点。
- *   · settings（第 4 条）：切回旧会话时右上角本窗口设置照它恢复
- *   · cc_session_id（第 5 条）：进程已丢时随下一句带回服务端，接上上下文
- * 老会话没这两个字段 —— 返回 null，界面就保持默认，不编数字。
- */
-function metaOfTurns(turns: HavenTurnRow[]): {
-  settings: {
-    cred?: string
-    providerId?: string
-    model?: string
-    effort?: string
-    thinkingOn?: boolean
-    web?: CcWebSettings
-  } | null
-  ccSessionId: string
-} {
-  for (let i = turns.length - 1; i >= 0; i -= 1) {
-    const rawJson = turns[i]?.raw_json
-    if (!rawJson) continue
-    try {
-      const parsed = JSON.parse(rawJson) as Record<string, unknown>
-      const s = parsed?.settings as Record<string, unknown> | undefined
-      const settings = s
-        ? {
-            cred: typeof s.cred === 'string' ? s.cred : undefined,
-            providerId: typeof s.provider_id === 'string' ? s.provider_id : undefined,
-            model: typeof s.model === 'string' ? s.model : undefined,
-            effort: typeof s.effort === 'string' ? s.effort : undefined,
-            thinkingOn: typeof s.thinking_on === 'boolean' ? s.thinking_on : undefined,
-            web:
-              s.web && typeof s.web === 'object'
-                ? normalizeWebSettings(s.web as Record<string, unknown>)
-                : undefined,
-          }
-        : null
-      const ccSessionId = typeof parsed?.cc_session_id === 'string' ? parsed.cc_session_id : ''
-      // 只要这轮带了任一新字段就用它；否则接着往前找老一点的轮
-      if (settings || ccSessionId) return { settings, ccSessionId }
-    } catch {
-      /* 解不出来接着往前找 */
-    }
-  }
-  return { settings: null, ccSessionId: '' }
-}
-
-function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
-  const out: CcMessage[] = []
-  for (const t of turns) {
-    const at = Date.parse(t.created_at) || Date.now()
-    if (t.user_text?.trim()) {
-      out.push({ id: `h${t.id}u`, role: 'user', text: t.user_text, createdAt: at, fromHistory: true })
-    }
-    if (t.assistant_text?.trim()) {
-      const extra = parseTurnRaw(t.raw_json)
-      out.push({
-        id: `h${t.id}a`,
-        role: 'assistant',
-        text: t.assistant_text,
-        createdAt: at,
-        fromHistory: true,
-        personaId: personaOfClient(t.client),
-        thinking: extra.thinking || undefined,
-        tools: extra.tools.length ? extra.tools : undefined,
-        process: extra.process.length ? extra.process : undefined,
-        recall: extra.recall,
-        usage: extra.usage,
-        interrupted: extra.interrupted || undefined,
-      })
-    }
-  }
-  return out
-}
+//
+// 9.5 拆出来的两部分：
+//   · ccHistory.ts    —— Haven 历史行 → 界面消息的纯转换（测试过的那批）
+//   · ccSseConsumer.ts —— SSE 流消费（读流 → 切帧 → 按事件名分发）
+// 本文件只管「界面状态」：谁在聊、发了什么、等什么批准、上游选了哪套。
 
 export function useCcChat(personaId = '') {
   const [sessionId, setSessionId] = useState('')
@@ -885,7 +651,6 @@ export function useCcChat(personaId = '') {
       const patch = (fn: (m: CcMessage) => CcMessage) => {
         setMessages(prev => prev.map(m => (m.id === assistantId ? fn(m) : m)))
       }
-      let terminalEvent: 'done' | 'error' | null = null
 
       try {
         const res = await fetch('/api/cc-chat', {
@@ -934,181 +699,157 @@ export function useCcChat(personaId = '') {
         // 5.5：handoff 只随首条带一次，发出去就清
         if (handoffRef.current) handoffRef.current = null
 
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-
-          // SSE 以空行分帧
-          let sep = buffer.indexOf('\n\n')
-          while (sep !== -1) {
-            const frame = buffer.slice(0, sep)
-            buffer = buffer.slice(sep + 2)
-            sep = buffer.indexOf('\n\n')
-
-            let eventName = 'message'
-            const dataLines: string[] = []
-            for (const line of frame.split('\n')) {
-              if (line.startsWith('event: ')) eventName = line.slice(7).trim()
-              else if (line.startsWith('data: ')) dataLines.push(line.slice(6))
-            }
-            if (dataLines.length === 0) continue
-            let payload: Record<string, unknown>
-            try {
-              payload = JSON.parse(dataLines.join('\n')) as Record<string, unknown>
-            } catch {
-              continue
-            }
-
-            if (eventName === 'delta') {
-              const chunk = String(payload.text || '')
-              const id = String(payload.id || `text-${Date.now()}`)
-              patch(m => {
-                const process = closeOpenThinking(m.process)
-                const last = process.at(-1)
-                const continuesTextSegment = last?.type === 'text' && last.id === id
-                if (continuesTextSegment) {
-                  process[process.length - 1] = { ...last, text: last.text + chunk }
-                } else {
-                  process.push({ type: 'text', id, text: chunk })
-                }
-                return {
-                  ...m,
-                  process,
-                  thinkingMs: thinkingDuration(process) || undefined,
-                  text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
-                }
-              })
-            } else if (eventName === 'thinking') {
-              const chunk = String(payload.text || '')
-              const id = String(payload.id || `thinking-${Date.now()}`)
-              const startedAt =
-                typeof payload.startedAt === 'number' ? payload.startedAt : Date.now()
-              patch(m => {
-                const process = [...(m.process || [])]
-                const last = process.at(-1)
-                if (last?.type === 'thinking' && last.id === id) {
-                  process[process.length - 1] = { ...last, text: last.text + chunk }
-                } else {
-                  process.push({ type: 'thinking', id, text: chunk, startedAt })
-                }
-                return {
-                  ...m,
-                  thinking: (m.thinking || '') + chunk,
-                  process,
-                }
-              })
-            } else if (eventName === 'recall') {
-              patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
-            } else if (eventName === 'tool') {
-              const tool = payload as unknown as CcToolEvent
-              patch(m => ({
+        // SSE 消费（读流 → 切帧 → 按事件分发）在 ccSseConsumer 里，
+        // 这里只写「每个事件怎么改界面状态」。
+        // 只有「流结束却没收到完成事件」才会抛错 —— 见下面 catch。
+        await consumeSseStream(res.body, {
+          onDelta: payload => {
+            const chunk = String(payload.text || '')
+            const id = String(payload.id || `text-${Date.now()}`)
+            patch(m => {
+              const process = closeOpenThinking(m.process)
+              const last = process.at(-1)
+              const continuesTextSegment = last?.type === 'text' && last.id === id
+              if (continuesTextSegment) {
+                process[process.length - 1] = { ...last, text: last.text + chunk }
+              } else {
+                process.push({ type: 'text', id, text: chunk })
+              }
+              return {
                 ...m,
-                process: [
-                  ...closeOpenThinking(m.process, tool.startedAt || Date.now()),
-                  { type: 'tool', id: `process-${tool.id}`, tool },
-                ],
-                tools: [...(m.tools || []), tool],
-              }))
-            } else if (eventName === 'tool_result') {
-              const id = String(payload.id || '')
-              const result =
-                typeof payload.result === 'string' && payload.result
-                  ? payload.result
-                  : undefined
-              const error =
-                typeof payload.error === 'string' && payload.error
-                  ? payload.error
-                  : undefined
-              const status =
-                payload.status === 'error' || payload.status === 'denied'
-                  ? payload.status
-                  : 'completed'
-              const durationMs =
-                typeof payload.durationMs === 'number' ? payload.durationMs : undefined
-              patch(m => ({
+                process,
+                thinkingMs: thinkingDuration(process) || undefined,
+                text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
+              }
+            })
+          },
+          onThinking: payload => {
+            const chunk = String(payload.text || '')
+            const id = String(payload.id || `thinking-${Date.now()}`)
+            const startedAt =
+              typeof payload.startedAt === 'number' ? payload.startedAt : Date.now()
+            patch(m => {
+              const process = [...(m.process || [])]
+              const last = process.at(-1)
+              if (last?.type === 'thinking' && last.id === id) {
+                process[process.length - 1] = { ...last, text: last.text + chunk }
+              } else {
+                process.push({ type: 'thinking', id, text: chunk, startedAt })
+              }
+              return {
                 ...m,
-                tools: (m.tools || []).map(tool =>
-                  tool.id === id
-                    ? {
-                        ...tool,
-                        result: result || tool.result,
+                thinking: (m.thinking || '') + chunk,
+                process,
+              }
+            })
+          },
+          onRecall: payload => {
+            patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
+          },
+          onTool: payload => {
+            const tool = payload as unknown as CcToolEvent
+            patch(m => ({
+              ...m,
+              process: [
+                ...closeOpenThinking(m.process, tool.startedAt || Date.now()),
+                { type: 'tool', id: `process-${tool.id}`, tool },
+              ],
+              tools: [...(m.tools || []), tool],
+            }))
+          },
+          onToolResult: payload => {
+            const id = String(payload.id || '')
+            const result =
+              typeof payload.result === 'string' && payload.result
+                ? payload.result
+                : undefined
+            const error =
+              typeof payload.error === 'string' && payload.error
+                ? payload.error
+                : undefined
+            const status =
+              payload.status === 'error' || payload.status === 'denied'
+                ? payload.status
+                : 'completed'
+            const durationMs =
+              typeof payload.durationMs === 'number' ? payload.durationMs : undefined
+            patch(m => ({
+              ...m,
+              tools: (m.tools || []).map(tool =>
+                tool.id === id
+                  ? {
+                      ...tool,
+                      result: result || tool.result,
+                      error,
+                      status,
+                      durationMs,
+                    }
+                  : tool,
+              ),
+              process: (m.process || []).map(event =>
+                event.type === 'tool' && event.tool.id === id
+                  ? {
+                      ...event,
+                      tool: {
+                        ...event.tool,
+                        result: result || event.tool.result,
                         error,
                         status,
                         durationMs,
-                      }
-                    : tool,
-                ),
-                process: (m.process || []).map(event =>
-                  event.type === 'tool' && event.tool.id === id
-                    ? {
-                        ...event,
-                        tool: {
-                          ...event.tool,
-                          result: result || event.tool.result,
-                          error,
-                          status,
-                          durationMs,
-                        },
-                      }
-                    : event,
-                ),
-              }))
-            } else if (eventName === 'permission') {
-              // 有东西要批准了。对话流当场弹卡片（这一轮正停在服务端等）
-              const req = payload as unknown as CcPermRequest
-              setPending(prev => (prev.some(p => p.id === req.id) ? prev : [...prev, req]))
-            } else if (eventName === 'permission_resolved') {
-              // 别的设备点了 / 超时了 —— 把卡片撤掉
-              const id = String(payload.id || '')
-              setPending(prev => prev.filter(p => p.id !== id))
-              void refreshPending()
-            } else if (eventName === 'done') {
-              terminalEvent = 'done'
-              const usage = (payload.usage || null) as CcTurnUsage | null
-              const interrupted = payload.interrupted === true
-              patch(m => {
-                const process = closeOpenThinking(m.process)
-                return {
-                  ...m,
-                  process,
-                  streaming: false,
-                  usage,
-                  interrupted: interrupted || m.interrupted,
-                  thinkingMs: thinkingDuration(process) || undefined,
-                }
-              })
-              if (payload.stats) setStats(payload.stats as CcSessionStats)
-            } else if (eventName === 'after') {
-              // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
-              // 这个事件只更新顶部那几个数字和会话列表。
-              if (payload.stats) setStats(payload.stats as CcSessionStats)
-              void refreshSessions()
-            } else if (eventName === 'error') {
-              terminalEvent = 'error'
-              setError(String(payload.message || '出错了'))
-              // API / SDK 错误不是助手回复：页面只留错误提示，不留一条假消息。
-              setMessages(prev => prev.filter(message => message.id !== assistantId))
-            }
-          }
-        }
-        if (!terminalEvent) {
-          throw new Error('连接提前结束，没有收到这一轮的完成结果')
-        }
+                      },
+                    }
+                  : event,
+              ),
+            }))
+          },
+          onPermission: payload => {
+            // 有东西要批准了。对话流当场弹卡片（这一轮正停在服务端等）
+            const req = payload as unknown as CcPermRequest
+            setPending(prev => (prev.some(p => p.id === req.id) ? prev : [...prev, req]))
+          },
+          onPermissionResolved: payload => {
+            // 别的设备点了 / 超时了 —— 把卡片撤掉
+            const id = String(payload.id || '')
+            setPending(prev => prev.filter(p => p.id !== id))
+            void refreshPending()
+          },
+          onDone: payload => {
+            const usage = (payload.usage || null) as CcMessage['usage']
+            const interrupted = payload.interrupted === true
+            patch(m => {
+              const process = closeOpenThinking(m.process)
+              return {
+                ...m,
+                process,
+                streaming: false,
+                usage,
+                interrupted: interrupted || m.interrupted,
+                thinkingMs: thinkingDuration(process) || undefined,
+              }
+            })
+            if (payload.stats) setStats(payload.stats as CcSessionStats)
+          },
+          onAfter: payload => {
+            // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
+            // 这个事件只更新顶部那几个数字和会话列表。
+            if (payload.stats) setStats(payload.stats as CcSessionStats)
+            void refreshSessions()
+          },
+          onError: payload => {
+            setError(String(payload.message || '出错了'))
+            // API / SDK 错误不是助手回复：页面只留错误提示，不留一条假消息。
+            setMessages(prev => prev.filter(message => message.id !== assistantId))
+          },
+        })
       } catch (e) {
         const err = e as Error
         if (err.name !== 'AbortError') setError(err.message || String(err))
         setMessages(prev => prev.filter(message => message.id !== assistantId))
         // 浏览器断流时服务端的 iterator 可能还在等；主动回收，避免 busy 锁残留。
-        if (!terminalEvent) {
-          void fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, {
-            method: 'DELETE',
-          }).catch(() => undefined)
-        }
+        //（consumeSseStream 只有「流结束却没收到完成事件」才抛，走到这里必然无终态）
+        void fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, {
+          method: 'DELETE',
+        }).catch(() => undefined)
       } finally {
         abortRef.current = null
         stoppingRef.current = false
