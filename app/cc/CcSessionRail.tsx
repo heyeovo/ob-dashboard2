@@ -10,12 +10,14 @@ import type { CcSessionListItem } from './types'
 
 type Props = {
   sessions: CcSessionListItem[]
+  deletedSessions: CcSessionListItem[]
   activeSessionId: string
   loading: boolean
   onPick: (sessionId: string) => void
   onNew: () => void
   onRename: (sessionId: string, title: string) => Promise<boolean>
   onDelete: (sessionId: string) => Promise<boolean>
+  onPermanentDelete: (sessionId: string) => Promise<boolean>
 }
 
 function relativeTime(iso: string) {
@@ -32,8 +34,19 @@ function relativeTime(iso: string) {
   return new Date(t).toLocaleDateString('zh-CN')
 }
 
-export default function CcSessionRail({ sessions, activeSessionId, loading, onPick, onNew, onRename, onDelete }: Props) {
+export default function CcSessionRail({
+  sessions,
+  deletedSessions,
+  activeSessionId,
+  loading,
+  onPick,
+  onNew,
+  onRename,
+  onDelete,
+  onPermanentDelete,
+}: Props) {
   const [menuId, setMenuId] = useState('')
+  const [deletedOpen, setDeletedOpen] = useState(false)
 
   const copySessionId = async (sessionId: string) => {
     await navigator.clipboard.writeText(sessionId)
@@ -50,6 +63,20 @@ export default function CcSessionRail({ sessions, activeSessionId, loading, onPi
     const confirmed = window.confirm(`删除窗口“${session.title || session.session_id}”？\n\n窗口会从列表隐藏，对话原文和 Persona 历史仍会保留。`)
     if (!confirmed) return
     if (await onDelete(session.session_id)) setMenuId('')
+  }
+
+  const permanentlyRemove = async (session: CcSessionListItem) => {
+    const label = session.title || session.session_id
+    const first = window.confirm(
+      `永久删除窗口“${label}”？\n\n这会删除该窗口的全部对话与窗口状态，无法恢复；长期记忆桶不会被删除。`,
+    )
+    if (!first) return
+    const typed = window.prompt(`二次确认：请输入完整 Session ID\n${session.session_id}`)
+    if (typed?.trim() !== session.session_id) {
+      window.alert('Session ID 不一致，未执行永久删除。')
+      return
+    }
+    await onPermanentDelete(session.session_id)
   }
 
   return (
@@ -115,6 +142,38 @@ export default function CcSessionRail({ sessions, activeSessionId, loading, onPi
             )
           })
         )}
+
+        <div className="mt-3 border-t border-[var(--color-border-light)] pt-2">
+          <button
+            type="button"
+            onClick={() => setDeletedOpen(value => !value)}
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
+          >
+            <span>已删除窗口</span>
+            <span>{deletedSessions.length} {deletedOpen ? '⌃' : '⌄'}</span>
+          </button>
+          {deletedOpen ? (
+            <div className="mt-1 space-y-1">
+              {deletedSessions.length === 0 ? (
+                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--color-text-disabled)]">没有已删除窗口</div>
+              ) : deletedSessions.map(session => (
+                <div key={session.session_id} className="rounded-lg bg-[var(--color-surface-secondary)] px-2.5 py-2">
+                  <div className="truncate text-[11px] text-[var(--color-text-secondary)]">{session.title || session.session_id}</div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-[9px] text-[var(--color-text-disabled)]">{session.session_id}</span>
+                    <button
+                      type="button"
+                      onClick={() => void permanentlyRemove(session)}
+                      className="shrink-0 text-[10px] text-rose-600 hover:underline"
+                    >
+                      永久删除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   )

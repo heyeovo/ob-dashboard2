@@ -13,6 +13,7 @@ import type {
 } from './types'
 import type { CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings, type CcWebSettings } from './webSettings'
+import { normalizeProviderUsage, normalizeTurnContext } from './engineRouting'
 
 const NEW_SESSION_PREFIX = 'ob2-'
 
@@ -58,6 +59,7 @@ export function thinkingDuration(process: CcProcessEvent[] | undefined) {
 /** Haven 的一轮（user + assistant 一行）拆成界面上的两条消息。 */
 export type HavenTurnRow = {
   id: number
+  round_id?: number
   user_text: string
   assistant_text: string
   created_at: string
@@ -70,7 +72,9 @@ export type HavenTurnRow = {
 /** client 列形如 `ob2-chat/<persona_id>`（4.5b 起写）。解不出来就是无主的老消息。 */
 export function personaOfClient(client: string | undefined): string {
   const value = (client || '').trim()
-  return value.startsWith('ob2-chat/') ? value.slice('ob2-chat/'.length).trim() : ''
+  if (value.startsWith('ob2-chat/')) return value.slice('ob2-chat/'.length).trim()
+  if (value.startsWith('ob2-selfhost/')) return value.slice('ob2-selfhost/'.length).trim()
+  return ''
 }
 
 /**
@@ -87,6 +91,11 @@ export function parseTurnRaw(rawJson: string | undefined): {
   recall: CcRecallInfo | null
   usage: CcTurnUsage | null
   interrupted: boolean
+  engine: 'cc' | 'selfhost' | undefined
+  providerId: string
+  providerLabel: string
+  model: string
+  context: CcMessage['context']
 } {
   const empty = {
     thinking: '',
@@ -95,6 +104,11 @@ export function parseTurnRaw(rawJson: string | undefined): {
     recall: null,
     usage: null,
     interrupted: false,
+    engine: undefined,
+    providerId: '',
+    providerLabel: '',
+    model: '',
+    context: null,
   }
   if (!rawJson) return empty
   let raw: Record<string, unknown>
@@ -162,10 +176,18 @@ export function parseTurnRaw(rawJson: string | undefined): {
     recall:
       raw.recall && typeof raw.recall === 'object' ? (raw.recall as unknown as CcRecallInfo) : null,
     // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
-    usage:
-      raw.usage && typeof raw.usage === 'object' ? (raw.usage as unknown as CcTurnUsage) : null,
+    usage: normalizeProviderUsage(raw.usage),
     // 被中断的半截回复。老消息没有这个字段 —— 一律不算中断。
     interrupted: raw.interrupted === true,
+    engine: raw.engine === 'selfhost' ? 'selfhost' : raw.engine ? 'cc' : undefined,
+    providerId: typeof raw.provider_id === 'string' ? raw.provider_id : '',
+    providerLabel: typeof raw.provider_label === 'string' ? raw.provider_label : '',
+    model: typeof raw.model === 'string'
+      ? raw.model
+      : raw.settings && typeof raw.settings === 'object'
+        ? String((raw.settings as Record<string, unknown>).model || '')
+        : '',
+    context: normalizeTurnContext(raw.context),
   }
 }
 
@@ -256,6 +278,13 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         recall: extra.recall,
         usage: extra.usage,
         interrupted: extra.interrupted || undefined,
+        engine: extra.engine || (t.source === 'selfhost' ? 'selfhost' : t.source === 'cc' ? 'cc' : undefined),
+        providerId: extra.providerId || undefined,
+        providerLabel: extra.providerLabel || undefined,
+        model: extra.model || undefined,
+        context: extra.context,
+        roundId: t.round_id,
+        deliveryState: 'saved',
       })
     }
   }

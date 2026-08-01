@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  CcEngine,
   CcMessage,
   CcPermDecided,
   CcPermRequest,
@@ -30,6 +31,13 @@ import {
   type HavenTurnRow,
 } from './ccHistory'
 import { consumeSseStream } from './ccSseConsumer'
+import {
+  deliveryFromError,
+  effectiveEngine as resolveEffectiveEngine,
+  newTurnRequestId,
+  normalizeProviderUsage,
+  normalizeTurnContext,
+} from './engineRouting'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -44,9 +52,17 @@ import { consumeSseStream } from './ccSseConsumer'
 //   · ccSseConsumer.ts —— SSE 流消费（读流 → 切帧 → 按事件名分发）
 // 本文件只管「界面状态」：谁在聊、发了什么、等什么批准、上游选了哪套。
 
-export function useCcChat(personaId = '') {
+type RetryTurn = {
+  assistantId: string
+  requestId: string
+  expectedLastRoundId: number
+  engine: CcEngine
+}
+
+export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionId, setSessionId] = useState('')
   const [sessions, setSessions] = useState<CcSessionListItem[]>([])
+  const [deletedSessions, setDeletedSessions] = useState<CcSessionListItem[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [messages, setMessages] = useState<CcMessage[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -59,6 +75,9 @@ export function useCcChat(personaId = '') {
   // 读历史时数出来的轮数。进程被回收后 stats.turnCount 归零，用它兜底
   const [historyTurnCount, setHistoryTurnCount] = useState(0)
   const [error, setError] = useState('')
+  const [localEnginePreference, setLocalEnginePreference] = useState<CcEngine>('cc')
+  const [engineSaving, setEngineSaving] = useState(false)
+  const effectiveEngine = resolveEffectiveEngine(isRemote, localEnginePreference)
   // 第 5 步：正在等点批准的操作。
   // ⚠️ 它的权威副本在服务端队列里 —— 刷新页面 / 换设备打开都靠下面那个轮询拉回来，
   // 不是只靠 SSE 推。SSE 只是让它当场出现。
@@ -89,6 +108,8 @@ export function useCcChat(personaId = '') {
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
+  const lastRoundIdRef = useRef(0)
+  const activeTurnRef = useRef<{ assistantId: string; engine: CcEngine } | null>(null)
   // 停止请求发过就不要再发 —— interrupt 一次就够，重复发没意义。done/error 到达时复位。
   const stoppingRef = useRef(false)
   // 第 5 条 resume：切回旧会话时从历史最后一轮读出的 cc session id。
@@ -143,7 +164,8 @@ export function useCcChat(personaId = '') {
 
   // 首次进页面：开一个新会话 id + 拉会话列表
   useEffect(() => {
-    setSessionId(newSessionId())
+    const timer = window.setTimeout(() => setSessionId(newSessionId()), 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   // 工作台靠这个知道现在在聊哪个会话
@@ -161,9 +183,16 @@ export function useCcChat(personaId = '') {
   const refreshSessions = useCallback(async () => {
     try {
       const qs = personaId ? `&persona_id=${encodeURIComponent(personaId)}` : ''
-      const res = await fetch(`/api/cc-turns?limit=60${qs}`, { cache: 'no-store' })
-      const data = await res.json()
-      if (data.ok && Array.isArray(data.sessions)) setSessions(data.sessions)
+      const [activeResponse, deletedResponse] = await Promise.all([
+        fetch(`/api/cc-turns?limit=60${qs}`, { cache: 'no-store' }),
+        fetch(`/api/cc-turns?limit=60&deleted=1${qs}`, { cache: 'no-store' }),
+      ])
+      const [activeData, deletedData] = await Promise.all([
+        activeResponse.json(),
+        deletedResponse.json(),
+      ])
+      if (activeData.ok && Array.isArray(activeData.sessions)) setSessions(activeData.sessions)
+      if (deletedData.ok && Array.isArray(deletedData.sessions)) setDeletedSessions(deletedData.sessions)
     } catch {
       /* 会话列表拉不到不影响聊天 */
     } finally {
@@ -178,7 +207,12 @@ export function useCcChat(personaId = '') {
       const res = await fetch('/api/cc-turns', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: targetSessionId, title: cleanedTitle }),
+        body: JSON.stringify({
+          session_id: targetSessionId,
+          title: cleanedTitle,
+          persona_id: personaId,
+          local_engine_preference: localEnginePreference,
+        }),
       })
       const data = await res.json()
       if (!res.ok || !data.ok) throw new Error(String(data.error || '重命名失败'))
@@ -190,10 +224,11 @@ export function useCcChat(personaId = '') {
       setError(reason instanceof Error ? reason.message : '重命名失败')
       return false
     }
-  }, [])
+  }, [localEnginePreference, personaId])
 
   useEffect(() => {
-    void refreshSessions()
+    const timer = window.setTimeout(() => void refreshSessions(), 0)
+    return () => window.clearTimeout(timer)
   }, [refreshSessions])
 
   // 顶部的费用 / 缓存剩余时间：每 20 秒问一次服务端
@@ -248,9 +283,12 @@ export function useCcChat(personaId = '') {
 
   useEffect(() => {
     if (!sessionId) return
-    void refreshPending()
+    const initialTimer = window.setTimeout(() => void refreshPending(), 0)
     const timer = setInterval(refreshPending, 5_000)
-    return () => clearInterval(timer)
+    return () => {
+      window.clearTimeout(initialTimer)
+      clearInterval(timer)
+    }
   }, [sessionId, refreshPending])
 
   /** 点批准 / 拒绝。Bash / WebFetch 可按 SDK 的具体建议选择会话级或永久规则。 */
@@ -323,6 +361,8 @@ export function useCcChat(personaId = '') {
       setHistoryTurnCount(0)
       setHistoryBeforeId(null)
       setHasEarlierHistory(false)
+      setLocalEnginePreference('cc')
+      lastRoundIdRef.current = 0
       // 待批准是按会话分的，切走先清空，轮询会把新会话那份拉回来
       setPending([])
       setDecided([])
@@ -343,6 +383,9 @@ export function useCcChat(personaId = '') {
           setMessages(turnsToMessages(turns))
           setHistoryBeforeId(turns[0]?.id ?? null)
           setHasEarlierHistory(turns.length === 100)
+          lastRoundIdRef.current = turns.reduce((largest, turn) => Math.max(largest, Number(turn.round_id || 0)), 0)
+          const sessionState = data.session as { local_engine_preference?: string } | null
+          setLocalEnginePreference(sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc')
           // 进程没了内存里的轮数就归零，用库里的行数补上。
           // 花费补不了（要价格表），保持 0。
           const knownTurnCount = sessions.find(session => session.session_id === nextId)?.turn_count || 0
@@ -415,6 +458,8 @@ export function useCcChat(personaId = '') {
     setDecided([])
     setAutoAllowEdits(false)
     setSettingsNote('')
+    setLocalEnginePreference('cc')
+    lastRoundIdRef.current = 0
     setWebSettings(webDefaults)
     // 新对话没有接回点
     resumeHintRef.current = ''
@@ -436,14 +481,69 @@ export function useCcChat(personaId = '') {
         method: 'DELETE',
       }).catch(() => undefined)
       draftsRef.current.delete(targetSessionId)
+      const deleted = sessions.find(session => session.session_id === targetSessionId)
       setSessions(previous => previous.filter(session => session.session_id !== targetSessionId))
+      if (deleted) setDeletedSessions(previous => [{ ...deleted, deleted_at: new Date().toISOString() }, ...previous])
       if (targetSessionId === sessionId) startNewSession()
       return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '删除窗口失败')
       return false
     }
-  }, [sessionId, startNewSession])
+  }, [sessionId, sessions, startNewSession])
+
+  const permanentlyDeleteSession = useCallback(async (targetSessionId: string) => {
+    if (!targetSessionId) return false
+    try {
+      const res = await fetch('/api/cc-turns', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: targetSessionId,
+          permanent: true,
+          confirm_session_id: targetSessionId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(String(data.error || '永久删除失败'))
+      setDeletedSessions(previous => previous.filter(session => session.session_id !== targetSessionId))
+      draftsRef.current.delete(targetSessionId)
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '永久删除失败')
+      return false
+    }
+  }, [])
+
+  const changeEngine = useCallback(async (next: CcEngine) => {
+    if (!sessionId || !personaId || next === localEnginePreference) return
+    if (isRemote === true) {
+      setError('Vercel 环境仅支持自建引擎；本地首选没有被修改。')
+      return
+    }
+    const previous = localEnginePreference
+    setLocalEnginePreference(next)
+    setEngineSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/cc-turns', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          persona_id: personaId,
+          local_engine_preference: next,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(String(data.error || '引擎首选保存失败'))
+    } catch (reason) {
+      setLocalEnginePreference(previous)
+      setError(reason instanceof Error ? reason.message : '引擎首选保存失败')
+    } finally {
+      setEngineSaving(false)
+    }
+  }, [isRemote, localEnginePreference, personaId, sessionId])
 
   const startWithHandoff = useCallback(
     async (payload: HandoffPayload) => {
@@ -460,6 +560,8 @@ export function useCcChat(personaId = '') {
       setHistoryTurnCount(0)
       setHistoryBeforeId(null)
       setHasEarlierHistory(false)
+      setLocalEnginePreference('cc')
+      lastRoundIdRef.current = 0
       setPending([])
       setDecided([])
       setAutoAllowEdits(false)
@@ -612,6 +714,24 @@ export function useCcChat(personaId = '') {
   }, [webSettings])
 
   const stop = useCallback(() => {
+    if (effectiveEngine === 'selfhost') {
+      const active = activeTurnRef.current
+      abortRef.current?.abort()
+      if (active) {
+        setMessages(previous => previous.map(message => (
+          message.id === active.assistantId
+            ? {
+                ...message,
+                streaming: false,
+                interrupted: true,
+                deliveryState: 'stopped',
+                deliveryNote: '已停止生成；这段未完成回复没有保存。',
+              }
+            : message
+        )))
+      }
+      return
+    }
     // 不 abort：abort 会断开 SSE，服务端那边把这一轮整块丢掉。改成发「停止」请求，
     // 服务端调 interrupt() 优雅收尾 —— 已生成的字留在界面、写进 Haven，上下文也保住。
     // SSE 连接保持开着，等服务端把 done / after 推回来，这一轮才算真正收尾。
@@ -622,15 +742,18 @@ export function useCcChat(personaId = '') {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId }),
     }).catch(() => undefined)
-  }, [sessionId])
+  }, [effectiveEngine, sessionId])
 
   const send = useCallback(
-    async (rawText: string) => {
+    async (rawText: string, retry?: RetryTurn) => {
       const text = rawText.trim()
       if (!text || sending || !sessionId) return
 
+      const requestId = retry?.requestId || newTurnRequestId()
+      const expectedLastRoundId = retry?.expectedLastRoundId ?? lastRoundIdRef.current
+      const turnEngine = retry?.engine || effectiveEngine
       const userMsg: CcMessage = { id: localId(), role: 'user', text, createdAt: Date.now() }
-      const assistantId = localId()
+      const assistantId = retry?.assistantId || localId()
       const assistantMsg: CcMessage = {
         id: assistantId,
         role: 'assistant',
@@ -639,11 +762,21 @@ export function useCcChat(personaId = '') {
         streaming: true,
         tools: [],
         process: [],
+        engine: turnEngine,
+        requestId,
+        deliveryState: 'generating',
+        retryText: text,
+        retryExpectedLastRoundId: expectedLastRoundId,
       }
-      setMessages(prev => [...prev, userMsg, assistantMsg])
+      if (retry) {
+        setMessages(previous => previous.map(message => message.id === assistantId ? assistantMsg : message))
+      } else {
+        setMessages(prev => [...prev, userMsg, assistantMsg])
+      }
       setDraft('')
       setSending(true)
       setError('')
+      activeTurnRef.current = { assistantId, engine: turnEngine }
 
       const ac = new AbortController()
       abortRef.current = ac
@@ -653,7 +786,15 @@ export function useCcChat(personaId = '') {
       }
 
       try {
-        const res = await fetch('/api/cc-chat', {
+        const endpoint = turnEngine === 'selfhost' ? '/api/cc-chat-selfhost' : '/api/cc-chat'
+        const strictPayload = {
+          session_id: sessionId,
+          request_id: requestId,
+          expected_last_round_id: expectedLastRoundId,
+          persona_id: personaId,
+          text,
+        }
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           // persona_id 每轮都带上：服务端按它取提示词/记忆/引擎。
@@ -661,10 +802,8 @@ export function useCcChat(personaId = '') {
           //
           // 5.2 起还带这一窗选的那套上游。同样是「第一轮定死」的那几项
           //（mode / cred / provider_id）后面几轮送过去也不会改，服务端沿用启动时那份。
-          body: JSON.stringify({
-            session_id: sessionId,
-            text,
-            persona_id: personaId,
+          body: JSON.stringify(turnEngine === 'selfhost' ? strictPayload : {
+            ...strictPayload,
             mode,
             // 没人定过就不送 cred，让服务端照协作者的 engine 走
             ...(credChosen ? { cred: pick.kind === 'subscription' ? 'subscription' : 'api' } : {}),
@@ -703,6 +842,26 @@ export function useCcChat(personaId = '') {
         // 这里只写「每个事件怎么改界面状态」。
         // 只有「流结束却没收到完成事件」才会抛错 —— 见下面 catch。
         await consumeSseStream(res.body, {
+          onStart: payload => {
+            patch(message => ({
+              ...message,
+              requestId: String(payload.request_id || requestId),
+              engine: turnEngine,
+              deliveryState: 'generating',
+            }))
+          },
+          onContext: payload => {
+            patch(message => ({ ...message, context: normalizeTurnContext(payload) }))
+          },
+          onInit: payload => {
+            patch(message => ({
+              ...message,
+              engine: payload.engine === 'selfhost' ? 'selfhost' : turnEngine,
+              providerId: String(payload.provider_id || ''),
+              providerLabel: String(payload.provider_label || ''),
+              model: String(payload.model || ''),
+            }))
+          },
           onDelta: payload => {
             const chunk = String(payload.text || '')
             const id = String(payload.id || `text-${Date.now()}`)
@@ -742,6 +901,15 @@ export function useCcChat(personaId = '') {
                 process,
               }
             })
+          },
+          onUsage: payload => {
+            patch(message => ({
+              ...message,
+              usage: normalizeProviderUsage(payload),
+              streaming: false,
+              deliveryState: 'saving',
+              deliveryNote: '回复已生成，正在保存到 Haven…',
+            }))
           },
           onRecall: payload => {
             patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
@@ -814,17 +982,23 @@ export function useCcChat(personaId = '') {
             void refreshPending()
           },
           onDone: payload => {
-            const usage = (payload.usage || null) as CcMessage['usage']
+            const usage = normalizeProviderUsage(payload.usage)
             const interrupted = payload.interrupted === true
+            const replayed = payload.idempotent_replay === true
+            const roundId = Number(payload.round_id || 0)
+            if (roundId > 0) lastRoundIdRef.current = Math.max(lastRoundIdRef.current, roundId)
             patch(m => {
               const process = closeOpenThinking(m.process)
               return {
                 ...m,
                 process,
                 streaming: false,
-                usage,
+                usage: usage || m.usage,
                 interrupted: interrupted || m.interrupted,
                 thinkingMs: thinkingDuration(process) || undefined,
+                roundId: roundId || m.roundId,
+                deliveryState: replayed ? 'replayed' : 'saved',
+                deliveryNote: replayed ? '已从 Haven 幂等重放，没有重复生成或写入。' : '已保存到 Haven',
               }
             })
             if (payload.stats) setStats(payload.stats as CcSessionStats)
@@ -836,28 +1010,64 @@ export function useCcChat(personaId = '') {
             void refreshSessions()
           },
           onError: payload => {
-            setError(String(payload.message || '出错了'))
-            // API / SDK 错误不是助手回复：页面只留错误提示，不留一条假消息。
-            setMessages(prev => prev.filter(message => message.id !== assistantId))
+            const delivery = deliveryFromError(payload)
+            setError(delivery.note)
+            if (delivery.keepGenerated) {
+              patch(message => ({
+                ...message,
+                streaming: false,
+                deliveryState: delivery.state,
+                deliveryNote: delivery.note,
+              }))
+            } else {
+              setMessages(prev => prev.filter(message => message.id !== assistantId))
+            }
           },
         })
       } catch (e) {
         const err = e as Error
-        if (err.name !== 'AbortError') setError(err.message || String(err))
-        setMessages(prev => prev.filter(message => message.id !== assistantId))
+        if (err.name === 'AbortError') {
+          setMessages(previous => previous.flatMap(message => {
+            if (message.id !== assistantId) return [message]
+            if (!message.text && !message.thinking) return []
+            return [{
+              ...message,
+              streaming: false,
+              interrupted: true,
+              deliveryState: 'stopped',
+              deliveryNote: '已停止生成；这段未完成回复没有保存。',
+            }]
+          }))
+        } else {
+          setError(err.message || String(err))
+          setMessages(prev => prev.filter(message => message.id !== assistantId))
+        }
         // 浏览器断流时服务端的 iterator 可能还在等；主动回收，避免 busy 锁残留。
         //（consumeSseStream 只有「流结束却没收到完成事件」才抛，走到这里必然无终态）
-        void fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, {
-          method: 'DELETE',
-        }).catch(() => undefined)
+        if (turnEngine === 'cc') {
+          void fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, {
+            method: 'DELETE',
+          }).catch(() => undefined)
+        }
       } finally {
         abortRef.current = null
+        activeTurnRef.current = null
         stoppingRef.current = false
         setSending(false)
       }
     },
-    [sessionId, sending, personaId, refreshSessions, mode, pick, credChosen, webSettings],
+    [sessionId, sending, personaId, refreshSessions, refreshPending, mode, pick, credChosen, webSettings, effectiveEngine],
   )
+
+  const retryPersistence = useCallback((message: CcMessage) => {
+    if (!message.requestId || !message.retryText || message.retryExpectedLastRoundId == null || !message.engine) return
+    void send(message.retryText, {
+      assistantId: message.id,
+      requestId: message.requestId,
+      expectedLastRoundId: message.retryExpectedLastRoundId,
+      engine: message.engine,
+    })
+  }, [send])
 
   // 轮数取两者的大者：进程活着时它自己的计数是准的（这一轮刚加完，库还没写）；
   // 进程没了就用历史行数。
@@ -869,10 +1079,12 @@ export function useCcChat(personaId = '') {
     || messages.find(message => message.role === 'user' && !message.handoff)?.text.slice(0, 80)
     || '新对话'
   const activeSessionSource = sessions.find(session => session.session_id === sessionId)?.source || ''
+  const latestTurn = [...messages].reverse().find(message => message.role === 'assistant' && !message.handoff)
 
   return {
     sessionId,
     sessions,
+    deletedSessions,
     sessionsLoading,
     sessionTitle,
     activeSessionSource,
@@ -893,6 +1105,14 @@ export function useCcChat(personaId = '') {
     startNewSession,
     renameSession,
     deleteSession,
+    permanentlyDeleteSession,
+    localEnginePreference,
+    effectiveEngine,
+    engineSaving,
+    changeEngine,
+    latestTurn,
+    retryPersistence,
+    isRemote,
     // 5.2：模式 + 本窗口设置
     mode,
     setMode,

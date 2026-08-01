@@ -22,6 +22,8 @@ export const SSE_EVENTS = {
   delta: 'delta',
   thinking: 'thinking',
   recall: 'recall',
+  context: 'context',
+  usage: 'usage',
   tool: 'tool',
   toolResult: 'tool_result',
   permission: 'permission',
@@ -35,13 +37,18 @@ export const SSE_EVENTS = {
 
 /* ── 每个事件的 payload ── */
 
-export type CcSseStart = { session_id: string; at: number }
+export type CcSseStart = { session_id: string; at: number; request_id?: string; idempotent_replay?: boolean }
 
 export type CcSseInit = {
   claude_code_version?: string
   model?: string
   cwd?: string
   session_id?: string
+  engine?: 'cc' | 'selfhost'
+  provider_id?: string
+  provider_label?: string
+  request_id?: string
+  idempotent_replay?: boolean
 }
 
 /** 助手正文的增量。id 是服务端 process 段 id，前端靠它判断是不是同一段。 */
@@ -68,6 +75,10 @@ export type CcSseDone = {
   stats: SessionStats
   elapsed_ms: number
   interrupted?: boolean
+  request_id?: string
+  turn_id?: number
+  round_id?: number
+  idempotent_replay?: boolean
 }
 
 export type CcSseAfter = {
@@ -77,7 +88,18 @@ export type CcSseAfter = {
   elapsed_ms: number
 }
 
-export type CcSseError = { message: string }
+export type CcSseError = {
+  message: string
+  code?: string
+  stage?: string
+  retryable?: boolean
+  http_status?: number | null
+  request_id?: string
+  generated_not_saved?: boolean
+  persistence_unknown?: boolean
+  expected_last_round_id?: number
+  actual_last_round_id?: number
+}
 
 export type CcSsePermissionResolved = { id: string; outcome: string }
 
@@ -88,6 +110,8 @@ export type CcSseEventMap = {
   [SSE_EVENTS.delta]: CcSseDelta
   [SSE_EVENTS.thinking]: CcSseThinking
   [SSE_EVENTS.recall]: CcSseRecall
+  [SSE_EVENTS.context]: Record<string, unknown>
+  [SSE_EVENTS.usage]: Record<string, unknown>
   [SSE_EVENTS.tool]: CcSseTool
   [SSE_EVENTS.toolResult]: CcSseToolResult
   [SSE_EVENTS.permission]: CcPermRequest

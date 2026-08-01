@@ -2,7 +2,28 @@
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
 
 export type CcRole = 'user' | 'assistant'
+export type CcEngine = 'cc' | 'selfhost'
 export type CcToolStatus = 'running' | 'completed' | 'error' | 'denied'
+
+export type CcDeliveryState =
+  | 'generating'
+  | 'saving'
+  | 'saved'
+  | 'replayed'
+  | 'not_saved'
+  | 'persistence_unknown'
+  | 'conflict'
+  | 'stopped'
+
+export type CcTurnContext = {
+  estimator?: string
+  modelContextLimit: number
+  replyReserveTokens: number
+  inputTokensEstimated: number
+  historyTokensEstimated: number
+  includedHistoryRounds: number
+  omittedHistoryRounds: number
+}
 
 export type CcToolEvent = {
   name: string
@@ -84,6 +105,19 @@ export type CcMessage = {
    * 空串 = 4.5b 之前的老消息或 Polaris 写的，退回按当前选中的那个显示。
    */
   personaId?: string
+  /** 10.3：这一轮真实走的执行器与上游，不跟当前窗口选择混用。 */
+  engine?: CcEngine
+  providerId?: string
+  providerLabel?: string
+  model?: string
+  context?: CcTurnContext | null
+  requestId?: string
+  roundId?: number
+  deliveryState?: CcDeliveryState
+  deliveryNote?: string
+  /** 保存结果未知时，用同一个 request_id 原位核对/重放。 */
+  retryText?: string
+  retryExpectedLastRoundId?: number
 }
 
 /**
@@ -261,6 +295,7 @@ export type CcSessionStats = {
 /** 会话列表项。来自 /api/cc-turns（Haven 的 conversation_turns）。 */
 export type CcSessionListItem = {
   session_id: string
+  persona_id?: string
   turn_count: number
   first_at: string
   last_at: string
@@ -269,4 +304,5 @@ export type CcSessionListItem = {
   client: string
   route: string
   source: string
+  deleted_at?: string | null
 }

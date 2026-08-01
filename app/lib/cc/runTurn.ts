@@ -42,7 +42,7 @@ import { buildCcOptions, isWebTool, sdkModelForProvider, storedMcpResult, stored
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
-import { recordTurn, listTurns, updatePersonaFromExchange } from '@/app/lib/havenTurns'
+import { recordTurnStrict, listTurns, updatePersonaFromExchange } from '@/app/lib/havenTurns'
 import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
 
@@ -76,6 +76,9 @@ const recalledIdsCache = new Map<string, Set<string>>()
 
 export type RunTurnInput = {
   sessionId: string
+  requestId: string
+  expectedLastRoundId: number
+  personaId: string
   /** 用户原话（不带任何注入） */
   text: string
   persona: HavenPersona | null
@@ -270,7 +273,20 @@ async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T
  *   · close() 关掉 SSE 流
  */
 export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
-  const { sessionId, text, persona, config, handoff, signal, send, close, stamp } = input
+  const {
+    sessionId,
+    requestId,
+    expectedLastRoundId,
+    personaId,
+    text,
+    persona,
+    config,
+    handoff,
+    signal,
+    send,
+    close,
+    stamp,
+  } = input
   const state = new TurnState(sessionId)
   const startedAt = Date.now()
 
@@ -323,7 +339,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
     // 先告诉前端这一轮开始了，再去等召回 —— 召回开语义要 4-6 秒，
     // 放在 start 前面的话这几秒界面上什么都没有。
-    send('start', { session_id: sessionId, at: startedAt })
+    send('start', { session_id: sessionId, request_id: requestId, at: startedAt })
 
     /* ── 召回：发送前做，结果拼进 user 正文 ──
      * 不走 UserPromptSubmit hook：那条路返回的 additionalContext 会被 SDK
@@ -454,7 +470,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
         live.ccSessionId = msg.session_id
         rememberResumePoint(sessionId, msg.session_id)
-        send('init', initInfo)
+        send('init', {
+          ...initInfo,
+          engine: 'cc',
+          provider_id: config.providerId,
+          provider_label: config.providerLabel || (config.cred === 'subscription' ? 'Claude 订阅' : ''),
+        })
         continue
       }
 
@@ -598,36 +619,37 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     live.busy = false
     busyReleased = true
 
-    // ⚠️ 顺序是故意的：先把 done 发出去，再做写库和上下文用量。
-    // 这两步都要走网络（Haven 在 Zeabur / 子进程一次控制请求），
-    // 放在 done 前面会让浏览器一直停在「回复中」——第 5.2 步就是这么慢的。
-    // 收尾做完再补一个 after 事件，只用来刷新顶部那几个数字。
-    send('done', {
-      result: resultInfo,
-      usage: turnUsage,
-      stats: getSessionStats(sessionId),
-      elapsed_ms: Date.now() - startedAt,
-      interrupted: interrupted || undefined,
-    })
+    // 10.3 严格完成顺序：模型生成 → Haven 原子写入 → done。
+    // usage 先发，让前端在 Haven 落库期间明确显示“正在保存”。
+    if (turnUsage) send('usage', turnUsage)
 
     // ── 写回 Haven 的 conversation_turns ────────────────────────────
     // sessionId 跟 hook 用的是同一个值（同一个变量），不会分组串。
     let storeInfo: Record<string, unknown>
     let personaInfo: Record<string, unknown> = { ok: false, updated: false, skipped: 'conversation_not_stored' }
     if (assistantText.trim()) {
-      const rec = await withTimeout(recordTurn({
+      const recalledMemoryIds = Array.isArray(bucket.recallInfo?.recalled_ids)
+        ? bucket.recallInfo.recalled_ids.map(String)
+        : []
+      const rec = await withTimeout(recordTurnStrict({
         sessionId,
+        requestId,
+        expectedLastRoundId,
+        personaId,
         userText: text,
         assistantText,
         model: String(initInfo?.model || config.model || ''),
         // client 里带上协作者 id：会话列表接口只回 client 不回 raw_json，
         // 靠它做「这个对话属于谁」的过滤，不用为此再改一次 Haven。
         // 这一列只有这条路由写，没别人读，可以这么用。权威记录仍是下面 raw.persona_id。
-        client: persona?.id ? `ob2-chat/${persona.id}` : 'ob2-chat',
+        client: `ob2-chat/${personaId}`,
         route: '/api/cc-chat',
         source: 'cc',
+        recalledBucketIds: recalledMemoryIds,
         raw: {
-          engine: 'claude-code-agent-sdk',
+          version: 1,
+          engine: 'cc',
+          request_id: requestId,
           cred_mode: config.cred,
           // 用户点了停止：这一轮是被打断的半截回复。读历史时前端靠它显示「已停止」
           interrupted: interrupted || undefined,
@@ -635,6 +657,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           // 历史消息读回来时右下角那个 token 面板靠 usage 重建。
           mode: config.mode,
           provider_id: config.providerId || undefined,
+          provider_label: config.providerLabel || (config.cred === 'subscription' ? 'Claude 订阅' : undefined),
+          model: String(initInfo?.model || config.model || '') || undefined,
           // 第 5 条 resume：这一轮的 claude code session id。进程回收 / 重启后，
           // 前端读回历史时把最后一轮这个值带回来，服务端用它 resume 接上上下文。
           cc_session_id: live.ccSessionId || undefined,
@@ -649,7 +673,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             web: config.webSettings,
           },
           usage: turnUsage || undefined,
-          persona_id: persona?.id || undefined,
+          persona_id: personaId,
           persona_name: persona?.name || undefined,
           thinking: thinkingText || undefined,
           process: bucket.processEvents,
@@ -667,14 +691,43 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             stored: rec.stored,
             turn_id: rec.turnId,
             round_id: rec.roundId,
+            idempotent_replay: rec.idempotentReplay,
+            code: rec.code || undefined,
+            http_status: rec.httpStatus,
             error: rec.error || undefined,
           }
-        : { ok: false, stored: false, error: `写库超过 ${STORE_TIMEOUT_MS / 1000}s 没回，这一轮没存上` }
+        : {
+            ok: false,
+            stored: false,
+            persistence_unknown: true,
+            error: `写库超过 ${STORE_TIMEOUT_MS / 1000}s 没有返回，无法确认是否已保存`,
+          }
+
+      if (!rec?.ok || !rec.stored) {
+        const unknown = !rec || rec.httpStatus == null
+        const details = rec?.details || {}
+        send('error', {
+          code: rec?.code || (unknown ? 'persistence_unknown' : 'persistence_failed'),
+          message: rec?.error || (unknown ? '无法确认回复是否已保存，请刷新后检查' : '回复已生成，但未保存'),
+          stage: 'persistence',
+          retryable: rec?.code !== 'request_id_reused' && rec?.code !== 'conversation_persona_conflict',
+          http_status: rec?.httpStatus ?? null,
+          request_id: requestId,
+          generated_not_saved: !unknown,
+          persistence_unknown: unknown || undefined,
+          expected_last_round_id: Number(details.expected_last_round_id ?? expectedLastRoundId),
+          actual_last_round_id: details.actual_last_round_id == null ? undefined : Number(details.actual_last_round_id),
+        })
+        // 这一轮已经进入 cc 私有上下文但没能确认写入 Haven。收掉进程，
+        // “核对保存状态”若确认未保存，会从最近一轮已保存的 resume 点重新生成，
+        // 不把同一句在旧私有上下文里重复追加。
+        dropSession(sessionId)
+        stamp?.('写库失败')
+        state.markFailed()
+        return { ok: false, error: rec?.error || '对话保存失败', phase: state.current }
+      }
       // 中断的轮不喂 persona 学习 —— 半截回复拿去更新协作者记忆，可能学到没说完的想法
       if (rec?.ok && rec.stored && !interrupted) {
-        const recalledMemoryIds = Array.isArray(bucket.recallInfo?.recalled_ids)
-          ? bucket.recallInfo.recalled_ids.map(String)
-          : []
         const personaResult = await updatePersonaFromExchange({
           sessionId,
           userMessage: text,
@@ -690,8 +743,31 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       }
     } else {
       storeInfo = { ok: false, stored: false, error: '模型没有文本输出，不写库' }
+      send('error', {
+        code: 'empty_response',
+        message: '模型没有返回正文，本轮未保存',
+        stage: 'upstream',
+        retryable: true,
+        request_id: requestId,
+        generated_not_saved: false,
+      })
+      state.markFailed()
+      return { ok: false, error: '模型没有返回正文', phase: state.current }
     }
     stamp?.('写库完')
+
+    const storedRoundId = Number(storeInfo.round_id || 0)
+    send('done', {
+      result: resultInfo,
+      usage: turnUsage,
+      stats: getSessionStats(sessionId),
+      elapsed_ms: Date.now() - startedAt,
+      interrupted: interrupted || undefined,
+      request_id: requestId,
+      round_id: storedRoundId,
+      turn_id: Number(storeInfo.turn_id || 0),
+      idempotent_replay: storeInfo.idempotent_replay === true,
+    })
 
     // 上下文用量：这一轮答完了才拉（getContextUsage 要走一次控制请求，
     // 这一轮还占着 iterator 的时候拿不到）。顶部那个「x / 1M」胶囊用它。

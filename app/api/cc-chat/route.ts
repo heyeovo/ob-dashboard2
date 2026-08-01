@@ -22,6 +22,7 @@ import {
 import { clearRecallPrefs, runTurn, setRecallPrefs } from '@/app/lib/cc/runTurn'
 import { clearTurnBucket } from '@/app/lib/cc/processCollector'
 import { encodeSse } from '@/app/lib/cc/sseEvents'
+import { getTurnByRequestId, type HavenTurn } from '@/app/lib/havenTurns'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
 //
@@ -48,6 +49,8 @@ export const maxDuration = 300
 
 type ChatBody = {
   session_id?: string
+  request_id?: string
+  expected_last_round_id?: number
   text?: string
   cred?: string
   model?: string
@@ -85,6 +88,83 @@ type ChatBody = {
   handoff_bucket_ids?: string[]
   handoff_turns?: number
   handoff_from_session?: string
+}
+
+function rawRecord(rawJson: string | undefined): Record<string, unknown> {
+  if (!rawJson) return {}
+  try {
+    const parsed = JSON.parse(rawJson)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function replayCcTurn(turn: HavenTurn, body: ChatBody): Response {
+  const raw = rawRecord(turn.raw_json)
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder()
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+      }
+      send('start', {
+        session_id: turn.session_id,
+        request_id: body.request_id,
+        at: Date.now(),
+        idempotent_replay: true,
+      })
+      send('init', {
+        engine: 'cc',
+        model: turn.model || raw.model || '',
+        provider_id: raw.provider_id || '',
+        provider_label: raw.provider_label || '',
+        request_id: body.request_id,
+        idempotent_replay: true,
+      })
+      if (raw.recall && typeof raw.recall === 'object') send('recall', raw.recall)
+      if (raw.context && typeof raw.context === 'object') send('context', raw.context)
+      const process = Array.isArray(raw.process) ? raw.process : []
+      let replayedText = false
+      for (const part of process) {
+        if (!part || typeof part !== 'object') continue
+        const item = part as Record<string, unknown>
+        const text = String(item.text || '')
+        if (!text) continue
+        if (item.type === 'thinking') {
+          send('thinking', {
+            text,
+            id: String(item.id || 'thinking-0'),
+            startedAt: Number(item.startedAt || Date.now()),
+          })
+        } else if (item.type === 'text') {
+          replayedText = true
+          send('delta', { text, id: String(item.id || 'text-0') })
+        }
+      }
+      if (!replayedText && turn.assistant_text) send('delta', { text: turn.assistant_text, id: 'text-0' })
+      if (raw.usage && typeof raw.usage === 'object') send('usage', raw.usage)
+      send('done', {
+        request_id: body.request_id,
+        turn_id: turn.id,
+        round_id: turn.round_id,
+        idempotent_replay: true,
+        generated: false,
+        usage: raw.usage || null,
+        context: raw.context || null,
+        stats: getSessionStats(turn.session_id),
+      })
+      controller.close()
+    },
+  })
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }
 
 /**
@@ -243,9 +323,38 @@ export async function POST(request: NextRequest) {
   }
 
   const sessionId = (body.session_id || '').trim()
+  const requestId = (body.request_id || '').trim()
+  const personaId = (body.persona_id || '').trim()
   const text = (body.text || '').trim()
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
+  if (!requestId) return Response.json({ ok: false, error: 'request_id 为空' }, { status: 400 })
+  if (requestId.length > 128) return Response.json({ ok: false, error: 'request_id 不能超过 128 个字符' }, { status: 400 })
+  if (!personaId) return Response.json({ ok: false, error: 'persona_id 为空' }, { status: 400 })
   if (!text) return Response.json({ ok: false, error: 'text 为空' }, { status: 400 })
+  const expectedLastRoundId = Number(body.expected_last_round_id)
+  if (!Number.isInteger(expectedLastRoundId) || expectedLastRoundId < 0) {
+    return Response.json({ ok: false, error: 'expected_last_round_id 必须是大于或等于 0 的整数' }, { status: 400 })
+  }
+
+  const existing = await getTurnByRequestId(requestId, { signal: request.signal })
+  if (!existing.ok) {
+    return Response.json({ ok: false, error: existing.error || '幂等状态查询失败' }, { status: existing.httpStatus || 502 })
+  }
+  if (existing.found && existing.turn) {
+    const raw = rawRecord(existing.turn.raw_json)
+    const storedPersonaId = String(existing.turn.persona_id || raw.persona_id || '')
+    const matches = existing.turn.session_id === sessionId
+      && existing.turn.user_text === text
+      && storedPersonaId === personaId
+    if (!matches) {
+      return Response.json({
+        ok: false,
+        error: 'request_id_reused',
+        message: '这个 request_id 已用于另一条消息',
+      }, { status: 409 })
+    }
+    return replayCcTurn(existing.turn, body)
+  }
 
   const { persona, config, handoff } = await loadTurnInputs(body)
 
@@ -287,6 +396,9 @@ export async function POST(request: NextRequest) {
 
       await runTurn({
         sessionId,
+        requestId,
+        expectedLastRoundId,
+        personaId,
         text,
         persona,
         config,

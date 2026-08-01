@@ -12,8 +12,12 @@ import type { CcPermRequest } from '@/app/cc/types'
 export type SseEventPayload = Record<string, unknown>
 
 export type SseHandlers = {
+  onStart: (data: SseEventPayload) => void
+  onContext: (data: SseEventPayload) => void
+  onInit: (data: SseEventPayload) => void
   onDelta: (data: SseEventPayload) => void
   onThinking: (data: SseEventPayload) => void
+  onUsage: (data: SseEventPayload) => void
   onRecall: (data: SseEventPayload) => void
   onTool: (data: SseEventPayload) => void
   onToolResult: (data: SseEventPayload) => void
@@ -53,8 +57,12 @@ export async function consumeSseStream(
       buffer = frameResult.rest
       const { event, data } = frameResult.frame
 
-      if (event === 'delta') handlers.onDelta(data)
+      if (event === 'start') handlers.onStart(data)
+      else if (event === 'context') handlers.onContext(data)
+      else if (event === 'init') handlers.onInit(data)
+      else if (event === 'delta') handlers.onDelta(data)
       else if (event === 'thinking') handlers.onThinking(data)
+      else if (event === 'usage') handlers.onUsage(data)
       else if (event === 'recall') handlers.onRecall(data)
       else if (event === 'tool') handlers.onTool(data)
       else if (event === 'tool_result') handlers.onToolResult(data)
@@ -68,7 +76,7 @@ export async function consumeSseStream(
         terminal = 'error'
         handlers.onError(data)
       }
-      // 其它事件（init / start / files / command 等）前端不消费，忽略
+      // 其它事件（files / command 等）前端不消费，忽略
 
       frameResult = takeSseFrame(buffer)
     }

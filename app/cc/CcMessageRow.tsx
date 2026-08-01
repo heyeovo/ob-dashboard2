@@ -48,6 +48,7 @@ type Props = {
   onCopy: (text: string) => void
   onEditAndResend?: (text: string) => void
   onOpenRecall?: (message: CcMessage) => void
+  onRetryPersistence?: (message: CcMessage) => void
 }
 
 export default function CcMessageRow({
@@ -56,6 +57,7 @@ export default function CcMessageRow({
   onCopy,
   onEditAndResend,
   onOpenRecall,
+  onRetryPersistence,
 }: Props) {
   const isUser = message.role === 'user'
   const [menuOpen, setMenuOpen] = useState(false)
@@ -306,6 +308,36 @@ export default function CcMessageRow({
         {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
         {message.interrupted && !message.streaming ? (
           <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">已停止生成</div>
+        ) : null}
+
+        {!message.streaming && (message.engine || message.model || message.deliveryNote) ? (
+          <div className="mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
+              {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
+              {message.model ? <span>模型：{message.model}</span> : null}
+              {message.context ? (
+                <span title={`历史 ${message.context.includedHistoryRounds} 轮，丢弃 ${message.context.omittedHistoryRounds} 轮；回复预留 ${message.context.replyReserveTokens.toLocaleString()} token`}>
+                  上下文估算：{message.context.inputTokensEstimated.toLocaleString()}
+                  {message.context.modelContextLimit ? ` / ${message.context.modelContextLimit.toLocaleString()}` : ''}
+                </span>
+              ) : null}
+            </div>
+            {message.deliveryNote ? (
+              <div className={`mt-1 ${message.deliveryState === 'saved' || message.deliveryState === 'replayed' ? 'text-emerald-700' : message.deliveryState === 'saving' ? 'text-[var(--color-primary)]' : 'text-rose-600'}`}>
+                {message.deliveryNote}
+              </div>
+            ) : null}
+            {message.deliveryState === 'persistence_unknown' && onRetryPersistence ? (
+              <button
+                type="button"
+                onClick={() => onRetryPersistence(message)}
+                className="mt-1.5 rounded-full border border-amber-300 px-2.5 py-1 text-amber-700 hover:bg-amber-50"
+              >
+                核对保存状态
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}

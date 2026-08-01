@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server'
 import {
   listSessions,
   listTurns,
+  getConversationSession,
+  patchConversationSessionState,
+  permanentlyDeleteConversationSession,
   renameConversationSession,
   softDeleteConversationSession,
   type TurnSource,
@@ -30,6 +33,7 @@ const LEGACY_OWNER = 'ombre'
 function personaOfClient(client: string): string {
   const value = (client || '').trim()
   if (value.startsWith(`${LEGACY_CLIENT}/`)) return value.slice(LEGACY_CLIENT.length + 1).trim()
+  if (value.startsWith('ob2-selfhost/')) return value.slice('ob2-selfhost/'.length).trim()
   return ''
 }
 
@@ -43,21 +47,30 @@ export async function GET(request: NextRequest) {
       : undefined
 
   if (sessionId) {
-    const res = await listTurns(sessionId, {
-      limit: Number(sp.get('limit') || 200),
-      beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
-      includeRaw: sp.get('raw') === '1',
-    })
+    const [res, state] = await Promise.all([
+      listTurns(sessionId, {
+        limit: Number(sp.get('limit') || 200),
+        beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
+        includeRaw: sp.get('raw') === '1',
+      }),
+      getConversationSession(sessionId),
+    ])
     if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })
+    if (!state.ok) return Response.json({ ok: false, error: state.error }, { status: 502 })
     return Response.json({
       ok: true,
       session_id: sessionId,
       count: res.turns.length,
       turns: res.turns,
+      session: state.found ? state.session : null,
     })
   }
 
-  const res = await listSessions({ limit: Number(sp.get('limit') || 50), source })
+  const res = await listSessions({
+    limit: Number(sp.get('limit') || 50),
+    source,
+    deleted: sp.get('deleted') === '1',
+  })
   if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })
 
   // 按协作者过滤。规则（用户拍板）：
@@ -67,8 +80,8 @@ export async function GET(request: NextRequest) {
   const personaId = (sp.get('persona_id') || '').trim()
   const sessions = personaId
     ? res.sessions.filter(s => {
-        if (s.source !== 'cc') return true
-        const owner = personaOfClient(s.client) || LEGACY_OWNER
+        if (s.source !== 'cc' && s.source !== 'selfhost') return true
+        const owner = s.persona_id || personaOfClient(s.client) || LEGACY_OWNER
         return owner === personaId
       })
     : res.sessions
@@ -83,24 +96,72 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { session_id?: string; title?: string } | null
+  const body = await request.json().catch(() => null) as {
+    session_id?: string
+    title?: string
+    persona_id?: string
+    local_engine_preference?: string
+    expected_state_version?: number
+  } | null
   const sessionId = (body?.session_id || '').trim()
   const title = (body?.title || '').trim()
-  if (!sessionId || !title) {
-    return Response.json({ ok: false, error: 'session_id / title 不能为空' }, { status: 400 })
+  const preference = body?.local_engine_preference
+  if (!sessionId) {
+    return Response.json({ ok: false, error: 'session_id 不能为空' }, { status: 400 })
+  }
+  let session = null
+  if (preference === 'cc' || preference === 'selfhost') {
+    const result = await patchConversationSessionState({
+      sessionId,
+      personaId: String(body?.persona_id || ''),
+      localEnginePreference: preference,
+      expectedStateVersion: body?.expected_state_version,
+    })
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, session_id: sessionId, session: null, error: result.error || undefined },
+        { status: result.httpStatus || 502 },
+      )
+    }
+    session = result.session
+    if (!title) {
+      return Response.json({ ok: true, session_id: sessionId, session })
+    }
+  }
+  if (!title) {
+    return Response.json({ ok: false, error: 'title 或 local_engine_preference 不能为空' }, { status: 400 })
   }
   const result = await renameConversationSession(sessionId, title)
   return Response.json(
-    { ok: result.ok, session_id: sessionId, title: result.title, error: result.error || undefined },
+    { ok: result.ok, session_id: sessionId, title: result.title, session, error: result.error || undefined },
     { status: result.ok ? 200 : 502 },
   )
 }
 
 export async function DELETE(request: NextRequest) {
-  const body = await request.json().catch(() => null) as { session_id?: string } | null
+  const body = await request.json().catch(() => null) as {
+    session_id?: string
+    permanent?: boolean
+    confirm_session_id?: string
+  } | null
   const sessionId = (body?.session_id || '').trim()
   if (!sessionId) {
     return Response.json({ ok: false, error: 'session_id 不能为空' }, { status: 400 })
+  }
+  if (body?.permanent === true) {
+    const result = await permanentlyDeleteConversationSession(sessionId, String(body.confirm_session_id || ''))
+    return Response.json(
+      {
+        ok: result.ok,
+        session_id: sessionId,
+        deleted: result.ok,
+        permanent: result.ok,
+        deleted_counts: result.deletedCounts,
+        memory_buckets_deleted: 0,
+        error: result.error || undefined,
+      },
+      { status: result.ok ? 200 : 502 },
+    )
   }
   const result = await softDeleteConversationSession(sessionId)
   return Response.json(

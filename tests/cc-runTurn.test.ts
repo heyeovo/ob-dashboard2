@@ -66,7 +66,7 @@ const turns = vi.hoisted(() => ({
 }))
 
 vi.mock('@/app/lib/havenTurns', () => ({
-  recordTurn: turns.recordTurn,
+  recordTurnStrict: turns.recordTurn,
   listTurns: turns.listTurns,
   updatePersonaFromExchange: turns.updatePersonaFromExchange,
 }))
@@ -201,6 +201,9 @@ function driveTurn(
   }
   handle.promise = runTurn({
     sessionId,
+    requestId: options.requestId || 'request-test-1',
+    expectedLastRoundId: options.expectedLastRoundId ?? 0,
+    personaId: options.personaId || 'ombre',
     text: options.text || '你好',
     persona: options.persona ?? null,
     config: options.config || makeConfig({ sessionId }),
@@ -236,6 +239,9 @@ beforeEach(() => {
     elapsedMs: 1,
     error: '',
     httpStatus: null,
+    idempotentReplay: false,
+    code: '',
+    details: {},
   })
   turns.listTurns.mockReset()
   turns.listTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
@@ -249,7 +255,7 @@ afterEach(() => {
 })
 
 describe('runTurn：普通回复', () => {
-  it('文本回复完整走完一轮：start → delta → done → after，写库', async () => {
+  it('文本回复严格走完一轮：start → delta → usage/保存 → done → after', async () => {
     const handle = driveTurn([initMsg(), textDelta('你好'), textDelta('呀'), resultMsg()])
     const result = await handle.promise
 
@@ -257,6 +263,8 @@ describe('runTurn：普通回复', () => {
     expect(result.phase).toBe('succeeded')
     const names = eventNames(handle)
     expect(names).toEqual(expect.arrayContaining(['start', 'delta', 'delta', 'done', 'after']))
+    expect(names.indexOf('usage')).toBeLessThan(names.indexOf('done'))
+    expect(names.indexOf('done')).toBeLessThan(names.indexOf('after'))
     expect(handle.closed).toBe(true)
 
     // 写库被调一次，带正确分组键和正文
@@ -267,6 +275,9 @@ describe('runTurn：普通回复', () => {
     expect(recInput.assistantText).toBe('你好呀')
     expect(recInput.source).toBe('cc')
     expect(recInput.route).toBe('/api/cc-chat')
+    expect(recInput.requestId).toBe('request-test-1')
+    expect(recInput.expectedLastRoundId).toBe(0)
+    expect(recInput.personaId).toBe('ombre')
 
     // done 带用量和统计
     const done = handle.events.find(e => e.event === 'done')!
@@ -433,5 +444,32 @@ describe('runTurn：中止与失败', () => {
     expect(result2.ok).toBe(true)
     expect(result2.phase).toBe('succeeded')
     expect(turns.recordTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it('生成后发生 409：只发结构化 error，不发 done，并收掉私有 cc 进程', async () => {
+    turns.recordTurn.mockResolvedValueOnce({
+      ok: false,
+      stored: false,
+      turnId: 0,
+      roundId: 0,
+      elapsedMs: 1,
+      error: '另一端产生了新消息，请刷新后重试',
+      httpStatus: 409,
+      idempotentReplay: false,
+      code: 'conversation_conflict',
+      details: { expected_last_round_id: 0, actual_last_round_id: 1 },
+    })
+    const handle = driveTurn([initMsg(), textDelta('已生成正文'), resultMsg()])
+    const result = await handle.promise
+
+    expect(result.phase).toBe('failed')
+    expect(eventNames(handle)).not.toContain('done')
+    const error = handle.events.find(event => event.event === 'error')?.data
+    expect(error).toMatchObject({
+      code: 'conversation_conflict',
+      http_status: 409,
+      generated_not_saved: true,
+      actual_last_round_id: 1,
+    })
   })
 })

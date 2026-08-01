@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
 import { CcPermCard } from './CcPermCard'
@@ -14,7 +13,7 @@ import { useIsRemote } from './useIsRemote'
 import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
 import CcWindowSettings from './CcWindowSettings'
-import CcHandoffDialog, { type HandoffPayload } from './CcHandoffDialog'
+import CcHandoffDialog from './CcHandoffDialog'
 import { MODE_LABEL } from '@/app/lib/ccModes'
 
 // 第 4 步的聊天页。
@@ -47,44 +46,10 @@ function formatTokens(n: number) {
   return String(n)
 }
 
-function CcRemoteNotice() {
-  return (
-    <div className="cc-page flex min-h-screen items-center justify-center px-6 pb-24">
-      <div className="max-w-md rounded-2xl border border-[var(--color-border)] bg-white/80 px-6 py-7 text-center backdrop-blur-md">
-        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]">
-          <svg className="h-6 w-6" viewBox="0 0 20 20" fill="none" stroke="white" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3.5 9.5c0-3 2.9-5.5 6.5-5.5s6.5 2.5 6.5 5.5S13.6 15 10 15c-.8 0-1.6-.1-2.3-.3L4 16l.9-2.6c-.9-1-1.4-2.3-1.4-3.9Z" />
-          </svg>
-        </div>
-        <h1 className="mb-2 text-lg font-semibold text-[var(--color-text-heading)]">这一页要在家里的电脑上用</h1>
-        <p className="mb-5 text-sm leading-relaxed text-[var(--color-text-tertiary)]">
-          这个聊天页要在本机跑 claude code，线上服务器上起不来。
-          在家开着电脑的 dev server，用电脑或同一个 wifi 下的手机访问，就能正常聊。
-        </p>
-        <div className="space-y-2 text-left">
-          <Link
-            href="/polaris"
-            className="block rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm transition-all hover:border-[var(--color-primary)]/30 hover:shadow-md"
-          >
-            <span className="font-semibold text-[var(--color-text-heading)]">在外面先用 Polaris 聊 →</span>
-            <span className="mt-1 block text-xs text-[var(--color-text-tertiary)]">走 Haven，跟以前一样，记忆照旧</span>
-          </Link>
-          <Link
-            href="/"
-            className="block rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm transition-all hover:border-[var(--color-primary)]/30 hover:shadow-md"
-          >
-            <span className="font-semibold text-[var(--color-text-heading)]">回主页 →</span>
-          </Link>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function CcChatPage() {
   const isRemote = useIsRemote()
   const people = usePersonas()
-  const chat = useCcChat(people.activeId)
+  const chat = useCcChat(people.activeId, isRemote)
   const [railOpen, setRailOpen] = useState(false)
   // 协作者：左上角开列表，右上角开设置。settingsFor 为 null 就是没开设置。
   const [personaRailOpen, setPersonaRailOpen] = useState(false)
@@ -108,8 +73,12 @@ export default function CcChatPage() {
   const cacheSession = formatCacheLeft(chat.stats.cacheRemainingMs)
   const cacheSystem = formatCacheLeft(chat.stats.cacheSystemRemainingMs)
   // 顶部显示实际在跑的那个模型（stats.model 来自服务端）；进程没起来就显示这一窗选的
-  const shownModel = chat.stats.model || chat.pick.model
-  const ctxMax = chat.stats.contextMaxTokens
+  const shownModel = chat.latestTurn?.model || chat.stats.model || chat.pick.model
+  const shownProvider = chat.latestTurn?.providerLabel
+    || chat.stats.boot?.providerLabel
+    || (chat.effectiveEngine === 'cc' && chat.pick.kind === 'subscription' ? 'Claude 订阅' : '')
+  const ctxTokens = chat.latestTurn?.context?.inputTokensEstimated || chat.stats.contextTokens
+  const ctxMax = chat.latestTurn?.context?.modelContextLimit || chat.stats.contextMaxTokens
   const totalChars = chat.messages.reduce((n, m) => n + m.text.length, 0)
 
   const header = (
@@ -150,7 +119,10 @@ export default function CcChatPage() {
             手机只留「模式 · N 轮」，其余（模型名 / 上下文 / 花费 / 缓存）
             md 以上才出现，手机想看去「本窗」弹窗里看。 */}
         <div className="mt-0.5 flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-[var(--color-text-disabled)]">
-          <span>{MODE_LABEL[chat.mode]}模式</span>
+          <span>{chat.effectiveEngine === 'selfhost' ? '纯聊天' : `${MODE_LABEL[chat.mode]}模式`}</span>
+          <span>·</span>
+          <span>{chat.latestTurn?.engine === 'selfhost' || (!chat.latestTurn && chat.effectiveEngine === 'selfhost') ? '自建引擎' : 'cc'}</span>
+          {shownProvider ? <><span className="hidden md:inline">·</span><span className="hidden md:inline">{shownProvider}</span></> : null}
           {shownModel ? (
             <>
               <span className="hidden md:inline">·</span>
@@ -162,11 +134,11 @@ export default function CcChatPage() {
           <span>·</span>
           <span>{chat.stats.turnCount} 轮</span>
           {/* 上下文用量。上限拿不到（进程还没起）就不显示分母，别编一个 */}
-          {chat.stats.contextTokens > 0 ? (
+          {ctxTokens > 0 ? (
             <>
               <span className="hidden md:inline">·</span>
               <span className="hidden md:inline" title="这个对话现在占了多少上下文">
-                {formatTokens(chat.stats.contextTokens)}
+                {formatTokens(ctxTokens)}
                 {ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}
               </span>
             </>
@@ -196,6 +168,20 @@ export default function CcChatPage() {
       </div>
       {/* 右：本窗口设置（这一个对话的模型/供应商）+ 协作者设置（跨对话的人设） */}
       <div className="flex shrink-0 items-center gap-1 md:gap-2">
+        <div className="flex rounded-full border border-[var(--color-border)] bg-white p-0.5 text-[10px]">
+          {(['cc', 'selfhost'] as const).map(engine => (
+            <button
+              key={engine}
+              type="button"
+              disabled={chat.isRemote === true || chat.engineSaving || chat.sending}
+              onClick={() => void chat.changeEngine(engine)}
+              className={`rounded-full px-2 py-1 ${chat.effectiveEngine === engine ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'} disabled:cursor-not-allowed disabled:opacity-55`}
+              title={chat.isRemote === true ? 'Vercel 环境仅支持自建引擎，本地首选不会被覆盖' : `切换到 ${engine === 'cc' ? 'cc' : '自建引擎'}`}
+            >
+              {engine === 'cc' ? 'cc' : '自建'}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={() => setWinSetOpen(true)}
@@ -268,6 +254,7 @@ export default function CcChatPage() {
                 onCopy={copy}
                 onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
                 onOpenRecall={setRecallDetail}
+                onRetryPersistence={chat.retryPersistence}
               />
             ),
           )
@@ -302,7 +289,12 @@ export default function CcChatPage() {
   const composer = (
     <div className="px-4 pb-4 pt-1">
       <div className="mx-auto max-w-[var(--chat-assistant-width)]">
-        {chat.activeSessionSource && chat.activeSessionSource !== 'cc' ? (
+        {chat.isRemote === true ? (
+          <div className="mb-2 rounded-xl bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">
+            Vercel 环境仅支持自建引擎；你的本地引擎首选没有被修改。
+          </div>
+        ) : null}
+        {chat.activeSessionSource && chat.activeSessionSource !== 'cc' && chat.activeSessionSource !== 'selfhost' ? (
           <div className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-sm">
             <div>这是历史归档，Claude Code 无法直接接回原来的 Polaris 运行会话。</div>
             <button
@@ -329,6 +321,7 @@ export default function CcChatPage() {
   const rail = (
     <CcSessionRail
       sessions={chat.sessions}
+      deletedSessions={chat.deletedSessions}
       activeSessionId={chat.sessionId}
       loading={chat.sessionsLoading}
       onPick={id => {
@@ -341,6 +334,7 @@ export default function CcChatPage() {
       }}
       onRename={chat.renameSession}
       onDelete={chat.deleteSession}
+      onPermanentDelete={chat.permanentlyDeleteSession}
     />
   )
 
@@ -376,10 +370,6 @@ export default function CcChatPage() {
       </div>
     </div>
   ) : null
-
-  // 线上（Vercel）打开这一页：claude code 子进程起不来，给一句话说清楚，
-  // 别让人发一句话再对着报错猜。本地 / 局域网都照常走下面的完整界面。
-  if (isRemote) return <CcRemoteNotice />
 
   return (
     <>

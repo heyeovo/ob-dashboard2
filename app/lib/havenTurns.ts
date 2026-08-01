@@ -58,6 +58,7 @@ export type HavenConversationSession = {
 
 export type HavenSession = {
   session_id: string
+  persona_id?: string
   turn_count: number
   first_at: string
   last_at: string
@@ -400,11 +401,13 @@ export async function importPolarisConversations(
 export async function listSessions(options?: {
   limit?: number
   source?: TurnSource
+  deleted?: boolean
   signal?: AbortSignal
 }): Promise<{ ok: boolean; sessions: HavenSession[]; error: string }> {
   const params = new URLSearchParams()
   if (options?.limit != null) params.set('limit', String(options.limit))
   if (options?.source) params.set('source', options.source)
+  if (options?.deleted) params.set('deleted', '1')
   const qs = params.toString()
   const res = await havenFetch({
     method: 'GET',
@@ -483,6 +486,39 @@ export async function renameConversationSession(
   return { ok: res.ok, title: cleanedTitle, error: res.error }
 }
 
+export async function patchConversationSessionState(input: {
+  sessionId: string
+  personaId: string
+  localEnginePreference: 'cc' | 'selfhost'
+  expectedStateVersion?: number
+}): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
+  const sessionId = input.sessionId.trim()
+  const personaId = input.personaId.trim()
+  if (!sessionId || !personaId) {
+    return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
+  }
+  const body: Record<string, unknown> = {
+    session_id: sessionId,
+    persona_id: personaId,
+    local_engine_preference: input.localEnginePreference,
+  }
+  if (input.expectedStateVersion != null) body.expected_state_version = input.expectedStateVersion
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId,
+    body,
+  })
+  return {
+    ok: res.ok,
+    session: res.ok && res.payload.session && typeof res.payload.session === 'object'
+      ? res.payload.session as HavenConversationSession
+      : null,
+    error: res.error,
+    httpStatus: res.httpStatus,
+  }
+}
+
 export async function softDeleteConversationSession(
   sessionId: string,
 ): Promise<{ ok: boolean; error: string }> {
@@ -495,6 +531,29 @@ export async function softDeleteConversationSession(
     body: { session_id: id },
   })
   return { ok: res.ok, error: res.error }
+}
+
+export async function permanentlyDeleteConversationSession(
+  sessionId: string,
+  confirmSessionId: string,
+): Promise<{ ok: boolean; deletedCounts: Record<string, number>; error: string }> {
+  const id = sessionId.trim()
+  if (!id || confirmSessionId.trim() !== id) {
+    return { ok: false, deletedCounts: {}, error: '永久删除确认与 session_id 不一致' }
+  }
+  const res = await havenFetch({
+    method: 'DELETE',
+    path: '/gateway/api/conversation/session',
+    sessionId: id,
+    body: { session_id: id, permanent: true, confirm_session_id: id },
+  })
+  return {
+    ok: res.ok,
+    deletedCounts: res.ok && res.payload.deleted_counts && typeof res.payload.deleted_counts === 'object'
+      ? res.payload.deleted_counts as Record<string, number>
+      : {},
+    error: res.error,
+  }
 }
 
 export async function updatePersonaFromExchange(input: {
