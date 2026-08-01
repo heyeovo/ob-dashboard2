@@ -53,6 +53,8 @@ import {
   recordTurnCost,
   noteContextUsage,
   flushPendingMcpServers,
+  clearTurnInterrupted,
+  consumeTurnInterrupted,
   type TurnUsage,
 } from '@/app/lib/ccSession'
 import { CHAT_MODE_PROMPT, isCcMode, type CcMode } from '@/app/lib/ccModes'
@@ -252,6 +254,9 @@ function splitRecallModules(
 // 「注入 OB 记忆 / 语义检索」就能当场生效 —— 提示词和引擎做不到这点
 // （那是子进程的启动参数，界面上也是这么写的）。
 const recallPrefs = new Map<string, { recall: boolean; semantic: boolean }>()
+
+/** 这个会话里已经召回过的桶 ID。下次调 Haven 时传 exclude_ids，避免重复注入。 */
+const recalledIdsCache = new Map<string, Set<string>>()
 
 /**
  * 这个会话「当前那一轮」的收集口，和上面那张表同一个道理：
@@ -665,6 +670,8 @@ export async function POST(request: NextRequest) {
       // hook 是第一轮建的，只有走那张表才拿得到「当前这一轮」的那份。
       let assistantText = ''
       let thinkingText = ''
+      /** 用户点了「停止」：这一轮按中断收尾，保留已生成的字，写库打标记 */
+      let interrupted = false
       let resultInfo: Record<string, unknown> | null = null
       let initInfo: Record<string, unknown> | null = null
       /** 这一轮的用量，消息右下角那个面板要显示 */
@@ -1103,6 +1110,8 @@ export async function POST(request: NextRequest) {
       // 从占用 busy 开始，召回、模型流和写库前收尾都必须落进同一个 finally。
       // 否则浏览器在召回阶段断开，也会留下永远无法发送下一句的死锁。
       try {
+        // 上一轮中断时若已过消费点，残留标记会污染这一轮，先清掉
+        clearTurnInterrupted(sessionId)
         live.lastModelCallAt = Date.now()
         stamp(live.turnCount > 0 ? '沿用已有子进程' : '子进程建好了')
 
@@ -1122,10 +1131,12 @@ export async function POST(request: NextRequest) {
       let content = text
       const prefs = recallPrefs.get(sessionId)
       if (!prefs || prefs.recall) {
+        const existingIds = recalledIdsCache.get(sessionId)
         const recall = await recallForPrompt(text, {
           sessionId,
           semantic: prefs ? prefs.semantic : true,
           signal: request.signal,
+          excludeIds: existingIds ? [...existingIds] : undefined,
         })
         const info = {
           ok: recall.ok,
@@ -1139,6 +1150,12 @@ export async function POST(request: NextRequest) {
           // 第 6 步：把注入正文按标签切成分模块明细，弹窗直接读它。
           // 同时进 emit（当轮显示）和 raw_json（历史读回），一处改两处生效。
           modules: recall.ok ? splitRecallModules(recall.additionalContext, recall.cardCount) : [],
+        }
+        // 召回成功后，把这次的 ID 累积进 session 级缓存
+        if (recall.ok && recall.recalledIds.length > 0) {
+          if (!recalledIdsCache.has(sessionId)) recalledIdsCache.set(sessionId, new Set())
+          const cache = recalledIdsCache.get(sessionId)!
+          for (const id of recall.recalledIds) cache.add(id)
         }
         // bucket 就是这一轮的桶（上面刚 set 的），不用再 get 一次
         bucket.recallInfo = info
@@ -1208,6 +1225,11 @@ export async function POST(request: NextRequest) {
         for (;;) {
           const step = await nextSdkMessage(live.iterator, request.signal)
           if (step.done) {
+            // 点了停止后 CLI 可能不发 result 直接关流 —— 按中断收尾，保留已生成的字
+            if (consumeTurnInterrupted(sessionId)) {
+              interrupted = true
+              break
+            }
             throw new Error('模型连接提前结束，没有返回这一轮的完成结果')
           }
           const msg = step.value as SDKMessage
@@ -1321,7 +1343,11 @@ export async function POST(request: NextRequest) {
               total_cost_usd: msg.total_cost_usd,
               usage: msg.usage,
             }
-            if (msg.is_error || msg.subtype !== 'success') {
+            // 用户点了停止：result 可能是 error subtype 或带 aborted 标记，
+            // 都不当错误处理 —— 已生成的字照常留，写库时打 interrupted 标记。
+            if (consumeTurnInterrupted(sessionId)) {
+              interrupted = true
+            } else if (msg.is_error || msg.subtype !== 'success') {
               const failed = msg as SDKMessage & { result?: string }
               throw new Error(
                 failed.result?.trim() ||
@@ -1329,8 +1355,9 @@ export async function POST(request: NextRequest) {
                   `模型请求失败（${msg.subtype}）`,
               )
             }
-            // result 里的 result 字段是这一轮的完整文本，用它兜底
-            if (!assistantText.trim()) {
+            // result 里的 result 字段是这一轮的完整文本，用它兜底。
+            // 只有 success 才有这个字段（error subtype 只有 errors 数组）。
+            if (!assistantText.trim() && msg.subtype === 'success') {
               assistantText = msg.result
             }
             live.totalCostUsd += Number(msg.total_cost_usd || 0)
@@ -1369,6 +1396,7 @@ export async function POST(request: NextRequest) {
           usage: turnUsage,
           stats: getSessionStats(sessionId),
           elapsed_ms: Date.now() - startedAt,
+          interrupted: interrupted || undefined,
         })
 
         // ── 写回 Haven 的 conversation_turns ────────────────────────────
@@ -1390,6 +1418,8 @@ export async function POST(request: NextRequest) {
             raw: {
               engine: 'claude-code-agent-sdk',
               cred_mode: cred,
+              // 用户点了停止：这一轮是被打断的半截回复。读历史时前端靠它显示「已停止」
+              interrupted: interrupted || undefined,
               // 5.2：这一轮是闲聊还是工作、走的哪个中转站、用量明细。
               // 历史消息读回来时右下角那个 token 面板靠 usage 重建。
               mode,
@@ -1429,7 +1459,8 @@ export async function POST(request: NextRequest) {
                 error: rec.error || undefined,
               }
             : { ok: false, stored: false, error: `写库超过 ${STORE_TIMEOUT_MS / 1000}s 没回，这一轮没存上` }
-          if (rec?.ok && rec.stored) {
+          // 中断的轮不喂 persona 学习 —— 半截回复拿去更新协作者记忆，可能学到没说完的想法
+          if (rec?.ok && rec.stored && !interrupted) {
             const recalledMemoryIds = Array.isArray(bucket.recallInfo?.recalled_ids)
               ? bucket.recallInfo.recalled_ids.map(String)
               : []

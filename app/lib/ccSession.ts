@@ -221,6 +221,53 @@ export function dropSession(sessionId: string) {
   }
 }
 
+/* ── 用户点「停止」：优雅中断，而不是断开重来 ── */
+
+/** 这一轮被用户点了「停止」（/api/cc-stop 时标记，POST 循环读它做优雅收尾）。 */
+const interruptedTurns = new Set<string>()
+
+/** /api/cc-stop：标记当前这一轮被中断。 */
+export function markTurnInterrupted(sessionId: string) {
+  interruptedTurns.add(sessionId)
+}
+
+/** POST 循环：消费「这一轮被中断」标记，读完就删。 */
+export function consumeTurnInterrupted(sessionId: string): boolean {
+  return interruptedTurns.delete(sessionId)
+}
+
+/** 每一轮开始前清掉残留标记 —— 上一轮中断时若已过消费点，这里防止它污染这一轮。 */
+export function clearTurnInterrupted(sessionId: string) {
+  interruptedTurns.delete(sessionId)
+}
+
+/**
+ * 点「停止」时调用：让当前这一轮优雅收尾，而不是像以前那样断开 SSE、把半截回复整个丢掉。
+ *
+ * 调 q.interrupt() 把模型叫停 —— 这是控制请求，**不杀子进程**。已生成的字会继续以
+ * aborted 标记的 assistant 消息流回 POST 循环，会话上下文保留，下一句继续聊模型记得
+ * 这条半截回复（跟官方 CLI 按 Esc 一个效果）。
+ *
+ * 兜底：interrupt 控制请求 15 秒没回来说明子进程卡死，直接收掉进程 ——
+ * 宁可丢这一轮，也不能让界面永远停在「停止中」。
+ */
+export async function stopSession(sessionId: string): Promise<void> {
+  const live = registry.get(sessionId)
+  if (!live || !live.busy) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const ok = await Promise.race([
+      live.q.interrupt().then(() => true, () => false),
+      new Promise<boolean>(resolve => {
+        timer = setTimeout(() => resolve(false), 15_000)
+      }),
+    ])
+    if (!ok) dropSession(sessionId)
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export type EnsureSessionInput = {
   sessionId: string
   /** query() 的 options，只在**新建**会话时生效（已有会话沿用建它时的配置） */

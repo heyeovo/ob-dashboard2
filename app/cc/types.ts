@@ -72,6 +72,8 @@ export type CcMessage = {
   recall?: CcRecallInfo | null
   /** 正在流式输出中 */
   streaming?: boolean
+  /** 这一轮被用户点了「停止」—— 保留已生成的字，显示「已停止」 */
+  interrupted?: boolean
   createdAt: number
   /** 来自 Haven 的历史消息（不可重发/编辑） */
   fromHistory?: boolean

@@ -42,6 +42,8 @@ export type HavenRecallOptions = {
   maxChars?: number
   timeoutMs?: number
   signal?: AbortSignal
+  /** 已在上下文中的桶 ID，Haven 会跳过不再返回 */
+  excludeIds?: string[]
 }
 
 /**
@@ -85,6 +87,9 @@ export async function recallForPrompt(
   if (options.includeDebug) body.include_debug = '1'
   if (options.maxNotes != null) body.max_notes = options.maxNotes
   if (options.maxChars != null) body.max_chars = options.maxChars
+  if (options.excludeIds && options.excludeIds.length > 0) {
+    body.exclude_ids = options.excludeIds
+  }
 
   // 自己的超时 + 外部 signal 一起生效，谁先到算谁
   const ac = new AbortController()

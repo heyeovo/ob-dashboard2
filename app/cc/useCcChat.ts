@@ -102,6 +102,7 @@ function parseTurnRaw(rawJson: string | undefined): {
   process: CcProcessEvent[]
   recall: CcRecallInfo | null
   usage: CcTurnUsage | null
+  interrupted: boolean
 } {
   const empty = {
     thinking: '',
@@ -109,6 +110,7 @@ function parseTurnRaw(rawJson: string | undefined): {
     process: [] as CcProcessEvent[],
     recall: null,
     usage: null,
+    interrupted: false,
   }
   if (!rawJson) return empty
   let raw: Record<string, unknown>
@@ -178,6 +180,8 @@ function parseTurnRaw(rawJson: string | undefined): {
     // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
     usage:
       raw.usage && typeof raw.usage === 'object' ? (raw.usage as unknown as CcTurnUsage) : null,
+    // 被中断的半截回复。老消息没有这个字段 —— 一律不算中断。
+    interrupted: raw.interrupted === true,
   }
 }
 
@@ -267,6 +271,7 @@ function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         process: extra.process.length ? extra.process : undefined,
         recall: extra.recall,
         usage: extra.usage,
+        interrupted: extra.interrupted || undefined,
       })
     }
   }
@@ -318,6 +323,8 @@ export function useCcChat(personaId = '') {
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
+  // 停止请求发过就不要再发 —— interrupt 一次就够，重复发没意义。done/error 到达时复位。
+  const stoppingRef = useRef(false)
   // 第 5 条 resume：切回旧会话时从历史最后一轮读出的 cc session id。
   // 进程已丢时随下一句带给服务端接回上下文；服务端有活进程会忽略它。
   const resumeHintRef = useRef('')
@@ -839,11 +846,17 @@ export function useCcChat(personaId = '') {
   }, [webSettings])
 
   const stop = useCallback(() => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    setSending(false)
-    setMessages(prev => prev.map(m => (m.streaming ? { ...m, streaming: false } : m)))
-  }, [])
+    // 不 abort：abort 会断开 SSE，服务端那边把这一轮整块丢掉。改成发「停止」请求，
+    // 服务端调 interrupt() 优雅收尾 —— 已生成的字留在界面、写进 Haven，上下文也保住。
+    // SSE 连接保持开着，等服务端把 done / after 推回来，这一轮才算真正收尾。
+    if (stoppingRef.current) return
+    stoppingRef.current = true
+    void fetch('/api/cc-stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    }).catch(() => undefined)
+  }, [sessionId])
 
   const send = useCallback(
     async (rawText: string) => {
@@ -1057,6 +1070,7 @@ export function useCcChat(personaId = '') {
             } else if (eventName === 'done') {
               terminalEvent = 'done'
               const usage = (payload.usage || null) as CcTurnUsage | null
+              const interrupted = payload.interrupted === true
               patch(m => {
                 const process = closeOpenThinking(m.process)
                 return {
@@ -1064,6 +1078,7 @@ export function useCcChat(personaId = '') {
                   process,
                   streaming: false,
                   usage,
+                  interrupted: interrupted || m.interrupted,
                   thinkingMs: thinkingDuration(process) || undefined,
                 }
               })
@@ -1096,6 +1111,7 @@ export function useCcChat(personaId = '') {
         }
       } finally {
         abortRef.current = null
+        stoppingRef.current = false
         setSending(false)
       }
     },

@@ -303,6 +303,11 @@ export default function CcMessageRow({
           ) : null}
         </div>
 
+        {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
+        {message.interrupted && !message.streaming ? (
+          <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">已停止生成</div>
+        ) : null}
+
         {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}
         {!message.streaming && message.text ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
