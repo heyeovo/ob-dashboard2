@@ -88,6 +88,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `mcp-relay/[...path]/route.ts` | cc MCP 工具调用中继 |
 | `provider-relay/route.ts` | 上游 provider 测试中继 |
 | `cc-chat/route.ts` | cc 聊天主入口（SSE 流式，runTurn + ccOptions + ccHistory 架构） |
+| `cc-chat-selfhost/route.ts` | 自建纯聊天入口：服务端读取 Haven 配置/历史，直连 Anthropic-compatible SSE，严格写回成功后才完成 |
 | `cc-turns/route.ts` | 会话轮次（conversation_turns 表） |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
 | `cc-personas/route.ts` | 协作者（persona 列表/保存/删除） |
@@ -193,6 +194,8 @@ params 是 Promise，必须 `const { id } = await params`。
 
 ### cc 聊天架构
 `cc-chat/route.ts` 是 SSE 流式入口，内部拆 `runTurn` / `ccOptions` / `ccHistory` + `processCollector`（进程收集）+ 一轮状态机。浏览器断连后子进程会被回收，防止下次发言卡死。前端 `useCcChat.ts` + `ccSseConsumer.ts` 消费 SSE 事件（事件契约见 `lib/cc/sseEvents.ts`）。14 条 vitest 集成测试覆盖 9.5 验收清单。
+
+`cc-chat-selfhost/route.ts` 是独立的无状态纯聊天链路：浏览器只提交 `session_id`、`request_id`、`expected_last_round_id`、`persona_id` 和当前正文；服务端从 Haven 读取 Persona、窗口覆盖、完整分页历史和上游密钥。`lib/selfhost/` 负责 Persona → recall 参考块、保守上下文预算、Anthropic-compatible `/v1/messages` 请求与 SSE 解析。上游完成后使用 Haven 严格 compare-and-append，写入成功才发送 `done`；幂等命中从 Haven 原轮次重放，生成后 409/写库失败只发送结构化 `error`。thinking 不设本地开关或请求参数，上游若返回 `thinking_delta` 就透传。
 
 ---
 

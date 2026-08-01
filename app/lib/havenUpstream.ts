@@ -116,13 +116,14 @@ export async function saveUpstreamConfig(
 export function resolveProvider(
   config: HavenUpstreamConfig,
   providerId: string,
-): { baseUrl: string; authToken: string; label: string } | null {
+): { providerId: string; baseUrl: string; authToken: string; label: string } | null {
   const list = Array.isArray(config.providers) ? config.providers : []
   const hit =
     list.find(p => String(p.id || '') === providerId) ||
     (providerId ? null : list.find(p => String(p.id || '') === String(config.default_provider_id || '')) || list[0])
   if (!hit || !hit.base_url) return null
   return {
+    providerId: String(hit.id || ''),
     baseUrl: String(hit.base_url),
     authToken: String(hit.token || ''),
     label: String(hit.label || ''),

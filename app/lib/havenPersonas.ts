@@ -47,6 +47,7 @@ export type HavenPersona = {
   recall_on: boolean
   semantic_on: boolean
   engine: string
+  selfhost_defaults?: Record<string, unknown>
   sort_order: number
   created_at: string
   updated_at: string
@@ -68,6 +69,7 @@ export type PersonaPatch = {
   recall_on?: boolean
   semantic_on?: boolean
   engine?: CcEngine
+  selfhost_defaults?: Record<string, unknown>
   sort_order?: number
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
+import { anthropicHeaders, candidateAnthropicUrls } from '@/app/lib/selfhost/anthropicMessages'
 
 // 「这个中转站的这个模型通不通」（5.2）。
 //
@@ -18,26 +19,14 @@ import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 
 export const runtime = 'nodejs'
 
-/** 中转站的 URL 有的带 /v1 有的不带，两种都试一次，省得让人猜该怎么填。 */
-function candidateUrls(baseUrl: string): string[] {
-  const base = baseUrl.replace(/\/+$/, '')
-  if (/\/v1$/.test(base)) return [`${base}/messages`, `${base.slice(0, -3)}/v1/messages`]
-  return [`${base}/v1/messages`, `${base}/messages`]
-}
-
 async function tryOnce(url: string, token: string, model: string) {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), 20_000)
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': token,
-        // 有些中转站只认 Authorization，两个都带上
-        Authorization: `Bearer ${token}`,
-        'anthropic-version': '2023-06-01',
-      },
+      // 与自建聊天共用同一份 Anthropic-compatible 鉴权边界。
+      headers: anthropicHeaders(token),
       body: JSON.stringify({
         model,
         max_tokens: 1,
@@ -94,7 +83,7 @@ export async function POST(request: NextRequest) {
 
   const startedAt = Date.now()
   let last = { status: 0, text: '没试成' }
-  for (const url of candidateUrls(hit.baseUrl)) {
+  for (const url of candidateAnthropicUrls(hit.baseUrl)) {
     const res = await tryOnce(url, hit.authToken, model)
     if (res.status >= 200 && res.status < 300) {
       return Response.json({ ok: true, elapsed_ms: Date.now() - startedAt, url })

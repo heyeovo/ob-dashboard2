@@ -25,7 +25,7 @@ const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
 
 /** 来源标记。第一版只有 cc（新前端）和 gateway（Haven 自己那条链写的）。
  *  polaris 留给第 6 步迁历史用。 */
-export type TurnSource = 'cc' | 'gateway' | 'polaris'
+export type TurnSource = 'cc' | 'selfhost' | 'gateway' | 'polaris'
 
 export type HavenTurn = {
   id: number
@@ -39,6 +39,21 @@ export type HavenTurn = {
   route: string
   source: string
   raw_json?: string
+  request_id?: string
+  persona_id?: string
+}
+
+export type HavenConversationSession = {
+  profile_id: string
+  session_id: string
+  persona_id: string
+  title: string
+  local_engine_preference: 'cc' | 'selfhost'
+  selfhost_overrides: Record<string, unknown>
+  cc_seen_round_id: number
+  state_version: number
+  deleted_at: string | null
+  updated_at: string
 }
 
 export type HavenSession = {
@@ -77,6 +92,20 @@ export type RecordTurnResult = {
   elapsedMs: number
   error: string
   httpStatus: number | null
+}
+
+export type StrictRecordTurnInput = RecordTurnInput & {
+  requestId: string
+  expectedLastRoundId: number
+  personaId: string
+  recalledBucketIds?: string[]
+  createdBucketIds?: string[]
+}
+
+export type StrictRecordTurnResult = RecordTurnResult & {
+  idempotentReplay: boolean
+  code: string
+  details: Record<string, unknown>
 }
 
 export type PolarisImportPayload = {
@@ -128,18 +157,33 @@ async function havenFetch(
     })
 
     const raw = await res.text()
-    if (!res.ok) {
-      return { ok: false, payload: {}, error: `HTTP ${res.status}: ${raw.slice(0, 300)}`, httpStatus: res.status }
-    }
+    let parsed: Record<string, unknown> = {}
+    let parsedOk = false
     try {
-      return {
-        ok: true,
-        payload: JSON.parse(raw) as Record<string, unknown>,
-        error: '',
-        httpStatus: res.status,
+      const value = JSON.parse(raw)
+      if (value && typeof value === 'object') {
+        parsed = value as Record<string, unknown>
+        parsedOk = true
       }
     } catch {
+      /* 非 JSON 错误仍保留原始摘要 */
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        payload: parsed,
+        error: String(parsed.message || parsed.error || `HTTP ${res.status}: ${raw.slice(0, 300)}`),
+        httpStatus: res.status,
+      }
+    }
+    if (!parsedOk) {
       return { ok: false, payload: {}, error: `非 JSON 响应: ${raw.slice(0, 200)}`, httpStatus: res.status }
+    }
+    return {
+      ok: true,
+      payload: parsed,
+      error: '',
+      httpStatus: res.status,
     }
   } catch (e) {
     const err = e as Error
@@ -209,6 +253,138 @@ export async function recordTurn(input: RecordTurnInput): Promise<RecordTurnResu
   }
 }
 
+/** 10.1 的严格追加契约。selfhost 不得回退到 recordTurn 的宽松写入。 */
+export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<StrictRecordTurnResult> {
+  const started = Date.now()
+  const fail = (
+    error: string,
+    httpStatus: number | null = null,
+    code = '',
+    details: Record<string, unknown> = {},
+  ): StrictRecordTurnResult => ({
+    ok: false,
+    stored: false,
+    turnId: 0,
+    roundId: 0,
+    elapsedMs: Date.now() - started,
+    error,
+    httpStatus,
+    idempotentReplay: false,
+    code,
+    details,
+  })
+
+  const sessionId = (input.sessionId || '').trim()
+  const requestId = (input.requestId || '').trim()
+  const personaId = (input.personaId || '').trim()
+  if (!sessionId || !requestId || !personaId) return fail('严格写入缺少 session_id / request_id / persona_id')
+
+  const res = await havenFetch({
+    method: 'POST',
+    path: '/gateway/api/conversation/turn',
+    sessionId,
+    timeoutMs: input.timeoutMs,
+    signal: input.signal,
+    body: {
+      session_id: sessionId,
+      request_id: requestId,
+      expected_last_round_id: input.expectedLastRoundId,
+      persona_id: personaId,
+      user_text: input.userText || '',
+      assistant_text: input.assistantText || '',
+      source: input.source || 'selfhost',
+      model: input.model || '',
+      client: input.client || 'ob2-selfhost',
+      route: input.route || '/api/cc-chat-selfhost',
+      raw: input.raw,
+      recalled_bucket_ids: input.recalledBucketIds || [],
+      created_bucket_ids: input.createdBucketIds || [],
+    },
+  })
+  if (!res.ok) {
+    return fail(res.error, res.httpStatus, String(res.payload.error || ''), res.payload)
+  }
+  return {
+    ok: true,
+    stored: res.payload.stored === true,
+    turnId: Number(res.payload.turn_id || 0),
+    roundId: Number(res.payload.round_id || 0),
+    elapsedMs: Date.now() - started,
+    error: '',
+    httpStatus: res.httpStatus,
+    idempotentReplay: res.payload.idempotent_replay === true,
+    code: '',
+    details: {},
+  }
+}
+
+/** request_id 已落库时读回完整轮次，供真正的幂等重放使用。 */
+export async function getTurnByRequestId(
+  requestId: string,
+  options?: { signal?: AbortSignal },
+): Promise<{ ok: boolean; found: boolean; turn: HavenTurn | null; error: string; httpStatus: number | null }> {
+  const id = (requestId || '').trim()
+  if (!id) return { ok: false, found: false, turn: null, error: 'request_id 为空', httpStatus: null }
+  const params = new URLSearchParams({ request_id: id })
+  const res = await havenFetch({
+    method: 'GET',
+    path: `/gateway/api/conversation/turn?${params.toString()}`,
+    signal: options?.signal,
+  })
+  if (!res.ok && res.httpStatus === 404) {
+    return { ok: true, found: false, turn: null, error: '', httpStatus: 404 }
+  }
+  if (!res.ok) return { ok: false, found: false, turn: null, error: res.error, httpStatus: res.httpStatus }
+  const turn = res.payload.turn
+  return {
+    ok: true,
+    found: Boolean(turn && typeof turn === 'object'),
+    turn: turn && typeof turn === 'object' ? (turn as HavenTurn) : null,
+    error: '',
+    httpStatus: res.httpStatus,
+  }
+}
+
+/** 新会话返回 found=false；其他错误必须阻断 selfhost 发送。 */
+export async function getConversationSession(
+  sessionId: string,
+  options?: { includeBucketExclusions?: boolean; signal?: AbortSignal },
+): Promise<{
+  ok: boolean
+  found: boolean
+  session: HavenConversationSession | null
+  bucketExclusionIds: string[]
+  error: string
+  httpStatus: number | null
+}> {
+  const id = (sessionId || '').trim()
+  if (!id) return { ok: false, found: false, session: null, bucketExclusionIds: [], error: 'session_id 为空', httpStatus: null }
+  const params = new URLSearchParams({ session_id: id })
+  if (options?.includeBucketExclusions) params.set('include_bucket_exclusions', '1')
+  const res = await havenFetch({
+    method: 'GET',
+    path: `/gateway/api/conversation/session?${params.toString()}`,
+    sessionId: id,
+    signal: options?.signal,
+  })
+  if (!res.ok && res.httpStatus === 404) {
+    return { ok: true, found: false, session: null, bucketExclusionIds: [], error: '', httpStatus: 404 }
+  }
+  if (!res.ok) {
+    return { ok: false, found: false, session: null, bucketExclusionIds: [], error: res.error, httpStatus: res.httpStatus }
+  }
+  return {
+    ok: true,
+    found: true,
+    session: res.payload.session as HavenConversationSession,
+    bucketExclusionIds: Array.isArray(res.payload.bucket_exclusion_ids)
+      ? res.payload.bucket_exclusion_ids.map(String)
+      : [],
+    error: '',
+    httpStatus: res.httpStatus,
+  }
+}
+
 export async function importPolarisConversations(
   payload: PolarisImportPayload,
 ): Promise<{ ok: boolean; payload: Record<string, unknown>; error: string; httpStatus: number | null }> {
@@ -266,6 +442,29 @@ export async function listTurns(
     turns: Array.isArray(res.payload.turns) ? (res.payload.turns as HavenTurn[]) : [],
     error: '',
   }
+}
+
+/** Haven 每页最多 500；这里一直向前翻，保证 max_history_rounds=0 不是伪无限。 */
+export async function listAllTurns(
+  sessionId: string,
+  options?: { includeRaw?: boolean; signal?: AbortSignal },
+): Promise<{ ok: boolean; turns: HavenTurn[]; error: string }> {
+  const pages: HavenTurn[][] = []
+  let beforeId: number | undefined
+  while (true) {
+    const page = await listTurns(sessionId, {
+      limit: 500,
+      beforeId,
+      includeRaw: options?.includeRaw,
+      signal: options?.signal,
+    })
+    if (!page.ok) return { ok: false, turns: [], error: page.error }
+    if (page.turns.length === 0) break
+    pages.push(page.turns)
+    if (page.turns.length < 500) break
+    beforeId = page.turns[0].id
+  }
+  return { ok: true, turns: pages.reverse().flat(), error: '' }
 }
 
 export async function renameConversationSession(

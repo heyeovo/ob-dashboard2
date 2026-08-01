@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   const sessionId = sp.get('session_id')
   const rawSource = sp.get('source')
   const source =
-    rawSource === 'cc' || rawSource === 'gateway' || rawSource === 'polaris'
+    rawSource === 'cc' || rawSource === 'selfhost' || rawSource === 'gateway' || rawSource === 'polaris'
       ? (rawSource as TurnSource)
       : undefined
 
