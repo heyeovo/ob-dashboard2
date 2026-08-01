@@ -60,14 +60,15 @@
 
 ---
 
-## 未接入功能 / 遗留（规范列表）
+## 未接入功能 / 长期遗留（无近期实施窗口）
 
-> dashboard 的 CLAUDE.md 与 Haven 的 CLAUDE.md 都引用这份，以这里为准。
+> 这里只记录短期不处理、没有明确实施窗口的事项。已经安排给后续窗口的工作写入对应 handoff，不在这里重复维护。dashboard 的 CLAUDE.md 与 Haven 的 CLAUDE.md 都引用这份，以这里为准。
 
 - [ ] **重新脱水（redehydrate）** —— Fork 有 `/api/bucket/{id}/redehydrate` + redehydrate-commit
 - [ ] **控制台配置页** —— 多组 LLM profile、衰减权重 UI 调节。⚠️ 待确认：Haven 已做 `settings/upstream` 等 5 个配置子页，这条可能已实现
 - [ ] **自动备份** —— GitHub Actions 每天备份 buckets 到私有仓库
 - [ ] **情感唤起罗盘** —— 手机端 2D 心情坐标选记忆 + LLM 叙事
+- [ ] **旧 session 诊断表补 profile 隔离** —— `request_rounds`、`injected_buckets`、`injection_debug`、`recent_context_injections`、`upstream_usage`、`handoff_blocks` 只有 session_id；为避免跨 profile 误删，当前永久删除保留这些后台记录，后续迁移 profile_id 后再纳入清理。
 
 ---
 
