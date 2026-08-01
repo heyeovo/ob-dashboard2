@@ -42,10 +42,10 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 **导航系：**
 | 文件 | 说明 |
 |------|------|
-| `NavBar.tsx` | 桌面端顶部导航栏（`hidden md:block`），全站 8 页共用 |
-| `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar（记忆/审阅/日记/Breath/设置） |
-| `MobileViewSwitch.tsx` | 手机端记忆页时间线/记忆格切换 |
-| `MobileShell.tsx` | 手机端布局容器（加底部间距，包装全站） |
+| `SideRail.tsx` | 桌面端左侧竖栏（4.6 导航重构后取代原 NavBar，`md:flex`） |
+| `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar（主页/记忆库/聊天/工作台/设置，聊天为中间突起） |
+| `MemoryViewSwitch.tsx` | 记忆页时间线/记忆格/待处理三格切换 |
+| `MobileShell.tsx` | 全站布局容器：桌面端渲染 `SideRail`（fixed），手机端加底部安全间距 |
 
 **弹窗系：**
 | 文件 | 说明 |
@@ -66,8 +66,13 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `KnobRow.tsx` | 评分旋钮滑条 |
 | `KnobToggle.tsx` | 评分旋钮开关 |
 | `ScoreBar.tsx` | Pipeline 四维评分条 |
+| `TimelineDayGroup.tsx` | 时间线按天分组容器 |
+| `EntryGrid.tsx` | 记忆格视图网格容器 |
+| `HomeToolDrawer.tsx` | 主页工具抽屉（MCP 工具入口） |
+| `McpManager.tsx` | cc MCP 工具管理组件 |
+| `ServiceWorkerRegister.tsx` | PWA service worker 注册 |
 
-> 完整设计规范见 `DESIGN.md`。
+> 完整设计规范见 `DESIGN.md`。注：4.6 导航重构已删除 `NavBar.tsx`（桌面横条，被 `SideRail` 取代）和 `MobileViewSwitch.tsx`（两格，被 `MemoryViewSwitch` 取代）。
 
 ### `app/api/` — API Routes（代理到 OB 后端）
 
@@ -78,6 +83,25 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `search/route.ts` | GET — 透传全部 query params（simulate, include_vector, include_noise, limit 等） |
 | `edit-bucket/route.ts` | POST — 噪声标记/撤销、字段修改、delete:true 软删除 |
 | `breath-debug/route.ts` | GET — 模拟 breath 四维评分 |
+| `gateway/[...path]/route.ts` | cc 生态总代理 → OB Gateway（Bearer 网关鉴权） |
+| `haven/[...path]/route.ts` | 通用 OB 后端代理（Haven 接口） |
+| `mcp-relay/[...path]/route.ts` | cc MCP 工具调用中继 |
+| `provider-relay/route.ts` | 上游 provider 测试中继 |
+| `cc-chat/route.ts` | cc 聊天主入口（SSE 流式，runTurn + ccOptions + ccHistory 架构） |
+| `cc-turns/route.ts` | 会话轮次（conversation_turns 表） |
+| `cc-stop/route.ts` | 停止生成（保留已生成部分） |
+| `cc-personas/route.ts` | 协作者（persona 列表/保存/删除） |
+| `cc-upstream/route.ts` | 上游模型配置 |
+| `cc-mcp/route.ts` | cc MCP 工具配置 |
+| `cc-permission/route.ts` | 写权限批准 |
+| `cc-session-settings/route.ts` | 本窗会话配置 |
+| `cc-web-settings/route.ts` | web 工具开关 |
+| `cc-workbench/route.ts` | 工作台数据 |
+| `cc-polaris-import/route.ts` | Polaris 聊天历史导入 |
+| `cc-test/route.ts`, `cc-hook-test/route.ts` | 测试 hook |
+| `care/[...path]/route.ts` | 照顾备忘/待办 |
+| `persona/route.ts` | 用户画像状态 |
+| `daily-chat-memory/route.ts` | 每日聊天记忆 |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -85,37 +109,53 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 | 路径 | 说明 |
 |------|------|
-| `page.tsx` | 主页面（时间线/记忆格/审阅，含噪声筛选 + 隐藏开关 + 乐观更新） |
+| `page.tsx` | 主页面（时间线/记忆格，含噪声筛选 + 隐藏开关 + 乐观更新） |
+| `memory/page.tsx` | 记忆库页（时间线/记忆格/待处理三格切换） |
+| `cc/page.tsx` | **聊天主页**（协作者 Rail + 会话 Rail + SSE 流式消息，thinking/工具/召回内联展示） |
+| `workbench/page.tsx` | 工作台（批准执行 + 四格面板） |
+| `settings/page.tsx` | 设置聚合页（入口） |
+| `settings/upstream/page.tsx` | 上游模型配置 |
+| `settings/memory-processing/page.tsx` | 记忆处理设置 |
+| `settings/models/page.tsx` | 召回/自动记忆模型设置 |
+| `settings/recall/page.tsx` | 召回设置 |
+| `settings/automation/page.tsx` | 自动化设置 |
+| `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
+| `polaris/page.tsx` | Polaris 聊天历史导入 |
+| `impressions/page.tsx` | 日印象日历 |
+| `care/page.tsx` | 照顾备忘 + 待办 |
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
 | `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |
 | `journal/page.tsx` | 日记页（垂直时间轴） |
 | `import/page.tsx` | 导入工作台：拖拽/粘贴、大/小模式、试跑、进度+费用、完成后审查 |
 | `trash/page.tsx` | 回收站：恢复/彻底删除/清空 |
-| `review/page.tsx` | 审阅页面 |
 | `prompts/page.tsx` | Prompt 配置 |
+| `cc/import/page.tsx` | cc 会话导入 |
+| `tools/mcp/page.tsx` | MCP 工具管理页 |
 
-### `app/lib/api.ts`
+> 注：旧 `review/`、`chat/` 页面已在 4.6 导航重构后删除（导航无入口）。审阅功能并入记忆页筛选。
 
-- `getSessionCookie()` — 带 5min 缓存
-- `clearSessionCookie()` — 手动清除缓存
-- `getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`
+### `app/lib/`
+
+`api.ts`：`getSessionCookie()`（带 5min 缓存）、`clearSessionCookie()`、`getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`。
+
+cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes.ts`）、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts`、`ccEnv.ts`、`ccDirs.ts`、`haven*`（`havenPersonas.ts`/`havenUpstream.ts`/`havenTurns.ts`/`havenRecall.ts`/`havenPermissions.ts`）、`cc/runTurn.ts`、`cc/ccOptions.ts`、`cc/ccHistory.ts`、`cc/processCollector.ts`、`cc/sseEvents.ts`、`cc/turnState.ts`、`polarisExport.ts`、`format.ts`、`ccDiff.ts`。
 
 ---
 
 ## 导航架构
 
 ### 桌面端
-`NavBar` 横向排列全部页面入口（`hidden md:block`），`max-w-6xl` 统一宽度。
+`SideRail` 左侧竖栏（fixed，`md:flex`）：上半段 = 手机 5 Tab 同批入口（主页/记忆库/聊天/工作台/设置），下半段 = 次级入口（Polaris/日记）。
 
 ### 手机端
 `BottomTabBar` 固定在底部（`md:hidden`），5 个 Tab：
-- 审阅 → `/?tab=review`
-- 日记 → `/journal`
-- **记忆**（中间圆形突起）→ `/`
-- Breath → `/breath-sim`
-- 设置（点击向上弹出菜单：关系图谱/导入/回收站/权重配置）
+- 主页 → `/`
+- 记忆库 → `/memory`
+- **聊天**（中间圆形突起）→ `/cc`
+- 工作台 → `/workbench`
+- 设置 → `/settings`
 
-记忆页顶部 mini header：左 Ombre Brain logo，右 `MobileViewSwitch`（时间线/记忆格切换）。所有页面通过 `MobileShell` 包裹获得底部安全间距。
+次级入口（Polaris/日记）收在主页汉堡和设置聚合页里。所有页面通过 `MobileShell` 包裹。
 
 ---
 
@@ -151,10 +191,13 @@ params 是 Promise，必须 `const { id } = await params`。
 ### 会话 Cookie 缓存
 `getSessionCookie()` 5min 内存缓存。避免每次 API 请求重复 POST `/auth/login`。
 
+### cc 聊天架构
+`cc-chat/route.ts` 是 SSE 流式入口，内部拆 `runTurn` / `ccOptions` / `ccHistory` + `processCollector`（进程收集）+ 一轮状态机。浏览器断连后子进程会被回收，防止下次发言卡死。前端 `useCcChat.ts` + `ccSseConsumer.ts` 消费 SSE 事件（事件契约见 `lib/cc/sseEvents.ts`）。14 条 vitest 集成测试覆盖 9.5 验收清单。
+
 ---
 
 ## 待办事项
 
-未接入 / 已知问题统一维护在 **Ombre Brain CLAUDE.md**。前端特有项：
+待删 / 冗余 / 未接入功能统一维护在 **`TECH_DEBT.md`**（本仓库），前端特有项：
 
 - [ ] 关系图谱页 UI 和其他页面风格统一
