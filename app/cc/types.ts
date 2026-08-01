@@ -29,6 +29,12 @@ export type CcProcessEvent =
       durationMs?: number
     }
   | {
+      /** 工具调用前后的助手可见文字；最后一段仍作为正式回答显示。 */
+      type: 'text'
+      id: string
+      text: string
+    }
+  | {
       type: 'tool'
       id: string
       tool: CcToolEvent
@@ -60,7 +66,7 @@ export type CcMessage = {
   usage?: CcTurnUsage | null
   /** 助手这一轮调过的工具 */
   tools?: CcToolEvent[]
-  /** thinking / 工具按实际发生顺序组成的过程时间线 */
+  /** thinking / 助手文字 / 工具按实际发生顺序组成的过程时间线 */
   process?: CcProcessEvent[]
   /** 这一轮召回了什么（只有助手消息有） */
   recall?: CcRecallInfo | null

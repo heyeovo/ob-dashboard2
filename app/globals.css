@@ -332,6 +332,14 @@ body {
   background: var(--chat-think-bg);
   padding: 12px 14px;
 }
+.cc-process-text {
+  margin: 10px 0 3px;
+  border-left: 2px solid rgba(217, 119, 87, 0.32);
+  padding: 2px 4px 2px 12px;
+  color: var(--color-text-primary);
+  line-height: var(--chat-line-height);
+}
+.cc-process-text:first-child { margin-top: 2px; }
 .cc-process-icon {
   display: inline-flex;
   align-items: center;

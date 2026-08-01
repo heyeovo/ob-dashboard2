@@ -152,6 +152,13 @@ function parseTurnRaw(rawJson: string | undefined): {
         durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
       }]
     }
+    if (item.type === 'text' && typeof item.text === 'string') {
+      return [{
+        type: 'text',
+        id: String(item.id || `text-${index}`),
+        text: item.text,
+      }]
+    }
     if (item.type === 'tool' && item.tool && typeof item.tool === 'object') {
       const parsed = parseTool(item.tool as Record<string, unknown>, `process-tool-${index}`)
       return [{
@@ -946,13 +953,21 @@ export function useCcChat(personaId = '') {
 
             if (eventName === 'delta') {
               const chunk = String(payload.text || '')
+              const id = String(payload.id || `text-${Date.now()}`)
               patch(m => {
                 const process = closeOpenThinking(m.process)
+                const last = process.at(-1)
+                const continuesTextSegment = last?.type === 'text' && last.id === id
+                if (continuesTextSegment) {
+                  process[process.length - 1] = { ...last, text: last.text + chunk }
+                } else {
+                  process.push({ type: 'text', id, text: chunk })
+                }
                 return {
                   ...m,
                   process,
                   thinkingMs: thinkingDuration(process) || undefined,
-                  text: m.text + chunk,
+                  text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
                 }
               })
             } else if (eventName === 'thinking') {

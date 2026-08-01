@@ -364,6 +364,22 @@ function appendThinkingProcess(
   return { id: item.id, startedAt }
 }
 
+function appendTextProcess(bucket: TurnBucket, text: string): { id: string } {
+  const last = bucket.processEvents.at(-1)
+  if (last?.type === 'text') {
+    last.text = String(last.text || '') + text
+    return { id: String(last.id) }
+  }
+
+  const item = {
+    type: 'text',
+    id: `text-${Date.now()}-${bucket.processEvents.length}`,
+    text,
+  }
+  bucket.processEvents.push(item)
+  return { id: item.id }
+}
+
 /** 从工具结果里抠出文本。不同工具的 tool_response 形状不一样，都兜一下。 */
 function toolResponseText(res: unknown): string {
   if (typeof res === 'string') return res
@@ -1219,8 +1235,10 @@ export async function POST(request: NextRequest) {
               if (ev.delta.type === 'text_delta' && ev.delta.text) {
                 if (!assistantText) stamp('模型吐出第一个字')
                 closeThinkingProcess(bucket, Date.now())
-                assistantText += ev.delta.text
-                send('delta', { text: ev.delta.text })
+                const startsTextSegment = bucket.processEvents.at(-1)?.type !== 'text'
+                assistantText += startsTextSegment && assistantText ? `\n\n${ev.delta.text}` : ev.delta.text
+                const segment = appendTextProcess(bucket, ev.delta.text)
+                send('delta', { text: ev.delta.text, ...segment })
               } else if (ev.delta.type === 'thinking_delta' && ev.delta.thinking) {
                 if (!thinkingText) stamp('模型开始思考')
                 thinkingText += ev.delta.thinking

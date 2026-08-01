@@ -182,6 +182,14 @@ export default function CcMessageRow({
             tool,
           })),
         ]
+  // 最后一段可见文字就是正式回答；此前的文字留在过程时间线原位。
+  // 老记录没有 text 事件，继续使用 message.text，避免改变既有历史。
+  const lastProcessEvent = process.at(-1)
+  const trailingText = lastProcessEvent?.type === 'text' ? lastProcessEvent : null
+  const visibleProcess = trailingText ? process.slice(0, -1) : process
+  const finalText = process.some(event => event.type === 'text')
+    ? trailingText?.text || ''
+    : message.text
   const openTool = openToolId ? tools.find(tool => tool.id === openToolId) || null : null
   // 5.2 之前的老消息没有 usage，那就不显示（不编 0）
   const usage = message.usage || null
@@ -210,16 +218,16 @@ export default function CcMessageRow({
           ) : null}
         </div>
 
-        {/* Thinking 与工具按真实发生顺序展示，最终回答固定放在过程区之后。 */}
-        {process.length > 0 ? (
+        {/* Thinking、助手中间回复与工具按真实顺序展示；末尾文字作为正式回答。 */}
+        {visibleProcess.length > 0 ? (
           <div className="cc-process">
-            {process.map((event, index) => {
+            {visibleProcess.map((event, index) => {
               if (event.type === 'thinking') {
                 const thinkingIndex =
-                  process.slice(0, index).filter(item => item.type === 'thinking').length
+                  visibleProcess.slice(0, index).filter(item => item.type === 'thinking').length
                 const isActive =
                   Boolean(message.streaming) &&
-                  index === process.length - 1 &&
+                  index === visibleProcess.length - 1 &&
                   event.durationMs == null
                 const title = thinkingIndex === 0 ? '深度思考' : '继续思考'
                 return (
@@ -238,11 +246,19 @@ export default function CcMessageRow({
                         ? '正在思考'
                         : event.durationMs != null
                           ? `${title} (${(event.durationMs / 1000).toFixed(1)}s)`
-                          : `${title} ${event.text.length} 字`}
+                          : `${title}（时长未记录）`}
                     </button>
                     {thinkingOpen
                       ? <div className="cc-think-body">{event.text}</div>
                       : null}
+                  </div>
+                )
+              }
+
+              if (event.type === 'text') {
+                return (
+                  <div className="cc-process-text" key={event.id}>
+                    <CcMarkdown text={event.text} />
                   </div>
                 )
               }
@@ -273,9 +289,9 @@ export default function CcMessageRow({
 
         {/* 正文：markdown。流式中末尾跟一个光标 */}
         <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
-          {message.text ? <CcMarkdown text={message.text} /> : null}
+          {finalText ? <CcMarkdown text={finalText} /> : null}
           {message.streaming ? (
-            message.text ? (
+            finalText ? (
               <span className="cc-caret" aria-hidden="true" />
             ) : !message.thinking ? (
               <span className="cc-dots" aria-label="生成中">
