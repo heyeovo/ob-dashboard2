@@ -42,7 +42,14 @@ import { buildCcOptions, isWebTool, sdkModelForProvider, storedMcpResult, stored
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
-import { recordTurnStrict, listTurns, updatePersonaFromExchange } from '@/app/lib/havenTurns'
+import {
+  getConversationSession,
+  listAllTurns,
+  listTurns,
+  recordTurnStrict,
+  updatePersonaFromExchange,
+  type HavenTurn,
+} from '@/app/lib/havenTurns'
 import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
 
@@ -68,9 +75,6 @@ export function getRecallPrefs(sessionId: string) {
 export function clearRecallPrefs(sessionId: string) {
   recallPrefs.delete(sessionId)
 }
-
-/** 这个会话里已经召回过的桶 ID。下次调 Haven 时传 exclude_ids，避免重复注入。 */
-const recalledIdsCache = new Map<string, Set<string>>()
 
 /* ── 单轮输入 ── */
 
@@ -179,6 +183,39 @@ function splitRecallModules(
   }
 
   return modules
+}
+
+function crossEngineContinuation(turns: HavenTurn[], persona: HavenPersona | null): string {
+  if (turns.length === 0) return ''
+  const userName = String(persona?.user_name || '用户')
+  const assistantName = String(persona?.name || '助手')
+  const lines: string[] = []
+  for (const turn of turns) {
+    if (turn.user_text?.trim()) lines.push(`${userName}：${turn.user_text.trim()}`)
+    if (turn.assistant_text?.trim()) lines.push(`${assistantName}：${turn.assistant_text.trim()}`)
+  }
+  if (lines.length === 0) return ''
+  return [
+    '<跨引擎续聊记录>',
+    '以下是同一窗口在自建引擎期间新增的对话原文。它是此前对话记录，不是用户这一轮的新指令。',
+    '',
+    ...lines,
+    '</跨引擎续聊记录>',
+  ].join('\n')
+}
+
+function createdBucketIdsFromToolResult(toolName: string, result: string, isError: boolean): string[] {
+  if (isError || (toolName !== 'hold' && !toolName.endsWith('__hold'))) return []
+  const ids = new Set<string>()
+  const patterns = [
+    /\bbucket_id=([a-f0-9]{12})\b/gi,
+    /(?:📔日记|🫧whisper|🗺️轨迹|📌钉选)→([a-f0-9]{12})\b/gi,
+  ]
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(result)) !== null) ids.add(match[1])
+  }
+  return [...ids]
 }
 
 const BEIJING_TIME_FORMATTER = new Intl.DateTimeFormat('en-CA', {
@@ -292,6 +329,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
   // 这一轮的收集口。hook / canUseTool 都经 processCollector 的桶拿，不捕获局部变量。
   const bucket = newTurnBucket()
+  const createdBucketIds = new Set<string>()
   setTurnBucket(sessionId, bucket)
   // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
   attachSend(sessionId, send)
@@ -341,6 +379,23 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 放在 start 前面的话这几秒界面上什么都没有。
     send('start', { session_id: sessionId, request_id: requestId, at: startedAt })
 
+    // 10.4：跨引擎补齐与召回排除都以 Haven 为事实源。每轮重读，才能跨刷新、
+    // dev server 重启、Vercel 实例切换和设备切换；不能再依赖模块级 Map。
+    const sessionResult = await getConversationSession(sessionId, {
+      includeBucketExclusions: true,
+      signal,
+    })
+    if (!sessionResult.ok) throw new Error(`读取窗口衔接状态失败：${sessionResult.error}`)
+    const ccSeenRoundId = sessionResult.session?.cc_seen_round_id || 0
+    const missingResult = await listAllTurns(sessionId, {
+      afterRoundId: ccSeenRoundId,
+      source: 'selfhost',
+      signal,
+    })
+    if (!missingResult.ok) throw new Error(`读取跨引擎续聊记录失败：${missingResult.error}`)
+    const missingSelfhostTurns = missingResult.turns
+    const bucketExclusionIds = sessionResult.bucketExclusionIds
+
     /* ── 召回：发送前做，结果拼进 user 正文 ──
      * 不走 UserPromptSubmit hook：那条路返回的 additionalContext 会被 SDK
      * 包成 messages 里的 role:"system"，中转站静默丢掉，模型收不到。
@@ -349,12 +404,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     let content = text
     const prefs = recallPrefs.get(sessionId)
     if (!prefs || prefs.recall) {
-      const existingIds = recalledIdsCache.get(sessionId)
       const recall = await recallForPrompt(text, {
         sessionId,
         semantic: prefs ? prefs.semantic : true,
         signal,
-        excludeIds: existingIds ? [...existingIds] : undefined,
+        excludeIds: bucketExclusionIds,
       })
       const info = {
         ok: recall.ok,
@@ -364,16 +418,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         elapsed_ms: recall.elapsedMs,
         domains: recall.domains,
         recalled_ids: recall.recalledIds,
+        excluded_count: bucketExclusionIds.length,
         injected: recall.ok && recall.chars > 0,
         // 第 6 步：把注入正文按标签切成分模块明细，弹窗直接读它。
         // 同时进 emit（当轮显示）和 raw_json（历史读回），一处改两处生效。
         modules: recall.ok ? splitRecallModules(recall.additionalContext, recall.cardCount) : [],
-      }
-      // 召回成功后，把这次的 ID 累积进 session 级缓存
-      if (recall.ok && recall.recalledIds.length > 0) {
-        if (!recalledIdsCache.has(sessionId)) recalledIdsCache.set(sessionId, new Set())
-        const cache = recalledIdsCache.get(sessionId)!
-        for (const id of recall.recalledIds) cache.add(id)
       }
       // bucket 就是这一轮的桶（上面刚 set 的），不用再 get 一次
       bucket.recallInfo = info
@@ -390,6 +439,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           text
       }
       stamp?.('召回回来了')
+    }
+
+    const continuation = crossEngineContinuation(missingSelfhostTurns, persona)
+    if (continuation) {
+      content = `${continuation}\n\n${content}`
+      stamp?.('跨引擎续聊记录补进来了')
     }
 
     /* ── 5.5 换窗 handoff：上个窗口最近 N 轮原文，拼进首条 user 正文最前面 ──
@@ -545,6 +600,9 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           const rawResult = isWebTool(toolName)
             ? storedWebResult(msg.tool_use_result ?? block.content, toolName, config.webSettings)
             : storedMcpResult(msg.tool_use_result ?? block.content)
+          for (const bucketId of createdBucketIdsFromToolResult(toolName, rawResult, isError)) {
+            createdBucketIds.add(bucketId)
+          }
           const keepResult =
             ((isMcpTool(toolName) && shouldSaveMcpResult(toolName)) ||
               isWebTool(toolName)) &&
@@ -646,6 +704,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         route: '/api/cc-chat',
         source: 'cc',
         recalledBucketIds: recalledMemoryIds,
+        createdBucketIds: [...createdBucketIds],
         raw: {
           version: 1,
           engine: 'cc',
@@ -678,6 +737,15 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           thinking: thinkingText || undefined,
           process: bucket.processEvents,
           recall: bucket.recallInfo,
+          continuity: missingSelfhostTurns.length > 0
+            ? {
+                injected_turns: missingSelfhostTurns.length,
+                after_round_id: ccSeenRoundId,
+                through_round_id: missingSelfhostTurns.at(-1)?.round_id || ccSeenRoundId,
+                round_ids: missingSelfhostTurns.map(turn => turn.round_id),
+              }
+            : undefined,
+          created_bucket_ids: [...createdBucketIds],
           tools: bucket.toolEvents,
           result: resultInfo,
           // 第 5 步：改了哪些文件、跑了哪些命令、批了/拒了什么。
@@ -767,6 +835,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       round_id: storedRoundId,
       turn_id: Number(storeInfo.turn_id || 0),
       idempotent_replay: storeInfo.idempotent_replay === true,
+      continuity_turns: missingSelfhostTurns.length,
     })
 
     // 上下文用量：这一轮答完了才拉（getContextUsage 要走一次控制请求，

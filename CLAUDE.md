@@ -193,9 +193,9 @@ params 是 Promise，必须 `const { id } = await params`。
 `getSessionCookie()` 5min 内存缓存。避免每次 API 请求重复 POST `/auth/login`。
 
 ### cc 聊天架构
-`cc-chat/route.ts` 是 cc SSE 流式入口，内部拆 `runTurn` / `ccOptions` / `ccHistory` + `processCollector`（进程收集）+ 一轮状态机。10.3 起 cc 与 selfhost 都要求 `request_id + expected_last_round_id + persona_id`；cc 在执行前查询 Haven 幂等记录，命中则重放，模型生成后以严格 compare-and-append 写入，Haven 成功后才发送 `done`。浏览器断连后子进程会被回收，防止下次发言卡死。
+`cc-chat/route.ts` 是 cc SSE 流式入口，内部拆 `runTurn` / `ccOptions` / `ccHistory` + `processCollector`（进程收集）+ 一轮状态机。10.3 起 cc 与 selfhost 都要求 `request_id + expected_last_round_id + persona_id`；cc 在执行前查询 Haven 幂等记录，命中则重放，模型生成后以严格 compare-and-append 写入，Haven 成功后才发送 `done`。10.4 起每轮 cc 还会从 Haven 读取 `cc_seen_round_id`，把游标后的 selfhost 用户/助手原文作为 `<跨引擎续聊记录>` 一次性放进下一条 SDK user message；只有 cc 严格写入成功才由 Haven 推进游标，`done` 会带本轮补入轮数。浏览器断连后子进程会被回收，防止下次发言卡死。
 
-`cc-chat-selfhost/route.ts` 是独立的无状态纯聊天链路：浏览器只提交 `session_id`、`request_id`、`expected_last_round_id`、`persona_id` 和当前正文；服务端从 Haven 读取 Persona、窗口覆盖、完整分页历史和上游密钥。`lib/selfhost/` 负责 Persona → recall 参考块、保守上下文预算、Anthropic-compatible `/v1/messages` 请求与 SSE 解析。上游完成后使用 Haven 严格 compare-and-append，写入成功才发送 `done`；幂等命中从 Haven 原轮次重放，生成后 409/写库失败只发送结构化 `error`。thinking 不设本地开关或请求参数，上游若返回 `thinking_delta` 就透传。
+`cc-chat-selfhost/route.ts` 是独立的无状态纯聊天链路：浏览器只提交 `session_id`、`request_id`、`expected_last_round_id`、`persona_id` 和当前正文；服务端从 Haven 读取 Persona、窗口覆盖、完整分页历史和上游密钥，因此 cc 写入的历史会原样进入 selfhost 上下文。`lib/selfhost/` 负责 Persona → recall 参考块、保守上下文预算、Anthropic-compatible `/v1/messages` 请求与 SSE 解析。cc 与 selfhost 召回前都读取 Haven 持久排除集合（已召回桶 + 本窗口新建桶），本轮召回/新建 ID 随严格写入落回 Haven，不依赖进程内缓存或 localStorage。上游完成后使用 Haven 严格 compare-and-append，写入成功才发送 `done`；幂等命中从 Haven 原轮次重放，生成后 409/写库失败只发送结构化 `error`。thinking 不设本地开关或请求参数，上游若返回 `thinking_delta` 就透传。
 
 前端 `useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`，不会覆盖本地首选；引擎切换保持同一个 `session_id`。生成后未保存、`persistence_unknown`、409 跨设备冲突、保存中、正常完成和幂等重放均为独立界面状态。
 

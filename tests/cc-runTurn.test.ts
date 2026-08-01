@@ -19,7 +19,7 @@ import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
 import { dropSession } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import type { TurnConfig } from '@/app/lib/cc/ccOptions'
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
 /* ── mock SDK：query 按全局脚本吐消息 ── */
 
@@ -27,11 +27,13 @@ const sdk = vi.hoisted(() => ({
   /** 当前脚本。query 被调用时按它造迭代器。 */
   script: [] as unknown[],
   queryCalls: 0,
+  promptIterators: [] as AsyncIterator<SDKUserMessage>[],
 }))
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-  query: () => {
+  query: ({ prompt }: { prompt: AsyncIterable<SDKUserMessage> }) => {
     sdk.queryCalls += 1
+    sdk.promptIterators.push(prompt[Symbol.asyncIterator]())
     const iter = makeIterator(sdk.script)
     return {
       [Symbol.asyncIterator]: () => iter,
@@ -61,27 +63,24 @@ function makeIterator(script: unknown[]) {
 
 const turns = vi.hoisted(() => ({
   recordTurn: vi.fn(),
+  getSession: vi.fn(),
+  listAllTurns: vi.fn(),
   listTurns: vi.fn(),
   updatePersonaFromExchange: vi.fn(),
 }))
 
 vi.mock('@/app/lib/havenTurns', () => ({
   recordTurnStrict: turns.recordTurn,
+  getConversationSession: turns.getSession,
+  listAllTurns: turns.listAllTurns,
   listTurns: turns.listTurns,
   updatePersonaFromExchange: turns.updatePersonaFromExchange,
 }))
 
+const recall = vi.hoisted(() => ({ run: vi.fn() }))
+
 vi.mock('@/app/lib/havenRecall', () => ({
-  recallForPrompt: vi.fn(async () => ({
-    ok: false,
-    error: '',
-    additionalContext: '',
-    cardCount: 0,
-    chars: 0,
-    elapsedMs: 0,
-    domains: [],
-    recalledIds: [],
-  })),
+  recallForPrompt: recall.run,
 }))
 
 /* ── 消息构造 ── */
@@ -230,6 +229,18 @@ function eventNames(handle: RunHandle): string[] {
 beforeEach(() => {
   sdk.script = []
   sdk.queryCalls = 0
+  sdk.promptIterators = []
+  recall.run.mockReset()
+  recall.run.mockResolvedValue({
+    ok: false,
+    error: '',
+    additionalContext: '',
+    cardCount: 0,
+    chars: 0,
+    elapsedMs: 0,
+    domains: [],
+    recalledIds: [],
+  })
   turns.recordTurn.mockReset()
   turns.recordTurn.mockResolvedValue({
     ok: true,
@@ -243,6 +254,28 @@ beforeEach(() => {
     code: '',
     details: {},
   })
+  turns.getSession.mockReset()
+  turns.getSession.mockResolvedValue({
+    ok: true,
+    found: true,
+    session: {
+      profile_id: 'default',
+      session_id: 'ob2-test-session',
+      persona_id: 'ombre',
+      title: '',
+      local_engine_preference: 'cc',
+      selfhost_overrides: {},
+      cc_seen_round_id: 0,
+      state_version: 0,
+      deleted_at: null,
+      updated_at: '',
+    },
+    bucketExclusionIds: [],
+    error: '',
+    httpStatus: 200,
+  })
+  turns.listAllTurns.mockReset()
+  turns.listAllTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
   turns.listTurns.mockReset()
   turns.listTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
   turns.updatePersonaFromExchange.mockReset()
@@ -283,6 +316,93 @@ describe('runTurn：普通回复', () => {
     const done = handle.events.find(e => e.event === 'done')!
     expect(done.data.usage).toMatchObject({ inputTokens: 10, outputTokens: 20 })
     expect(done.data.interrupted).toBeUndefined()
+  })
+
+  it('把 cc 游标后的 selfhost 原文一次性补入可 resume 的 SDK 消息，并记录补齐元数据', async () => {
+    turns.getSession.mockResolvedValueOnce({
+      ok: true,
+      found: true,
+      session: {
+        profile_id: 'default', session_id: 'ob2-test-session', persona_id: 'ombre', title: '',
+        local_engine_preference: 'cc', selfhost_overrides: {}, cc_seen_round_id: 1,
+        state_version: 0, deleted_at: null, updated_at: '',
+      },
+      bucketExclusionIds: ['already-recalled', 'created-here'],
+      error: '',
+      httpStatus: 200,
+    })
+    turns.listAllTurns.mockResolvedValueOnce({
+      ok: true,
+      turns: [
+        {
+          id: 2, session_id: 'ob2-test-session', round_id: 2, created_at: '',
+          user_text: '出门后说的话', assistant_text: '自建引擎的回答', model: '', client: '',
+          route: '/api/cc-chat-selfhost', source: 'selfhost',
+        },
+      ],
+      error: '',
+    })
+    const handle = driveTurn([initMsg(), textDelta('接上了'), resultMsg()])
+    await handle.promise
+
+    const pushed = await sdk.promptIterators[0].next()
+    const content = String(pushed.value?.message.content || '')
+    expect(content).toContain('<跨引擎续聊记录>')
+    expect(content).toContain('出门后说的话')
+    expect(content).toContain('自建引擎的回答')
+    expect(content.lastIndexOf('你好')).toBeGreaterThan(content.indexOf('</跨引擎续聊记录>'))
+    expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
+      afterRoundId: 1,
+      source: 'selfhost',
+    }))
+    expect(recall.run).toHaveBeenCalledWith('你好', expect.objectContaining({
+      excludeIds: ['already-recalled', 'created-here'],
+    }))
+    const recInput = turns.recordTurn.mock.calls[0][0]
+    expect(recInput.raw.continuity).toEqual({
+      injected_turns: 1,
+      after_round_id: 1,
+      through_round_id: 2,
+      round_ids: [2],
+    })
+    expect(handle.events.find(event => event.event === 'done')?.data.continuity_turns).toBe(1)
+  })
+
+  it('Haven 游标已经推进后不再重复补入同一批 selfhost 轮次', async () => {
+    turns.getSession.mockResolvedValueOnce({
+      ok: true,
+      found: true,
+      session: {
+        profile_id: 'default', session_id: 'ob2-test-session', persona_id: 'ombre', title: '',
+        local_engine_preference: 'cc', selfhost_overrides: {}, cc_seen_round_id: 3,
+        state_version: 1, deleted_at: null, updated_at: '',
+      },
+      bucketExclusionIds: [], error: '', httpStatus: 200,
+    })
+    const handle = driveTurn([initMsg(), textDelta('没有重复'), resultMsg()])
+    await handle.promise
+
+    const pushed = await sdk.promptIterators[0].next()
+    expect(String(pushed.value?.message.content || '')).not.toContain('<跨引擎续聊记录>')
+    expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
+      afterRoundId: 3,
+      source: 'selfhost',
+    }))
+    expect(turns.recordTurn.mock.calls[0][0].raw.continuity).toBeUndefined()
+  })
+
+  it('把现有 hold 新建结果里的桶 ID 写进本窗口排除账本', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      toolUse('hold-1', 'mcp__ombre__hold', { content: '记住这件事' }),
+      toolResult('hold-1', '新建→一件重要的事 life [bucket_id=abc123def456]'),
+      textDelta('记住了'),
+      resultMsg(),
+    ])
+    await handle.promise
+
+    expect(turns.recordTurn.mock.calls[0][0].createdBucketIds).toEqual(['abc123def456'])
+    expect(turns.recordTurn.mock.calls[0][0].raw.created_bucket_ids).toEqual(['abc123def456'])
   })
 
   it('连续 text delta 拼成一段正文，process 也合并成一段', async () => {

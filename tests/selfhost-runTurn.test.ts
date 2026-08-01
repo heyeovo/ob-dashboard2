@@ -73,6 +73,16 @@ describe('runSelfhostTurn stream contract', () => {
       requestId: 'request-1', expectedLastRoundId: 2, personaId: 'ombre', source: 'selfhost',
       recalledBucketIds: ['new-bucket'],
     }))
+    expect(deps.recall).toHaveBeenCalledWith('现在的问题', expect.objectContaining({
+      excludeIds: ['old-bucket'],
+    }))
+    expect(deps.streamUpstream).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [
+        { role: 'user', content: '之前' },
+        { role: 'assistant', content: '回答' },
+        { role: 'user', content: '现在的问题' },
+      ],
+    }))
   })
 
   it('does not emit done when Haven rejects a cross-device race after generation', async () => {
@@ -101,4 +111,3 @@ describe('runSelfhostTurn stream contract', () => {
     expect(body).not.toContain('event: done')
   })
 })
-

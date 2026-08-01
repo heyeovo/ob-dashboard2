@@ -152,6 +152,10 @@ function replayCcTurn(turn: HavenTurn, body: ChatBody): Response {
         generated: false,
         usage: raw.usage || null,
         context: raw.context || null,
+        continuity_turns:
+          raw.continuity && typeof raw.continuity === 'object'
+            ? Number((raw.continuity as Record<string, unknown>).injected_turns || 0)
+            : 0,
         stats: getSessionStats(turn.session_id),
       })
       controller.close()

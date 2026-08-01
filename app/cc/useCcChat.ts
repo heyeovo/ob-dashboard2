@@ -985,6 +985,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             const usage = normalizeProviderUsage(payload.usage)
             const interrupted = payload.interrupted === true
             const replayed = payload.idempotent_replay === true
+            const continuityTurns = Number(payload.continuity_turns || 0)
             const roundId = Number(payload.round_id || 0)
             if (roundId > 0) lastRoundIdRef.current = Math.max(lastRoundIdRef.current, roundId)
             patch(m => {
@@ -998,7 +999,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 thinkingMs: thinkingDuration(process) || undefined,
                 roundId: roundId || m.roundId,
                 deliveryState: replayed ? 'replayed' : 'saved',
-                deliveryNote: replayed ? '已从 Haven 幂等重放，没有重复生成或写入。' : '已保存到 Haven',
+                deliveryNote: replayed
+                  ? '已从 Haven 幂等重放，没有重复生成或写入。'
+                  : continuityTurns > 0
+                    ? `已向 cc 补入自建引擎期间 ${continuityTurns} 轮对话；已保存到 Haven`
+                    : '已保存到 Haven',
               }
             })
             if (payload.stats) setStats(payload.stats as CcSessionStats)

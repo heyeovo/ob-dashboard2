@@ -425,13 +425,22 @@ export async function listSessions(options?: {
 /** 某个会话的消息，时间正序（界面直接顺着渲染）。 */
 export async function listTurns(
   sessionId: string,
-  options?: { limit?: number; beforeId?: number; includeRaw?: boolean; signal?: AbortSignal },
+  options?: {
+    limit?: number
+    beforeId?: number
+    afterRoundId?: number
+    source?: TurnSource
+    includeRaw?: boolean
+    signal?: AbortSignal
+  },
 ): Promise<{ ok: boolean; turns: HavenTurn[]; error: string }> {
   const id = (sessionId || '').trim()
   if (!id) return { ok: false, turns: [], error: 'session_id 为空' }
   const params = new URLSearchParams({ session_id: id })
   if (options?.limit != null) params.set('limit', String(options.limit))
   if (options?.beforeId != null) params.set('before_id', String(options.beforeId))
+  if (options?.afterRoundId != null) params.set('after_round_id', String(options.afterRoundId))
+  if (options?.source) params.set('source', options.source)
   if (options?.includeRaw) params.set('include_raw', '1')
   const res = await havenFetch({
     method: 'GET',
@@ -450,7 +459,12 @@ export async function listTurns(
 /** Haven 每页最多 500；这里一直向前翻，保证 max_history_rounds=0 不是伪无限。 */
 export async function listAllTurns(
   sessionId: string,
-  options?: { includeRaw?: boolean; signal?: AbortSignal },
+  options?: {
+    afterRoundId?: number
+    source?: TurnSource
+    includeRaw?: boolean
+    signal?: AbortSignal
+  },
 ): Promise<{ ok: boolean; turns: HavenTurn[]; error: string }> {
   const pages: HavenTurn[][] = []
   let beforeId: number | undefined
@@ -458,6 +472,8 @@ export async function listAllTurns(
     const page = await listTurns(sessionId, {
       limit: 500,
       beforeId,
+      afterRoundId: options?.afterRoundId,
+      source: options?.source,
       includeRaw: options?.includeRaw,
       signal: options?.signal,
     })
