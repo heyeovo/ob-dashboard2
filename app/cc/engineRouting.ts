@@ -7,6 +7,16 @@ export function effectiveEngine(
   return isRemote === true ? 'selfhost' : localPreference
 }
 
+export function requiresImportedSessionHandoff(source: string, engine: CcEngine): boolean {
+  const normalized = source.trim().toLowerCase()
+  if (!normalized || normalized === 'cc' || normalized === 'selfhost') return false
+  return engine === 'cc'
+}
+
+export function providerSelectionLocked(engine: CcEngine, sessionStarted: boolean): boolean {
+  return engine === 'cc' && sessionStarted
+}
+
 export function normalizeProviderUsage(value: unknown): CcTurnUsage | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as Record<string, unknown>

@@ -87,6 +87,56 @@ function parseSseFrame(raw: string): ParsedSse | null {
   }
 }
 
+function createLiteralThinkingFilter(onVisibleText: (text: string) => void) {
+  const openTag = '<thinking>'
+  const closeTag = '</thinking>'
+  let pending = ''
+  let insideThinking = false
+
+  const matchingSuffixLength = (value: string, tag: string) => {
+    const lower = value.toLowerCase()
+    for (let length = Math.min(lower.length, tag.length - 1); length > 0; length -= 1) {
+      if (tag.startsWith(lower.slice(-length))) return length
+    }
+    return 0
+  }
+
+  const drain = (finishing = false) => {
+    while (pending) {
+      const tag = insideThinking ? closeTag : openTag
+      const index = pending.toLowerCase().indexOf(tag)
+      if (index >= 0) {
+        if (!insideThinking && index > 0) onVisibleText(pending.slice(0, index))
+        pending = pending.slice(index + tag.length)
+        insideThinking = !insideThinking
+        continue
+      }
+
+      if (insideThinking) {
+        const keep = finishing ? 0 : matchingSuffixLength(pending, closeTag)
+        pending = keep > 0 ? pending.slice(-keep) : ''
+        return
+      }
+
+      const keep = finishing ? 0 : matchingSuffixLength(pending, openTag)
+      const visibleLength = pending.length - keep
+      if (visibleLength > 0) onVisibleText(pending.slice(0, visibleLength))
+      pending = keep > 0 ? pending.slice(-keep) : ''
+      return
+    }
+  }
+
+  return {
+    push(text: string) {
+      pending += text
+      drain()
+    },
+    finish() {
+      drain(true)
+    },
+  }
+}
+
 /** 按 SSE 空行切帧；兼容任意 chunk 边界、CRLF、多行 data 和未知事件。 */
 export async function parseAnthropicSse(
   body: ReadableStream<Uint8Array>,
@@ -139,6 +189,14 @@ export async function parseAnthropicSse(
     return startedAt
   }
 
+  const acceptVisibleText = (text: string) => {
+    if (!text) return
+    assistantText += text
+    appendProcessText('text', text)
+    callbacks?.onText?.(text)
+  }
+  const literalThinkingFilter = createLiteralThinkingFilter(acceptVisibleText)
+
   const acceptUsage = (value: unknown) => {
     if (!value || typeof value !== 'object') return
     const item = value as Record<string, unknown>
@@ -167,9 +225,8 @@ export async function parseAnthropicSse(
       if (deltaType === 'text_delta') {
         const text = String(item.text || '')
         if (!text) return
-        assistantText += text
-        appendProcessText('text', text)
-        callbacks?.onText?.(text)
+        closeActiveThinking()
+        literalThinkingFilter.push(text)
       } else if (deltaType === 'thinking_delta') {
         const text = String(item.thinking || '')
         if (!text) return
@@ -223,6 +280,7 @@ export async function parseAnthropicSse(
   if (!sawMessageStop) {
     throw new AnthropicStreamError('上游连接在 message_stop 前结束', { code: 'upstream_stream_incomplete' })
   }
+  literalThinkingFilter.finish()
   closeActiveThinking()
   return { assistantText, thinkingText, stopReason, usage, process }
 }

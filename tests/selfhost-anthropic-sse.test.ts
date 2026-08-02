@@ -67,6 +67,31 @@ describe('Anthropic-compatible SSE parser', () => {
     await expect(promise).rejects.toMatchObject({ code: 'overloaded_error', message: 'busy' })
   })
 
+  it('keeps native thinking but removes a different literal thinking block from streamed text', async () => {
+    const text: string[] = []
+    const thinking: string[] = []
+    const result = await parseAnthropicSse(chunked([
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"正式思考"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"<thin"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"king>另一份思考</think"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ing>最终"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"回答"}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ]), {
+      onText: value => text.push(value),
+      onThinking: value => thinking.push(value),
+    })
+
+    expect(thinking.join('')).toBe('正式思考')
+    expect(text.join('')).toBe('最终回答')
+    expect(result.thinkingText).toBe('正式思考')
+    expect(result.assistantText).toBe('最终回答')
+    expect(result.process.map(part => ({ type: part.type, text: part.text }))).toEqual([
+      { type: 'thinking', text: '正式思考' },
+      { type: 'text', text: '最终回答' },
+    ])
+  })
+
   it('rejects a stream that ends without message_stop', async () => {
     await expect(parseAnthropicSse(chunked([
       'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"partial"}}\n\n',

@@ -4,6 +4,8 @@ import {
   effectiveEngine,
   normalizeProviderUsage,
   normalizeTurnContext,
+  providerSelectionLocked,
+  requiresImportedSessionHandoff,
 } from '@/app/cc/engineRouting'
 
 describe('10.3 engine routing and strict delivery states', () => {
@@ -11,6 +13,20 @@ describe('10.3 engine routing and strict delivery states', () => {
     expect(effectiveEngine(false, 'cc')).toBe('cc')
     expect(effectiveEngine(false, 'selfhost')).toBe('selfhost')
     expect(effectiveEngine(true, 'cc')).toBe('selfhost')
+  })
+
+  it('lets selfhost continue imported Polaris history while cc requires a handoff', () => {
+    expect(requiresImportedSessionHandoff('polaris', 'cc')).toBe(true)
+    expect(requiresImportedSessionHandoff('gateway', 'cc')).toBe(true)
+    expect(requiresImportedSessionHandoff('polaris', 'selfhost')).toBe(false)
+    expect(requiresImportedSessionHandoff('cc', 'cc')).toBe(false)
+    expect(requiresImportedSessionHandoff('', 'cc')).toBe(false)
+  })
+
+  it('locks a started cc provider but keeps selfhost provider switchable', () => {
+    expect(providerSelectionLocked('cc', true)).toBe(true)
+    expect(providerSelectionLocked('cc', false)).toBe(false)
+    expect(providerSelectionLocked('selfhost', true)).toBe(false)
   })
 
   it('normalizes provider usage and context estimates without mixing them', () => {

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
 import { CcPermCard } from './CcPermCard'
@@ -16,6 +16,7 @@ import CcWindowSettings from './CcWindowSettings'
 import CcHandoffDialog from './CcHandoffDialog'
 import { MODE_LABEL } from '@/app/lib/ccModes'
 import { modelLabel, modelsFor } from './upstream'
+import { requiresImportedSessionHandoff } from './engineRouting'
 
 // 第 4 步的聊天页。
 //
@@ -45,6 +46,73 @@ function formatTokens(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`
   return String(n)
+}
+
+function CcScrollJumps({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [canGoUp, setCanGoUp] = useState(false)
+  const [canGoDown, setCanGoDown] = useState(false)
+
+  const update = useCallback(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
+    const nextCanGoUp = node.scrollTop > 24
+    const nextCanGoDown = distanceFromBottom > 24
+    setCanGoUp(current => current === nextCanGoUp ? current : nextCanGoUp)
+    setCanGoDown(current => current === nextCanGoDown ? current : nextCanGoDown)
+  }, [])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(update)
+    window.addEventListener('resize', update)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', update)
+    }
+  }, [children, update])
+
+  const jump = (top: number) => {
+    scrollRef.current?.scrollTo({ top, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="relative min-h-0 flex-1">
+      <div
+        ref={scrollRef}
+        onScroll={update}
+        className="no-scrollbar h-full overflow-y-auto px-4 py-6"
+      >
+        {children}
+      </div>
+      {canGoUp || canGoDown ? (
+        <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex flex-col gap-1.5">
+          {canGoUp ? (
+            <button
+              type="button"
+              aria-label="跳到对话顶部"
+              title="跳到顶部"
+              onClick={() => jump(0)}
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-white/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
+            >
+              <span aria-hidden="true" className="text-sm leading-none">↑</span>
+            </button>
+          ) : null}
+          {canGoDown ? (
+            <button
+              type="button"
+              aria-label="跳到对话底部"
+              title="跳到最新消息"
+              onClick={() => jump(scrollRef.current?.scrollHeight || 0)}
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-white/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
+            >
+              <span aria-hidden="true" className="text-sm leading-none">↓</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export default function CcChatPage() {
@@ -216,7 +284,7 @@ export default function CcChatPage() {
     .find(message => message.role === 'assistant' && !message.handoff)?.id
 
   const thread = (bottomRef: RefObject<HTMLDivElement | null>) => (
-    <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-6">
+    <CcScrollJumps>
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
         {!chat.historyLoading && chat.messages.length > 0 && chat.hasEarlierHistory ? (
           <div className="text-center">
@@ -295,7 +363,7 @@ export default function CcChatPage() {
         ) : null}
         <div ref={bottomRef} />
       </div>
-    </div>
+    </CcScrollJumps>
   )
 
   const composer = (
@@ -306,9 +374,9 @@ export default function CcChatPage() {
             Vercel 环境仅支持自建引擎；你的本地引擎首选没有被修改。
           </div>
         ) : null}
-        {chat.activeSessionSource && chat.activeSessionSource !== 'cc' && chat.activeSessionSource !== 'selfhost' ? (
+        {requiresImportedSessionHandoff(chat.activeSessionSource, chat.effectiveEngine) ? (
           <div className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-sm">
-            <div>这是历史归档，Claude Code 无法直接接回原来的 Polaris 运行会话。</div>
+            <div>Claude Code 无法直接接回原来的 Polaris 运行会话；可切到自建引擎原窗续聊，或换窗启动新的 cc 会话。</div>
             <button
               type="button"
               onClick={() => setHandoffOpen({ fromSessionId: chat.sessionId })}
@@ -461,7 +529,9 @@ export default function CcChatPage() {
           onWebChange={chat.applyWebSettings}
           onSaveWebDefaults={() => void chat.saveWebDefaults()}
           webSaving={chat.webSaving}
-          locked={chat.modeLocked}
+          engine={chat.effectiveEngine}
+          providerLocked={chat.providerLocked}
+          webLocked={chat.modeLocked}
           note={chat.settingsNote}
           onHandoff={() => {
             setWinSetOpen(false)

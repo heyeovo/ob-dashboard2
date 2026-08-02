@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import type { CcSessionStats } from './types'
+import type { CcEngine, CcSessionStats } from './types'
 import {
   EFFORT_OPTIONS,
   modelLabel,
@@ -17,7 +17,8 @@ import type { CcWebSettings } from './webSettings'
 //
 // 三档待遇，界面上必须写清楚，不然用户会以为点了就生效：
 //   · 模型 / 力度 / 深度思考 —— 当场生效（换模型会把 prompt cache 清掉）
-//   · 订阅 ↔ api 中转站、换哪个中转站 —— 子进程的环境变量，只有新对话能改
+//   · cc 的订阅 / 中转站 —— 子进程环境变量，只有新对话能改
+//   · selfhost 的中转站 —— 每轮重新直连，保存到 Haven 后下一句生效
 //
 // ⚠️ 中转站的 token 不下发到浏览器，这里只显示名字。要改去「上游模型」页。
 
@@ -39,8 +40,9 @@ type Props = {
   onWebChange: (next: Partial<CcWebSettings>) => void
   onSaveWebDefaults: () => void
   webSaving: boolean
-  /** 已经开口了：供应商那两个框只能看不能换 */
-  locked: boolean
+  engine: CcEngine
+  providerLocked: boolean
+  webLocked: boolean
   note: string
   onHandoff: () => void
   onClose: () => void
@@ -80,7 +82,9 @@ export default function CcWindowSettings({
   onWebChange,
   onSaveWebDefaults,
   webSaving,
-  locked,
+  engine,
+  providerLocked,
+  webLocked,
   note,
   onHandoff,
   onClose,
@@ -162,7 +166,7 @@ export default function CcWindowSettings({
           <div className="mb-2 flex gap-1.5">
             <button
               type="button"
-              disabled={locked}
+              disabled={providerLocked || engine === 'selfhost'}
               className={seg(pick.kind === 'subscription')}
               onClick={() => onPick({ kind: 'subscription', providerId: '' })}
             >
@@ -170,7 +174,7 @@ export default function CcWindowSettings({
             </button>
             <button
               type="button"
-              disabled={locked}
+              disabled={providerLocked}
               className={seg(pick.kind === 'api')}
               onClick={() =>
                 onPick({ kind: 'api', providerId: pick.providerId || upstream.providers[0]?.id || '' })
@@ -192,7 +196,7 @@ export default function CcWindowSettings({
             ) : (
               <select
                 className={`${SELECT} mb-2`}
-                disabled={locked}
+                disabled={providerLocked}
                 value={pick.providerId}
                 onChange={e => onPick({ providerId: e.target.value })}
               >
@@ -205,8 +209,10 @@ export default function CcWindowSettings({
             )
           ) : null}
 
-          {locked ? (
+          {providerLocked ? (
             <div className={HINT}>换供应商要新建对话（这一窗的凭据在启动时就定了）</div>
+          ) : engine === 'selfhost' ? (
+            <div className={HINT}>自建引擎每轮重新连接；切换中转站后，下一句话立即使用新选择。</div>
           ) : null}
 
           {/* ── 模型 / 力度 / 思考：能中途改 ── */}
@@ -271,7 +277,7 @@ export default function CcWindowSettings({
           <div className="mb-2 grid grid-cols-2 gap-1.5">
             <button
               type="button"
-              disabled={locked}
+              disabled={webLocked}
               className={seg(web.searchEnabled)}
               onClick={() => onWebChange({ searchEnabled: !web.searchEnabled })}
             >
@@ -279,14 +285,14 @@ export default function CcWindowSettings({
             </button>
             <button
               type="button"
-              disabled={locked}
+              disabled={webLocked}
               className={seg(web.fetchEnabled)}
               onClick={() => onWebChange({ fetchEnabled: !web.fetchEnabled })}
             >
               Web Fetch · {web.fetchEnabled ? '开' : '关'}
             </button>
           </div>
-          {locked ? (
+          {webLocked ? (
             <div className={HINT}>联网工具在会话启动时确定；这一窗已经开口，只能新建或换窗后调整</div>
           ) : null}
 
@@ -299,7 +305,7 @@ export default function CcWindowSettings({
                 <span className={LABEL}>每轮最多 Search 次数</span>
                 <select
                   className={SELECT}
-                  disabled={locked || !web.searchEnabled}
+                  disabled={webLocked || !web.searchEnabled}
                   value={web.maxSearchesPerTurn}
                   onChange={e => onWebChange({ maxSearchesPerTurn: Number(e.target.value) })}
                 >
@@ -313,7 +319,7 @@ export default function CcWindowSettings({
                 <span className={LABEL}>每轮最多 Fetch 网页数</span>
                 <select
                   className={SELECT}
-                  disabled={locked || !web.fetchEnabled}
+                  disabled={webLocked || !web.fetchEnabled}
                   value={web.maxFetchesPerTurn}
                   onChange={e => onWebChange({ maxFetchesPerTurn: Number(e.target.value) })}
                 >
@@ -327,7 +333,7 @@ export default function CcWindowSettings({
                 <span className={LABEL}>单页内容目标上限</span>
                 <select
                   className={SELECT}
-                  disabled={locked || !web.fetchEnabled}
+                  disabled={webLocked || !web.fetchEnabled}
                   value={web.fetchTargetTokens}
                   onChange={e => onWebChange({ fetchTargetTokens: Number(e.target.value) })}
                 >
@@ -344,7 +350,7 @@ export default function CcWindowSettings({
                 <span className={LABEL}>最多展示来源数</span>
                 <select
                   className={SELECT}
-                  disabled={locked || !web.searchEnabled}
+                  disabled={webLocked || !web.searchEnabled}
                   value={web.maxDisplayedSources}
                   onChange={e => onWebChange({ maxDisplayedSources: Number(e.target.value) })}
                 >
@@ -358,7 +364,7 @@ export default function CcWindowSettings({
                 <span className={LABEL}>域名范围</span>
                 <select
                   className={`${SELECT} mb-2`}
-                  disabled={locked}
+                  disabled={webLocked}
                   value={web.domainMode}
                   onChange={e =>
                     onWebChange({
@@ -373,7 +379,7 @@ export default function CcWindowSettings({
                 {web.domainMode !== 'all' ? (
                   <textarea
                     className={`${SELECT} min-h-20 resize-y font-mono text-[10.5px]`}
-                    disabled={locked}
+                    disabled={webLocked}
                     value={web.domains.join('\n')}
                     placeholder={'example.com\ndocs.example.org'}
                     onChange={e =>
