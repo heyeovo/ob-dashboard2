@@ -235,7 +235,6 @@ export default function CcMessageRow({
             {persona.initial}
           </span>
           <span className="cc-name">{persona.name}</span>
-          <span className="cc-time">{formatTime(message.createdAt)}</span>
           {message.recall ? (
             <button
               type="button"
@@ -341,13 +340,13 @@ export default function CcMessageRow({
         ) : null}
 
         {!message.streaming && (message.engine || shownModel || message.deliveryNote) ? (
-          <div className="mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+          <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
               {shownModel ? <span>模型：{shownModel}</span> : null}
               {message.context ? (
-                <div ref={contextRef} className="relative">
+                <div ref={contextRef} className="static sm:relative">
                   <button
                     type="button"
                     aria-label="上下文详情"
@@ -366,7 +365,7 @@ export default function CcMessageRow({
                     <div
                       role="dialog"
                       aria-label="上下文详情"
-                      className="absolute right-0 top-full z-30 mt-1.5 w-64 max-w-[calc(100dvw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg sm:left-0 sm:right-auto"
+                      className="absolute inset-x-3 top-full z-30 mt-1.5 w-auto rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg sm:left-0 sm:right-auto sm:w-64"
                     >
                       <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
                       <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
