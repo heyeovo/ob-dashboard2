@@ -88,37 +88,60 @@ function parseSseFrame(raw: string): ParsedSse | null {
 }
 
 function createLiteralThinkingFilter(onVisibleText: (text: string) => void) {
-  const openTag = '<thinking>'
-  const closeTag = '</thinking>'
+  const tagPairs = [
+    { open: '<thinking>', close: '</thinking>' },
+    { open: '<think>', close: '</think>' },
+  ]
   let pending = ''
-  let insideThinking = false
+  let activeCloseTag = ''
 
-  const matchingSuffixLength = (value: string, tag: string) => {
+  const matchingSuffixLength = (value: string, tags: string[]) => {
     const lower = value.toLowerCase()
-    for (let length = Math.min(lower.length, tag.length - 1); length > 0; length -= 1) {
-      if (tag.startsWith(lower.slice(-length))) return length
+    let best = 0
+    for (const tag of tags) {
+      for (let length = Math.min(lower.length, tag.length - 1); length > best; length -= 1) {
+        if (tag.startsWith(lower.slice(-length))) {
+          best = length
+          break
+        }
+      }
     }
-    return 0
+    return best
+  }
+
+  const firstOpenTag = (value: string) => {
+    const lower = value.toLowerCase()
+    let match: { index: number; open: string; close: string } | null = null
+    for (const pair of tagPairs) {
+      const index = lower.indexOf(pair.open)
+      if (index >= 0 && (!match || index < match.index)) match = { index, ...pair }
+    }
+    return match
   }
 
   const drain = (finishing = false) => {
     while (pending) {
-      const tag = insideThinking ? closeTag : openTag
-      const index = pending.toLowerCase().indexOf(tag)
-      if (index >= 0) {
-        if (!insideThinking && index > 0) onVisibleText(pending.slice(0, index))
-        pending = pending.slice(index + tag.length)
-        insideThinking = !insideThinking
-        continue
-      }
-
-      if (insideThinking) {
-        const keep = finishing ? 0 : matchingSuffixLength(pending, closeTag)
+      if (activeCloseTag) {
+        const index = pending.toLowerCase().indexOf(activeCloseTag)
+        if (index >= 0) {
+          pending = pending.slice(index + activeCloseTag.length)
+          activeCloseTag = ''
+          continue
+        }
+        const keep = finishing ? 0 : matchingSuffixLength(pending, [activeCloseTag])
         pending = keep > 0 ? pending.slice(-keep) : ''
         return
       }
 
-      const keep = finishing ? 0 : matchingSuffixLength(pending, openTag)
+      const match = firstOpenTag(pending)
+      if (match) {
+        if (match.index > 0) onVisibleText(pending.slice(0, match.index))
+        pending = pending.slice(match.index + match.open.length)
+        activeCloseTag = match.close
+        continue
+      }
+
+      const keep = finishing ? 0 : matchingSuffixLength(pending, tagPairs.map(pair => pair.open))
       const visibleLength = pending.length - keep
       if (visibleLength > 0) onVisibleText(pending.slice(0, visibleLength))
       pending = keep > 0 ? pending.slice(-keep) : ''

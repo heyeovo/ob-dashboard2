@@ -92,6 +92,25 @@ describe('Anthropic-compatible SSE parser', () => {
     ])
   })
 
+  it('removes a literal think block when both tags are split across streamed chunks', async () => {
+    const text: string[] = []
+    const result = await parseAnthropicSse(chunked([
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"开头<th"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ink>不应进入正文</th"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ink>最终"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"回答"}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ]), {
+      onText: value => text.push(value),
+    })
+
+    expect(text.join('')).toBe('开头最终回答')
+    expect(result.assistantText).toBe('开头最终回答')
+    expect(result.process.map(part => ({ type: part.type, text: part.text }))).toEqual([
+      { type: 'text', text: '开头最终回答' },
+    ])
+  })
+
   it('rejects a stream that ends without message_stop', async () => {
     await expect(parseAnthropicSse(chunked([
       'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"partial"}}\n\n',
