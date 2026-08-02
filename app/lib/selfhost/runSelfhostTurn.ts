@@ -299,23 +299,49 @@ function persistenceError(prepared: PreparedSelfhostTurn, result: Awaited<Return
 
 export function createSelfhostStream(
   prepared: PreparedSelfhostTurn | ReplaySelfhostTurn,
-  signal?: AbortSignal,
+  requestSignal?: AbortSignal,
   dependencies: SelfhostRuntimeDependencies = DEFAULT_RUNTIME_DEPENDENCIES,
 ): ReadableStream<Uint8Array> {
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      if (prepared.kind === 'replay') {
-        try { sendReplay(controller, prepared) } finally { controller.close() }
-        return
-      }
+  const turnAbort = new AbortController()
+  let cancelled = false
+  const cancelTurn = () => {
+    cancelled = true
+    if (!turnAbort.signal.aborted) {
+      turnAbort.abort(new DOMException('浏览器已断开响应流', 'AbortError'))
+    }
+  }
+  const onRequestAbort = () => cancelTurn()
+  if (requestSignal?.aborted) cancelTurn()
+  else requestSignal?.addEventListener('abort', onRequestAbort, { once: true })
 
-      const encoder = new TextEncoder()
-      const send = (event: string, data: unknown) => controller.enqueue(encoder.encode(encodeSelfhostSse(event, data)))
-      const startedAt = Date.now()
-      const request = prepared.request
-      let generated = false
-      let hasOutput = false
-      try {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      // 不把整轮 Promise 返回给 start：Web Streams 会等待 start 完成后才执行底层
+      // cancel；若 start 一直等上游生成，关闭浏览器就永远无法及时 abort 上游。
+      void (async () => {
+        if (prepared.kind === 'replay') {
+          try { sendReplay(controller, prepared) } finally {
+            requestSignal?.removeEventListener('abort', onRequestAbort)
+            if (!cancelled) controller.close()
+          }
+          return
+        }
+
+        const encoder = new TextEncoder()
+        const send = (event: string, data: unknown) => {
+          if (cancelled) return
+          try {
+            controller.enqueue(encoder.encode(encodeSelfhostSse(event, data)))
+          } catch {
+            cancelTurn()
+          }
+        }
+        const signal = turnAbort.signal
+        const startedAt = Date.now()
+        const request = prepared.request
+        let generated = false
+        let hasOutput = false
+        try {
         send('start', { session_id: request.sessionId, request_id: request.requestId, at: startedAt })
         const recall = prepared.persona.recall_on === false
           ? {
@@ -457,22 +483,27 @@ export function createSelfhostStream(
           usage,
           context: selection.stats,
         })
-      } catch (error) {
-        const upstream = error instanceof AnthropicStreamError ? error : null
-        const err = error as Error
-        const aborted = err.name === 'AbortError' || upstream?.code === 'aborted'
-        send('error', {
-          code: upstream?.code || (aborted ? 'aborted' : 'selfhost_internal_error'),
-          message: upstream?.message || (aborted ? '请求已取消' : String(err.message || err)),
-          stage: 'upstream',
-          retryable: upstream?.retryable ?? !aborted,
-          http_status: upstream?.httpStatus ?? null,
-          request_id: request.requestId,
-          generated_not_saved: generated || hasOutput,
-        } satisfies SelfhostErrorPayload)
-      } finally {
-        controller.close()
-      }
+        } catch (error) {
+          const upstream = error instanceof AnthropicStreamError ? error : null
+          const err = error as Error
+          const aborted = err.name === 'AbortError' || upstream?.code === 'aborted'
+          send('error', {
+            code: upstream?.code || (aborted ? 'aborted' : 'selfhost_internal_error'),
+            message: upstream?.message || (aborted ? '请求已取消' : String(err.message || err)),
+            stage: 'upstream',
+            retryable: upstream?.retryable ?? !aborted,
+            http_status: upstream?.httpStatus ?? null,
+            request_id: request.requestId,
+            generated_not_saved: generated || hasOutput,
+          } satisfies SelfhostErrorPayload)
+        } finally {
+          requestSignal?.removeEventListener('abort', onRequestAbort)
+          if (!cancelled) controller.close()
+        }
+      })()
+    },
+    cancel() {
+      cancelTurn()
     },
   })
 }

@@ -164,4 +164,32 @@ describe('runSelfhostTurn stream contract', () => {
     expect(body).toContain('"generated_not_saved":false')
     expect(body).not.toContain('event: done')
   })
+
+  it('aborts the upstream and skips persistence when the browser cancels the response stream', async () => {
+    const deps = dependencies({
+      ok: true, stored: true, turnId: 9, roundId: 3, elapsedMs: 2, error: '', httpStatus: 200,
+      idempotentReplay: false, code: '', details: {},
+    })
+    let markStarted!: () => void
+    const started = new Promise<void>(resolve => { markStarted = resolve })
+    let markAborted!: () => void
+    const aborted = new Promise<void>(resolve => { markAborted = resolve })
+    vi.mocked(deps.streamUpstream).mockImplementation(async input => {
+      markStarted()
+      return await new Promise((_, reject) => {
+        input.signal?.addEventListener('abort', () => {
+          markAborted()
+          reject(new DOMException('aborted', 'AbortError'))
+        }, { once: true })
+      })
+    })
+
+    const reader = createSelfhostStream(prepared(), undefined, deps).getReader()
+    await started
+    await reader.cancel()
+    await aborted
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(deps.persist).not.toHaveBeenCalled()
+  })
 })
