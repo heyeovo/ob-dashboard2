@@ -13,6 +13,8 @@
 // 失败策略跟 havenRecall.ts 一致：**任何失败都不抛异常**，返回 ok=false。
 // 写库失败不能把已经答完的一轮对话弄崩。
 
+import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
+
 const HAVEN_BASE = (
   process.env.HAVEN_GATEWAY_URL ||
   process.env.OMBRE_BASE_URL ||
@@ -149,7 +151,7 @@ async function havenFetch(
     if (options.sessionId) headers['X-Ombre-Session-Id'] = options.sessionId
     if (options.body !== undefined) headers['Content-Type'] = 'application/json'
 
-    const res = await fetch(`${HAVEN_BASE}${options.path}`, {
+    const res = await fetchHavenWithReadRetry(`${HAVEN_BASE}${options.path}`, {
       method: options.method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -191,7 +193,7 @@ async function havenFetch(
     return {
       ok: false,
       payload: {},
-      error: err.name === 'AbortError' ? '对话存储超时/被取消' : String(err.message || err),
+      error: err.name === 'AbortError' ? '对话存储超时/被取消' : describeFetchError(e),
       httpStatus: null,
     }
   } finally {
@@ -505,7 +507,8 @@ export async function renameConversationSession(
 export async function patchConversationSessionState(input: {
   sessionId: string
   personaId: string
-  localEnginePreference: 'cc' | 'selfhost'
+  localEnginePreference?: 'cc' | 'selfhost'
+  selfhostOverrides?: Record<string, unknown>
   expectedStateVersion?: number
 }): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
   const sessionId = input.sessionId.trim()
@@ -513,11 +516,12 @@ export async function patchConversationSessionState(input: {
   if (!sessionId || !personaId) {
     return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
   }
-  const body: Record<string, unknown> = {
-    session_id: sessionId,
-    persona_id: personaId,
-    local_engine_preference: input.localEnginePreference,
+  if (!input.localEnginePreference && !input.selfhostOverrides) {
+    return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
+  const body: Record<string, unknown> = { session_id: sessionId, persona_id: personaId }
+  if (input.localEnginePreference) body.local_engine_preference = input.localEnginePreference
+  if (input.selfhostOverrides) body.selfhost_overrides = input.selfhostOverrides
   if (input.expectedStateVersion != null) body.expected_state_version = input.expectedStateVersion
   const res = await havenFetch({
     method: 'PATCH',

@@ -11,6 +11,8 @@
 // 失败策略跟 havenTurns.ts 一致：**任何失败都不抛异常**，返回 ok=false。
 // 配置读不到时前端退回内置默认协作者，不能让聊天页整个白屏。
 
+import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
+
 const HAVEN_BASE = (
   process.env.HAVEN_GATEWAY_URL ||
   process.env.OMBRE_BASE_URL ||
@@ -104,7 +106,7 @@ async function havenFetch(
     }
     if (options.body !== undefined) headers['Content-Type'] = 'application/json'
 
-    const res = await fetch(`${HAVEN_BASE}${options.path}`, {
+    const res = await fetchHavenWithReadRetry(`${HAVEN_BASE}${options.path}`, {
       method: options.method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -126,7 +128,7 @@ async function havenFetch(
     return {
       ok: false,
       payload: {},
-      error: err.name === 'AbortError' ? '协作者配置请求超时/被取消' : String(err.message || err),
+      error: err.name === 'AbortError' ? '协作者配置请求超时/被取消' : describeFetchError(e),
       httpStatus: null,
     }
   } finally {

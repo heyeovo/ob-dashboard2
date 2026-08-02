@@ -6,6 +6,8 @@
 // 失败策略跟 havenPersonas.ts 一致：不抛异常，返回 ok=false + 空配置。
 // 配置读不到时引擎层退回 .env.local 那一条，不能让聊天页发不了话。
 
+import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
+
 const HAVEN_BASE = (
   process.env.HAVEN_GATEWAY_URL ||
   process.env.OMBRE_BASE_URL ||
@@ -53,7 +55,7 @@ async function havenFetch(
   try {
     const headers: Record<string, string> = { Authorization: `Bearer ${GATEWAY_TOKEN}` }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
-    const res = await fetch(`${HAVEN_BASE}${PATH}`, {
+    const res = await fetchHavenWithReadRetry(`${HAVEN_BASE}${PATH}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -72,7 +74,7 @@ async function havenFetch(
     return {
       ok: false,
       payload: {},
-      error: err.name === 'AbortError' ? '上游模型配置请求超时' : String(err.message || err),
+      error: err.name === 'AbortError' ? '上游模型配置请求超时' : describeFetchError(e),
     }
   } finally {
     clearTimeout(timer)

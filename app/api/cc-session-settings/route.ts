@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server'
 import { applyRuntimeSettings, getSessionStats, peekSession } from '@/app/lib/ccSession'
+import { getConversationSession, patchConversationSessionState } from '@/app/lib/havenTurns'
 
 // 「本窗口设置」里能中途改的那几项（5.2）。
 //
-//   POST /api/cc-session-settings   body: { session_id, model?, effort?, thinking? }
+//   cc:       { session_id, model?, effort?, thinking? }
+//   selfhost: { session_id, engine: 'selfhost', persona_id, provider_id, model }
 //
 // ⚠️ 能改的只有这三项。改不了的（要新建对话）：
 //   · 闲聊 / 工作模式 —— systemPrompt 和 tools 是子进程启动参数
@@ -29,6 +31,39 @@ export async function POST(request: NextRequest) {
 
   const sessionId = String(body.session_id || '').trim()
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
+
+  if (body.engine === 'selfhost') {
+    const personaId = String(body.persona_id || '').trim()
+    const providerId = String(body.provider_id || '').trim()
+    const model = String(body.model || '').trim()
+    if (!personaId || !providerId || !model) {
+      return Response.json(
+        { ok: false, error: '自建引擎需要 persona_id、provider_id 和 model' },
+        { status: 400 },
+      )
+    }
+
+    // Haven 的 selfhost_overrides 是整对象替换。先读后合并，不能在换模型时
+    // 顺手抹掉本窗口已有的历史预算、回复预留等覆盖项。
+    const current = await getConversationSession(sessionId)
+    if (!current.ok) {
+      return Response.json({ ok: false, error: current.error || '读取本窗口设置失败' }, { status: 502 })
+    }
+    const existing = current.session?.selfhost_overrides || {}
+    const result = await patchConversationSessionState({
+      sessionId,
+      personaId,
+      selfhostOverrides: { ...existing, provider_id: providerId, model },
+      expectedStateVersion: current.session?.state_version ?? 0,
+    })
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, error: result.error || '保存本窗口自建模型失败' },
+        { status: result.httpStatus || 502 },
+      )
+    }
+    return Response.json({ ok: true, applied: true, session: result.session })
+  }
 
   // 进程不在时不新建 —— 那会白付一次缓存写入，而且用户要的只是"改个设置"。
   // 前端会把新设置留在本地，下一句话带过去（那时候本来就要起进程）。

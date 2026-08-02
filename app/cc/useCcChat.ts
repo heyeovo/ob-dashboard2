@@ -398,8 +398,13 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           setHistoryBeforeId(turns[0]?.id ?? null)
           setHasEarlierHistory(turns.length === 100)
           lastRoundIdRef.current = turns.reduce((largest, turn) => Math.max(largest, Number(turn.round_id || 0)), 0)
-          const sessionState = data.session as { local_engine_preference?: string } | null
+          const sessionState = data.session as {
+            local_engine_preference?: string
+            selfhost_overrides?: { provider_id?: unknown; model?: unknown }
+          } | null
           setLocalEnginePreference(sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc')
+          const selfhostProviderId = String(sessionState?.selfhost_overrides?.provider_id || '').trim()
+          const selfhostModel = String(sessionState?.selfhost_overrides?.model || '').trim()
           // 进程没了内存里的轮数就归零，用库里的行数补上。
           // 花费补不了（要价格表），保持 0。
           const knownTurnCount = sessions.find(session => session.session_id === nextId)?.turn_count || 0
@@ -426,6 +431,16 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             // 存过 cred 就当「有人定过」，右上角照它显示订阅 / api
             if (s.cred === 'subscription' || s.cred === 'api') setCredChosen(true)
             if (s.web) setWebSettings(s.web)
+          }
+          // selfhost 的事实源是 Haven 窗口覆盖，优先于最后一轮 cc 的运行时元数据。
+          if (selfhostProviderId || selfhostModel) {
+            setPick(previous => ({
+              ...previous,
+              kind: 'api',
+              providerId: selfhostProviderId || previous.providerId,
+              model: selfhostModel || previous.model,
+            }))
+            setCredChosen(true)
           }
         }
       } catch {
@@ -651,16 +666,44 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         // 换站/换凭据会换掉子进程的环境变量，跑着的进程改不了
         const models = modelsFor(upstream, merged.kind, merged.providerId)
         if (!models.includes(merged.model)) merged.model = models[0] || ''
-        setPick(merged)
         // 用户亲手点过订阅 / api，从这里开始按他选的送
         setCredChosen(true)
+      }
+
+      setPick(merged)
+      if (effectiveEngine === 'selfhost') {
+        if (merged.kind !== 'api' || !merged.providerId || !merged.model) {
+          setPick(pick)
+          setSettingsNote('自建引擎需要选择 api 中转站和模型')
+          return
+        }
+        try {
+          const res = await fetch('/api/cc-session-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: sessionId,
+              engine: 'selfhost',
+              persona_id: personaId,
+              provider_id: merged.providerId,
+              model: merged.model,
+            }),
+          })
+          const data = await res.json()
+          if (!res.ok || !data.ok) throw new Error(String(data.error || '保存失败'))
+          setSettingsNote('已生效')
+        } catch (reason) {
+          setPick(pick)
+          setSettingsNote(`没有改上：${reason instanceof Error ? reason.message : '保存失败'}`)
+        }
+        return
+      }
+      if (switchedUpstream) {
         setSettingsNote(
           sessionStarted ? '换供应商要新建对话才生效（这一窗还是原来那套）' : '已选好，这一窗生效',
         )
         return
       }
-
-      setPick(merged)
       if (!sessionStarted) {
         setSettingsNote('已选好，发第一句时生效')
         return
@@ -690,7 +733,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setSettingsNote('设置没送到，等下再试')
       }
     },
-    [pick, sessionStarted, upstream, sessionId],
+    [pick, sessionStarted, upstream, sessionId, effectiveEngine, personaId],
   )
 
   const applyWebSettings = useCallback(

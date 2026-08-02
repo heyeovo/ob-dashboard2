@@ -116,7 +116,9 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
 
   const [sessionResult, historyResult, personaResult, upstreamResult] = await Promise.all([
     getConversationSession(request.sessionId, { includeBucketExclusions: true, signal }),
-    listAllTurns(request.sessionId, { signal }),
+    // selfhost 是无状态完整重放；raw_json 里的历史召回正文也属于窗口上下文，
+    // 不读 raw 就会在下一轮消失，而桶又已进入排除集合、不会再次召回。
+    listAllTurns(request.sessionId, { includeRaw: true, signal }),
     getPersona(request.personaId, { signal }),
     loadUpstreamConfig(),
   ])
@@ -202,6 +204,32 @@ function rawRecord(value: string | undefined): Record<string, unknown> {
   }
 }
 
+function historicalRecallContext(turn: HavenTurn): string {
+  const raw = rawRecord(turn.raw_json)
+  const recall = raw.recall && typeof raw.recall === 'object'
+    ? raw.recall as Record<string, unknown>
+    : null
+  if (!recall) return ''
+  const direct = typeof recall.additional_context === 'string' ? recall.additional_context.trim() : ''
+  if (direct) return direct
+  if (!Array.isArray(recall.modules)) return ''
+  return recall.modules
+    .map(item => item && typeof item === 'object' ? String((item as Record<string, unknown>).text || '').trim() : '')
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+export function historyWithPersistedRecall(history: HavenTurn[]): HavenTurn[] {
+  return history.map(turn => {
+    const recalledContext = historicalRecallContext(turn)
+    if (!recalledContext) return turn
+    return {
+      ...turn,
+      user_text: [recallSystemBlock(recalledContext), turn.user_text].filter(Boolean).join('\n\n'),
+    }
+  })
+}
+
 function sendReplay(controller: ReadableStreamDefaultController<Uint8Array>, prepared: ReplaySelfhostTurn) {
   const encoder = new TextEncoder()
   const send = (event: string, data: unknown) => controller.enqueue(encoder.encode(encodeSelfhostSse(event, data)))
@@ -215,6 +243,7 @@ function sendReplay(controller: ReadableStreamDefaultController<Uint8Array>, pre
     idempotent_replay: true,
   })
   if (raw.context && typeof raw.context === 'object') send('context', raw.context)
+  if (raw.recall && typeof raw.recall === 'object') send('recall', raw.recall)
   const process = Array.isArray(raw.process) ? raw.process : []
   let replayedText = false
   for (const part of process) {
@@ -298,21 +327,31 @@ export function createSelfhostStream(
               excludeIds: prepared.bucketExclusionIds,
               signal,
             })
-        send('recall', {
+        const recalledText = recall.ok ? recall.additionalContext.trim() : ''
+        const recallDisplay = {
           ok: recall.ok,
           card_count: recall.cardCount,
           chars: recall.chars,
           elapsed_ms: recall.elapsedMs,
+          injected: Boolean(recalledText),
+          domains: recall.domains,
+          modules: recalledText
+            ? [{ key: 'memory_card', card_count: recall.cardCount, chars: recall.chars, text: recalledText }]
+            : [],
+          error: recall.error || undefined,
+        }
+        send('recall', {
+          ...recallDisplay,
           recalled_ids: recall.recalledIds,
           excluded_count: prepared.bucketExclusionIds.length,
-          error: recall.error || undefined,
         })
 
         const system = assembleSystem(prepared.persona, recall.ok ? recall.additionalContext : '')
+        const history = historyWithPersistedRecall(prepared.history)
         // max_tokens 是 /v1/messages 必填项；0 配置在第一版按默认 32K 执行并预留同样空间。
         const replyReserve = prepared.settings.replyReserveTokens || DEFAULT_REPLY_RESERVE_TOKENS
         const selection = selectHistory({
-          turns: prepared.history,
+          turns: history,
           system,
           currentUserText: request.text,
           model: prepared.settings.model,
@@ -377,8 +416,7 @@ export function createSelfhostStream(
             model: prepared.settings.model,
             system_order: ['base', 'persona', 'recall'],
             recall: {
-              ok: recall.ok,
-              error: recall.error,
+              ...recallDisplay,
               recalled_ids: recall.recalledIds,
               excluded_count: prepared.bucketExclusionIds.length,
               additional_context: recall.ok ? recall.additionalContext : '',

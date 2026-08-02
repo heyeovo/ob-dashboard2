@@ -113,4 +113,20 @@ describe('ccHistory：旧历史兼容', () => {
     expect(parsed.usage).toMatchObject({ inputTokens: 3 })
     expect(parsed.process).toEqual([])
   })
+
+  it('把旧 selfhost additional_context 恢复成可查看的召回模块', () => {
+    const parsed = parseTurnRaw(JSON.stringify({
+      recall: {
+        ok: true,
+        additional_context: '旧召回正文',
+        recalled_ids: ['old-bucket'],
+      },
+    }))
+    expect(parsed.recall).toMatchObject({
+      injected: true,
+      card_count: 1,
+      chars: 5,
+      modules: [{ key: 'memory_card', text: '旧召回正文' }],
+    })
+  })
 })

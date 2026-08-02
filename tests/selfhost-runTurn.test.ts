@@ -25,6 +25,9 @@ function prepared(): PreparedSelfhostTurn {
     history: [{
       id: 2, session_id: 'session-1', round_id: 2, created_at: '', user_text: '之前', assistant_text: '回答',
       model: '', client: '', route: '', source: 'cc',
+      raw_json: JSON.stringify({
+        recall: { additional_context: '上一轮召回背景', recalled_ids: ['old-bucket'] },
+      }),
     }],
     bucketExclusionIds: ['old-bucket'],
     settings: {
@@ -72,17 +75,26 @@ describe('runSelfhostTurn stream contract', () => {
     expect(body.indexOf('event: usage')).toBeLessThan(body.indexOf('event: done'))
     expect(body).toContain('"startedAt":12000')
     expect(body).toContain('"round_id":3')
+    expect(body).toContain('"injected":true')
+    expect(body).toContain('"text":"召回背景"')
     expect(body).not.toContain('event: error')
     expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({
       requestId: 'request-1', expectedLastRoundId: 2, personaId: 'ombre', source: 'selfhost',
       recalledBucketIds: ['new-bucket'],
     }))
+    expect(vi.mocked(deps.persist).mock.calls[0][0].raw).toMatchObject({
+      recall: {
+        injected: true,
+        modules: [{ key: 'memory_card', text: '召回背景' }],
+        additional_context: '召回背景',
+      },
+    })
     expect(deps.recall).toHaveBeenCalledWith('现在的问题', expect.objectContaining({
       excludeIds: ['old-bucket'],
     }))
     expect(deps.streamUpstream).toHaveBeenCalledWith(expect.objectContaining({
       messages: [
-        { role: 'user', content: '之前' },
+        { role: 'user', content: expect.stringContaining('上一轮召回背景\n</haven_recall_reference>\n\n之前') },
         { role: 'assistant', content: '回答' },
         { role: 'user', content: '现在的问题' },
       ],

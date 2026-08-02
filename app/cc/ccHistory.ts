@@ -8,6 +8,7 @@ import type {
   CcMessage,
   CcProcessEvent,
   CcRecallInfo,
+  CcRecallModule,
   CcToolEvent,
   CcTurnUsage,
 } from './types'
@@ -67,6 +68,49 @@ export type HavenTurnRow = {
   client?: string
   /** 写库时原样存的那份，thinking / 工具 / 召回都在里面。要 raw=1 才有 */
   raw_json?: string
+}
+
+function normalizeRecall(value: unknown): CcRecallInfo | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const additionalContext = typeof raw.additional_context === 'string' ? raw.additional_context.trim() : ''
+  const modules: CcRecallModule[] = Array.isArray(raw.modules)
+    ? raw.modules.flatMap(item => {
+        if (!item || typeof item !== 'object') return []
+        const detail = item as Record<string, unknown>
+        return [{
+          key: String(detail.key || 'memory_card'),
+          card_count: Number(detail.card_count || 0),
+          chars: Number(detail.chars || 0),
+          text: String(detail.text || ''),
+        }]
+      })
+    : additionalContext
+      ? [{
+          key: 'memory_card',
+          card_count: Number(raw.card_count || 0),
+          chars: Number(raw.chars || additionalContext.length),
+          text: additionalContext,
+        }]
+      : []
+  const domains = Array.isArray(raw.domains) ? raw.domains.map(String).filter(Boolean) : undefined
+  const fallbackCardCount = Array.isArray(raw.recalled_ids)
+    ? raw.recalled_ids.length
+    : modules.reduce((total, detail) => total + detail.card_count, 0)
+  const fallbackChars = additionalContext.length
+    || modules.reduce((total, detail) => total + (detail.chars || detail.text.length), 0)
+  return {
+    ok: raw.ok !== false,
+    card_count: Number(raw.card_count ?? fallbackCardCount),
+    chars: Number(raw.chars ?? fallbackChars),
+    elapsed_ms: Number(raw.elapsed_ms || 0),
+    injected: typeof raw.injected === 'boolean'
+      ? raw.injected
+      : Boolean(additionalContext || modules.some(module => module.text.trim())),
+    domains,
+    error: typeof raw.error === 'string' && raw.error ? raw.error : undefined,
+    modules: modules.length ? modules : undefined,
+  }
 }
 
 /** client 列形如 `ob2-chat/<persona_id>`（4.5b 起写）。解不出来就是无主的老消息。 */
@@ -173,8 +217,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
     thinking: typeof raw.thinking === 'string' ? raw.thinking : '',
     tools,
     process,
-    recall:
-      raw.recall && typeof raw.recall === 'object' ? (raw.recall as unknown as CcRecallInfo) : null,
+    recall: normalizeRecall(raw.recall),
     // 5.2 起写库时带 usage。老消息没有 —— 那就不显示 token 面板，不编数字。
     usage: normalizeProviderUsage(raw.usage),
     // 被中断的半截回复。老消息没有这个字段 —— 一律不算中断。
