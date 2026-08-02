@@ -4,6 +4,7 @@ import CcMarkdown from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcMessage, CcProcessEvent, CcToolEvent } from './types'
+import { modelLabel } from './upstream'
 
 // 一条消息。
 //
@@ -63,6 +64,7 @@ export default function CcMessageRow({
   onRetryPersistence,
 }: Props) {
   const isUser = message.role === 'user'
+  const shownModel = modelLabel(message.model || '')
   const [menuOpen, setMenuOpen] = useState(false)
   // 新生成的当前轮默认展开；从 Haven 读回的历史轮默认折叠。
   // 状态只属于当前页面：实时轮结束后保持展开，刷新后会按历史规则重新折叠。
@@ -334,12 +336,12 @@ export default function CcMessageRow({
           <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">已停止生成</div>
         ) : null}
 
-        {!message.streaming && (message.engine || message.model || message.deliveryNote) ? (
+        {!message.streaming && (message.engine || shownModel || message.deliveryNote) ? (
           <div className="mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
-              {message.model ? <span>模型：{message.model}</span> : null}
+              {shownModel ? <span>模型：{shownModel}</span> : null}
               {message.context ? (
                 <div ref={contextRef} className="relative">
                   <button

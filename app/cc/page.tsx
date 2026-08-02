@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
 import { CcPermCard } from './CcPermCard'
@@ -15,6 +15,7 @@ import type { CcMessage } from './types'
 import CcWindowSettings from './CcWindowSettings'
 import CcHandoffDialog from './CcHandoffDialog'
 import { MODE_LABEL } from '@/app/lib/ccModes'
+import { modelLabel, modelsFor } from './upstream'
 
 // 第 4 步的聊天页。
 //
@@ -57,11 +58,13 @@ export default function CcChatPage() {
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const [winSetOpen, setWinSetOpen] = useState(false)
   const [handoffOpen, setHandoffOpen] = useState<{ fromSessionId: string | null } | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const desktopBottomRef = useRef<HTMLDivElement>(null)
+  const mobileBottomRef = useRef<HTMLDivElement>(null)
 
-  // 新消息进来滚到底。批准卡片出现时也滚 —— 不滚就可能在屏幕外，人不知道在等他
+  // 新消息进来滚到底。桌面和手机是两套同时渲染的布局，必须各自滚自己的可见区域。
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' })
+    desktopBottomRef.current?.scrollIntoView({ block: 'end' })
+    mobileBottomRef.current?.scrollIntoView({ block: 'end' })
   }, [chat.messages, chat.pending.length])
 
   const copy = (text: string) => {
@@ -73,7 +76,11 @@ export default function CcChatPage() {
   const cacheSession = formatCacheLeft(chat.stats.cacheRemainingMs)
   const cacheSystem = formatCacheLeft(chat.stats.cacheSystemRemainingMs)
   // 顶部显示实际在跑的那个模型（stats.model 来自服务端）；进程没起来就显示这一窗选的
-  const shownModel = chat.latestTurn?.model || chat.stats.model || chat.pick.model
+  const modelCandidates = modelsFor(chat.upstream, chat.pick.kind, chat.pick.providerId)
+  const shownModel = modelLabel(
+    chat.latestTurn?.model || chat.stats.model || chat.pick.model,
+    modelCandidates,
+  )
   const shownProvider = chat.latestTurn?.providerLabel
     || chat.stats.boot?.providerLabel
     || (chat.effectiveEngine === 'cc' && chat.pick.kind === 'subscription' ? 'Claude 订阅' : '')
@@ -208,7 +215,7 @@ export default function CcChatPage() {
     .reverse()
     .find(message => message.role === 'assistant' && !message.handoff)?.id
 
-  const thread = (
+  const thread = (bottomRef: RefObject<HTMLDivElement | null>) => (
     <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-6">
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
         {!chat.historyLoading && chat.messages.length > 0 && chat.hasEarlierHistory ? (
@@ -346,7 +353,7 @@ export default function CcChatPage() {
   // 协作者列表：桌面端和手机端都是从左侧盖上来的浮层。
   // 桌面端左边那栏是会话列表，两个东西不能抢同一个位置。
   const personaRail = personaRailOpen ? (
-    <div className="fixed inset-0 z-40">
+    <div className="cc-mobile-overlay-clearance fixed inset-x-0 top-0 z-40 md:inset-0">
       <button
         type="button"
         aria-label="关闭协作者列表"
@@ -384,7 +391,7 @@ export default function CcChatPage() {
           <aside className="cc-rail-pane w-[var(--chat-rail-width)] shrink-0">{rail}</aside>
           <main className="flex min-w-0 flex-1 flex-col">
             {header}
-            {thread}
+            {thread(desktopBottomRef)}
             {composer}
           </main>
         </div>
@@ -396,12 +403,12 @@ export default function CcChatPage() {
         style={{ height: 'calc(100dvh - 76px - env(safe-area-inset-bottom, 0px))' }}
       >
         {header}
-        {thread}
+        {thread(mobileBottomRef)}
         {composer}
       </div>
 
       {railOpen ? (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="cc-mobile-overlay-clearance fixed inset-x-0 top-0 z-40 md:hidden">
           <button
             type="button"
             aria-label="关闭对话列表"

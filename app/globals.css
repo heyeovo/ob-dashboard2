@@ -261,6 +261,14 @@ body {
   background-repeat: no-repeat;
   background-attachment: fixed;
 }
+.cc-mobile-overlay-clearance {
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .cc-mobile-overlay-clearance {
+    bottom: 0;
+  }
+}
 .cc-topbar {
   border-bottom: 1px solid var(--color-border-light);
   background: var(--chat-glass);

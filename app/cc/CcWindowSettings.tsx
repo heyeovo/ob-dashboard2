@@ -1,7 +1,13 @@
 'use client'
 import Link from 'next/link'
 import type { CcSessionStats } from './types'
-import { EFFORT_OPTIONS, modelsFor, type CcUpstreamConfig, type CcUpstreamPick } from './upstream'
+import {
+  EFFORT_OPTIONS,
+  modelLabel,
+  modelsFor,
+  type CcUpstreamConfig,
+  type CcUpstreamPick,
+} from './upstream'
 import type { CcWebSettings } from './webSettings'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
@@ -80,6 +86,7 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const models = modelsFor(upstream, pick.kind, pick.providerId)
+  const shownStatsModel = modelLabel(stats.model, models)
   const recent = stats.recentCostUsd || []
   const recentSum = recent.reduce((a, b) => a + b, 0)
   // 订阅侧不按量计费，SDK 报的那个数字对用户没意义 —— 直接显示 $0（用户拍板的）。
@@ -122,10 +129,10 @@ export default function CcWindowSettings({
               </span>
             </div>
             {/* 下面这两行手机端顶栏放不下，只在这里看得到 */}
-            {stats.model ? (
+            {shownStatsModel ? (
               <div className={ROW}>
                 <span className={KEY}>正在用</span>
-                <span className={`${VAL} font-mono text-[10.5px]`}>{stats.model}</span>
+                <span className={`${VAL} font-mono text-[10.5px]`}>{shownStatsModel}</span>
               </div>
             ) : null}
             {stats.contextTokens > 0 ? (

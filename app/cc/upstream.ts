@@ -161,3 +161,36 @@ export function modelsFor(config: CcUpstreamConfig, kind: CcProviderKind, provid
   const provider = config.providers.find(p => p.id === providerId)
   return provider?.models || []
 }
+
+/**
+ * Claude Code 为 Opus 4.6 使用的 `opus[1m]` 是 SDK 内部别名，不是上游模型名。
+ * 界面和本窗口配置继续显示 Haven 中配置的原始模型；候选列表为空时保留别名，
+ * 等上游配置加载后再按候选模型还原。
+ */
+export function providerModelForSdkModel(model: string, candidates: string[] = []): string {
+  const value = model.trim()
+  if (!value || !/\[1m\]$/i.test(value)) return value
+
+  const base = value.replace(/\[1m\]$/i, '')
+  if (candidates.includes(base)) return base
+
+  // SDK 可能只回传 `opus[1m]`，此时从当前 Provider 的 Opus 4.6 候选中找回原名。
+  if (/^opus$/i.test(base)) {
+    const opus46 = candidates.find(candidate =>
+      /(?:^|[-_.])opus[-_.]?4[-_.]?6(?:$|[-_.])/i.test(candidate),
+    )
+    if (opus46) return opus46
+  }
+
+  return candidates.length > 0 ? base : value
+}
+
+/** 仅用于界面文字；没有候选列表时也不把 `[1m]` 露给用户。 */
+export function modelLabel(model: string, candidates: string[] = []): string {
+  const value = model.trim()
+  if (!value) return ''
+  const normalized = providerModelForSdkModel(value, candidates)
+  if (normalized !== value) return normalized
+  if (/^opus\[1m\]$/i.test(value)) return 'claude-opus-4-6'
+  return value.replace(/\[1m\]$/i, '')
+}

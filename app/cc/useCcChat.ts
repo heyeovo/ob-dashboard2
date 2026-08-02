@@ -12,7 +12,13 @@ import type {
 import { EMPTY_STATS } from './types'
 import type { CcMode } from '@/app/lib/ccModes'
 import type { CcUpstreamConfig, CcUpstreamPick } from './upstream'
-import { EMPTY_UPSTREAM, modelsFor, pickFromConfig, upstreamFromHaven } from './upstream'
+import {
+  EMPTY_UPSTREAM,
+  modelsFor,
+  pickFromConfig,
+  providerModelForSdkModel,
+  upstreamFromHaven,
+} from './upstream'
 import type { HandoffPayload } from './CcHandoffDialog'
 import {
   DEFAULT_WEB_SETTINGS,
@@ -91,6 +97,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [mode, setMode] = useState<CcMode>('chat')
   const [upstream, setUpstream] = useState<CcUpstreamConfig>(EMPTY_UPSTREAM)
   const [upstreamLoaded, setUpstreamLoaded] = useState(false)
+  const upstreamRef = useRef<CcUpstreamConfig>(EMPTY_UPSTREAM)
   // 这个窗口选的那套上游。model / effort / thinking 能中途改，kind / providerId 不能
   const [pick, setPick] = useState<CcUpstreamPick>(() => pickFromConfig(EMPTY_UPSTREAM))
   const [settingsNote, setSettingsNote] = useState('')
@@ -127,8 +134,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         const data = await res.json()
         if (cancelled || !data.ok) return
         const config = upstreamFromHaven(data.config as Record<string, unknown>)
+        upstreamRef.current = config
         setUpstream(config)
-        setPick(pickFromConfig(config))
+        // 上游配置可能比旧会话历史晚返回；已有窗口选择不能被默认模型覆盖。
+        setPick(current => {
+          if (!current.model) return pickFromConfig(config)
+          const candidates = modelsFor(config, current.kind, current.providerId)
+          const model = providerModelForSdkModel(current.model, candidates)
+          return model === current.model ? current : { ...current, model }
+        })
         // 配过东西（有中转站 / 填过订阅模型）才算「定过」，空配置不抢协作者的 engine
         if (config.providers.length > 0 || config.subscriptionModels.length > 0) setCredChosen(true)
       } catch {
@@ -397,11 +411,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           resumeHintRef.current = meta.ccSessionId
           if (meta.settings) {
             const s = meta.settings
+            const nextKind =
+              s.cred === 'subscription' ? 'subscription' : s.cred === 'api' ? 'api' : undefined
+            const nextProviderId = s.providerId ?? ''
+            const candidates = modelsFor(upstreamRef.current, nextKind || 'api', nextProviderId)
             setPick(prev => ({
               ...prev,
               kind: s.cred === 'subscription' ? 'subscription' : s.cred === 'api' ? 'api' : prev.kind,
               providerId: s.providerId ?? prev.providerId,
-              model: s.model ?? prev.model,
+              model: s.model ? providerModelForSdkModel(s.model, candidates) : prev.model,
               effort: (s.effort as CcUpstreamPick['effort']) ?? prev.effort,
               thinking: s.thinkingOn ?? prev.thinking,
             }))
