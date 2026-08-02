@@ -67,6 +67,11 @@ describe('runSelfhostTurn stream contract', () => {
   afterEach(() => vi.restoreAllMocks())
 
   it('emits usage, strictly persists, then emits done', async () => {
+    let now = 1_000
+    vi.spyOn(Date, 'now').mockImplementation(() => {
+      now += 1_000
+      return now
+    })
     const deps = dependencies({
       ok: true, stored: true, turnId: 9, roundId: 3, elapsedMs: 2, error: '', httpStatus: 200,
       idempotentReplay: false, code: '', details: {},
@@ -77,9 +82,12 @@ describe('runSelfhostTurn stream contract', () => {
     expect(body).toContain('"round_id":3')
     expect(body).toContain('"injected":true')
     expect(body).toContain('"text":"召回背景"')
+    expect(body).toContain('"durationMs":1000')
+    expect(body).toContain('"tokensPerSec":10')
     expect(body).not.toContain('event: error')
     expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({
       requestId: 'request-1', expectedLastRoundId: 2, personaId: 'ombre', source: 'selfhost',
+      userText: '现在的问题',
       recalledBucketIds: ['new-bucket'],
     }))
     expect(vi.mocked(deps.persist).mock.calls[0][0].raw).toMatchObject({
@@ -87,6 +95,10 @@ describe('runSelfhostTurn stream contract', () => {
         injected: true,
         modules: [{ key: 'memory_card', text: '召回背景' }],
         additional_context: '召回背景',
+      },
+      usage: {
+        durationMs: 1_000,
+        tokensPerSec: 10,
       },
     })
     expect(deps.recall).toHaveBeenCalledWith('现在的问题', expect.objectContaining({
@@ -96,7 +108,12 @@ describe('runSelfhostTurn stream contract', () => {
       messages: [
         { role: 'user', content: expect.stringContaining('上一轮召回背景\n</haven_recall_reference>\n\n之前') },
         { role: 'assistant', content: '回答' },
-        { role: 'user', content: '现在的问题' },
+        {
+          role: 'user',
+          content: expect.stringMatching(
+            /^现在的问题\n\n<运行时信息>\n当前北京时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\+08:00（Asia\/Shanghai）。这是系统提供的隐藏时间，不是用户消息。\n<\/运行时信息>$/,
+          ),
+        },
       ],
     }))
   })

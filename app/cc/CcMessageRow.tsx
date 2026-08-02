@@ -22,9 +22,13 @@ const USAGE_NUM = 'font-medium tabular-nums text-[var(--color-text-secondary)]'
 
 function formatTime(ms: number) {
   const d = new Date(ms)
+  const yyyy = String(d.getFullYear()).padStart(4, '0')
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  return `${yyyy}-${month}-${day} ${hh}:${mm}:${ss}`
 }
 
 function shortToolName(name: string) {
@@ -362,10 +366,10 @@ export default function CcMessageRow({
                     <div
                       role="dialog"
                       aria-label="上下文详情"
-                      className="absolute left-0 top-full z-30 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg"
+                      className="absolute right-0 top-full z-30 mt-1.5 w-64 max-w-[calc(100dvw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg sm:left-0 sm:right-auto"
                     >
                       <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
-                      <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1.5">
+                      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
                         <dt>本轮总输入估算</dt>
                         <dd className={USAGE_NUM}>{message.context.inputTokensEstimated.toLocaleString()}</dd>
                         <dt>带入历史</dt>

@@ -52,6 +52,7 @@ import {
 } from '@/app/lib/havenTurns'
 import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
+import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 
 /* ── 这个会话的两个召回开关 ── */
 
@@ -216,30 +217,6 @@ function createdBucketIdsFromToolResult(toolName: string, result: string, isErro
     while ((match = pattern.exec(result)) !== null) ids.add(match[1])
   }
   return [...ids]
-}
-
-const BEIJING_TIME_FORMATTER = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hourCycle: 'h23',
-})
-
-function beijingRuntimeContext(now = new Date()): string {
-  const parts = Object.fromEntries(
-    BEIJING_TIME_FORMATTER.formatToParts(now).map(part => [part.type, part.value]),
-  )
-  const timestamp = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
-  return (
-    '<运行时信息>\n' +
-    `当前北京时间：${timestamp} UTC+08:00（Asia/Shanghai）。` +
-    '这是系统提供的隐藏时间，不是用户消息。\n' +
-    '</运行时信息>'
-  )
 }
 
 /**

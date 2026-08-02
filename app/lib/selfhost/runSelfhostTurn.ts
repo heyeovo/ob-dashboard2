@@ -9,6 +9,7 @@ import {
   type HavenTurn,
 } from '@/app/lib/havenTurns'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
+import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 import {
   DEFAULT_REPLY_RESERVE_TOKENS,
   resolveSelfhostSettings,
@@ -347,13 +348,16 @@ export function createSelfhostStream(
         })
 
         const system = assembleSystem(prepared.persona, recall.ok ? recall.additionalContext : '')
+        // 与 cc 保持一致：当前时间只进入本轮模型请求，不改浏览器气泡或 Haven user_text。
+        // 预算和实际请求必须使用同一份文本，避免隐藏时间绕过上下文上限计算。
+        const currentUserText = `${request.text}\n\n${beijingRuntimeContext()}`
         const history = historyWithPersistedRecall(prepared.history)
         // max_tokens 是 /v1/messages 必填项；0 配置在第一版按默认 32K 执行并预留同样空间。
         const replyReserve = prepared.settings.replyReserveTokens || DEFAULT_REPLY_RESERVE_TOKENS
         const selection = selectHistory({
           turns: history,
           system,
-          currentUserText: request.text,
+          currentUserText,
           model: prepared.settings.model,
           historyTokenBudget: prepared.settings.historyTokenBudget,
           maxHistoryRounds: prepared.settings.maxHistoryRounds,
@@ -374,7 +378,8 @@ export function createSelfhostStream(
           request_id: request.requestId,
         })
 
-        const messages = assembleMessages(selection.selected, request.text)
+        const messages = assembleMessages(selection.selected, currentUserText)
+        const upstreamStartedAt = Date.now()
         const upstream = await dependencies.streamUpstream({
           baseUrl: prepared.provider.baseUrl,
           token: prepared.provider.authToken,
@@ -392,8 +397,16 @@ export function createSelfhostStream(
             send('thinking', { text, id: 'thinking-0', startedAt: thinkingStartedAt })
           },
         })
+        const durationMs = Math.max(0, Date.now() - upstreamStartedAt)
+        const usage = {
+          ...upstream.usage,
+          durationMs,
+          tokensPerSec: durationMs > 0
+            ? Math.round((upstream.usage.output_tokens / (durationMs / 1000)) * 10) / 10
+            : 0,
+        }
         generated = true
-        send('usage', upstream.usage)
+        send('usage', usage)
 
         const persisted = await dependencies.persist({
           sessionId: request.sessionId,
@@ -422,7 +435,7 @@ export function createSelfhostStream(
               additional_context: recall.ok ? recall.additionalContext : '',
             },
             context: selection.stats,
-            usage: upstream.usage,
+            usage,
             stop_reason: upstream.stopReason,
             thinking: upstream.thinkingText,
             process: upstream.process,
@@ -441,7 +454,7 @@ export function createSelfhostStream(
           idempotent_replay: persisted.idempotentReplay,
           generated: true,
           elapsed_ms: Date.now() - startedAt,
-          usage: upstream.usage,
+          usage,
           context: selection.stats,
         })
       } catch (error) {
