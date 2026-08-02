@@ -338,6 +338,9 @@ describe('runTurn：普通回复', () => {
           id: 2, session_id: 'ob2-test-session', round_id: 2, created_at: '',
           user_text: '出门后说的话', assistant_text: '自建引擎的回答', model: '', client: '',
           route: '/api/cc-chat-selfhost', source: 'selfhost',
+          raw_json: JSON.stringify({
+            recall: { additional_context: '自建引擎当时看到的桶 A' },
+          }),
         },
       ],
       error: '',
@@ -347,18 +350,23 @@ describe('runTurn：普通回复', () => {
 
     const pushed = await sdk.promptIterators[0].next()
     const content = String(pushed.value?.message.content || '')
+    expect(content).toContain('<跨引擎召回参考>')
+    expect(content).toContain('自建引擎当时看到的桶 A')
     expect(content).toContain('<跨引擎续聊记录>')
     expect(content).toContain('出门后说的话')
     expect(content).toContain('自建引擎的回答')
+    expect(content.indexOf('<跨引擎召回参考>')).toBeLessThan(content.indexOf('<跨引擎续聊记录>'))
     expect(content.lastIndexOf('你好')).toBeGreaterThan(content.indexOf('</跨引擎续聊记录>'))
     expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
       afterRoundId: 1,
       source: 'selfhost',
+      includeRaw: true,
     }))
     expect(recall.run).toHaveBeenCalledWith('你好', expect.objectContaining({
       excludeIds: ['already-recalled', 'created-here'],
     }))
     const recInput = turns.recordTurn.mock.calls[0][0]
+    expect(recInput.userText).toBe('你好')
     expect(recInput.raw.continuity).toEqual({
       injected_turns: 1,
       after_round_id: 1,

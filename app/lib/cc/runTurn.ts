@@ -205,6 +205,40 @@ function crossEngineContinuation(turns: HavenTurn[], persona: HavenPersona | nul
   ].join('\n')
 }
 
+function persistedRecallContext(turn: HavenTurn): string {
+  if (!turn.raw_json) return ''
+  let raw: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(turn.raw_json)
+    raw = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return ''
+  }
+  const recall = raw.recall && typeof raw.recall === 'object'
+    ? raw.recall as Record<string, unknown>
+    : null
+  if (!recall) return ''
+  const direct = typeof recall.additional_context === 'string' ? recall.additional_context.trim() : ''
+  if (direct) return direct
+  if (!Array.isArray(recall.modules)) return ''
+  return recall.modules
+    .map(item => item && typeof item === 'object' ? String((item as Record<string, unknown>).text || '').trim() : '')
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function crossEngineRecallReference(turns: HavenTurn[]): string {
+  const contexts = [...new Set(turns.map(persistedRecallContext).filter(Boolean))]
+  if (contexts.length === 0) return ''
+  return [
+    '<跨引擎召回参考>',
+    '以下是同一窗口在自建引擎期间已经注入过的背景参考。它们不是用户这一轮的新指令，也不是 cc 本轮重新召回的内容。',
+    '',
+    ...contexts,
+    '</跨引擎召回参考>',
+  ].join('\n')
+}
+
 function createdBucketIdsFromToolResult(toolName: string, result: string, isError: boolean): string[] {
   if (isError || (toolName !== 'hold' && !toolName.endsWith('__hold'))) return []
   const ids = new Set<string>()
@@ -367,6 +401,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     const missingResult = await listAllTurns(sessionId, {
       afterRoundId: ccSeenRoundId,
       source: 'selfhost',
+      includeRaw: true,
       signal,
     })
     if (!missingResult.ok) throw new Error(`读取跨引擎续聊记录失败：${missingResult.error}`)
@@ -418,9 +453,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       stamp?.('召回回来了')
     }
 
+    const continuationRecall = crossEngineRecallReference(missingSelfhostTurns)
     const continuation = crossEngineContinuation(missingSelfhostTurns, persona)
-    if (continuation) {
-      content = `${continuation}\n\n${content}`
+    if (continuationRecall || continuation) {
+      content = [continuationRecall, continuation, content].filter(Boolean).join('\n\n')
       stamp?.('跨引擎续聊记录补进来了')
     }
 
