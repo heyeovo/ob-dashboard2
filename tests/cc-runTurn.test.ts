@@ -350,13 +350,13 @@ describe('runTurn：普通回复', () => {
 
     const pushed = await sdk.promptIterators[0].next()
     const content = String(pushed.value?.message.content || '')
-    expect(content).toContain('<跨引擎召回参考>')
+    expect(content).toContain('<之前的记忆>')
     expect(content).toContain('自建引擎当时看到的桶 A')
-    expect(content).toContain('<跨引擎续聊记录>')
+    expect(content).toContain('<上次聊到这里>')
     expect(content).toContain('出门后说的话')
     expect(content).toContain('自建引擎的回答')
-    expect(content.indexOf('<跨引擎召回参考>')).toBeLessThan(content.indexOf('<跨引擎续聊记录>'))
-    expect(content.lastIndexOf('你好')).toBeGreaterThan(content.indexOf('</跨引擎续聊记录>'))
+    expect(content.indexOf('<之前的记忆>')).toBeLessThan(content.indexOf('<上次聊到这里>'))
+    expect(content.lastIndexOf('你好')).toBeGreaterThan(content.indexOf('</上次聊到这里>'))
     expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
       afterRoundId: 1,
       source: 'selfhost',
@@ -391,7 +391,7 @@ describe('runTurn：普通回复', () => {
     await handle.promise
 
     const pushed = await sdk.promptIterators[0].next()
-    expect(String(pushed.value?.message.content || '')).not.toContain('<跨引擎续聊记录>')
+    expect(String(pushed.value?.message.content || '')).not.toContain('<上次聊到这里>')
     expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
       afterRoundId: 3,
       source: 'selfhost',

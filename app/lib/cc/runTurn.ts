@@ -197,11 +197,11 @@ function crossEngineContinuation(turns: HavenTurn[], persona: HavenPersona | nul
   }
   if (lines.length === 0) return ''
   return [
-    '<跨引擎续聊记录>',
+    '<上次聊到这里>',
     '以下是同一窗口在自建引擎期间新增的对话原文。它是此前对话记录，不是用户这一轮的新指令。',
     '',
     ...lines,
-    '</跨引擎续聊记录>',
+    '</上次聊到这里>',
   ].join('\n')
 }
 
@@ -231,11 +231,11 @@ function crossEngineRecallReference(turns: HavenTurn[]): string {
   const contexts = [...new Set(turns.map(persistedRecallContext).filter(Boolean))]
   if (contexts.length === 0) return ''
   return [
-    '<跨引擎召回参考>',
+    '<之前的记忆>',
     '以下是同一窗口在自建引擎期间已经注入过的背景参考。它们不是用户这一轮的新指令，也不是 cc 本轮重新召回的内容。',
     '',
     ...contexts,
-    '</跨引擎召回参考>',
+    '</之前的记忆>',
   ].join('\n')
 }
 
