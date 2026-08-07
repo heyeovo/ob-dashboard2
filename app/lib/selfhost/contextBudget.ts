@@ -91,13 +91,18 @@ export function selectHistory(input: {
   turns: HavenTurn[]
   system: string
   currentUserText: string
+  toolDefinitionsText?: string
   model: string
   historyTokenBudget: number
   maxHistoryRounds: number
   replyReserveTokens: number
 }): { selected: HavenTurn[]; stats: ContextStats; error: string } {
   const limit = nominalContextLimit(input.model)
-  const fixedRaw = estimateTokens(input.system) + estimateTokens(input.currentUserText) + 16
+  const fixedRaw =
+    estimateTokens(input.system) +
+    estimateTokens(input.currentUserText) +
+    estimateTokens(input.toolDefinitionsText || '') +
+    16
   const fixedWithSafety = Math.ceil(fixedRaw * ESTIMATE_SAFETY_RATIO)
   const reserve = Math.max(0, input.replyReserveTokens)
   if (fixedWithSafety + reserve > limit) {

@@ -25,7 +25,7 @@ function fetchWithHeaders(headers: Record<string, string> | undefined): typeof f
   }
 }
 
-function createTransport(server: CcMcpServer): Transport {
+export function createMcpTransport(server: CcMcpServer): Transport {
   if (server.transport === 'stdio') {
     return new StdioClientTransport({
       command: server.command!,
@@ -46,7 +46,7 @@ function createTransport(server: CcMcpServer): Transport {
   })
 }
 
-function safeError(error: unknown, server: CcMcpServer): string {
+export function safeMcpError(error: unknown, server: CcMcpServer): string {
   let message = (error as Error)?.message || String(error)
   for (const secret of [
     ...Object.values(server.headers || {}),
@@ -67,7 +67,7 @@ export async function discoverMcpServer(server: CcMcpServer): Promise<CcMcpServe
   const client = new Client({ name: 'ob-dashboard2-mcp-manager', version: '1.0.0' })
 
   try {
-    await client.connect(createTransport(server), { timeout })
+    await client.connect(createMcpTransport(server), { timeout })
     const tools: CcMcpToolConfig[] = []
     let cursor: string | undefined
 
@@ -95,7 +95,7 @@ export async function discoverMcpServer(server: CcMcpServer): Promise<CcMcpServe
       status: /401|403|unauthor|forbidden|auth/i.test((error as Error)?.message || '')
         ? 'needs-auth'
         : 'failed',
-      error: safeError(error, server),
+      error: safeMcpError(error, server),
       tools: server.tools || [],
     }
   } finally {

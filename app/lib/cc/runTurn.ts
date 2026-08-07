@@ -242,6 +242,19 @@ function crossEngineRecallReference(turns: HavenTurn[]): string {
 function createdBucketIdsFromToolResult(toolName: string, result: string, isError: boolean): string[] {
   if (isError || (toolName !== 'hold' && !toolName.endsWith('__hold'))) return []
   const ids = new Set<string>()
+  try {
+    const parsed = JSON.parse(result) as Record<string, unknown>
+    const bucketId = String(parsed.bucket_id || '')
+    if (
+      parsed.status === 'success' &&
+      parsed.action === 'created' &&
+      /^[a-f0-9]{12}$/i.test(bucketId)
+    ) {
+      ids.add(bucketId)
+    }
+  } catch {
+    // 旧 MCP 返回纯文本，继续走下面的兼容标记。
+  }
   const patterns = [
     /\bbucket_id=([a-f0-9]{12})\b/gi,
     /(?:📔日记|🫧whisper|🗺️轨迹|📌钉选)→([a-f0-9]{12})\b/gi,

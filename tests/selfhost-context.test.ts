@@ -74,5 +74,16 @@ describe('selfhost context budget', () => {
     })
     expect(result.error).toContain('未向上游发送')
   })
-})
 
+  it('counts MCP tool definitions as fixed context', () => {
+    const withoutTools = selectHistory({
+      turns: [], system: 'system', currentUserText: 'now', model: 'claude-opus-4-5',
+      historyTokenBudget: 0, maxHistoryRounds: 0, replyReserveTokens: 32_000,
+    })
+    const withTools = selectHistory({
+      turns: [], system: 'system', currentUserText: 'now', toolDefinitionsText: 'x'.repeat(3_000),
+      model: 'claude-opus-4-5', historyTokenBudget: 0, maxHistoryRounds: 0, replyReserveTokens: 32_000,
+    })
+    expect(withTools.stats.fixed_tokens_estimated).toBeGreaterThan(withoutTools.stats.fixed_tokens_estimated)
+  })
+})

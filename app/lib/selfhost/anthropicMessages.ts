@@ -1,4 +1,24 @@
-export type AnthropicMessage = { role: 'user' | 'assistant'; content: string }
+export type AnthropicTextBlock = { type: 'text'; text: string }
+export type AnthropicToolUseBlock = {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+export type AnthropicToolResultBlock = {
+  type: 'tool_result'
+  tool_use_id: string
+  content: string
+  is_error?: boolean
+}
+export type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock
+export type AnthropicMessage = { role: 'user' | 'assistant'; content: string | AnthropicContentBlock[] }
+
+export type AnthropicToolDefinition = {
+  name: string
+  description?: string
+  input_schema: Record<string, unknown>
+}
 
 export type AnthropicUsage = {
   input_tokens: number
@@ -10,6 +30,8 @@ export type AnthropicUsage = {
 
 export type AnthropicStreamResult = {
   assistantText: string
+  assistantContent: AnthropicContentBlock[]
+  toolUses: AnthropicToolUseBlock[]
   thinkingText: string
   stopReason: string
   usage: AnthropicUsage
@@ -183,6 +205,8 @@ export async function parseAnthropicSse(
     context_input_tokens: 0,
   }
   const process: Array<Record<string, unknown>> = []
+  const toolUses: AnthropicToolUseBlock[] = []
+  const pendingToolUses = new Map<number, AnthropicToolUseBlock & { partialJson: string }>()
   let textPart = 0
   let thinkingPart = 0
   let activeThinking: Record<string, unknown> | null = null
@@ -233,11 +257,54 @@ export async function parseAnthropicSse(
   const accept = (frame: ParsedSse) => {
     const payload = frame.data
     const type = String(payload.type || frame.event || '')
-    if (type === 'ping' || type === 'message_start' || type === 'content_block_start' || type === 'content_block_stop') {
+    if (type === 'ping' || type === 'message_start') {
       if (type === 'message_start') {
         const message = payload.message
         if (message && typeof message === 'object') acceptUsage((message as Record<string, unknown>).usage)
       }
+      return
+    }
+    if (type === 'content_block_start') {
+      const block = payload.content_block
+      if (!block || typeof block !== 'object') return
+      const item = block as Record<string, unknown>
+      if (item.type !== 'tool_use') return
+      const index = numberValue(payload.index)
+      pendingToolUses.set(index, {
+        type: 'tool_use',
+        id: String(item.id || ''),
+        name: String(item.name || ''),
+        input: item.input && typeof item.input === 'object' && !Array.isArray(item.input)
+          ? item.input as Record<string, unknown>
+          : {},
+        partialJson: '',
+      })
+      return
+    }
+    if (type === 'content_block_stop') {
+      const index = numberValue(payload.index)
+      const pending = pendingToolUses.get(index)
+      if (!pending) return
+      if (pending.partialJson) {
+        try {
+          const parsed = JSON.parse(pending.partialJson)
+          pending.input = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? parsed as Record<string, unknown>
+            : {}
+        } catch {
+          throw new AnthropicStreamError(`工具 ${pending.name || pending.id} 的参数不是有效 JSON`, {
+            code: 'invalid_tool_input',
+            retryable: false,
+          })
+        }
+      }
+      toolUses.push({
+        type: 'tool_use',
+        id: pending.id,
+        name: pending.name,
+        input: pending.input,
+      })
+      pendingToolUses.delete(index)
       return
     }
     if (type === 'content_block_delta') {
@@ -259,6 +326,10 @@ export async function parseAnthropicSse(
       } else if (deltaType === 'signature_delta') {
         closeActiveThinking()
         process.push({ type: 'thinking_signature', signature: String(item.signature || '') })
+      } else if (deltaType === 'input_json_delta') {
+        const index = numberValue(payload.index)
+        const pending = pendingToolUses.get(index)
+        if (pending) pending.partialJson += String(item.partial_json || '')
       }
       return
     }
@@ -305,7 +376,10 @@ export async function parseAnthropicSse(
   }
   literalThinkingFilter.finish()
   closeActiveThinking()
-  return { assistantText, thinkingText, stopReason, usage, process }
+  const assistantContent: AnthropicContentBlock[] = []
+  if (assistantText) assistantContent.push({ type: 'text', text: assistantText })
+  assistantContent.push(...toolUses)
+  return { assistantText, assistantContent, toolUses, thinkingText, stopReason, usage, process }
 }
 
 export async function streamAnthropicMessages(input: {
@@ -314,6 +388,7 @@ export async function streamAnthropicMessages(input: {
   model: string
   system: string
   messages: AnthropicMessage[]
+  tools?: AnthropicToolDefinition[]
   maxTokens: number
   signal?: AbortSignal
   onText?: (text: string) => void
@@ -332,6 +407,7 @@ export async function streamAnthropicMessages(input: {
           stream: true,
           system: input.system,
           messages: input.messages,
+          ...(input.tools?.length ? { tools: input.tools } : {}),
         }),
         signal: input.signal,
         cache: 'no-store',

@@ -48,7 +48,8 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
       input.onThinking?.('先想', 12_000)
       input.onText?.('最终回答')
       return {
-        assistantText: '最终回答', thinkingText: '先想', stopReason: 'end_turn', url: 'https://relay.example/v1/messages',
+        assistantText: '最终回答', assistantContent: [{ type: 'text' as const, text: '最终回答' }], toolUses: [],
+        thinkingText: '先想', stopReason: 'end_turn', url: 'https://relay.example/v1/messages',
         usage: {
           input_tokens: 100, output_tokens: 10, cache_read_input_tokens: 20,
           cache_creation_input_tokens: 5, context_input_tokens: 125,
@@ -60,6 +61,11 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
       }
     }),
     persist: vi.fn(async () => persistResult as Awaited<ReturnType<SelfhostRuntimeDependencies['persist']>>),
+    createMcpRuntime: vi.fn(async () => ({
+      tools: [], warnings: [],
+      callTool: vi.fn(async () => ({ text: '', isError: false })),
+      close: vi.fn(async () => undefined),
+    })),
   }
 }
 
@@ -163,6 +169,72 @@ describe('runSelfhostTurn stream contract', () => {
     expect(body).toContain('"persistence_unknown":true')
     expect(body).toContain('"generated_not_saved":false')
     expect(body).not.toContain('event: done')
+  })
+
+  it('executes an allowed MCP tool, persists its truncated result, and records a created hold bucket', async () => {
+    const deps = dependencies({
+      ok: true, stored: true, turnId: 9, roundId: 3, elapsedMs: 2, error: '', httpStatus: 200,
+      idempotentReplay: false, code: '', details: {},
+    })
+    const toolUse = {
+      type: 'tool_use' as const,
+      id: 'tool-1',
+      name: 'mcp__ombre_brain__hold',
+      input: { content: '记住暗号' },
+    }
+    vi.mocked(deps.streamUpstream)
+      .mockResolvedValueOnce({
+        assistantText: '', assistantContent: [toolUse], toolUses: [toolUse], thinkingText: '',
+        stopReason: 'tool_use', url: 'https://relay.example/v1/messages',
+        usage: {
+          input_tokens: 20, output_tokens: 3, cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0, context_input_tokens: 20,
+        },
+        process: [],
+      })
+      .mockImplementationOnce(async input => {
+        input.onText?.('已经记住。')
+        return {
+          assistantText: '已经记住。', assistantContent: [{ type: 'text', text: '已经记住。' }], toolUses: [],
+          thinkingText: '', stopReason: 'end_turn', url: 'https://relay.example/v1/messages',
+          usage: {
+            input_tokens: 30, output_tokens: 5, cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0, context_input_tokens: 30,
+          },
+          process: [{ type: 'text', text: '已经记住。', id: 'text-0' }],
+        }
+      })
+    const callTool = vi.fn(async () => ({
+      text: '{"status":"success","action":"created","bucket_id":"abc123def456","bucket_name":"暗号"}',
+      isError: false,
+      structuredContent: {
+        status: 'success', action: 'created', bucket_id: 'abc123def456', bucket_name: '暗号',
+      },
+      persistedResult: '{"status":"success","action":"created","bucket_id":"abc123def456","bucket_name":"暗号"}',
+    }))
+    deps.createMcpRuntime = vi.fn(async () => ({
+      tools: [{
+        name: toolUse.name, description: '保存记忆', input_schema: { type: 'object' },
+        serverName: 'ombre_brain', remoteName: 'hold', saveResults: true,
+      }],
+      warnings: [], callTool, close: vi.fn(async () => undefined),
+    }))
+
+    const body = await new Response(createSelfhostStream(prepared(), undefined, deps)).text()
+    expect(body).toContain('event: tool')
+    expect(body).toContain('event: tool_result')
+    expect(body).toContain('已经记住。')
+    expect(callTool).toHaveBeenCalledWith({ name: toolUse.name, input: toolUse.input }, expect.any(AbortSignal))
+    expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({
+      createdBucketIds: ['abc123def456'],
+      assistantText: '已经记住。',
+    }))
+    expect(vi.mocked(deps.persist).mock.calls[0][0].raw).toMatchObject({
+      created_bucket_ids: ['abc123def456'],
+      mcp: { tool_calls: 1, max_tool_calls: 8 },
+      tools: [{ name: toolUse.name, status: 'completed', result: expect.stringContaining('abc123def456') }],
+      usage: { input_tokens: 50, output_tokens: 8 },
+    })
   })
 
   it('aborts the upstream and skips persistence when the browser cancels the response stream', async () => {

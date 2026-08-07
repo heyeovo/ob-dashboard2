@@ -20,17 +20,22 @@ import {
 import {
   AnthropicStreamError,
   streamAnthropicMessages,
+  type AnthropicContentBlock,
   type AnthropicMessage,
   type AnthropicStreamResult,
+  type AnthropicToolResultBlock,
   type AnthropicUsage,
 } from '@/app/lib/selfhost/anthropicMessages'
+import { createSelfhostMcpRuntime, type SelfhostMcpRuntime } from '@/app/lib/selfhost/mcp'
 import { encodeSelfhostSse, type SelfhostErrorPayload } from '@/app/lib/selfhost/sse'
 
 const BASE_SYSTEM = [
-  '你正在 Ombre Brain 的纯聊天链路中回复用户。',
-  '本轮没有文件、命令或工具能力；不要声称已经读取文件、执行命令或调用工具。',
+  '你正在 Ombre Brain 的自建聊天链路中回复用户。',
+  '你只能使用本轮明确提供的远程 MCP 工具；没有提供的文件、命令或工具能力一律不可声称已经执行。',
   '优先遵循用户当前消息，并给出直接、诚实的回答。',
 ].join('\n')
+
+export const MAX_SELFHOST_TOOL_CALLS = 8
 
 export type SelfhostRequest = {
   sessionId: string
@@ -69,12 +74,14 @@ export type SelfhostRuntimeDependencies = {
   recall: typeof recallForPrompt
   streamUpstream: typeof streamAnthropicMessages
   persist: typeof recordTurnStrict
+  createMcpRuntime?: typeof createSelfhostMcpRuntime
 }
 
 const DEFAULT_RUNTIME_DEPENDENCIES: SelfhostRuntimeDependencies = {
   recall: recallForPrompt,
   streamUpstream: streamAnthropicMessages,
   persist: recordTurnStrict,
+  createMcpRuntime: createSelfhostMcpRuntime,
 }
 
 export type PreparedResult = PreparedSelfhostTurn | ReplaySelfhostTurn | PreflightFailure
@@ -297,6 +304,65 @@ function persistenceError(prepared: PreparedSelfhostTurn, result: Awaited<Return
   }
 }
 
+function emptyUsage(): AnthropicUsage {
+  return {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    context_input_tokens: 0,
+  }
+}
+
+function addUsage(total: AnthropicUsage, next: AnthropicUsage) {
+  total.input_tokens += next.input_tokens
+  total.output_tokens += next.output_tokens
+  total.cache_read_input_tokens += next.cache_read_input_tokens
+  total.cache_creation_input_tokens += next.cache_creation_input_tokens
+  total.context_input_tokens += next.context_input_tokens
+}
+
+function createdBucketIdFromToolResult(
+  toolName: string,
+  result: { isError: boolean; structuredContent?: Record<string, unknown>; text: string },
+): string {
+  if (result.isError || !toolName.endsWith('__hold')) return ''
+  const structured = result.structuredContent
+  if (
+    structured?.status === 'success' &&
+    structured.action === 'created' &&
+    /^[a-f0-9]{12}$/i.test(String(structured.bucket_id || ''))
+  ) {
+    return String(structured.bucket_id)
+  }
+  const legacy = /\bbucket_id=([a-f0-9]{12})\b/i.exec(result.text)
+  return legacy?.[1] || ''
+}
+
+function appendProcess(
+  target: Array<Record<string, unknown>>,
+  source: Array<Record<string, unknown>>,
+  iteration: number,
+) {
+  for (const item of source) {
+    target.push({
+      ...item,
+      id: item.id ? `${String(item.id)}-${iteration}` : undefined,
+    })
+  }
+}
+
+async function unavailableMcpRuntime(error: unknown): Promise<SelfhostMcpRuntime> {
+  return {
+    tools: [],
+    warnings: [{ server: 'runtime', error: (error as Error).message || String(error) }],
+    async callTool() {
+      return { text: 'MCP 当前不可用', isError: true }
+    },
+    async close() {},
+  }
+}
+
 export function createSelfhostStream(
   prepared: PreparedSelfhostTurn | ReplaySelfhostTurn,
   requestSignal?: AbortSignal,
@@ -341,6 +407,7 @@ export function createSelfhostStream(
         const request = prepared.request
         let generated = false
         let hasOutput = false
+        let mcpRuntime: SelfhostMcpRuntime | null = null
         try {
         send('start', { session_id: request.sessionId, request_id: request.requestId, at: startedAt })
         const recall = prepared.persona.recall_on === false
@@ -374,6 +441,16 @@ export function createSelfhostStream(
         })
 
         const system = assembleSystem(prepared.persona, recall.ok ? recall.additionalContext : '')
+        try {
+          mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal)
+        } catch (error) {
+          mcpRuntime = await unavailableMcpRuntime(error)
+        }
+        const anthropicTools = mcpRuntime.tools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.input_schema,
+        }))
         // 与 cc 保持一致：当前时间只进入本轮模型请求，不改浏览器气泡或 Haven user_text。
         // 预算和实际请求必须使用同一份文本，避免隐藏时间绕过上下文上限计算。
         const currentUserText = `${request.text}\n\n${beijingRuntimeContext()}`
@@ -384,6 +461,7 @@ export function createSelfhostStream(
           turns: history,
           system,
           currentUserText,
+          toolDefinitionsText: anthropicTools.length ? JSON.stringify(anthropicTools) : '',
           model: prepared.settings.model,
           historyTokenBudget: prepared.settings.historyTokenBudget,
           maxHistoryRounds: prepared.settings.maxHistoryRounds,
@@ -402,33 +480,121 @@ export function createSelfhostStream(
           provider_id: prepared.provider.providerId,
           provider_label: prepared.provider.label,
           request_id: request.requestId,
+          mcp_tool_count: anthropicTools.length,
+          mcp_warnings: mcpRuntime.warnings,
         })
 
         const messages = assembleMessages(selection.selected, currentUserText)
-        const upstreamStartedAt = Date.now()
-        const upstream = await dependencies.streamUpstream({
-          baseUrl: prepared.provider.baseUrl,
-          token: prepared.provider.authToken,
-          model: prepared.settings.model,
-          system,
-          messages,
-          maxTokens: replyReserve,
-          signal,
-          onText: text => {
-            hasOutput = true
-            send('delta', { text, id: 'text-0' })
-          },
-          onThinking: (text, thinkingStartedAt) => {
-            hasOutput = true
-            send('thinking', { text, id: 'thinking-0', startedAt: thinkingStartedAt })
-          },
-        })
-        const durationMs = Math.max(0, Date.now() - upstreamStartedAt)
+        const totalUsage = emptyUsage()
+        const process: Array<Record<string, unknown>> = []
+        const toolEvents: Array<Record<string, unknown>> = []
+        const createdBucketIds = new Set<string>()
+        let assistantText = ''
+        let thinkingText = ''
+        let stopReason = ''
+        let upstreamUrl = ''
+        let upstreamDurationMs = 0
+        let toolCallCount = 0
+        let iteration = 0
+        let toolsForRequest = anthropicTools
+
+        while (true) {
+          iteration += 1
+          const upstreamStartedAt = Date.now()
+          let streamedTextThisIteration = false
+          const upstream = await dependencies.streamUpstream({
+            baseUrl: prepared.provider.baseUrl,
+            token: prepared.provider.authToken,
+            model: prepared.settings.model,
+            system,
+            messages,
+            tools: toolsForRequest,
+            maxTokens: replyReserve,
+            signal,
+            onText: text => {
+              hasOutput = true
+              if (!streamedTextThisIteration && assistantText) {
+                send('delta', { text: '\n\n', id: `text-${iteration}` })
+              }
+              streamedTextThisIteration = true
+              send('delta', { text, id: `text-${iteration}` })
+            },
+            onThinking: (text, thinkingStartedAt) => {
+              hasOutput = true
+              send('thinking', { text, id: `thinking-${iteration}`, startedAt: thinkingStartedAt })
+            },
+          })
+          upstreamDurationMs += Math.max(0, Date.now() - upstreamStartedAt)
+          addUsage(totalUsage, upstream.usage)
+          if (upstream.assistantText) {
+            assistantText += assistantText ? `\n\n${upstream.assistantText}` : upstream.assistantText
+          }
+          thinkingText += upstream.thinkingText
+          stopReason = upstream.stopReason
+          upstreamUrl = upstream.url
+          appendProcess(process, upstream.process, iteration)
+
+          if (upstream.toolUses.length === 0) break
+          if (toolsForRequest.length === 0) {
+            const limitText = '工具调用已达到本轮上限，无法继续执行。'
+            assistantText += assistantText ? `\n\n${limitText}` : limitText
+            process.push({ type: 'text', text: limitText, id: `tool-limit-${iteration}` })
+            send('delta', { text: limitText, id: `text-${iteration + 1}` })
+            break
+          }
+
+          const toolResults: AnthropicToolResultBlock[] = []
+          for (const toolUse of upstream.toolUses) {
+            const startedAt = Date.now()
+            const toolEvent: Record<string, unknown> = {
+              name: toolUse.name,
+              id: toolUse.id,
+              input: toolUse.input,
+              status: 'running',
+              startedAt,
+            }
+            toolEvents.push(toolEvent)
+            process.push({ type: 'tool', id: `process-${toolUse.id}`, tool: toolEvent })
+            send('tool', toolEvent)
+
+            const overLimit = toolCallCount >= MAX_SELFHOST_TOOL_CALLS
+            const result = overLimit
+              ? { text: '工具调用已达到本轮上限', isError: true as const }
+              : await mcpRuntime.callTool({ name: toolUse.name, input: toolUse.input }, signal)
+            if (!overLimit) toolCallCount += 1
+            const durationMs = Math.max(0, Date.now() - startedAt)
+            toolEvent.status = result.isError ? 'error' : 'completed'
+            toolEvent.durationMs = durationMs
+            if ('persistedResult' in result && result.persistedResult) toolEvent.result = result.persistedResult
+            if (result.isError) toolEvent.error = result.text
+            send('tool_result', {
+              id: toolUse.id,
+              result: !result.isError && 'persistedResult' in result ? result.persistedResult : undefined,
+              error: result.isError ? result.text : undefined,
+              status: toolEvent.status,
+              durationMs,
+            })
+            const createdBucketId = createdBucketIdFromToolResult(toolUse.name, result)
+            if (createdBucketId) createdBucketIds.add(createdBucketId)
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: result.text,
+              is_error: result.isError || undefined,
+            })
+          }
+
+          const assistantContent: AnthropicContentBlock[] = upstream.assistantContent
+          messages.push({ role: 'assistant', content: assistantContent })
+          messages.push({ role: 'user', content: toolResults })
+          if (toolCallCount >= MAX_SELFHOST_TOOL_CALLS) toolsForRequest = []
+        }
+
         const usage = {
-          ...upstream.usage,
-          durationMs,
-          tokensPerSec: durationMs > 0
-            ? Math.round((upstream.usage.output_tokens / (durationMs / 1000)) * 10) / 10
+          ...totalUsage,
+          durationMs: upstreamDurationMs,
+          tokensPerSec: upstreamDurationMs > 0
+            ? Math.round((totalUsage.output_tokens / (upstreamDurationMs / 1000)) * 10) / 10
             : 0,
         }
         generated = true
@@ -440,12 +606,13 @@ export function createSelfhostStream(
           expectedLastRoundId: request.expectedLastRoundId,
           personaId: request.personaId,
           userText: request.text,
-          assistantText: upstream.assistantText,
+          assistantText,
           source: 'selfhost',
           model: prepared.settings.model,
           client: `ob2-selfhost/${request.personaId}`,
           route: '/api/cc-chat-selfhost',
           recalledBucketIds: recall.ok ? recall.recalledIds : [],
+          createdBucketIds: [...createdBucketIds],
           raw: {
             version: 1,
             engine: 'selfhost',
@@ -462,10 +629,18 @@ export function createSelfhostStream(
             },
             context: selection.stats,
             usage,
-            stop_reason: upstream.stopReason,
-            thinking: upstream.thinkingText,
-            process: upstream.process,
-            upstream_url: upstream.url,
+            stop_reason: stopReason,
+            thinking: thinkingText,
+            process,
+            tools: toolEvents,
+            created_bucket_ids: [...createdBucketIds],
+            mcp: {
+              available_tools: anthropicTools.map(tool => tool.name),
+              warnings: mcpRuntime.warnings,
+              tool_calls: toolCallCount,
+              max_tool_calls: MAX_SELFHOST_TOOL_CALLS,
+            },
+            upstream_url: upstreamUrl,
           },
           signal,
         })
@@ -497,6 +672,7 @@ export function createSelfhostStream(
             generated_not_saved: generated || hasOutput,
           } satisfies SelfhostErrorPayload)
         } finally {
+          await mcpRuntime?.close()
           requestSignal?.removeEventListener('abort', onRequestAbort)
           if (!cancelled) controller.close()
         }

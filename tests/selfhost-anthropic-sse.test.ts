@@ -67,6 +67,22 @@ describe('Anthropic-compatible SSE parser', () => {
     await expect(promise).rejects.toMatchObject({ code: 'overloaded_error', message: 'busy' })
   })
 
+  it('parses a streamed tool_use block and its fragmented JSON input', async () => {
+    const result = await parseAnthropicSse(chunked([
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool-1","name":"mcp__ombre__hold","input":{}}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"content\\":\\"暗"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"号\\"}"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":4}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ]))
+    expect(result.toolUses).toEqual([{
+      type: 'tool_use', id: 'tool-1', name: 'mcp__ombre__hold', input: { content: '暗号' },
+    }])
+    expect(result.assistantContent).toEqual(result.toolUses)
+    expect(result.stopReason).toBe('tool_use')
+  })
+
   it('keeps native thinking but removes a different literal thinking block from streamed text', async () => {
     const text: string[] = []
     const thinking: string[] = []
@@ -133,6 +149,7 @@ describe('Anthropic-compatible SSE parser', () => {
       model: 'claude-opus-4-6-thinking',
       system: 'persona system',
       messages: [{ role: 'user', content: 'hello' }],
+      tools: [{ name: 'mcp__ombre__hold', description: '保存记忆', input_schema: { type: 'object' } }],
       maxTokens: 32_000,
     })
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -142,6 +159,7 @@ describe('Anthropic-compatible SSE parser', () => {
     expect(body).toMatchObject({
       model: 'claude-opus-4-6-thinking', max_tokens: 32_000, stream: true,
       system: 'persona system', messages: [{ role: 'user', content: 'hello' }],
+      tools: [{ name: 'mcp__ombre__hold', description: '保存记忆', input_schema: { type: 'object' } }],
     })
     expect(body).not.toHaveProperty('thinking')
   })
