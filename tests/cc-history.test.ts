@@ -129,4 +129,20 @@ describe('ccHistory：旧历史兼容', () => {
       modules: [{ key: 'memory_card', text: '旧召回正文' }],
     })
   })
+
+  it('把 Haven 图片元数据恢复成私有缩略图，清除后只留占位', () => {
+    const messages = turnsToMessages([turn({
+      id: 9,
+      user_text: '',
+      attachments: [{
+        id: 'image-1', session_id: 'session-1', filename: '截图.webp', mime_type: 'image/webp',
+        byte_size: 1234, sha256: 'abc', cleared: false,
+      }, {
+        id: 'image-2', session_id: 'session-1', filename: '旧图.webp', mime_type: 'image/webp',
+        byte_size: 4321, sha256: 'def', cleared: true,
+      }],
+    })])
+    expect(messages[0].attachments?.[0].previewUrl).toContain('/api/cc-attachments/image-1')
+    expect(messages[0].attachments?.[1]).toMatchObject({ cleared: true, previewUrl: undefined })
+  })
 })

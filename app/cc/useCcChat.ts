@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  CcAttachment,
   CcEngine,
   CcMessage,
   CcPermDecided,
@@ -64,6 +65,7 @@ type RetryTurn = {
   requestId: string
   expectedLastRoundId: number
   engine: CcEngine
+  attachmentIds: string[]
 }
 
 export function useCcChat(personaId = '', isRemote: boolean | null = false) {
@@ -845,14 +847,21 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [effectiveEngine, sessionId])
 
   const send = useCallback(
-    async (rawText: string, retry?: RetryTurn) => {
+    async (rawText: string, retry?: RetryTurn, selectedAttachments: CcAttachment[] = []) => {
       const text = rawText.trim()
-      if (!text || sending || !sessionId) return
+      const attachmentIds = retry?.attachmentIds || selectedAttachments.map(item => item.id)
+      if ((!text && attachmentIds.length === 0) || sending || !sessionId) return
 
       const requestId = retry?.requestId || newTurnRequestId()
       const expectedLastRoundId = retry?.expectedLastRoundId ?? lastRoundIdRef.current
       const turnEngine = retry?.engine || effectiveEngine
-      const userMsg: CcMessage = { id: localId(), role: 'user', text, createdAt: Date.now() }
+      const userMsg: CcMessage = {
+        id: localId(),
+        role: 'user',
+        text,
+        attachments: selectedAttachments,
+        createdAt: Date.now(),
+      }
       const assistantId = retry?.assistantId || localId()
       const assistantMsg: CcMessage = {
         id: assistantId,
@@ -867,6 +876,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         deliveryState: 'generating',
         retryText: text,
         retryExpectedLastRoundId: expectedLastRoundId,
+        retryAttachmentIds: attachmentIds,
       }
       if (retry) {
         setMessages(previous => previous.map(message => message.id === assistantId ? assistantMsg : message))
@@ -893,6 +903,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           expected_last_round_id: expectedLastRoundId,
           persona_id: personaId,
           text,
+          attachment_ids: attachmentIds,
         }
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -1171,8 +1182,53 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       requestId: message.requestId,
       expectedLastRoundId: message.retryExpectedLastRoundId,
       engine: message.engine,
+      attachmentIds: message.retryAttachmentIds || [],
     })
   }, [send])
+
+  const clearAttachment = useCallback(async (messageId: string, attachmentId: string) => {
+    try {
+      const response = await fetch(`/api/cc-attachments/${encodeURIComponent(attachmentId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || '清除图片失败'))
+      setMessages(previous => previous.map(message => message.id === messageId
+        ? {
+            ...message,
+            attachments: message.attachments?.map(item => item.id === attachmentId
+              ? { ...item, cleared: true, previewUrl: undefined }
+              : item),
+          }
+        : message))
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '清除图片失败')
+      return false
+    }
+  }, [sessionId])
+
+  const clearAllAttachments = useCallback(async () => {
+    try {
+      const response = await fetch('/api/cc-attachments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, all: true }),
+      })
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || '清除窗口图片失败'))
+      setMessages(previous => previous.map(message => ({
+        ...message,
+        attachments: message.attachments?.map(item => ({ ...item, cleared: true, previewUrl: undefined })),
+      })))
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '清除窗口图片失败')
+      return false
+    }
+  }, [sessionId])
 
   // 轮数取两者的大者：进程活着时它自己的计数是准的（这一轮刚加完，库还没写）；
   // 进程没了就用历史行数。
@@ -1217,6 +1273,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     changeEngine,
     latestTurn,
     retryPersistence,
+    clearAttachment,
+    clearAllAttachments,
     isRemote,
     // 5.2：模式 + 本窗口设置
     mode,

@@ -36,13 +36,18 @@ export async function POST(request: NextRequest) {
     requestId: String(body.request_id || '').trim(),
     personaId: String(body.persona_id || '').trim(),
     text: String(body.text || ''),
+    attachmentIds: Array.isArray(body.attachment_ids)
+      ? [...new Set(body.attachment_ids.map(String).map(value => value.trim()).filter(Boolean))]
+      : [],
     expectedLastRoundId: Number(body.expected_last_round_id),
   }
   if (!parsed.sessionId) return invalid('session_id 不能为空', parsed.requestId)
   if (!parsed.requestId) return invalid('request_id 不能为空')
   if (parsed.requestId.length > 128) return invalid('request_id 不能超过 128 个字符', parsed.requestId)
   if (!parsed.personaId) return invalid('persona_id 不能为空', parsed.requestId)
-  if (!parsed.text.trim()) return invalid('text 不能为空', parsed.requestId)
+  const attachmentIds = parsed.attachmentIds || []
+  if (!parsed.text.trim() && attachmentIds.length === 0) return invalid('文字和图片不能同时为空', parsed.requestId)
+  if (attachmentIds.length > 4) return invalid('每轮最多 4 张图片', parsed.requestId)
   if (!Number.isInteger(parsed.expectedLastRoundId) || parsed.expectedLastRoundId < 0) {
     return invalid('expected_last_round_id 必须是大于或等于 0 的整数', parsed.requestId)
   }
@@ -53,4 +58,3 @@ export async function POST(request: NextRequest) {
   }
   return sseResponse(createSelfhostStream(prepared, request.signal))
 }
-

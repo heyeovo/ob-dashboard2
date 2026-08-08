@@ -89,6 +89,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `provider-relay/route.ts` | 上游 provider 测试中继 |
 | `cc-chat/route.ts` | cc 聊天主入口：严格发送 payload、Haven 幂等预检/重放、SSE 流式执行，写入成功后才完成 |
 | `cc-chat-selfhost/route.ts` | 自建聊天入口：服务端读取 Haven 配置/历史/MCP 配置，按 cc 同一格式注入本轮隐藏北京时间，直连 Anthropic-compatible SSE 并执行远程 MCP 工具循环，记录上游生成耗时/速度，严格写回成功后才完成 |
+| `cc-attachments/route.ts` + `[id]/route.ts` | `/cc` 图片上传、私有读取与清除：浏览器先压缩，服务端用网关密钥转存 Haven；浏览器不接触密钥或永久公开 URL |
 | `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态：读取/保存本地引擎首选、列出软删除窗口、严格永久删除 |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
 | `cc-personas/route.ts` | 协作者（persona 列表/保存/删除） |
@@ -139,7 +140,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 `api.ts`：`getSessionCookie()`（带 5min 缓存）、`clearSessionCookie()`、`getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`。
 
-cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes.ts`）、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts`、`ccEnv.ts`、`ccDirs.ts`、`haven*`（`havenPersonas.ts`/`havenUpstream.ts`/`havenTurns.ts`/`havenRecall.ts`/`havenPermissions.ts`）、`cc/runTurn.ts`、`cc/ccOptions.ts`、`cc/ccHistory.ts`、`cc/processCollector.ts`、`cc/sseEvents.ts`、`cc/turnState.ts`、`selfhost/mcp.ts`、`polarisExport.ts`、`format.ts`、`ccDiff.ts`。
+cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes.ts`）、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts`、`ccEnv.ts`、`ccDirs.ts`、`haven*`（`havenPersonas.ts`/`havenUpstream.ts`/`havenTurns.ts`/`havenAttachments.ts`/`havenRecall.ts`/`havenPermissions.ts`）、`cc/runTurn.ts`、`cc/ccOptions.ts`、`cc/ccHistory.ts`、`cc/processCollector.ts`、`cc/sseEvents.ts`、`cc/turnState.ts`、`selfhost/mcp.ts`、`polarisExport.ts`、`format.ts`、`ccDiff.ts`。
 
 ---
 
@@ -198,6 +199,8 @@ params 是 Promise，必须 `const { id } = await params`。
 `cc-chat-selfhost/route.ts` 是独立的无状态聊天链路：浏览器只提交 `session_id`、`request_id`、`expected_last_round_id`、`persona_id` 和当前正文；服务端从 Haven 读取 Persona、窗口覆盖、完整分页历史、上游密钥与 MCP 配置，因此 cc 写入的历史会原样进入 selfhost 上下文，密钥和 MCP 请求头不返回浏览器。每轮当前用户内容末尾会按 cc 同一格式追加隐藏的北京时间运行时块；预算计算和真实上游请求使用同一份带时间文本，但浏览器气泡与 Haven `user_text` 仍只保存用户原话。预检阶段访问 Haven 的配置、Persona、会话与历史 GET 遇到连接级异常会短暂重试一次；HTTP 错误、写入和主动取消不重试，最终网络错误保留 undici `cause` 便于定位。`lib/selfhost/` 负责 Persona → recall 参考块、保守上下文预算、Anthropic-compatible `/v1/messages` 请求与 SSE 解析，以及远程 MCP 工具循环：只连接已启用的 HTTP/SSE server，并按服务端实时 `listTools` schema 注入权限最终为 `allow` 的工具；`ask`、`deny` 和 stdio 不注入。工具定义计入固定上下文预算，一轮最多执行 8 次工具调用；结果按现有 MCP 设置决定是否把截断正文持久化，状态与调用元数据仍随轮次保存。连接、发现或调用失败会作为工具错误/警告返回，不阻断普通聊天；达到上限后不再提供工具，要求模型完成正文。usage 累加各次上游调用，并只记录上游生成耗时，不混入工具、召回和 Haven 保存耗时。每个 selfhost 响应流持有独立 AbortController；浏览器取消 response stream 或入站 request signal 中断时都会 abort 召回、上游 fetch 与尚未完成的 Haven 写入，取消后不再发送 SSE 或保存该轮。cc 与 selfhost 召回前都读取 Haven 持久排除集合（已召回桶 + 本窗口新建桶），本轮召回/新建 ID 随严格写入落回 Haven，不依赖进程内缓存或 localStorage；MCP `hold` 只有结构化结果为 `status=success, action=created` 时才追加 `created_bucket_ids`，`merged/commented` 不算新桶，cc 仍兼容旧文本标记。selfhost 还会读取历史轮次 `raw_json.recall`，把此前已注入、因此不会再次召回的正文随对应历史轮次继续重放，并计入历史预算；实时和刷新后的召回按钮都从同一持久正文展示。上游完成后使用 Haven 严格 compare-and-append，写入成功才发送 `done`；幂等命中从 Haven 原轮次重放，生成后 409/写库失败只发送结构化 `error`。thinking 不设本地开关或请求参数：正式 `thinking_delta` 照常展示与保存；中转站若又把另一份字面 `<thinking>...</thinking>` 或 `<think>...</think>` 放进 `text_delta`，流式解析器会分别按配对标签跨 chunk 剔除该区段，避免进入正文和历史。
 
 前端 `useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`，不会覆盖本地首选；引擎切换保持同一个 `session_id`。cc 与 selfhost 各自保留供应商/模型选择：cc provider 随 SDK 子进程锁定，selfhost 每轮重新直连，允许在同一窗口途中换中转站；selfhost 选择合并写入 Haven `selfhost_overrides`，保存成功才显示生效，重新打开窗口也从该事实源恢复。Vercel 恢复窗口时，设置卡按实际 `effective_engine` 显示 selfhost 覆盖，不会因本地首选仍为 cc 而回退到全局默认；卡内“正在用 / 上下文”与页面顶部共用最后一轮实际 Provider、模型和上下文元数据，缺少历史元数据时才回退到当前选择或 cc 进程 stats。Polaris/gateway 导入窗口在 selfhost 下可直接用 Haven 历史原窗续聊，切到 cc 时仍要求换窗启动新的 SDK session。浏览器始终不向严格聊天请求提交上游地址或密钥。生成后未保存、`persistence_unknown`、409 跨设备冲突、保存中、正常完成和幂等重放均为独立界面状态。
+
+图片附件第一版只支持 JPEG/PNG/WebP：原图选择上限 25MB，每轮最多 4 张，浏览器缩到最长边 2000px 并转成 WebP，上传后的硬上限 2MB。Haven 保存压缩文件和附件元数据，严格请求只携带有序 `attachment_ids`；cc 组装 Agent SDK image block，selfhost 组装 Anthropic-compatible base64 image block，并只重放最近 2 个 selfhost 图片轮次。图片不进入 handoff 或跨引擎补齐；清除会永久删除 Haven 文件并保留“图片已清除”占位，但不能从已建立的 cc SDK 私有上下文中单独撤回。
 
 ---
 

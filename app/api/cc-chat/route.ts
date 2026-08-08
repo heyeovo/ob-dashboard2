@@ -23,6 +23,7 @@ import { clearRecallPrefs, runTurn, setRecallPrefs } from '@/app/lib/cc/runTurn'
 import { clearTurnBucket } from '@/app/lib/cc/processCollector'
 import { encodeSse } from '@/app/lib/cc/sseEvents'
 import { getTurnByRequestId, type HavenTurn } from '@/app/lib/havenTurns'
+import { resolveAttachments } from '@/app/lib/havenAttachments'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
 //
@@ -52,6 +53,7 @@ type ChatBody = {
   request_id?: string
   expected_last_round_id?: number
   text?: string
+  attachment_ids?: string[]
   cred?: string
   model?: string
   semantic?: boolean
@@ -330,11 +332,15 @@ export async function POST(request: NextRequest) {
   const requestId = (body.request_id || '').trim()
   const personaId = (body.persona_id || '').trim()
   const text = (body.text || '').trim()
+  const attachmentIds = Array.isArray(body.attachment_ids)
+    ? [...new Set(body.attachment_ids.map(String).map(value => value.trim()).filter(Boolean))]
+    : []
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
   if (!requestId) return Response.json({ ok: false, error: 'request_id 为空' }, { status: 400 })
   if (requestId.length > 128) return Response.json({ ok: false, error: 'request_id 不能超过 128 个字符' }, { status: 400 })
   if (!personaId) return Response.json({ ok: false, error: 'persona_id 为空' }, { status: 400 })
-  if (!text) return Response.json({ ok: false, error: 'text 为空' }, { status: 400 })
+  if (!text && attachmentIds.length === 0) return Response.json({ ok: false, error: '文字和图片不能同时为空' }, { status: 400 })
+  if (attachmentIds.length > 4) return Response.json({ ok: false, error: '每轮最多 4 张图片' }, { status: 400 })
   const expectedLastRoundId = Number(body.expected_last_round_id)
   if (!Number.isInteger(expectedLastRoundId) || expectedLastRoundId < 0) {
     return Response.json({ ok: false, error: 'expected_last_round_id 必须是大于或等于 0 的整数' }, { status: 400 })
@@ -350,6 +356,7 @@ export async function POST(request: NextRequest) {
     const matches = existing.turn.session_id === sessionId
       && existing.turn.user_text === text
       && storedPersonaId === personaId
+      && JSON.stringify((existing.turn.attachments || []).map(item => item.id)) === JSON.stringify(attachmentIds)
     if (!matches) {
       return Response.json({
         ok: false,
@@ -361,6 +368,12 @@ export async function POST(request: NextRequest) {
   }
 
   const { persona, config, handoff } = await loadTurnInputs(body)
+  let attachments
+  try {
+    attachments = await resolveAttachments(attachmentIds, sessionId)
+  } catch (error) {
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : '图片读取失败' }, { status: 400 })
+  }
 
   const encoder = new TextEncoder()
   const startedAt = reqAt
@@ -404,6 +417,7 @@ export async function POST(request: NextRequest) {
         expectedLastRoundId,
         personaId,
         text,
+        attachments,
         persona,
         config,
         handoff,

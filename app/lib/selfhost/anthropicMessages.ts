@@ -1,4 +1,8 @@
 export type AnthropicTextBlock = { type: 'text'; text: string }
+export type AnthropicImageBlock = {
+  type: 'image'
+  source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/webp'; data: string }
+}
 export type AnthropicToolUseBlock = {
   type: 'tool_use'
   id: string
@@ -11,7 +15,7 @@ export type AnthropicToolResultBlock = {
   content: string
   is_error?: boolean
 }
-export type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock
+export type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock | AnthropicToolUseBlock | AnthropicToolResultBlock
 export type AnthropicMessage = { role: 'user' | 'assistant'; content: string | AnthropicContentBlock[] }
 
 export type AnthropicToolDefinition = {

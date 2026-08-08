@@ -53,6 +53,7 @@ import {
 import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
+import type { ResolvedAttachment } from '@/app/lib/havenAttachments'
 
 /* ── 这个会话的两个召回开关 ── */
 
@@ -86,6 +87,7 @@ export type RunTurnInput = {
   personaId: string
   /** 用户原话（不带任何注入） */
   text: string
+  attachments: ResolvedAttachment[]
   persona: HavenPersona | null
   /** 这一轮真正生效的配置快照（route 从 body + Haven 配置解析） */
   config: TurnConfig
@@ -340,6 +342,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     expectedLastRoundId,
     personaId,
     text,
+    attachments: inputAttachments,
     persona,
     config,
     handoff,
@@ -348,6 +351,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     close,
     stamp,
   } = input
+  const attachments = inputAttachments || []
   const state = new TurnState(sessionId)
   const startedAt = Date.now()
 
@@ -507,9 +511,22 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 下一轮它成为固定历史，不会改写旧时间，也不会让稳定的系统提示/历史缓存前缀失效。
     content += `\n\n${beijingRuntimeContext()}`
 
+    const sdkContent = attachments.length > 0
+      ? [
+          ...attachments.map(attachment => ({
+            type: 'image' as const,
+            source: {
+              type: 'base64' as const,
+              media_type: attachment.mime_type,
+              data: attachment.base64,
+            },
+          })),
+          { type: 'text' as const, text: content },
+        ]
+      : content
     const userMessage: SDKUserMessage = {
       type: 'user',
-      message: { role: 'user', content },
+      message: { role: 'user', content: sdkContent },
       parent_tool_use_id: null,
       uuid: turnUuid,
     }
@@ -729,12 +746,20 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         client: `ob2-chat/${personaId}`,
         route: '/api/cc-chat',
         source: 'cc',
+        attachmentIds: attachments.map(item => item.id),
         recalledBucketIds: recalledMemoryIds,
         createdBucketIds: [...createdBucketIds],
         raw: {
           version: 1,
           engine: 'cc',
           request_id: requestId,
+          attachments: attachments.map(item => ({
+            id: item.id,
+            filename: item.filename,
+            mime_type: item.mime_type,
+            byte_size: item.byte_size,
+            sha256: item.sha256,
+          })),
           cred_mode: config.cred,
           // 用户点了停止：这一轮是被打断的半截回复。读历史时前端靠它显示「已停止」
           interrupted: interrupted || undefined,

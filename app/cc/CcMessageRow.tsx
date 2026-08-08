@@ -56,6 +56,7 @@ type Props = {
   onEditAndResend?: (text: string) => void
   onOpenRecall?: (message: CcMessage) => void
   onRetryPersistence?: (message: CcMessage) => void
+  onClearAttachment?: (messageId: string, attachmentId: string) => void
 }
 
 export default function CcMessageRow({
@@ -66,6 +67,7 @@ export default function CcMessageRow({
   onEditAndResend,
   onOpenRecall,
   onRetryPersistence,
+  onClearAttachment,
 }: Props) {
   const isUser = message.role === 'user'
   const shownModel = modelLabel(message.model || '')
@@ -152,7 +154,44 @@ export default function CcMessageRow({
             onPointerMove={clearTimer}
             onPointerLeave={clearTimer}
           >
-            {message.text}
+            {message.attachments?.length ? (
+              <div className={`grid max-w-[360px] gap-2 ${message.attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {message.attachments.map(attachment => (
+                  <div key={attachment.id} className="group/image relative overflow-hidden rounded-xl bg-black/5">
+                    {attachment.cleared || !attachment.previewUrl ? (
+                      <div className="flex h-24 min-w-40 items-center justify-center px-3 text-xs text-[var(--color-text-tertiary)]">
+                        图片已清除
+                      </div>
+                    ) : (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element -- Haven 私有路由，不走公开图片优化器 */}
+                        <img
+                          src={attachment.previewUrl}
+                          alt={attachment.filename}
+                          loading="lazy"
+                          className="max-h-64 w-full object-contain"
+                        />
+                        {onClearAttachment ? (
+                          <button
+                            type="button"
+                            aria-label={`清除图片 ${attachment.filename}`}
+                            title="从 Haven 永久清除图片"
+                            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-black/55 text-sm text-white opacity-100 transition-opacity hover:bg-black/70 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
+                            onClick={event => {
+                              event.stopPropagation()
+                              onClearAttachment(message.id, attachment.id)
+                            }}
+                          >
+                            ×
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {message.text ? <div className={message.attachments?.length ? 'mt-2' : ''}>{message.text}</div> : null}
           </div>
 
           {menuOpen ? (

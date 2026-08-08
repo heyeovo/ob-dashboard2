@@ -14,6 +14,7 @@
 // 写库失败不能把已经答完的一轮对话弄崩。
 
 import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
+import type { HavenAttachment } from './havenAttachments'
 
 const HAVEN_BASE = (
   process.env.HAVEN_GATEWAY_URL ||
@@ -43,6 +44,7 @@ export type HavenTurn = {
   raw_json?: string
   request_id?: string
   persona_id?: string
+  attachments?: HavenAttachment[]
 }
 
 export type HavenConversationSession = {
@@ -103,6 +105,7 @@ export type StrictRecordTurnInput = RecordTurnInput & {
   personaId: string
   recalledBucketIds?: string[]
   createdBucketIds?: string[]
+  attachmentIds?: string[]
 }
 
 export type StrictRecordTurnResult = RecordTurnResult & {
@@ -300,6 +303,7 @@ export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<St
       client: input.client || 'ob2-selfhost',
       route: input.route || '/api/cc-chat-selfhost',
       raw: input.raw,
+      attachment_ids: input.attachmentIds || [],
       recalled_bucket_ids: input.recalledBucketIds || [],
       created_bucket_ids: input.createdBucketIds || [],
     },

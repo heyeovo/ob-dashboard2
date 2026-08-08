@@ -15,6 +15,17 @@ export type CcDeliveryState =
   | 'conflict'
   | 'stopped'
 
+export type CcAttachment = {
+  id: string
+  sessionId: string
+  filename: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+  byteSize: number
+  sha256: string
+  cleared?: boolean
+  previewUrl?: string
+}
+
 export type CcTurnContext = {
   estimator?: string
   modelContextLimit: number
@@ -79,6 +90,7 @@ export type CcMessage = {
   id: string
   role: CcRole
   text: string
+  attachments?: CcAttachment[]
   /** 助手侧的 thinking，可折叠 */
   thinking?: string
   /** 思考用了多久（毫秒）。显示成「深度思考 (2.3s)」 */
@@ -118,6 +130,7 @@ export type CcMessage = {
   /** 保存结果未知时，用同一个 request_id 原位核对/重放。 */
   retryText?: string
   retryExpectedLastRoundId?: number
+  retryAttachmentIds?: string[]
 }
 
 /**

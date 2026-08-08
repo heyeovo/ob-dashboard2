@@ -5,6 +5,7 @@ export const DEFAULT_REPLY_RESERVE_TOKENS = 32_000
 export const DEFAULT_MAX_HISTORY_ROUNDS = 0
 export const TOKEN_ESTIMATOR = 'utf8-bytes-div-3-v1'
 export const ESTIMATE_SAFETY_RATIO = 1.05
+export const ESTIMATED_IMAGE_TOKENS = 2_500
 
 export type SelfhostSettings = {
   providerId: string
@@ -83,14 +84,20 @@ export function estimateTokens(text: string): number {
   return text ? Math.max(1, Math.ceil(new TextEncoder().encode(text).length / 3)) : 0
 }
 
-export function estimateTurnTokens(turn: Pick<HavenTurn, 'user_text' | 'assistant_text'>): number {
-  return estimateTokens(turn.user_text) + estimateTokens(turn.assistant_text) + 12
+export function estimateTurnTokens(
+  turn: Pick<HavenTurn, 'user_text' | 'assistant_text'> & Pick<Partial<HavenTurn>, 'attachments' | 'source'>,
+): number {
+  const attachments = turn.source === 'selfhost' && Array.isArray(turn.attachments)
+    ? turn.attachments.filter(item => !item.cleared).length
+    : 0
+  return estimateTokens(turn.user_text) + estimateTokens(turn.assistant_text) + attachments * ESTIMATED_IMAGE_TOKENS + 12
 }
 
 export function selectHistory(input: {
   turns: HavenTurn[]
   system: string
   currentUserText: string
+  currentImageCount?: number
   toolDefinitionsText?: string
   model: string
   historyTokenBudget: number
@@ -101,6 +108,7 @@ export function selectHistory(input: {
   const fixedRaw =
     estimateTokens(input.system) +
     estimateTokens(input.currentUserText) +
+    Math.max(0, input.currentImageCount || 0) * ESTIMATED_IMAGE_TOKENS +
     estimateTokens(input.toolDefinitionsText || '') +
     16
   const fixedWithSafety = Math.ceil(fixedRaw * ESTIMATE_SAFETY_RATIO)

@@ -335,6 +335,7 @@ export default function CcChatPage() {
                 onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
                 onOpenRecall={setRecallDetail}
                 onRetryPersistence={chat.retryPersistence}
+                onClearAttachment={chat.clearAttachment}
               />
             ),
           )
@@ -387,10 +388,14 @@ export default function CcChatPage() {
           </div>
         ) : (
           <CcComposer
+            key={chat.sessionId}
+            sessionId={chat.sessionId}
             value={chat.draft}
             onChange={chat.setDraft}
-            onSubmit={() => chat.send(chat.draft)}
+            onSubmit={attachments => chat.send(chat.draft, undefined, attachments)}
             onStop={chat.stop}
+            onClearAll={chat.clearAllAttachments}
+            onError={chat.setError}
             sending={chat.sending}
           />
         )}

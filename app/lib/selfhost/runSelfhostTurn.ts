@@ -10,6 +10,7 @@ import {
 } from '@/app/lib/havenTurns'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
+import { resolveAttachments, type ResolvedAttachment } from '@/app/lib/havenAttachments'
 import {
   DEFAULT_REPLY_RESERVE_TOKENS,
   resolveSelfhostSettings,
@@ -43,6 +44,7 @@ export type SelfhostRequest = {
   expectedLastRoundId: number
   personaId: string
   text: string
+  attachmentIds?: string[]
 }
 
 type Provider = { providerId: string; baseUrl: string; authToken: string; label: string }
@@ -56,6 +58,7 @@ export type PreparedSelfhostTurn = {
   bucketExclusionIds: string[]
   settings: SelfhostSettings
   provider: Provider
+  currentAttachments: ResolvedAttachment[]
 }
 
 export type ReplaySelfhostTurn = {
@@ -114,7 +117,12 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
   if (!replay.ok) return preflightError(request.requestId, 502, 'haven_read_failed', `读取幂等状态失败：${replay.error}`)
   if (replay.found && replay.turn) {
     const turn = replay.turn
-    if (turn.session_id !== request.sessionId || turn.persona_id !== request.personaId || turn.user_text !== request.text) {
+    if (
+      turn.session_id !== request.sessionId
+      || turn.persona_id !== request.personaId
+      || turn.user_text !== request.text
+      || JSON.stringify((turn.attachments || []).map(item => item.id)) !== JSON.stringify(request.attachmentIds || [])
+    ) {
       return preflightError(request.requestId, 409, 'request_id_reused', '同一个发送标识被用于不同内容，请重新发送', {
         retryable: false,
       })
@@ -165,6 +173,13 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
   if (!provider) return preflightError(request.requestId, 400, 'provider_not_configured', '没有可用于自建引擎的中转站，请先保存上游配置')
   if (!provider.authToken) return preflightError(request.requestId, 400, 'provider_token_missing', '这个中转站没有服务端 token')
 
+  let currentAttachments: ResolvedAttachment[]
+  try {
+    currentAttachments = await resolveAttachments(request.attachmentIds || [], request.sessionId)
+  } catch (error) {
+    return preflightError(request.requestId, 400, 'attachment_read_failed', error instanceof Error ? error.message : '图片读取失败')
+  }
+
   return {
     kind: 'ready',
     request,
@@ -174,6 +189,7 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     bucketExclusionIds: sessionResult.bucketExclusionIds,
     settings,
     provider,
+    currentAttachments,
   }
 }
 
@@ -192,13 +208,43 @@ export function assembleSystem(persona: HavenPersona, recalledContext: string): 
   return [BASE_SYSTEM, buildPersonaAppend(persona), recallSystemBlock(recalledContext)].filter(Boolean).join('\n\n')
 }
 
-export function assembleMessages(history: HavenTurn[], currentUserText: string): AnthropicMessage[] {
+export function assembleMessages(
+  history: HavenTurn[],
+  currentUserText: string,
+  currentAttachments: ResolvedAttachment[] = [],
+  historyAttachments: Map<number, ResolvedAttachment[]> = new Map(),
+): AnthropicMessage[] {
   const messages: AnthropicMessage[] = []
   for (const turn of history) {
-    if (turn.user_text) messages.push({ role: 'user', content: turn.user_text })
+    const images = historyAttachments.get(turn.id) || []
+    if (turn.user_text || images.length > 0) {
+      messages.push({
+        role: 'user',
+        content: images.length > 0
+          ? [
+              ...images.map(item => ({
+                type: 'image' as const,
+                source: { type: 'base64' as const, media_type: item.mime_type, data: item.base64 },
+              })),
+              ...(turn.user_text ? [{ type: 'text' as const, text: turn.user_text }] : []),
+            ]
+          : turn.user_text,
+      })
+    }
     if (turn.assistant_text) messages.push({ role: 'assistant', content: turn.assistant_text })
   }
-  messages.push({ role: 'user', content: currentUserText })
+  messages.push({
+    role: 'user',
+    content: currentAttachments.length > 0
+      ? [
+          ...currentAttachments.map(item => ({
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: item.mime_type, data: item.base64 },
+          })),
+          { type: 'text' as const, text: currentUserText },
+        ]
+      : currentUserText,
+  })
   return messages
 }
 
@@ -236,6 +282,22 @@ export function historyWithPersistedRecall(history: HavenTurn[]): HavenTurn[] {
       user_text: [recallSystemBlock(recalledContext), turn.user_text].filter(Boolean).join('\n\n'),
     }
   })
+}
+
+async function hydrateRecentHistoryImages(
+  history: HavenTurn[],
+  sessionId: string,
+): Promise<Map<number, ResolvedAttachment[]>> {
+  const candidates = history
+    .filter(turn => turn.source === 'selfhost' && (turn.attachments || []).some(item => !item.cleared))
+    .slice(-2)
+  const result = new Map<number, ResolvedAttachment[]>()
+  for (const turn of candidates) {
+    const active = (turn.attachments || []).filter(item => !item.cleared)
+    const resolved = await resolveAttachments(active.map(item => item.id), sessionId, active)
+    if (resolved.length > 0) result.set(turn.id, resolved)
+  }
+  return result
 }
 
 function sendReplay(controller: ReadableStreamDefaultController<Uint8Array>, prepared: ReplaySelfhostTurn) {
@@ -454,13 +516,24 @@ export function createSelfhostStream(
         // 与 cc 保持一致：当前时间只进入本轮模型请求，不改浏览器气泡或 Haven user_text。
         // 预算和实际请求必须使用同一份文本，避免隐藏时间绕过上下文上限计算。
         const currentUserText = `${request.text}\n\n${beijingRuntimeContext()}`
+        const currentAttachments = prepared.currentAttachments || []
         const history = historyWithPersistedRecall(prepared.history)
+        const replayableImageTurnIds = new Set(
+          history
+            .filter(turn => turn.source === 'selfhost' && (turn.attachments || []).some(item => !item.cleared))
+            .slice(-2)
+            .map(turn => turn.id),
+        )
+        const budgetHistory = history.map(turn => replayableImageTurnIds.has(turn.id)
+          ? turn
+          : { ...turn, attachments: [] })
         // max_tokens 是 /v1/messages 必填项；0 配置在第一版按默认 32K 执行并预留同样空间。
         const replyReserve = prepared.settings.replyReserveTokens || DEFAULT_REPLY_RESERVE_TOKENS
         const selection = selectHistory({
-          turns: history,
+          turns: budgetHistory,
           system,
           currentUserText,
+          currentImageCount: currentAttachments.length,
           toolDefinitionsText: anthropicTools.length ? JSON.stringify(anthropicTools) : '',
           model: prepared.settings.model,
           historyTokenBudget: prepared.settings.historyTokenBudget,
@@ -484,7 +557,13 @@ export function createSelfhostStream(
           mcp_warnings: mcpRuntime.warnings,
         })
 
-        const messages = assembleMessages(selection.selected, currentUserText)
+        const historyAttachments = await hydrateRecentHistoryImages(selection.selected, request.sessionId)
+        const messages = assembleMessages(
+          selection.selected,
+          currentUserText,
+          currentAttachments,
+          historyAttachments,
+        )
         const totalUsage = emptyUsage()
         const process: Array<Record<string, unknown>> = []
         const toolEvents: Array<Record<string, unknown>> = []
@@ -611,12 +690,20 @@ export function createSelfhostStream(
           model: prepared.settings.model,
           client: `ob2-selfhost/${request.personaId}`,
           route: '/api/cc-chat-selfhost',
+          attachmentIds: request.attachmentIds || [],
           recalledBucketIds: recall.ok ? recall.recalledIds : [],
           createdBucketIds: [...createdBucketIds],
           raw: {
             version: 1,
             engine: 'selfhost',
             request_id: request.requestId,
+            attachments: currentAttachments.map(item => ({
+              id: item.id,
+              filename: item.filename,
+              mime_type: item.mime_type,
+              byte_size: item.byte_size,
+              sha256: item.sha256,
+            })),
             provider_id: prepared.provider.providerId,
             provider_label: prepared.provider.label,
             model: prepared.settings.model,

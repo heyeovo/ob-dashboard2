@@ -35,6 +35,7 @@ function prepared(): PreparedSelfhostTurn {
       maxHistoryRounds: 0, replyReserveTokens: 32_000,
     },
     provider: { providerId: 'provider-1', baseUrl: 'https://relay.example', authToken: 'secret', label: 'Relay' },
+    currentAttachments: [],
   }
 }
 
@@ -122,6 +123,26 @@ describe('runSelfhostTurn stream contract', () => {
         },
       ],
     }))
+  })
+
+  it('sends current images as Anthropic image blocks and persists only their ids', async () => {
+    const input = prepared()
+    input.request.attachmentIds = ['image-1']
+    input.currentAttachments = [{
+      id: 'image-1', session_id: 'session-1', turn_id: null, round_id: null,
+      filename: '截图.webp', mime_type: 'image/webp', byte_size: 123, sha256: 'abc',
+      created_at: '', cleared: false, base64: 'aW1hZ2U=',
+    }]
+    const deps = dependencies({
+      ok: true, stored: true, turnId: 9, roundId: 3, elapsedMs: 2, error: '', httpStatus: 200,
+      idempotentReplay: false, code: '', details: {},
+    })
+    await new Response(createSelfhostStream(input, undefined, deps)).text()
+    const upstreamInput = vi.mocked(deps.streamUpstream).mock.calls[0][0]
+    expect(upstreamInput.messages.at(-1)?.content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'image', source: expect.objectContaining({ media_type: 'image/webp', data: 'aW1hZ2U=' }) }),
+    ]))
+    expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ['image-1'] }))
   })
 
   it('restores persisted thinking duration during idempotent replay', async () => {

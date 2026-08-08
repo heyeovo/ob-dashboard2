@@ -6,6 +6,7 @@
 
 import type {
   CcMessage,
+  CcAttachment,
   CcProcessEvent,
   CcRecallInfo,
   CcRecallModule,
@@ -68,6 +69,15 @@ export type HavenTurnRow = {
   client?: string
   /** 写库时原样存的那份，thinking / 工具 / 召回都在里面。要 raw=1 才有 */
   raw_json?: string
+  attachments?: Array<{
+    id: string
+    session_id: string
+    filename: string
+    mime_type: string
+    byte_size: number
+    sha256: string
+    cleared?: boolean
+  }>
 }
 
 function normalizeRecall(value: unknown): CcRecallInfo | null {
@@ -303,8 +313,28 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   const out: CcMessage[] = []
   for (const t of turns) {
     const at = Date.parse(t.created_at) || Date.now()
-    if (t.user_text?.trim()) {
-      out.push({ id: `h${t.id}u`, role: 'user', text: t.user_text, createdAt: at, fromHistory: true })
+    const attachments: CcAttachment[] = (t.attachments || []).flatMap(item => {
+      if (item.mime_type !== 'image/jpeg' && item.mime_type !== 'image/png' && item.mime_type !== 'image/webp') return []
+      return [{
+        id: item.id,
+        sessionId: item.session_id,
+        filename: item.filename,
+        mimeType: item.mime_type,
+        byteSize: item.byte_size,
+        sha256: item.sha256,
+        cleared: item.cleared === true,
+        previewUrl: item.cleared ? undefined : `/api/cc-attachments/${encodeURIComponent(item.id)}?session_id=${encodeURIComponent(item.session_id)}`,
+      }]
+    })
+    if (t.user_text?.trim() || attachments.length > 0) {
+      out.push({
+        id: `h${t.id}u`,
+        role: 'user',
+        text: t.user_text,
+        attachments,
+        createdAt: at,
+        fromHistory: true,
+      })
     }
     if (t.assistant_text?.trim()) {
       const extra = parseTurnRaw(t.raw_json)
