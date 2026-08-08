@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { isSelfhostMcpServer, isSelfhostMcpToolAllowed } from '@/app/lib/selfhost/mcp'
+import {
+  isSelfhostMcpServer,
+  isSelfhostMcpToolAllowed,
+  selfhostMcpToolDescription,
+} from '@/app/lib/selfhost/mcp'
 import type { CcMcpServer } from '@/app/lib/ccMcpTypes'
 
 function server(overrides: Partial<CcMcpServer> = {}): CcMcpServer {
@@ -17,6 +21,13 @@ function server(overrides: Partial<CcMcpServer> = {}): CcMcpServer {
 }
 
 describe('selfhost MCP permission boundary', () => {
+  it('always gives an injected tool a non-empty description', () => {
+    expect(selfhostMcpToolDescription({ name: 'breath' })).toBe('MCP tool breath')
+    expect(selfhostMcpToolDescription({ name: 'breath', title: 'Breath' })).toBe('Breath')
+    expect(selfhostMcpToolDescription({ name: 'breath', description: '  Recall memories  ' })).toBe('Recall memories')
+    expect(selfhostMcpToolDescription({ name: 'breath', description: '   ' })).toBe('MCP tool breath')
+  })
+
   it('accepts only enabled HTTP/SSE servers', () => {
     expect(isSelfhostMcpServer(server({ transport: 'http' }))).toBe(true)
     expect(isSelfhostMcpServer(server({ transport: 'sse' }))).toBe(true)

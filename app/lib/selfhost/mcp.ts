@@ -68,6 +68,14 @@ function structuredRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
+export function selfhostMcpToolDescription(tool: {
+  name: string
+  description?: string
+  title?: string
+}) {
+  return tool.description?.trim() || tool.title?.trim() || `MCP tool ${tool.name}`
+}
+
 export async function createSelfhostMcpRuntime(signal?: AbortSignal): Promise<SelfhostMcpRuntime> {
   const connected = new Map<string, ConnectedServer>()
   const tools: SelfhostMcpTool[] = []
@@ -102,7 +110,7 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal): Promise<Se
           if (!isSelfhostMcpToolAllowed(server, name)) continue
           tools.push({
             name,
-            description: tool.description || tool.title,
+            description: selfhostMcpToolDescription(tool),
             input_schema: structuredRecord(tool.inputSchema) || { type: 'object', properties: {} },
             serverName: server.name,
             remoteName: tool.name,
