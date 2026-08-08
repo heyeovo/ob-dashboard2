@@ -69,7 +69,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `TimelineDayGroup.tsx` | 时间线按天分组容器 |
 | `EntryGrid.tsx` | 记忆格视图网格容器 |
 | `HomeToolDrawer.tsx` | 主页工具抽屉（MCP 工具入口） |
-| `McpManager.tsx` | cc MCP 工具管理组件 |
+| `McpManager.tsx` | cc MCP 工具管理组件；每个服务卡片内可折叠工具与权限，缺失的工具说明在界面中显示通用兜底文案 |
 | `ServiceWorkerRegister.tsx` | PWA service worker 注册 |
 
 > 完整设计规范见 `DESIGN.md`。注：4.6 导航重构已删除 `NavBar.tsx`（桌面横条，被 `SideRail` 取代）和 `MobileViewSwitch.tsx`（两格，被 `MemoryViewSwitch` 取代）。

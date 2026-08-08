@@ -126,6 +126,10 @@ function shortToolName(name: string) {
   return parts.length >= 3 ? parts.slice(2).join('__') : name
 }
 
+function toolDisplayDescription(tool: { name: string; description?: string }) {
+  return tool.description?.trim() || `调用 MCP 工具 ${shortToolName(tool.name)}`
+}
+
 export default function McpManager() {
   const [config, setConfig] = useState<CcMcpConfig>({ version: 1, servers: [] })
   const [loading, setLoading] = useState(true)
@@ -657,11 +661,22 @@ export default function McpManager() {
               </div>
 
               {tools.length > 0 ? (
-                <div className="mt-3 border-t border-[var(--color-border-light)] pt-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                    工具开关与权限
-                  </p>
-                  <div className="space-y-2">
+                <details className="group mt-3 border-t border-[var(--color-border-light)] pt-3">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-1 text-[var(--color-text-tertiary)] transition hover:text-[var(--color-text-secondary)] [&::-webkit-details-marker]:hidden">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider">
+                      工具与权限
+                    </span>
+                    <span className="flex items-center gap-2 text-[10px]">
+                      已开启 {enabledCount}/{tools.length}
+                      <span
+                        aria-hidden="true"
+                        className="inline-block text-xs transition-transform group-open:rotate-180"
+                      >
+                        ⌄
+                      </span>
+                    </span>
+                  </summary>
+                  <div className="mt-2 space-y-2">
                     {tools.map(tool => (
                       <div
                         key={tool.name}
@@ -701,11 +716,9 @@ export default function McpManager() {
                                 <span className="text-[9px] text-amber-700">访问外部</span>
                               )}
                             </div>
-                            {tool.description && (
-                              <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
-                                {tool.description}
-                              </p>
-                            )}
+                            <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
+                              {toolDisplayDescription(tool)}
+                            </p>
                           </div>
                           <select
                             className="rounded-lg border border-[var(--color-border)] bg-white px-2 py-1 text-[10px]"
@@ -728,7 +741,7 @@ export default function McpManager() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </details>
               ) : (
                 <p className="mt-3 border-t border-[var(--color-border-light)] pt-3 text-[10px] text-[var(--color-text-disabled)]">
                   尚未读取工具。编辑并保存，或点击“刷新工具清单”连接这个 MCP。
