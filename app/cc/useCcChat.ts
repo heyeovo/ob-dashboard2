@@ -461,7 +461,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           }
           ccPickRef.current = restoredCcPick
           selfhostPickRef.current = restoredSelfhostPick
-          setPick(restoredEngine === 'selfhost' ? restoredSelfhostPick : restoredCcPick)
+          // Vercel 必须保留本地首选（通常是 cc），但当前实际执行器固定为 selfhost。
+          // 设置卡也要跟实际执行器走，不能因此显示 cc / 全局默认的 provider 和模型。
+          const restoredEffectiveEngine = resolveEffectiveEngine(isRemote, restoredEngine)
+          setPick(restoredEffectiveEngine === 'selfhost' ? restoredSelfhostPick : restoredCcPick)
           setLocalEnginePreference(restoredEngine)
         }
       } catch {
@@ -470,7 +473,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setHistoryLoading(false)
       }
     },
-    [sessionId, draft, webDefaults, sessions],
+    [sessionId, draft, webDefaults, sessions, isRemote],
   )
 
   const loadEarlierHistory = useCallback(async () => {

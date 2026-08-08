@@ -33,6 +33,12 @@ type Props = {
   stats: CcSessionStats
   /** 界面上这一窗的总字数（消息正文加起来） */
   totalChars: number
+  /** 最后一轮实际使用的上游；没有已完成轮次时由页面回退到当前选择。 */
+  activeProvider: string
+  activeModel: string
+  /** 最后一轮实际上下文；cc 没有历史元数据时由页面回退到进程 stats。 */
+  contextTokens: number
+  contextMaxTokens: number
   upstream: CcUpstreamConfig
   pick: CcUpstreamPick
   onPick: (next: Partial<CcUpstreamPick>) => void
@@ -75,6 +81,10 @@ export default function CcWindowSettings({
   sessionId,
   stats,
   totalChars,
+  activeProvider,
+  activeModel,
+  contextTokens,
+  contextMaxTokens,
   upstream,
   pick,
   onPick,
@@ -90,7 +100,8 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const models = modelsFor(upstream, pick.kind, pick.providerId)
-  const shownStatsModel = modelLabel(stats.model, models)
+  const shownActiveModel = modelLabel(activeModel, models)
+  const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
   const recent = stats.recentCostUsd || []
   const recentSum = recent.reduce((a, b) => a + b, 0)
   // 订阅侧不按量计费，SDK 报的那个数字对用户没意义 —— 直接显示 $0（用户拍板的）。
@@ -133,18 +144,20 @@ export default function CcWindowSettings({
               </span>
             </div>
             {/* 下面这两行手机端顶栏放不下，只在这里看得到 */}
-            {shownStatsModel ? (
+            {activeUpstream ? (
               <div className={ROW}>
                 <span className={KEY}>正在用</span>
-                <span className={`${VAL} font-mono text-[10.5px]`}>{shownStatsModel}</span>
+                <span className={`${VAL} font-mono text-[10.5px]`} title={activeUpstream}>
+                  {activeUpstream}
+                </span>
               </div>
             ) : null}
-            {stats.contextTokens > 0 ? (
+            {contextTokens > 0 ? (
               <div className={ROW}>
                 <span className={KEY}>上下文</span>
                 <span className={VAL}>
-                  {fmtK(stats.contextTokens)}
-                  {stats.contextMaxTokens > 0 ? ` / ${fmtK(stats.contextMaxTokens)}` : ''}
+                  {fmtK(contextTokens)}
+                  {contextMaxTokens > 0 ? ` / ${fmtK(contextMaxTokens)}` : ''}
                 </span>
               </div>
             ) : null}

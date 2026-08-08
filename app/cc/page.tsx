@@ -522,6 +522,10 @@ export default function CcChatPage() {
           sessionId={chat.sessionId}
           stats={chat.stats}
           totalChars={totalChars}
+          activeProvider={shownProvider}
+          activeModel={shownModel}
+          contextTokens={ctxTokens}
+          contextMaxTokens={ctxMax}
           upstream={chat.upstream}
           pick={chat.pick}
           onPick={next => void chat.applyPick(next)}
