@@ -104,7 +104,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `care/[...path]/route.ts` | 照顾备忘/待办 |
 | `persona/route.ts` | 用户画像状态 |
 | `daily-chat-memory/route.ts` | 每日聊天记忆 |
-| `daily-reviews/route.ts` | 日回顾列表与手动微调代理 |
+| `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -124,7 +124,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `settings/automation/page.tsx` | 自动化设置 |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
 | `polaris/page.tsx` | Polaris 聊天历史导入 |
-| `impressions/page.tsx` | 独立日回顾列表与手动微调 |
+| `impressions/page.tsx` | 日回顾月历：同时标记日回顾/记忆事件，查看与微调日回顾，并保留当天记忆事件及详情抽屉 |
 | `care/page.tsx` | 照顾备忘 + 待办 |
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
 | `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |

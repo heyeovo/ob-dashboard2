@@ -37,3 +37,18 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: String(error) }, { status: 502 })
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const cookie = await getSessionCookie()
+    const body = await request.text()
+    const response = await fetch(`${BASE_URL}/api/daily-reviews/run`, {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body,
+    })
+    return relay(response)
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 502 })
+  }
+}
