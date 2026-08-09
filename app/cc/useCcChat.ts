@@ -1198,7 +1198,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         body: JSON.stringify({ session_id: sessionId }),
       })
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>
-      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || '清除图片失败'))
+      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || '清除内容失败'))
       setMessages(previous => previous.map(message => message.id === messageId
         ? {
             ...message,
@@ -1209,30 +1209,38 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         : message))
       return true
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '清除图片失败')
+      setError(reason instanceof Error ? reason.message : '清除内容失败')
       return false
     }
   }, [sessionId])
 
-  const clearAllAttachments = useCallback(async () => {
+  const clearAttachmentsByKind = useCallback(async (kind: 'image' | 'file') => {
+    const label = kind === 'image' ? '图片' : '文件'
     try {
       const response = await fetch('/api/cc-attachments', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, all: true }),
+        body: JSON.stringify({ session_id: sessionId, all: true, kind }),
       })
       const payload = await response.json().catch(() => ({})) as Record<string, unknown>
-      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || '清除窗口图片失败'))
+      if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || `清除窗口${label}失败`))
       setMessages(previous => previous.map(message => ({
         ...message,
-        attachments: message.attachments?.map(item => ({ ...item, cleared: true, previewUrl: undefined })),
+        attachments: message.attachments?.map(item => item.kind === kind
+          ? { ...item, cleared: true, previewUrl: undefined }
+          : item),
       })))
       return true
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '清除窗口图片失败')
+      setError(reason instanceof Error ? reason.message : `清除窗口${label}失败`)
       return false
     }
   }, [sessionId])
+
+  const activeImageCount = messages.reduce((count, message) => count
+    + (message.attachments || []).filter(item => item.kind === 'image' && !item.cleared).length, 0)
+  const activeFileCount = messages.reduce((count, message) => count
+    + (message.attachments || []).filter(item => item.kind === 'file' && !item.cleared).length, 0)
 
   // 轮数取两者的大者：进程活着时它自己的计数是准的（这一轮刚加完，库还没写）；
   // 进程没了就用历史行数。
@@ -1278,7 +1286,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     latestTurn,
     retryPersistence,
     clearAttachment,
-    clearAllAttachments,
+    clearAttachmentsByKind,
+    activeImageCount,
+    activeFileCount,
     isRemote,
     // 5.2：模式 + 本窗口设置
     mode,

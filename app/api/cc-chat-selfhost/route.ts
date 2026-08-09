@@ -46,8 +46,8 @@ export async function POST(request: NextRequest) {
   if (parsed.requestId.length > 128) return invalid('request_id 不能超过 128 个字符', parsed.requestId)
   if (!parsed.personaId) return invalid('persona_id 不能为空', parsed.requestId)
   const attachmentIds = parsed.attachmentIds || []
-  if (!parsed.text.trim() && attachmentIds.length === 0) return invalid('文字和图片不能同时为空', parsed.requestId)
-  if (attachmentIds.length > 4) return invalid('每轮最多 4 张图片', parsed.requestId)
+  if (!parsed.text.trim() && attachmentIds.length === 0) return invalid('文字和附件不能同时为空', parsed.requestId)
+  if (attachmentIds.length > 4) return invalid('每轮图片和文件合计最多 4 个', parsed.requestId)
   if (!Number.isInteger(parsed.expectedLastRoundId) || parsed.expectedLastRoundId < 0) {
     return invalid('expected_last_round_id 必须是大于或等于 0 的整数', parsed.requestId)
   }

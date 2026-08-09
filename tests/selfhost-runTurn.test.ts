@@ -130,7 +130,7 @@ describe('runSelfhostTurn stream contract', () => {
     input.request.attachmentIds = ['image-1']
     input.currentAttachments = [{
       id: 'image-1', session_id: 'session-1', turn_id: null, round_id: null,
-      filename: '截图.webp', mime_type: 'image/webp', byte_size: 123, sha256: 'abc',
+      filename: '截图.webp', kind: 'image', mime_type: 'image/webp', byte_size: 123, sha256: 'abc',
       created_at: '', cleared: false, base64: 'aW1hZ2U=',
     }]
     const deps = dependencies({
@@ -143,6 +143,30 @@ describe('runSelfhostTurn stream contract', () => {
       expect.objectContaining({ type: 'image', source: expect.objectContaining({ media_type: 'image/webp', data: 'aW1hZ2U=' }) }),
     ]))
     expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ['image-1'] }))
+  })
+
+  it('sends parsed window files as bounded text blocks instead of image blocks', async () => {
+    const input = prepared()
+    input.request.attachmentIds = ['file-1']
+    input.currentAttachments = [{
+      id: 'file-1', session_id: 'session-1', turn_id: null, round_id: null,
+      filename: '说明.md', kind: 'file', mime_type: 'text/markdown', byte_size: 64, sha256: 'doc',
+      text_chars: 12, text_truncated: false, created_at: '', cleared: false,
+      text_content: '这是文件正文',
+    }]
+    const deps = dependencies({
+      ok: true, stored: true, turnId: 9, roundId: 3, elapsedMs: 2, error: '', httpStatus: 200,
+      idempotentReplay: false, code: '', details: {},
+    })
+    await new Response(createSelfhostStream(input, undefined, deps)).text()
+    const upstreamInput = vi.mocked(deps.streamUpstream).mock.calls[0][0]
+    const content = upstreamInput.messages.at(-1)?.content
+    expect(content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('<window_file name="说明.md">') }),
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('这是文件正文') }),
+    ]))
+    expect(content).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'image' })]))
+    expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ['file-1'] }))
   })
 
   it('restores persisted thinking duration during idempotent replay', async () => {

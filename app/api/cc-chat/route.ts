@@ -339,8 +339,8 @@ export async function POST(request: NextRequest) {
   if (!requestId) return Response.json({ ok: false, error: 'request_id 为空' }, { status: 400 })
   if (requestId.length > 128) return Response.json({ ok: false, error: 'request_id 不能超过 128 个字符' }, { status: 400 })
   if (!personaId) return Response.json({ ok: false, error: 'persona_id 为空' }, { status: 400 })
-  if (!text && attachmentIds.length === 0) return Response.json({ ok: false, error: '文字和图片不能同时为空' }, { status: 400 })
-  if (attachmentIds.length > 4) return Response.json({ ok: false, error: '每轮最多 4 张图片' }, { status: 400 })
+  if (!text && attachmentIds.length === 0) return Response.json({ ok: false, error: '文字和附件不能同时为空' }, { status: 400 })
+  if (attachmentIds.length > 4) return Response.json({ ok: false, error: '每轮图片和文件合计最多 4 个' }, { status: 400 })
   const expectedLastRoundId = Number(body.expected_last_round_id)
   if (!Number.isInteger(expectedLastRoundId) || expectedLastRoundId < 0) {
     return Response.json({ ok: false, error: 'expected_last_round_id 必须是大于或等于 0 的整数' }, { status: 400 })
@@ -372,7 +372,7 @@ export async function POST(request: NextRequest) {
   try {
     attachments = await resolveAttachments(attachmentIds, sessionId)
   } catch (error) {
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : '图片读取失败' }, { status: 400 })
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : '附件读取失败' }, { status: 400 })
   }
 
   const encoder = new TextEncoder()

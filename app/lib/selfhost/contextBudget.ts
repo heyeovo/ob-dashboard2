@@ -87,10 +87,15 @@ export function estimateTokens(text: string): number {
 export function estimateTurnTokens(
   turn: Pick<HavenTurn, 'user_text' | 'assistant_text'> & Pick<Partial<HavenTurn>, 'attachments' | 'source'>,
 ): number {
-  const attachments = turn.source === 'selfhost' && Array.isArray(turn.attachments)
-    ? turn.attachments.filter(item => !item.cleared).length
+  const active = Array.isArray(turn.attachments) ? turn.attachments.filter(item => !item.cleared) : []
+  const images = turn.source === 'selfhost'
+    ? active.filter(item => item.kind !== 'file').length
     : 0
-  return estimateTokens(turn.user_text) + estimateTokens(turn.assistant_text) + attachments * ESTIMATED_IMAGE_TOKENS + 12
+  const documentTokens = active
+    .filter(item => item.kind === 'file')
+    .reduce((sum, item) => sum + Math.max(1, Math.ceil(Number(item.text_chars || 0) / 3)), 0)
+  return estimateTokens(turn.user_text) + estimateTokens(turn.assistant_text)
+    + images * ESTIMATED_IMAGE_TOKENS + documentTokens + 12
 }
 
 export function selectHistory(input: {
@@ -98,6 +103,7 @@ export function selectHistory(input: {
   system: string
   currentUserText: string
   currentImageCount?: number
+  currentDocumentText?: string
   toolDefinitionsText?: string
   model: string
   historyTokenBudget: number
@@ -109,6 +115,7 @@ export function selectHistory(input: {
     estimateTokens(input.system) +
     estimateTokens(input.currentUserText) +
     Math.max(0, input.currentImageCount || 0) * ESTIMATED_IMAGE_TOKENS +
+    estimateTokens(input.currentDocumentText || '') +
     estimateTokens(input.toolDefinitionsText || '') +
     16
   const fixedWithSafety = Math.ceil(fixedRaw * ESTIMATE_SAFETY_RATIO)

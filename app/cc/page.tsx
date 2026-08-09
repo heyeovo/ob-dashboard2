@@ -399,7 +399,9 @@ export default function CcChatPage() {
             onChange={chat.setDraft}
             onSubmit={attachments => chat.send(chat.draft, undefined, attachments)}
             onStop={chat.stop}
-            onClearAll={chat.clearAllAttachments}
+            onClearKind={chat.clearAttachmentsByKind}
+            activeImageCount={chat.activeImageCount}
+            activeFileCount={chat.activeFileCount}
             onError={chat.setError}
             sending={chat.sending}
           />

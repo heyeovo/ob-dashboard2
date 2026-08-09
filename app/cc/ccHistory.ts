@@ -73,9 +73,12 @@ export type HavenTurnRow = {
     id: string
     session_id: string
     filename: string
+    kind?: 'image' | 'file'
     mime_type: string
     byte_size: number
     sha256: string
+    text_chars?: number
+    text_truncated?: boolean
     cleared?: boolean
   }>
 }
@@ -317,18 +320,21 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   const out: CcMessage[] = []
   for (const t of turns) {
     const at = Date.parse(t.created_at) || Date.now()
-    const attachments: CcAttachment[] = (t.attachments || []).flatMap(item => {
-      if (item.mime_type !== 'image/jpeg' && item.mime_type !== 'image/png' && item.mime_type !== 'image/webp') return []
-      return [{
+    const attachments: CcAttachment[] = (t.attachments || []).map(item => {
+      const kind = item.kind === 'file' ? 'file' : 'image'
+      return {
         id: item.id,
         sessionId: item.session_id,
         filename: item.filename,
+        kind,
         mimeType: item.mime_type,
         byteSize: item.byte_size,
         sha256: item.sha256,
+        textChars: item.text_chars || 0,
+        textTruncated: item.text_truncated === true,
         cleared: item.cleared === true,
         previewUrl: item.cleared ? undefined : `/api/cc-attachments/${encodeURIComponent(item.id)}?session_id=${encodeURIComponent(item.session_id)}`,
-      }]
+      }
     })
     if (t.user_text?.trim() || attachments.length > 0) {
       out.push({

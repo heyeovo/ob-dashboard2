@@ -19,9 +19,12 @@ export type CcAttachment = {
   id: string
   sessionId: string
   filename: string
-  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+  kind: 'image' | 'file'
+  mimeType: string
   byteSize: number
   sha256: string
+  textChars?: number
+  textTruncated?: boolean
   cleared?: boolean
   previewUrl?: string
 }

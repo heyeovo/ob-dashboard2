@@ -89,7 +89,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `provider-relay/route.ts` | 上游 provider 测试中继 |
 | `cc-chat/route.ts` | cc 聊天主入口：严格发送 payload、Haven 幂等预检/重放、SSE 流式执行，写入成功后才完成 |
 | `cc-chat-selfhost/route.ts` | 自建聊天入口：服务端读取 Haven 配置/历史/MCP 配置，按 cc 同一格式注入本轮隐藏北京时间，直连 Anthropic-compatible SSE 并执行远程 MCP 工具循环，记录上游生成耗时/速度，严格写回成功后才完成 |
-| `cc-attachments/route.ts` + `[id]/route.ts` | `/cc` 图片上传、私有读取与清除：浏览器先压缩，服务端用网关密钥转存 Haven；浏览器不接触密钥或永久公开 URL |
+| `cc-attachments/route.ts` + `[id]/route.ts` | `/cc` 图片/文件上传、私有读取与分类清除：图片先压缩，PDF/DOCX/MD/TXT/CSV 在浏览器提取受限正文后与原文件一起转存 Haven；浏览器不接触网关密钥或永久公开 URL |
 | `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态：读取/保存本地引擎首选、列出软删除窗口、严格永久删除 |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
 | `cc-personas/route.ts` | 协作者（persona 列表/保存/删除） |
@@ -113,7 +113,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 |------|------|
 | `page.tsx` | 主页面（时间线/记忆格，含噪声筛选 + 隐藏开关 + 乐观更新） |
 | `memory/page.tsx` | 记忆库页（时间线/记忆格/待处理三格切换） |
-| `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、用户消息显示完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除） |
+| `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、图片/文件底部添加抽屉、附件与文字分离显示、用户消息完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除） |
 | `workbench/page.tsx` | 工作台（批准执行 + 四格面板） |
 | `settings/page.tsx` | 设置聚合页（入口） |
 | `settings/upstream/page.tsx` | 上游模型配置 |
@@ -140,7 +140,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 
 `api.ts`：`getSessionCookie()`（带 5min 缓存）、`clearSessionCookie()`、`getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`。
 
-cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes.ts`）、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts`、`ccEnv.ts`、`ccDirs.ts`、`haven*`（`havenPersonas.ts`/`havenUpstream.ts`/`havenTurns.ts`/`havenAttachments.ts`/`havenRecall.ts`/`havenPermissions.ts`）、`cc/runTurn.ts`、`cc/ccOptions.ts`、`cc/ccHistory.ts`、`cc/processCollector.ts`、`cc/sseEvents.ts`、`cc/turnState.ts`、`selfhost/mcp.ts`、`polarisExport.ts`、`format.ts`、`ccDiff.ts`。
+cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes.ts`）、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts`、`ccEnv.ts`、`ccDirs.ts`、`haven*`（`havenPersonas.ts`/`havenUpstream.ts`/`havenTurns.ts`/`havenAttachments.ts`/`havenRecall.ts`/`havenPermissions.ts`）、`attachments/*`（移植自 Polaris 的 PDF/DOCX/CSV/纯文本浏览器解析）、`cc/runTurn.ts`、`cc/ccOptions.ts`、`cc/ccHistory.ts`、`cc/processCollector.ts`、`cc/sseEvents.ts`、`cc/turnState.ts`、`selfhost/mcp.ts`、`polarisExport.ts`、`format.ts`、`ccDiff.ts`。
 
 ---
 
@@ -201,6 +201,8 @@ params 是 Promise，必须 `const { id } = await params`。
 前端 `useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`，不会覆盖本地首选；引擎切换保持同一个 `session_id`。cc 与 selfhost 各自保留供应商/模型选择：cc provider 随 SDK 子进程锁定，selfhost 每轮重新直连，允许在同一窗口途中换中转站；selfhost 选择合并写入 Haven `selfhost_overrides`，保存成功才显示生效，重新打开窗口也从该事实源恢复。Vercel 恢复窗口时，设置卡按实际 `effective_engine` 显示 selfhost 覆盖，不会因本地首选仍为 cc 而回退到全局默认；卡内“正在用 / 上下文”与页面顶部共用最后一轮实际 Provider、模型和上下文元数据，缺少历史元数据时才回退到当前选择或 cc 进程 stats。Polaris/gateway 导入窗口在 selfhost 下可直接用 Haven 历史原窗续聊，切到 cc 时仍要求换窗启动新的 SDK session。浏览器始终不向严格聊天请求提交上游地址或密钥。生成后未保存、`persistence_unknown`、409 跨设备冲突、保存中、正常完成和幂等重放均为独立界面状态。
 
 图片附件第一版只支持 JPEG/PNG/WebP：原图选择上限 25MB，每轮最多 4 张，浏览器缩到最长边 2000px 并转成 WebP，上传后的硬上限 2MB。Haven 保存压缩文件和附件元数据，严格请求只携带有序 `attachment_ids`；cc 组装 Agent SDK image block，selfhost 组装 Anthropic-compatible base64 image block，并只重放最近 2 个 selfhost 图片轮次。图片不进入 handoff 或跨引擎补齐；清除会永久删除 Haven 文件并保留“图片已清除”占位，但不能从已建立的 cc SDK 私有上下文中单独撤回。
+
+窗口文件支持 PDF/DOCX/MD/TXT/CSV，单个原文件上限 4MB（为包含解析正文的 multipart 留出 Vercel 4.5MB Function 请求体余量）；PDF/DOCX 最多提取 120,000 字符，CSV 最多 80,000 字符并限制 80 行 × 12 列，扫描 PDF 不做 OCR。原文件与解析正文作为 Haven 私有窗口附件保存，不进入长期记忆、召回或 handoff；cc/selfhost 都把解析正文作为带边界的用户资料文本发送，selfhost 历史按现有预算重放未清除文件。图片和文件各自支持单个永久清除及按窗口分类清除；清除文件会删除原文件和解析正文，只保留“文件已清除”占位。手机“＋”使用底部抽屉区分拍照、照片、上传文件以及两类清除入口；发送后附件卡独立位于文字气泡上方。每轮图片与文件合计最多 4 个。
 
 ---
 

@@ -31,6 +31,12 @@ function formatTime(ms: number) {
   return `${yyyy}-${month}-${day} ${hh}:${mm}:${ss}`
 }
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 function shortToolName(name: string) {
   if (name === 'WebSearch') return '网页搜索'
   if (name === 'WebFetch') return '读取网页'
@@ -135,7 +141,7 @@ export default function CcMessageRow({
       <div className="cc-row flex flex-col gap-1" data-role="user">
         <div ref={frameRef} className="flex flex-col items-end">
           <div
-            className="cc-bubble-user"
+            className="flex max-w-full flex-col items-end gap-2"
             onContextMenu={e => {
               if (message.fromHistory) return
               e.preventDefault()
@@ -157,12 +163,12 @@ export default function CcMessageRow({
             {message.attachments?.length ? (
               <div className={`grid max-w-[360px] gap-2 ${message.attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {message.attachments.map(attachment => (
-                  <div key={attachment.id} className="group/image relative overflow-hidden rounded-xl bg-black/5">
+                  <div key={attachment.id} className="group/image relative overflow-hidden rounded-xl bg-[var(--color-surface-secondary)]">
                     {attachment.cleared || !attachment.previewUrl ? (
                       <div className="flex h-24 min-w-40 items-center justify-center px-3 text-xs text-[var(--color-text-tertiary)]">
-                        图片已清除
+                        {attachment.kind === 'image' ? '图片已清除' : '文件已清除'}
                       </div>
-                    ) : (
+                    ) : attachment.kind === 'image' ? (
                       <>
                         {/* eslint-disable-next-line @next/next/no-img-element -- Haven 私有路由，不走公开图片优化器 */}
                         <img
@@ -186,12 +192,43 @@ export default function CcMessageRow({
                           </button>
                         ) : null}
                       </>
+                    ) : (
+                      <>
+                        <a
+                          href={attachment.previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex min-h-24 min-w-56 items-center gap-3 px-4 py-3 text-left"
+                        >
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--color-primary)]" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M9 13h6M9 16h4"/></svg>
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">{attachment.filename}</span>
+                            <span className="mt-0.5 block text-[10px] text-[var(--color-text-tertiary)]">
+                              {formatBytes(attachment.byteSize)}{attachment.textTruncated ? ' · 内容已截断' : ' · 已读取'}
+                            </span>
+                          </span>
+                        </a>
+                        {onClearAttachment ? (
+                          <button
+                            type="button"
+                            aria-label={`清除文件 ${attachment.filename}`}
+                            title="从 Haven 永久清除文件"
+                            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-black/55 text-sm text-white opacity-100 transition-opacity hover:bg-black/70 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
+                            onClick={event => {
+                              event.stopPropagation()
+                              onClearAttachment(message.id, attachment.id)
+                            }}
+                          >×</button>
+                        ) : null}
+                      </>
                     )}
                   </div>
                 ))}
               </div>
             ) : null}
-            {message.text ? <div className={message.attachments?.length ? 'mt-2' : ''}>{message.text}</div> : null}
+            {message.text ? <div className="cc-bubble-user">{message.text}</div> : null}
           </div>
 
           {menuOpen ? (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_HISTORY_TOKEN_BUDGET,
+  estimateTurnTokens,
   nominalContextLimit,
   resolveSelfhostSettings,
   selectHistory,
@@ -85,5 +86,29 @@ describe('selfhost context budget', () => {
       model: 'claude-opus-4-5', historyTokenBudget: 0, maxHistoryRounds: 0, replyReserveTokens: 32_000,
     })
     expect(withTools.stats.fixed_tokens_estimated).toBeGreaterThan(withoutTools.stats.fixed_tokens_estimated)
+  })
+
+  it('counts current and historical file text in the context budget', () => {
+    const plain = turn(1, 'hello', 'reply')
+    const withFile: HavenTurn = {
+      ...plain,
+      attachments: [{
+        id: 'file-1', session_id: 's-1', turn_id: 1, round_id: 1,
+        filename: 'notes.md', kind: 'file', mime_type: 'text/markdown', byte_size: 100,
+        sha256: 'abc', text_chars: 30_000, text_truncated: false,
+        created_at: '', cleared: false,
+      }],
+    }
+    expect(estimateTurnTokens(withFile)).toBeGreaterThan(estimateTurnTokens(plain) + 9_000)
+
+    const withoutFile = selectHistory({
+      turns: [], system: 'system', currentUserText: 'now', model: 'claude-opus-4-5',
+      historyTokenBudget: 0, maxHistoryRounds: 0, replyReserveTokens: 32_000,
+    })
+    const withCurrentFile = selectHistory({
+      turns: [], system: 'system', currentUserText: 'now', currentDocumentText: '文'.repeat(30_000),
+      model: 'claude-opus-4-5', historyTokenBudget: 0, maxHistoryRounds: 0, replyReserveTokens: 32_000,
+    })
+    expect(withCurrentFile.stats.fixed_tokens_estimated).toBeGreaterThan(withoutFile.stats.fixed_tokens_estimated)
   })
 })
