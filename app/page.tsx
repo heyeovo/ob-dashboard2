@@ -16,7 +16,7 @@ import HomeToolDrawer from './components/HomeToolDrawer'
 const MEMORY_ENTRIES: Entry[] = [
   { key: 'journal', label: '日记', desc: '按时间轴回看每天写下的东西', href: '/journal' },
   { key: 'memory', label: '记忆库', desc: '时间线 / 记忆格 / 待处理', href: '/memory' },
-  { key: 'impressions', label: '日印象', desc: '从月历回看每天的印象与事件', href: '/impressions' },
+  { key: 'impressions', label: '日回顾', desc: '查看和微调每天的连续性笔记', href: '/impressions' },
   { key: 'persona', label: 'Persona 状态', desc: '内在状态 + 画像查看', href: '/persona?tab=state' },
   { key: 'care', label: '照顾备忘', desc: '照顾备忘与 Todo', href: '/care' },
   { key: 'anniversary', label: '纪念日', desc: '以后做美化时一起', todo: true },

@@ -87,8 +87,8 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `haven/[...path]/route.ts` | 通用 OB 后端代理（Haven 接口） |
 | `mcp-relay/[...path]/route.ts` | cc MCP 工具调用中继 |
 | `provider-relay/route.ts` | 上游 provider 测试中继 |
-| `cc-chat/route.ts` | cc 聊天主入口：严格发送 payload、Haven 幂等预检/重放、SSE 流式执行，写入成功后才完成 |
-| `cc-chat-selfhost/route.ts` | 自建聊天入口：服务端读取 Haven 配置/历史/MCP 配置，按 cc 同一格式注入本轮隐藏北京时间，直连 Anthropic-compatible SSE 并执行远程 MCP 工具循环，记录上游生成耗时/速度，严格写回成功后才完成 |
+| `cc-chat/route.ts` | cc 聊天主入口：严格发送 payload、初始化窗口模式与固定日回顾快照、Haven 幂等预检/重放、SSE 流式执行，写入成功后才完成 |
+| `cc-chat-selfhost/route.ts` | 自建聊天入口：服务端读取 Haven 配置/历史/MCP 配置，初始化并注入固定日回顾快照，按 cc 同一格式注入本轮隐藏北京时间，直连 Anthropic-compatible SSE 并执行远程 MCP 工具循环，记录上游生成耗时/速度，严格写回成功后才完成 |
 | `cc-attachments/route.ts` + `[id]/route.ts` | `/cc` 图片/文件上传、私有读取与分类清除：图片先压缩，PDF/DOCX/MD/TXT/CSV 在浏览器提取受限正文后与原文件一起转存 Haven；浏览器不接触网关密钥或永久公开 URL |
 | `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态：所有来源严格按协作者归属过滤，读取/保存本地引擎首选与提示词模块覆盖、列出软删除窗口、严格永久删除 |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
@@ -104,6 +104,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `care/[...path]/route.ts` | 照顾备忘/待办 |
 | `persona/route.ts` | 用户画像状态 |
 | `daily-chat-memory/route.ts` | 每日聊天记忆 |
+| `daily-reviews/route.ts` | 日回顾列表与手动微调代理 |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -118,12 +119,12 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `settings/page.tsx` | 设置聚合页（入口） |
 | `settings/upstream/page.tsx` | 上游模型配置 |
 | `settings/memory-processing/page.tsx` | 记忆处理设置 |
-| `settings/models/page.tsx` | 召回/自动记忆模型设置 |
+| `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
 | `settings/recall/page.tsx` | 召回设置 |
 | `settings/automation/page.tsx` | 自动化设置 |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
 | `polaris/page.tsx` | Polaris 聊天历史导入 |
-| `impressions/page.tsx` | 日印象日历 |
+| `impressions/page.tsx` | 独立日回顾列表与手动微调 |
 | `care/page.tsx` | 照顾备忘 + 待办 |
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
 | `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |
@@ -195,6 +196,8 @@ params 是 Promise，必须 `const { id } = await params`。
 
 ### cc 聊天架构
 协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和“新窗口默认开启”状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖；不在输入框或消息详情增加模块标签。窗口覆盖缺省时跟随协作者默认，因此以后新增模块仍可自然继承默认状态。
+
+新对话与换窗共用的弹窗默认勾选“注入最近三天日回顾”。首次发送时把 `mode` 和该选择写入 Haven，并复制最近三个已结束日历日的日回顾正文成为窗口固定快照；之后日期推进或日回顾被微调都不会改变已创建窗口。cc 和 selfhost 都把这份快照作为稳定 system 背景注入，关闭选项则该窗口固定为空快照。
 
 订阅、API 中转站和 selfhost 共用同一份协作者基础提示词；默认值是原 cc 闲聊模式提示词，cc 闲聊不再另外注入写死副本。cc 工作模式仍保留 Claude Code preset，再追加同一份协作者配置。最终都按“协作者基础 system + 定位 + 当前有效提示词模块 + 记忆”组装，每个模块以 `【模块名称】` 开头，便于模型区分边界；界面用的协作者名字和对方称呼不再机械生成独立 system 句子，身份关系由基础提示词、定位和模块自然表达。selfhost 每轮重组；cc 对协作者配置组合计算启动指纹，内容变化时回收空闲 SDK query，并用原 Claude session resume，使下一轮使用新 system 且保留对话上下文。换窗 handoff 不计入该指纹，避免第二轮误重启后丢失稳定背景。每轮隐藏运行时信息直接提供北京时间对应的中文星期，避免模型自行换算日期。
 

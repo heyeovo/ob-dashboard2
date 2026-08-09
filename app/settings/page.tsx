@@ -48,8 +48,8 @@ const MODEL_ENTRIES: Entry[] = [
   },
   {
     key: 'memory-models',
-    label: '召回与自动记忆模型',
-    desc: '主域哨兵 / 召回模型；自动记忆生成模型',
+    label: '召回、自动记忆与日回顾模型',
+    desc: '主域哨兵 / 召回模型；已暂停的自动记忆；日回顾模型',
     href: '/settings/models',
   },
   { key: 'ui', label: 'UI 设置', desc: '主题 / 字体 / 字号，等新风格铺开后做', todo: true },

@@ -1,9 +1,11 @@
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import {
+  dailyReviewSystemBlock,
   getConversationSession,
   getTurnByRequestId,
   listAllTurns,
+  patchConversationSessionState,
   recordTurnStrict,
   type HavenConversationSession,
   type HavenTurn,
@@ -39,6 +41,8 @@ export type SelfhostRequest = {
   personaId: string
   text: string
   attachmentIds?: string[]
+  mode: 'chat' | 'work'
+  includeDailyReview: boolean
 }
 
 type Provider = { providerId: string; baseUrl: string; authToken: string; label: string }
@@ -124,6 +128,17 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     return { kind: 'replay', request, turn }
   }
 
+  const initialized = await patchConversationSessionState({
+    sessionId: request.sessionId,
+    personaId: request.personaId,
+    mode: request.mode,
+    dailyReviewEnabled: request.includeDailyReview,
+    initializeDailyReviewSnapshot: true,
+  })
+  if (!initialized.ok) {
+    return preflightError(request.requestId, 502, 'haven_session_failed', `初始化窗口配置失败：${initialized.error}`)
+  }
+
   const [sessionResult, historyResult, personaResult, upstreamResult] = await Promise.all([
     getConversationSession(request.sessionId, { includeBucketExclusions: true, signal }),
     // selfhost 是无状态完整重放；raw_json 里的历史召回正文也属于窗口上下文，
@@ -202,9 +217,11 @@ export function assembleSystem(
   persona: HavenPersona,
   recalledContext: string,
   promptModuleOverrides: Record<string, boolean> = {},
+  dailyReviewSnapshot: HavenConversationSession['daily_review_snapshot'] = [],
 ): string {
   return [
     buildPersonaAppend(persona, promptModuleOverrides),
+    dailyReviewSystemBlock(dailyReviewSnapshot),
     recallSystemBlock(recalledContext),
   ].filter(Boolean).join('\n\n')
 }
@@ -536,6 +553,7 @@ export function createSelfhostStream(
           prepared.persona,
           recall.ok ? recall.additionalContext : '',
           prepared.session?.prompt_module_overrides,
+          prepared.session?.daily_review_enabled ? prepared.session.daily_review_snapshot : [],
         )
         try {
           mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal)

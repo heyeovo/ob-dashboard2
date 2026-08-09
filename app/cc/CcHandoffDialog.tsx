@@ -4,6 +4,7 @@ import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 
 export type HandoffPayload = {
   mode: CcMode
+  includeDailyReview: boolean
   bucketIds: string[]
   turns: number
   fromSessionId: string | null
@@ -31,6 +32,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
   const [bucketsLoading, setBucketsLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [turns, setTurns] = useState(20)
+  const [includeDailyReview, setIncludeDailyReview] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +83,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
   const handleConfirm = () => {
     onConfirm({
       mode,
+      includeDailyReview,
       bucketIds: [...selected],
       turns: fromSessionId ? turns : 0,
       fromSessionId,
@@ -138,6 +141,21 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
               </button>
             ))}
           </div>
+
+          <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={includeDailyReview}
+              onChange={event => setIncludeDailyReview(event.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]"
+            />
+            <span>
+              <span className="block text-[11.5px] text-[var(--color-text-secondary)]">注入最近三天日回顾</span>
+              <span className="mt-0.5 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+                创建窗口时冻结为快照，之后不会随日期变化
+              </span>
+            </span>
+          </label>
 
           {/* ── 记忆桶 ── */}
           <div className="mb-1.5 flex items-center justify-between">

@@ -22,7 +22,13 @@ import {
 import { clearRecallPrefs, runTurn, setRecallPrefs } from '@/app/lib/cc/runTurn'
 import { clearTurnBucket } from '@/app/lib/cc/processCollector'
 import { encodeSse } from '@/app/lib/cc/sseEvents'
-import { getConversationSession, getTurnByRequestId, type HavenTurn } from '@/app/lib/havenTurns'
+import {
+  dailyReviewSystemBlock,
+  getConversationSession,
+  getTurnByRequestId,
+  patchConversationSessionState,
+  type HavenTurn,
+} from '@/app/lib/havenTurns'
 import { resolveAttachments } from '@/app/lib/havenAttachments'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
@@ -63,6 +69,8 @@ type ChatBody = {
   persona_id?: string
   /** 5.2：chat = 闲聊（零工具），work = 工作。只在会话第一轮生效 */
   mode?: string
+  /** 新窗口是否冻结并注入最近三天日回顾；默认开启。 */
+  include_daily_review?: boolean
   /** 5.2：哪个中转站（api 时）。只在第一轮生效，服务端翻成 baseUrl + token */
   provider_id?: string
   /** 5.2：reasoning effort。第一轮生效，之后走 /api/cc-session-settings 中途改 */
@@ -198,6 +206,13 @@ async function loadTurnInputs(body: ChatBody) {
 
   // 5.2 闲聊 / 工作。默认工作 —— 4.5b 之前的老会话和不带这个字段的调用都按老行为走。
   const mode: CcMode = isCcMode(body.mode) ? body.mode : 'work'
+  await patchConversationSessionState({
+    sessionId: String(body.session_id || ''),
+    personaId: String(body.persona_id || ''),
+    mode,
+    dailyReviewEnabled: body.include_daily_review !== false,
+    initializeDailyReviewSnapshot: true,
+  })
   const webSettings = normalizeWebSettings({
     search_enabled: body.web_search_enabled,
     fetch_enabled: body.web_fetch_enabled,
@@ -249,7 +264,6 @@ async function loadTurnInputs(body: ChatBody) {
     persona,
     sessionSnapshot.session?.prompt_module_overrides,
   )
-  const systemPromptKey = personaAppend
 
   // 5.5 换窗 handoff：勾选的记忆桶拼进 systemPrompt.append。
   // 为什么进系统提示而不是 user 正文：这批桶是「带过来的稳定背景」，希望它全程都在、
@@ -278,6 +292,11 @@ async function loadTurnInputs(body: ChatBody) {
       personaAppend = [personaAppend, block].filter(Boolean).join('\n\n')
     }
   }
+  const dailyReviewBlock = sessionSnapshot.session?.daily_review_enabled
+    ? dailyReviewSystemBlock(sessionSnapshot.session.daily_review_snapshot)
+    : ''
+  personaAppend = [personaAppend, dailyReviewBlock].filter(Boolean).join('\n\n')
+  const systemPromptKey = personaAppend
 
   // 能读哪些目录：协作者自己配的，没配就是仓库根。
   // 敏感文件的拦截跟这个无关，是 ccOptions 里 PreToolUse 那道硬规则。
@@ -354,7 +373,6 @@ export async function POST(request: NextRequest) {
   if (!Number.isInteger(expectedLastRoundId) || expectedLastRoundId < 0) {
     return Response.json({ ok: false, error: 'expected_last_round_id 必须是大于或等于 0 的整数' }, { status: 400 })
   }
-
   const existing = await getTurnByRequestId(requestId, { signal: request.signal })
   if (!existing.ok) {
     return Response.json({ ok: false, error: existing.error || '幂等状态查询失败' }, { status: existing.httpStatus || 502 })

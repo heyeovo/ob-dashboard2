@@ -16,6 +16,13 @@ type HavenConfig = {
     base_url?: string
     api_key_masked?: string
   }
+  daily_review?: {
+    enabled?: boolean
+    model?: string
+    thinking_mode?: string
+    base_url?: string
+    api_key_masked?: string
+  }
 }
 
 type FormState = {
@@ -27,11 +34,17 @@ type FormState = {
   autoMemoryThinkingMode: string
   autoMemoryBaseUrl: string
   autoMemoryApiKey: string
+  dailyReviewEnabled: boolean
+  dailyReviewModel: string
+  dailyReviewThinkingMode: string
+  dailyReviewBaseUrl: string
+  dailyReviewApiKey: string
 }
 
 type KeyStatus = {
   sentinel: string
   autoMemory: string
+  dailyReview: string
 }
 
 type Notice = { kind: 'success' | 'error'; text: string } | null
@@ -45,6 +58,11 @@ const EMPTY_FORM: FormState = {
   autoMemoryThinkingMode: '',
   autoMemoryBaseUrl: '',
   autoMemoryApiKey: '',
+  dailyReviewEnabled: true,
+  dailyReviewModel: '',
+  dailyReviewThinkingMode: '',
+  dailyReviewBaseUrl: '',
+  dailyReviewApiKey: '',
 }
 
 function responseMessage(data: unknown, fallback: string) {
@@ -65,6 +83,7 @@ export default function ModelsSettingsPage() {
   const [keyStatus, setKeyStatus] = useState<KeyStatus>({
     sentinel: '未配置',
     autoMemory: '未配置',
+    dailyReview: '未配置',
   })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -75,6 +94,7 @@ export default function ModelsSettingsPage() {
   const applyConfig = useCallback((config: HavenConfig) => {
     const gateway = config.gateway ?? {}
     const reflection = config.reflection ?? {}
+    const dailyReview = config.daily_review ?? {}
 
     setForm({
       sentinelEnabled: gateway.domain_sentinel_enabled ?? true,
@@ -85,10 +105,16 @@ export default function ModelsSettingsPage() {
       autoMemoryThinkingMode: reflection.thinking_mode ?? '',
       autoMemoryBaseUrl: reflection.base_url ?? '',
       autoMemoryApiKey: '',
+      dailyReviewEnabled: dailyReview.enabled ?? true,
+      dailyReviewModel: dailyReview.model ?? '',
+      dailyReviewThinkingMode: dailyReview.thinking_mode ?? '',
+      dailyReviewBaseUrl: dailyReview.base_url ?? '',
+      dailyReviewApiKey: '',
     })
     setKeyStatus({
       sentinel: gateway.domain_sentinel_api_key_masked || '未配置',
       autoMemory: reflection.api_key_masked || '未配置',
+      dailyReview: dailyReview.api_key_masked || '未配置',
     })
     setDirty(false)
   }, [])
@@ -134,14 +160,21 @@ export default function ModelsSettingsPage() {
         thinking_mode: form.autoMemoryThinkingMode,
         base_url: form.autoMemoryBaseUrl,
       }
+      const daily_review: Record<string, unknown> = {
+        enabled: form.dailyReviewEnabled,
+        model: form.dailyReviewModel,
+        thinking_mode: form.dailyReviewThinkingMode,
+        base_url: form.dailyReviewBaseUrl,
+      }
 
       if (form.sentinelApiKey) gateway.domain_sentinel_api_key = form.sentinelApiKey
       if (form.autoMemoryApiKey) reflection.api_key = form.autoMemoryApiKey
+      if (form.dailyReviewApiKey) daily_review.api_key = form.dailyReviewApiKey
 
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persist: true, gateway, reflection }),
+        body: JSON.stringify({ persist: true, persist_env: true, gateway, reflection, daily_review }),
       })
       const data = await readJson(res)
       if (!res.ok || (data && typeof data === 'object' && (data as { ok?: boolean }).ok === false)) {
@@ -151,7 +184,7 @@ export default function ModelsSettingsPage() {
       const refreshed = await fetch('/api/config', { cache: 'no-store' })
       const refreshedData = await readJson(refreshed)
       if (!refreshed.ok || !refreshedData || typeof refreshedData !== 'object') {
-        setForm(prev => ({ ...prev, sentinelApiKey: '', autoMemoryApiKey: '' }))
+        setForm(prev => ({ ...prev, sentinelApiKey: '', autoMemoryApiKey: '', dailyReviewApiKey: '' }))
         setDirty(false)
         setNotice({ kind: 'success', text: '已保存，但未能重新读取密钥状态' })
         return
@@ -174,7 +207,7 @@ export default function ModelsSettingsPage() {
   const labelClass = 'mb-1 block text-xs text-[var(--color-text-tertiary)]'
 
   const secretField = (
-    field: 'sentinelApiKey' | 'autoMemoryApiKey',
+    field: 'sentinelApiKey' | 'autoMemoryApiKey' | 'dailyReviewApiKey',
     current: string,
   ) => (
     <div>
@@ -199,16 +232,16 @@ export default function ModelsSettingsPage() {
         <Link href="/settings" className="text-xs text-[var(--color-text-tertiary)]">
           ← 设置
         </Link>
-        <span className="text-sm font-semibold">召回与自动记忆模型</span>
+        <span className="text-sm font-semibold">召回、自动记忆与日回顾模型</span>
       </header>
 
       <main className="mx-auto max-w-3xl px-3 pt-5 sm:px-6 sm:pt-10">
         <div className="mb-6 hidden md:block">
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
-            召回与自动记忆模型
+            召回、自动记忆与日回顾模型
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)]">
-            只配置 Haven 的记忆召回判断和自动记忆生成，不影响聊天所用的上游模型。
+            分别配置召回判断、已暂停的自动记忆，以及每天独立生成的日回顾。
           </p>
         </div>
 
@@ -272,10 +305,48 @@ export default function ModelsSettingsPage() {
             </section>
 
             <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold text-[var(--color-text-heading)]">日回顾模型</h2>
+                  <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
+                    每天凌晨 4 点整理前一天的对话，单独保存，不进入记忆桶或语义召回。
+                  </p>
+                </div>
+                <label className="flex shrink-0 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.dailyReviewEnabled}
+                    onChange={event => patch('dailyReviewEnabled', event.target.checked)}
+                  />
+                  启用
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={labelClass}>模型</label>
+                  <input className={inputClass} value={form.dailyReviewModel} placeholder="例如：provider/model" onChange={event => patch('dailyReviewModel', event.target.value)} />
+                </div>
+                <div>
+                  <label className={labelClass}>思考模式</label>
+                  <select className={inputClass} value={form.dailyReviewThinkingMode} onChange={event => patch('dailyReviewThinkingMode', event.target.value)}>
+                    <option value="">跟随模型默认</option>
+                    <option value="enabled">启用</option>
+                    <option value="disabled">禁用</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Base URL</label>
+                  <input className={inputClass} value={form.dailyReviewBaseUrl} placeholder="https://..." onChange={event => patch('dailyReviewBaseUrl', event.target.value)} />
+                </div>
+                <div>{secretField('dailyReviewApiKey', keyStatus.dailyReview)}</div>
+              </div>
+            </section>
+
+            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
               <div className="mb-4">
-                <h2 className="font-semibold text-[var(--color-text-heading)]">自动记忆模型</h2>
+                <h2 className="font-semibold text-[var(--color-text-heading)]">自动记忆模型（已暂停）</h2>
                 <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
-                  生成自动记忆候选；候选的审核模式和运行时机不在本页配置。
+                  保留原配置和历史候选；后台自动生成机制当前停用。
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

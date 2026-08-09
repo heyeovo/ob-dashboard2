@@ -633,18 +633,21 @@ export default function AutomationSettingsPage() {
             {/* 关系记忆整理 */}
             <Section
               title="关系记忆整理"
-              description="关系整理、日印象、自动记忆的开关与参数。"
+              description="关系整理仍可运行；旧日印象和自动记忆已暂时停用。"
             >
               <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                  旧日印象、旧自动记忆及其每日汇总已由后端暂停；历史数据和原配置保留。
+                </div>
                 {toggle('reflectionEnabled', '整理引擎')}
                 <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
                   总开关；关闭后此区域的关系整理、日印象、自动记忆都不运行
                 </div>
                 {toggle('reflectionAutoEnabled', '自动整理', !form.reflectionEnabled)}
                 <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
-                  后台定时任务；开启后跑零点自动记忆、日印象，并给已有记忆补 tags、affect_anchor、边关系
+                  后台定时任务；当前只继续关系整理和已有记忆的 tags、affect_anchor、边关系补全
                 </div>
-                {toggle('reflectionDailyEnabled', '日印象', !form.reflectionEnabled)}
+                {toggle('reflectionDailyEnabled', '旧日印象（已暂停）', true)}
                 <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
                   关闭后不再自动生成 daily relationship_weather
                 </div>
@@ -655,7 +658,7 @@ export default function AutomationSettingsPage() {
                     max="100"
                     className={inputClass}
                     value={form.reflectionMinMemory}
-                    disabled={!form.reflectionEnabled}
+                    disabled
                     onChange={event => patch('reflectionMinMemory', event.target.value)}
                   />
                 </Field>
@@ -666,19 +669,19 @@ export default function AutomationSettingsPage() {
                     max="80"
                     className={inputClass}
                     value={form.reflectionConversationTurns}
-                    disabled={!form.reflectionEnabled}
+                    disabled
                     onChange={event => patch('reflectionConversationTurns', event.target.value)}
                   />
                 </Field>
                 <Field
-                  label="自动记忆"
-                  hint="默认自动存；每天本地 0 点后整理前一天原文并写入长期记忆"
+                  label="旧自动记忆（已暂停）"
+                  hint="历史配置保留；后端不会继续生成或写入"
                   wide
                 >
                   <select
                     className={inputClass}
                     value={form.reflectionChatMemoryMode}
-                    disabled={!form.reflectionEnabled}
+                    disabled
                     onChange={event =>
                       patch('reflectionChatMemoryMode', event.target.value as 'auto' | 'review' | 'off')
                     }
@@ -698,7 +701,7 @@ export default function AutomationSettingsPage() {
                     max="10000"
                     className={inputClass}
                     value={form.reflectionChatMemoryTurns}
-                    disabled={!form.reflectionEnabled}
+                    disabled
                     onChange={event => patch('reflectionChatMemoryTurns', event.target.value)}
                   />
                 </Field>
@@ -706,7 +709,7 @@ export default function AutomationSettingsPage() {
                 <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
                   关闭后普通 bucket 不再自动追加 affect_anchor
                 </div>
-                {toggle('reflectionWeatherAnchorEnabled', '日印象和弦', !form.reflectionEnabled)}
+                {toggle('reflectionWeatherAnchorEnabled', '旧日印象和弦（已暂停）', true)}
                 <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
                   控制日印象/关系天气正文里的 affect_anchor
                 </div>

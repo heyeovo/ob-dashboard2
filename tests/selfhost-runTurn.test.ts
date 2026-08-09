@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  assembleSystem,
   createSelfhostStream,
   type PreparedSelfhostTurn,
   type ReplaySelfhostTurn,
@@ -15,6 +16,8 @@ function prepared(): PreparedSelfhostTurn {
       expectedLastRoundId: 2,
       personaId: 'ombre',
       text: '现在的问题',
+      mode: 'chat',
+      includeDailyReview: true,
     },
     persona: {
       id: 'ombre', name: 'Ombre', initial: 'O', tint: '', user_name: '', purpose: '', description: '', prompt: '',
@@ -71,6 +74,17 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
 }
 
 describe('runSelfhostTurn stream contract', () => {
+  it('injects a frozen daily review snapshot as stable system context', () => {
+    const system = assembleSystem(prepared().persona, '召回背景', {}, [
+      { review_date: '2026-08-08', content: '昨天一起处理了窗口归属，也聊了近况。' },
+    ])
+
+    expect(system).toContain('<daily_review_snapshot>')
+    expect(system).toContain('2026-08-08')
+    expect(system).toContain('昨天一起处理了窗口归属，也聊了近况。')
+    expect(system).toContain('<haven_recall_reference>')
+  })
+
   afterEach(() => vi.restoreAllMocks())
 
   it('emits usage, strictly persists, then emits done', async () => {

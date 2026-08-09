@@ -75,6 +75,7 @@ type SessionHistorySnapshot = {
   hasEarlierHistory: boolean
   historyTurnCount: number
   mode: CcMode
+  dailyReviewEnabled: boolean
   localEnginePreference: CcEngine
   pick: CcUpstreamPick
   ccPick: CcUpstreamPick
@@ -176,6 +177,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const resumeHintRef = useRef('')
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
   const handoffRef = useRef<{ bucketIds: string[]; turns: number; fromSessionId: string | null } | null>(null)
+  const dailyReviewEnabledRef = useRef(true)
 
   // 上游配置：进页面拉一次。拉不到就用空配置（引擎层会退回 .env.local）
   useEffect(() => {
@@ -428,6 +430,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           hasEarlierHistory,
           historyTurnCount,
           mode,
+          dailyReviewEnabled: dailyReviewEnabledRef.current,
           localEnginePreference,
           pick,
           ccPick: ccPickRef.current,
@@ -462,6 +465,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setHistoryBeforeId(cached.historyBeforeId)
         setHasEarlierHistory(cached.hasEarlierHistory)
         setMode(cached.mode)
+        dailyReviewEnabledRef.current = cached.dailyReviewEnabled
         setLocalEnginePreference(cached.localEnginePreference)
         setPick(cached.pick)
         ccPickRef.current = cached.ccPick
@@ -483,6 +487,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setPromptModuleOverrides({})
         promptModuleOverridesRef.current = {}
         setMode('chat')
+        dailyReviewEnabledRef.current = true
         setWebSettings(webDefaults)
         setCredChosen(false)
         ccPickRef.current = defaultPick
@@ -523,6 +528,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             local_engine_preference?: string
             selfhost_overrides?: { provider_id?: unknown; model?: unknown }
             prompt_module_overrides?: Record<string, boolean>
+            mode?: string
+            daily_review_enabled?: boolean
           } | null
           const restoredEngine = sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc'
           const selfhostProviderId = String(sessionState?.selfhost_overrides?.provider_id || '').trim()
@@ -536,7 +543,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           const knownTurnCount = sessions.find(session => session.session_id === nextId)?.turn_count || 0
           const restoredHistoryTurnCount = Math.max(turns.length, knownTurnCount)
           // 老会话是什么模式就照它显示，别让它看起来能改
-          const restoredMode = modeOfTurns(turns)
+          const restoredMode = sessionState?.mode === 'chat' || sessionState?.mode === 'work'
+            ? sessionState.mode
+            : modeOfTurns(turns)
+          const restoredDailyReviewEnabled = sessionState?.daily_review_enabled !== false
           // 第 4 + 5 条：从最后一轮读回本窗配置和 resume 接回点
           const meta = metaOfTurns(turns)
           let restoredCcPick = { ...defaultPick }
@@ -582,6 +592,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           setHasEarlierHistory(restoredHasEarlierHistory)
           setHistoryTurnCount(restoredHistoryTurnCount)
           setMode(restoredMode)
+          dailyReviewEnabledRef.current = restoredDailyReviewEnabled
           setWebSettings(restoredWebSettings)
           setCredChosen(restoredCredChosen)
           ccPickRef.current = restoredCcPick
@@ -600,6 +611,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             hasEarlierHistory: restoredHasEarlierHistory,
             historyTurnCount: restoredHistoryTurnCount,
             mode: restoredMode,
+            dailyReviewEnabled: restoredDailyReviewEnabled,
             localEnginePreference: restoredEngine,
             pick: restoredPick,
             ccPick: restoredCcPick,
@@ -688,6 +700,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setWebSettings(webDefaults)
     // 新对话没有接回点
     resumeHintRef.current = ''
+    dailyReviewEnabledRef.current = true
     // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
     const defaultPick = pickFromConfig(upstream)
     ccPickRef.current = defaultPick
@@ -847,6 +860,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       selfhostPickRef.current = defaultPick
       setPick(defaultPick)
       setMode(payload.mode)
+      dailyReviewEnabledRef.current = payload.includeDailyReview
 
       // 存 handoff 数据，首条 send 时带走
       handoffRef.current = {
@@ -1116,6 +1130,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           persona_id: personaId,
           text,
           attachment_ids: attachmentIds,
+          mode,
+          include_daily_review: dailyReviewEnabledRef.current,
         }
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -1127,7 +1143,6 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           //（mode / cred / provider_id）后面几轮送过去也不会改，服务端沿用启动时那份。
           body: JSON.stringify(turnEngine === 'selfhost' ? strictPayload : {
             ...strictPayload,
-            mode,
             // 没人定过就不送 cred，让服务端照协作者的 engine 走
             ...(credChosen ? { cred: pick.kind === 'subscription' ? 'subscription' : 'api' } : {}),
             provider_id: pick.providerId,
