@@ -99,6 +99,14 @@ describe('ccHistory：旧历史兼容', () => {
     ).toBe('chat')
   })
 
+  it('modeOfTurns: selfhost-only history leaves cc mode selectable', () => {
+    expect(
+      modeOfTurns([
+        turn({ id: 1, raw_json: JSON.stringify({ engine: 'selfhost' }) }),
+      ]),
+    ).toBe('chat')
+  })
+
   it('metaOfTurns：老消息没有 settings / cc_session_id 时返回空', () => {
     const meta = metaOfTurns([turn({ id: 1 })])
     expect(meta.settings).toBeNull()

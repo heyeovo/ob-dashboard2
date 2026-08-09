@@ -249,7 +249,12 @@ export default function CcChatPage() {
               key={engine}
               type="button"
               disabled={chat.isRemote === true || chat.engineSaving || chat.sending}
-              onClick={() => void chat.changeEngine(engine)}
+              onClick={() => {
+                const shouldChooseMode =
+                  engine === 'cc' && chat.effectiveEngine === 'selfhost' && !chat.modeLocked
+                void chat.changeEngine(engine)
+                if (shouldChooseMode) setWinSetOpen(true)
+              }}
               className={`rounded-full px-2 py-1 ${chat.effectiveEngine === engine ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'} disabled:cursor-not-allowed disabled:opacity-55`}
               title={chat.isRemote === true ? 'Vercel 环境仅支持自建引擎，本地首选不会被覆盖' : `切换到 ${engine === 'cc' ? 'cc' : '自建引擎'}`}
             >
@@ -539,6 +544,9 @@ export default function CcChatPage() {
           onSaveWebDefaults={() => void chat.saveWebDefaults()}
           webSaving={chat.webSaving}
           engine={chat.effectiveEngine}
+          mode={chat.mode}
+          onModeChange={chat.setMode}
+          modeLocked={chat.modeLocked}
           providerLocked={chat.providerLocked}
           webLocked={chat.modeLocked}
           note={chat.settingsNote}

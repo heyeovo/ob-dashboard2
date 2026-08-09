@@ -245,22 +245,26 @@ export function parseTurnRaw(rawJson: string | undefined): {
 }
 
 /**
- * 这个会话是什么模式：看最后一轮 raw 里的 mode。
- * 5.2 之前的老会话没这个字段 —— 一律算工作模式（那时候只有这一种行为）。
+ * 这个会话的 cc 是什么模式：只看 cc 轮次，自建轮次不能替 cc 锁模式。
+ * 5.2 之前的老 cc 会话没 mode，算工作模式；从未用过 cc 则默认闲聊。
  */
 export function modeOfTurns(turns: HavenTurnRow[]): CcMode {
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const rawJson = turns[i]?.raw_json
-    if (!rawJson) continue
+    // 非常早的 cc 轮次连 raw 都没有，当时只有工作模式。
+    if (!rawJson) return 'work'
     try {
       const parsed = JSON.parse(rawJson) as Record<string, unknown>
+      if (parsed?.engine === 'selfhost') continue
       if (parsed?.mode === 'chat') return 'chat'
       if (parsed?.mode === 'work') return 'work'
+      // selfhost 上线前的老轮次没有 engine / mode，当时只有 cc 工作模式。
+      return 'work'
     } catch {
       /* 解不出来接着往前找 */
     }
   }
-  return 'work'
+  return 'chat'
 }
 
 /**

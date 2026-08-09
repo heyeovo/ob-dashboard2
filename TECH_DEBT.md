@@ -69,6 +69,7 @@
 - [ ] **自动备份** —— GitHub Actions 每天备份 buckets 到私有仓库
 - [ ] **情感唤起罗盘** —— 手机端 2D 心情坐标选记忆 + LLM 叙事
 - [ ] **旧 session 诊断表补 profile 隔离** —— `request_rounds`、`injected_buckets`、`injection_debug`、`recent_context_injections`、`upstream_usage`、`handoff_blocks` 只有 session_id；为避免跨 profile 误删，当前永久删除保留这些后台记录，后续迁移 profile_id 后再纳入清理。
+- [ ] **selfhost 跨引擎后历史图片占 token 但模型看不见** —— 连续使用 selfhost 时，后续轮次能看到历史图片；但在「selfhost 发图 → cc 对话 → 切回 selfhost」的真实路径中，图片仍存在 Haven、未清除、轮次未裁剪、上游模型/供应商未变，且仍占用输入缓存 token，但模型声称看不到。用户清除该窗口图片后，cache creation 从约 12k 降至 8.5k，证明图片确实进入并占用上下文。当前接受保留，不把历史图片强行搬到最新 user message，也不引入自动/手动重附加 UI。未来重启时先抓实际 `/v1/messages` 出站 payload 并对照有无 cc 中间轮次，再判断是 Dashboard 组装、中转缓存还是模型行为。
 
 ---
 

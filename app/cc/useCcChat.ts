@@ -692,6 +692,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   // 旧会话从 Haven 读回时 historyTurnCount > 0；本窗发言后会出现非历史消息。
   const sessionStarted =
     historyTurnCount > 0 || messages.some(message => !message.fromHistory)
+  // 自建轮次不能锁住 cc 的启动模式；只有 cc 真正开口后才锁。
+  const ccSessionStarted = messages.some(
+    message => message.role === 'assistant' && message.engine !== 'selfhost' && !message.handoff,
+  )
 
   const applyPick = useCallback(
     async (next: Partial<CcUpstreamPick>) => {
@@ -1279,8 +1283,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     // 5.2：模式 + 本窗口设置
     mode,
     setMode,
-    /** 这个会话已经开口了 —— cc 模式和联网工具不能再改。 */
-    modeLocked: sessionStarted,
+    /** cc 已经在这个窗口开口 —— 模式和联网工具不能再改。 */
+    modeLocked: ccSessionStarted,
     /** cc provider 随子进程锁定；selfhost 每轮直连，可以中途切换。 */
     providerLocked: providerSelectionLocked(effectiveEngine, sessionStarted),
     upstream,

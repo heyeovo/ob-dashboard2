@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import type { CcEngine, CcSessionStats } from './types'
+import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
   EFFORT_OPTIONS,
   modelLabel,
@@ -47,6 +48,9 @@ type Props = {
   onSaveWebDefaults: () => void
   webSaving: boolean
   engine: CcEngine
+  mode: CcMode
+  onModeChange: (next: CcMode) => void
+  modeLocked: boolean
   providerLocked: boolean
   webLocked: boolean
   note: string
@@ -93,6 +97,9 @@ export default function CcWindowSettings({
   onSaveWebDefaults,
   webSaving,
   engine,
+  mode,
+  onModeChange,
+  modeLocked,
   providerLocked,
   webLocked,
   note,
@@ -172,6 +179,29 @@ export default function CcWindowSettings({
               <span className={VAL}>{subscription ? '$0（订阅）' : fmtCost(recentSum)}</span>
             </div>
           </div>
+
+          {engine === 'cc' ? (
+            <>
+              <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
+              <div className={LABEL}>模式</div>
+              <div className="mb-2 flex gap-1.5">
+                {(['chat', 'work'] as const).map(nextMode => (
+                  <button
+                    key={nextMode}
+                    type="button"
+                    disabled={modeLocked}
+                    className={seg(mode === nextMode)}
+                    onClick={() => onModeChange(nextMode)}
+                  >
+                    {MODE_LABEL[nextMode]}
+                  </button>
+                ))}
+              </div>
+              <div className={HINT}>
+                {modeLocked ? '这个窗口已用过 cc；如需换模式，请新建窗口。' : MODE_HINT[mode]}
+              </div>
+            </>
+          ) : null}
 
           {/* ── 供应商：左订阅 / 右 api 中转站 ── */}
           <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
