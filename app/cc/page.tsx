@@ -2,12 +2,13 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
-  type RefObject,
 } from 'react'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
@@ -57,9 +58,32 @@ function formatTokens(n: number) {
   return String(n)
 }
 
-function CcScrollJumps({ children }: { children: ReactNode }) {
+function CcScrollJumps({
+  children,
+  sessionId,
+  firstMessageId,
+  lastMessageId,
+  lastMessageVersion,
+  pendingCount,
+}: {
+  children: ReactNode
+  sessionId: string
+  firstMessageId: string
+  lastMessageId: string
+  lastMessageVersion: string
+  pendingCount: number
+}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null)
+  const scrollTopRef = useRef(0)
+  const previousContentRef = useRef<{
+    sessionId: string
+    firstMessageId: string
+    lastMessageId: string
+    lastMessageVersion: string
+    pendingCount: number
+    scrollHeight: number
+  } | null>(null)
   const [canGoUp, setCanGoUp] = useState(false)
   const [canGoDown, setCanGoDown] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -68,6 +92,7 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
   const update = useCallback(() => {
     const node = scrollRef.current
     if (!node) return
+    scrollTopRef.current = node.scrollTop
     const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
     const nextCanGoUp = node.scrollTop > 24
     const nextCanGoDown = distanceFromBottom > 24
@@ -79,7 +104,7 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
       setThumb(current => current.visible ? { visible: false, top: 0, height: 0 } : current)
       return
     }
-    const height = Math.max(40, trackHeight * (node.clientHeight / node.scrollHeight))
+    const height = Math.max(48, trackHeight * (node.clientHeight / node.scrollHeight))
     const top = (node.scrollTop / maxScrollTop) * Math.max(0, trackHeight - height)
     setThumb(current =>
       current.visible && Math.abs(current.top - top) < 0.5 && Math.abs(current.height - height) < 0.5
@@ -88,14 +113,39 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
     )
   }, [])
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(update)
+  useLayoutEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const previous = previousContentRef.current
+    if (!previous || previous.sessionId !== sessionId) {
+      node.scrollTop = node.scrollHeight
+    } else if (
+      previous.firstMessageId !== firstMessageId
+      && previous.lastMessageId === lastMessageId
+    ) {
+      node.scrollTop = scrollTopRef.current + (node.scrollHeight - previous.scrollHeight)
+    } else if (
+      previous.lastMessageId !== lastMessageId
+      || previous.lastMessageVersion !== lastMessageVersion
+      || previous.pendingCount !== pendingCount
+    ) {
+      node.scrollTop = node.scrollHeight
+    }
+    scrollTopRef.current = node.scrollTop
+    previousContentRef.current = {
+      sessionId,
+      firstMessageId,
+      lastMessageId,
+      lastMessageVersion,
+      pendingCount,
+      scrollHeight: node.scrollHeight,
+    }
+    update()
     window.addEventListener('resize', update)
     return () => {
-      window.cancelAnimationFrame(frame)
       window.removeEventListener('resize', update)
     }
-  }, [children, update])
+  }, [children, firstMessageId, lastMessageId, lastMessageVersion, pendingCount, sessionId, update])
 
   const jump = (top: number) => {
     scrollRef.current?.scrollTo({ top, behavior: 'smooth' })
@@ -105,6 +155,7 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
     const node = scrollRef.current
     if (!node) return
     event.preventDefault()
+    event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = { pointerId: event.pointerId, startY: event.clientY, startScrollTop: node.scrollTop }
     setDragging(true)
@@ -157,7 +208,7 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
         {children}
       </div>
       {thumb.visible ? (
-        <div className="pointer-events-none absolute inset-y-2 right-1 z-10 w-3 md:hidden">
+        <div className="pointer-events-none absolute inset-y-2 right-0 z-10 w-10 md:hidden">
           <button
             type="button"
             aria-label="快速滚动对话"
@@ -167,9 +218,22 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
             onPointerUp={endThumbDrag}
             onPointerCancel={endThumbDrag}
             onKeyDown={useThumbKeyboard}
-            className={`pointer-events-auto absolute right-0 w-1.5 touch-none rounded-full bg-[var(--color-text-tertiary)] shadow-sm transition-opacity ${dragging ? 'opacity-85' : 'opacity-45'}`}
-            style={{ top: thumb.top, height: thumb.height }}
-          />
+            onContextMenu={event => event.preventDefault()}
+            onDragStart={event => event.preventDefault()}
+            className="pointer-events-auto absolute right-0 flex w-10 touch-none select-none justify-end pr-1"
+            style={{
+              top: thumb.top,
+              height: thumb.height,
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
+            }}
+          >
+            <span
+              aria-hidden="true"
+              className={`h-full w-2 rounded-full bg-[var(--color-text-tertiary)] shadow-sm transition-opacity ${dragging ? 'opacity-85' : 'opacity-45'}`}
+            />
+          </button>
         </div>
       ) : null}
       {canGoUp || canGoDown ? (
@@ -213,14 +277,58 @@ export default function CcChatPage() {
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const [winSetOpen, setWinSetOpen] = useState(false)
   const [handoffOpen, setHandoffOpen] = useState<{ fromSessionId: string | null } | null>(null)
-  const desktopBottomRef = useRef<HTMLDivElement>(null)
-  const mobileBottomRef = useRef<HTMLDivElement>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchSessionId, setSearchSessionId] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeSearchMessageId, setActiveSearchMessageId] = useState('')
 
-  // 新消息进来滚到底。桌面和手机是两套同时渲染的布局，必须各自滚自己的可见区域。
+  const searchVisible = searchOpen && searchSessionId === chat.sessionId
+  const normalizedSearchQuery = searchVisible ? searchQuery.trim().toLocaleLowerCase() : ''
+  const searchResults = useMemo(
+    () => normalizedSearchQuery
+      ? chat.messages.filter(message =>
+          !message.handoff && message.text.toLocaleLowerCase().includes(normalizedSearchQuery),
+        )
+      : [],
+    [chat.messages, normalizedSearchQuery],
+  )
+  const shownActiveSearchMessageId = searchResults.some(message => message.id === activeSearchMessageId)
+    ? activeSearchMessageId
+    : searchResults[0]?.id || ''
+  const activeSearchIndex = searchResults.findIndex(message => message.id === shownActiveSearchMessageId)
+
   useEffect(() => {
-    desktopBottomRef.current?.scrollIntoView({ block: 'end' })
-    mobileBottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [chat.messages, chat.pending.length])
+    if (!searchVisible) return
+    const frame = window.requestAnimationFrame(() => {
+      const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('[data-cc-search-input]'))
+      inputs.find(input => input.getClientRects().length > 0)?.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [searchVisible])
+
+  useEffect(() => {
+    if (!shownActiveSearchMessageId) return
+    const frame = window.requestAnimationFrame(() => {
+      const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-message-id]'))
+      rows
+        .find(row => row.dataset.messageId === shownActiveSearchMessageId && row.getClientRects().length > 0)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [shownActiveSearchMessageId])
+
+  const moveSearch = (direction: -1 | 1) => {
+    if (searchResults.length === 0) return
+    const current = activeSearchIndex >= 0 ? activeSearchIndex : 0
+    const next = (current + direction + searchResults.length) % searchResults.length
+    setActiveSearchMessageId(searchResults[next].id)
+  }
+
+  const closeSearch = () => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    setActiveSearchMessageId('')
+  }
 
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text)
@@ -277,18 +385,19 @@ export default function CcChatPage() {
         >
           {chat.sessionTitle}
         </button>
-        {/* ⚠️ 一行到底不换行：手机上换行会把整条顶栏顶成半屏高。
-            手机只留「模式 · N 轮」，其余（模型名 / 上下文 / 花费 / 缓存）
-            md 以上才出现，手机想看去「本窗」弹窗里看。 */}
-        <div className="mt-0.5 flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-[var(--color-text-disabled)]">
+        <div className="mt-0.5 whitespace-nowrap text-[11px] text-[var(--color-text-disabled)] md:hidden">
+          {chat.effectiveEngine === 'selfhost' ? '纯聊天' : `${MODE_LABEL[chat.mode]}模式`}
+        </div>
+        {/* 完整运行信息只在桌面显示；手机去「本窗」查看，避免顶栏拥挤。 */}
+        <div className="mt-0.5 hidden items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-[var(--color-text-disabled)] md:flex">
           <span>{chat.effectiveEngine === 'selfhost' ? '纯聊天' : `${MODE_LABEL[chat.mode]}模式`}</span>
           <span>·</span>
           <span>{chat.latestTurn?.engine === 'selfhost' || (!chat.latestTurn && chat.effectiveEngine === 'selfhost') ? '自建引擎' : 'cc'}</span>
-          {shownProvider ? <><span className="hidden md:inline">·</span><span className="hidden md:inline">{shownProvider}</span></> : null}
+          {shownProvider ? <><span>·</span><span>{shownProvider}</span></> : null}
           {shownModel ? (
             <>
-              <span className="hidden md:inline">·</span>
-              <span className="hidden max-w-[11rem] truncate md:inline" title={shownModel}>
+              <span>·</span>
+              <span className="max-w-[11rem] truncate" title={shownModel}>
                 {shownModel}
               </span>
             </>
@@ -298,8 +407,8 @@ export default function CcChatPage() {
           {/* 上下文用量。上限拿不到（进程还没起）就不显示分母，别编一个 */}
           {ctxTokens > 0 ? (
             <>
-              <span className="hidden md:inline">·</span>
-              <span className="hidden md:inline" title="这个对话现在占了多少上下文">
+              <span>·</span>
+              <span title="这个对话现在占了多少上下文">
                 {formatTokens(ctxTokens)}
                 {ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}
               </span>
@@ -310,15 +419,14 @@ export default function CcChatPage() {
               这时候显示 $0 是在骗人，不如不显示。 */}
           {chat.stats.totalCostUsd > 0 && chat.pick.kind !== 'subscription' ? (
             <>
-              <span className="hidden md:inline">·</span>
-              <span className="hidden md:inline">{formatCost(chat.stats.totalCostUsd)}</span>
+              <span>·</span>
+              <span>{formatCost(chat.stats.totalCostUsd)}</span>
             </>
           ) : null}
           {cacheSystem ? (
             <>
-              <span className="hidden md:inline">·</span>
+              <span>·</span>
               <span
-                className="hidden md:inline"
                 title="Anthropic prompt cache 两档：系统提示 + 工具说明进 1 小时档，会话消息进 5 分钟档。5 分钟过了不等于缓存全没，接着聊仍然便宜。"
               >
                 缓存 {cacheSystem}
@@ -330,6 +438,23 @@ export default function CcChatPage() {
       </div>
       {/* 右：本窗口设置（这一个对话的模型/供应商）+ 协作者设置（跨对话的人设） */}
       <div className="flex shrink-0 items-center gap-1 md:gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setSearchSessionId(chat.sessionId)
+            setSearchQuery('')
+            setActiveSearchMessageId('')
+            setSearchOpen(true)
+          }}
+          aria-label="搜索当前对话"
+          title="搜索当前对话"
+          className="cc-icon-btn"
+        >
+          <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <circle cx="10.8" cy="10.8" r="6.3" />
+            <path d="m15.5 15.5 4 4" />
+          </svg>
+        </button>
         <div className="flex rounded-full border border-[var(--color-border)] bg-white p-0.5 text-[10px]">
           {(['cc', 'selfhost'] as const).map(engine => (
             <button
@@ -375,8 +500,31 @@ export default function CcChatPage() {
     .reverse()
     .find(message => message.role === 'assistant' && !message.handoff)?.id
 
-  const thread = (bottomRef: RefObject<HTMLDivElement | null>) => (
-    <CcScrollJumps>
+  const firstMessageId = chat.messages[0]?.id || ''
+  const lastMessage = chat.messages.at(-1)
+  const lastMessageId = lastMessage?.id || ''
+  const lastMessageVersion = lastMessage
+    ? [
+        lastMessage.id,
+        lastMessage.text.length,
+        lastMessage.thinking?.length || 0,
+        lastMessage.process?.reduce(
+          (length, event) => length + (event.type === 'tool' ? 0 : event.text.length),
+          0,
+        ) || 0,
+        lastMessage.tools?.length || 0,
+        lastMessage.streaming ? 1 : 0,
+      ].join(':')
+    : ''
+
+  const thread = () => (
+    <CcScrollJumps
+      sessionId={chat.sessionId}
+      firstMessageId={firstMessageId}
+      lastMessageId={lastMessageId}
+      lastMessageVersion={lastMessageVersion}
+      pendingCount={chat.pending.length}
+    >
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
         {!chat.historyLoading && chat.messages.length > 0 && chat.hasEarlierHistory ? (
           <div className="text-center">
@@ -428,6 +576,8 @@ export default function CcChatPage() {
                 onOpenRecall={setRecallDetail}
                 onRetryPersistence={chat.retryPersistence}
                 onClearAttachment={chat.clearAttachment}
+                searchQuery={normalizedSearchQuery}
+                searchActive={m.id === shownActiveSearchMessageId}
               />
             ),
           )
@@ -454,7 +604,7 @@ export default function CcChatPage() {
             {chat.error}
           </div>
         ) : null}
-        <div ref={bottomRef} />
+        <div />
       </div>
     </CcScrollJumps>
   )
@@ -462,6 +612,68 @@ export default function CcChatPage() {
   const composer = (
     <div className="px-4 pb-4 pt-1">
       <div className="mx-auto max-w-[var(--chat-assistant-width)]">
+        {searchVisible ? (
+          <div className="mb-2">
+            <div className="flex items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-white px-2 py-1.5 shadow-sm">
+              <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <circle cx="10.8" cy="10.8" r="6.3" />
+                <path d="m15.5 15.5 4 4" />
+              </svg>
+              <input
+                data-cc-search-input
+                type="search"
+                value={searchQuery}
+                onChange={event => {
+                  setSearchQuery(event.target.value)
+                  setActiveSearchMessageId('')
+                }}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  moveSearch(event.shiftKey ? -1 : 1)
+                }}
+                placeholder="搜索当前对话"
+                autoComplete="off"
+                className="min-w-0 flex-1 bg-transparent px-1 py-1 text-sm text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-disabled)]"
+              />
+              <div className="flex shrink-0 items-center rounded-full bg-[var(--color-surface-secondary)] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => moveSearch(-1)}
+                  disabled={searchResults.length === 0}
+                  aria-label="上一个匹配结果"
+                  className="flex size-7 items-center justify-center rounded-full text-xs text-[var(--color-text-secondary)] disabled:opacity-30"
+                >↑</button>
+                <span className="min-w-10 px-1 text-center text-[10px] tabular-nums text-[var(--color-text-tertiary)]">
+                  {searchResults.length > 0 ? `${Math.max(activeSearchIndex, 0) + 1}/${searchResults.length}` : '0/0'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => moveSearch(1)}
+                  disabled={searchResults.length === 0}
+                  aria-label="下一个匹配结果"
+                  className="flex size-7 items-center justify-center rounded-full text-xs text-[var(--color-text-secondary)] disabled:opacity-30"
+                >↓</button>
+              </div>
+              <button
+                type="button"
+                onClick={closeSearch}
+                aria-label="关闭搜索"
+                className="flex size-7 shrink-0 items-center justify-center rounded-full text-base text-[var(--color-text-tertiary)]"
+              >×</button>
+            </div>
+            {normalizedSearchQuery && chat.hasEarlierHistory ? (
+              <button
+                type="button"
+                onClick={() => void chat.loadEarlierHistory()}
+                disabled={chat.earlierHistoryLoading}
+                className="mt-1.5 w-full text-center text-[11px] text-[var(--color-primary)] disabled:opacity-50"
+              >
+                {chat.earlierHistoryLoading ? '正在搜索更早消息…' : '继续搜索更早消息'}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {chat.isRemote === true ? (
           <div className="mb-2 rounded-xl bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">
             Vercel 环境仅支持自建引擎；你的本地引擎首选没有被修改。
@@ -558,7 +770,7 @@ export default function CcChatPage() {
           <aside className="cc-rail-pane w-[var(--chat-rail-width)] shrink-0">{rail}</aside>
           <main className="flex min-w-0 flex-1 flex-col">
             {header}
-            {thread(desktopBottomRef)}
+            {thread()}
             {composer}
           </main>
         </div>
@@ -570,7 +782,7 @@ export default function CcChatPage() {
         style={{ height: 'calc(100dvh - 76px - env(safe-area-inset-bottom, 0px))' }}
       >
         {header}
-        {thread(mobileBottomRef)}
+        {thread()}
         {composer}
       </div>
 

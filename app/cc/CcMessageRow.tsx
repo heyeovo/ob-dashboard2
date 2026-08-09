@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import CcMarkdown from './CcMarkdown'
+import CcMarkdown, { highlightSearchText } from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcMessage, CcProcessEvent, CcToolEvent } from './types'
@@ -63,6 +63,8 @@ type Props = {
   onOpenRecall?: (message: CcMessage) => void
   onRetryPersistence?: (message: CcMessage) => void
   onClearAttachment?: (messageId: string, attachmentId: string) => void
+  searchQuery?: string
+  searchActive?: boolean
 }
 
 export default function CcMessageRow({
@@ -74,6 +76,8 @@ export default function CcMessageRow({
   onOpenRecall,
   onRetryPersistence,
   onClearAttachment,
+  searchQuery = '',
+  searchActive = false,
 }: Props) {
   const isUser = message.role === 'user'
   const shownModel = modelLabel(message.model || '')
@@ -138,7 +142,7 @@ export default function CcMessageRow({
   /* ---------- 用户侧 ---------- */
   if (isUser) {
     return (
-      <div className="cc-row flex flex-col gap-1" data-role="user">
+      <div className="cc-row flex flex-col gap-1" data-role="user" data-message-id={message.id}>
         <div ref={frameRef} className="flex flex-col items-end">
           <div
             className="flex max-w-full flex-col items-end gap-2"
@@ -228,7 +232,11 @@ export default function CcMessageRow({
                 ))}
               </div>
             ) : null}
-            {message.text ? <div className="cc-bubble-user">{message.text}</div> : null}
+            {message.text ? (
+              <div className="cc-bubble-user">
+                {highlightSearchText(message.text, searchQuery, searchActive)}
+              </div>
+            ) : null}
           </div>
 
           {menuOpen ? (
@@ -303,7 +311,7 @@ export default function CcMessageRow({
   const usage = message.usage || null
 
   return (
-    <div className="cc-row flex flex-col" data-role="assistant">
+    <div className="cc-row flex flex-col" data-role="assistant" data-message-id={message.id}>
       <div className="cc-assistant-block">
         {/* 名字行：头像 + 名字 + 时间，最右是这一轮的召回按钮 */}
         <div className="cc-namerow">
@@ -396,7 +404,9 @@ export default function CcMessageRow({
 
         {/* 正文：markdown。流式中末尾跟一个光标 */}
         <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
-          {finalText ? <CcMarkdown text={finalText} /> : null}
+          {finalText ? (
+            <CcMarkdown text={finalText} searchQuery={searchQuery} searchActive={searchActive} />
+          ) : null}
           {message.streaming ? (
             finalText ? (
               <span className="cc-caret" aria-hidden="true" />
