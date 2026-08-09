@@ -54,6 +54,7 @@ export type HavenConversationSession = {
   title: string
   local_engine_preference: 'cc' | 'selfhost'
   selfhost_overrides: Record<string, unknown>
+  prompt_module_overrides: Record<string, boolean>
   cc_seen_round_id: number
   state_version: number
   deleted_at: string | null
@@ -513,6 +514,7 @@ export async function patchConversationSessionState(input: {
   personaId: string
   localEnginePreference?: 'cc' | 'selfhost'
   selfhostOverrides?: Record<string, unknown>
+  promptModuleOverrides?: Record<string, boolean>
   expectedStateVersion?: number
 }): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
   const sessionId = input.sessionId.trim()
@@ -520,12 +522,13 @@ export async function patchConversationSessionState(input: {
   if (!sessionId || !personaId) {
     return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
   }
-  if (!input.localEnginePreference && !input.selfhostOverrides) {
+  if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.promptModuleOverrides === undefined) {
     return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
   const body: Record<string, unknown> = { session_id: sessionId, persona_id: personaId }
   if (input.localEnginePreference) body.local_engine_preference = input.localEnginePreference
   if (input.selfhostOverrides) body.selfhost_overrides = input.selfhostOverrides
+  if (input.promptModuleOverrides !== undefined) body.prompt_module_overrides = input.promptModuleOverrides
   if (input.expectedStateVersion != null) body.expected_state_version = input.expectedStateVersion
   const res = await havenFetch({
     method: 'PATCH',

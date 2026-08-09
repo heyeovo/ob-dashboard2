@@ -6,6 +6,7 @@ import {
   type CcEngine,
   type PersonaPatch,
 } from '@/app/lib/havenPersonas'
+import { DEFAULT_PERSONA_BASE_PROMPT } from '@/app/lib/personaPrompt'
 
 // 4.5b 协作者配置。代理到 Haven 的 /gateway/api/cc/personas。
 //
@@ -28,7 +29,9 @@ const SEED_PERSONA: PersonaPatch = {
   user_name: '',
   purpose: '',
   description: '',
+  base_prompt: DEFAULT_PERSONA_BASE_PROMPT,
   prompt: '',
+  prompt_modules: [],
   memory_entries: [],
   dirs: [],
   // 空 = 不能写。种子协作者也一样，写权限要用户自己去配
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
 
   // 白名单：只把认识的字段转给 Haven，未出现的字段不动（PATCH 语义靠这个成立）
   const patch: PersonaPatch = { id }
-  for (const key of ['name', 'initial', 'tint', 'user_name', 'purpose', 'description', 'prompt'] as const) {
+  for (const key of ['name', 'initial', 'tint', 'user_name', 'purpose', 'description', 'base_prompt', 'prompt'] as const) {
     if (key in input) patch[key] = String(input[key] ?? '')
   }
   for (const key of ['recall_on', 'semantic_on'] as const) {
@@ -87,6 +90,23 @@ export async function POST(request: NextRequest) {
     const raw = input[key]
     patch[key] = Array.isArray(raw)
       ? raw.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : []
+  }
+  if ('prompt_modules' in input) {
+    const raw = input.prompt_modules
+    patch.prompt_modules = Array.isArray(raw)
+      ? raw.flatMap((item, index) => {
+          if (!item || typeof item !== 'object') return []
+          const value = item as Record<string, unknown>
+          const content = String(value.content || '').trim()
+          if (!content) return []
+          return [{
+            id: String(value.id || `module-${index + 1}`).trim() || `module-${index + 1}`,
+            name: String(value.name || '未命名模块').trim() || '未命名模块',
+            content,
+            enabled_by_default: value.enabled_by_default !== false,
+          }]
+        })
       : []
   }
   if ('engine' in input) {

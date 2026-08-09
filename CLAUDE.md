@@ -90,9 +90,9 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `cc-chat/route.ts` | cc 聊天主入口：严格发送 payload、Haven 幂等预检/重放、SSE 流式执行，写入成功后才完成 |
 | `cc-chat-selfhost/route.ts` | 自建聊天入口：服务端读取 Haven 配置/历史/MCP 配置，按 cc 同一格式注入本轮隐藏北京时间，直连 Anthropic-compatible SSE 并执行远程 MCP 工具循环，记录上游生成耗时/速度，严格写回成功后才完成 |
 | `cc-attachments/route.ts` + `[id]/route.ts` | `/cc` 图片/文件上传、私有读取与分类清除：图片先压缩，PDF/DOCX/MD/TXT/CSV 在浏览器提取受限正文后与原文件一起转存 Haven；浏览器不接触网关密钥或永久公开 URL |
-| `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态：读取/保存本地引擎首选、列出软删除窗口、严格永久删除 |
+| `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态：所有来源严格按协作者归属过滤，读取/保存本地引擎首选与提示词模块覆盖、列出软删除窗口、严格永久删除 |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
-| `cc-personas/route.ts` | 协作者（persona 列表/保存/删除） |
+| `cc-personas/route.ts` | 协作者（persona 列表/保存/删除，含可自定义基础提示词、可排序提示词模块及默认启停） |
 | `cc-upstream/route.ts` | 上游模型配置 |
 | `cc-mcp/route.ts` | cc MCP 工具配置 |
 | `cc-permission/route.ts` | 写权限批准 |
@@ -194,6 +194,10 @@ params 是 Promise，必须 `const { id } = await params`。
 `getSessionCookie()` 5min 内存缓存。避免每次 API 请求重复 POST `/auth/login`。
 
 ### cc 聊天架构
+协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和“新窗口默认开启”状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖；不在输入框或消息详情增加模块标签。窗口覆盖缺省时跟随协作者默认，因此以后新增模块仍可自然继承默认状态。
+
+订阅、API 中转站和 selfhost 共用同一份协作者基础提示词；默认值是原 cc 闲聊模式提示词，cc 闲聊不再另外注入写死副本。cc 工作模式仍保留 Claude Code preset，再追加同一份协作者配置。最终都按“协作者基础 system + 定位 + 当前有效提示词模块 + 记忆”组装，每个模块以 `【模块名称】` 开头，便于模型区分边界；界面用的协作者名字和对方称呼不再机械生成独立 system 句子，身份关系由基础提示词、定位和模块自然表达。selfhost 每轮重组；cc 对协作者配置组合计算启动指纹，内容变化时回收空闲 SDK query，并用原 Claude session resume，使下一轮使用新 system 且保留对话上下文。换窗 handoff 不计入该指纹，避免第二轮误重启后丢失稳定背景。每轮隐藏运行时信息直接提供北京时间对应的中文星期，避免模型自行换算日期。
+
 `cc-chat/route.ts` 是 cc SSE 流式入口，内部拆 `runTurn` / `ccOptions` / `ccHistory` + `processCollector`（进程收集）+ 一轮状态机。10.3 起 cc 与 selfhost 都要求 `request_id + expected_last_round_id + persona_id`；cc 在执行前查询 Haven 幂等记录，命中则重放，模型生成后以严格 compare-and-append 写入，Haven 成功后才发送 `done`。10.4 起每轮 cc 还会从 Haven 读取 `cc_seen_round_id`，把游标后的 selfhost 用户/助手原文作为 `<上次聊到这里>` 一次性放进下一条 SDK user message；这些缺失 selfhost 轮次若保存过 `raw_json.recall.additional_context`（旧数据可回退到 `modules[].text`），还会在原续聊记录之前追加独立的隐藏 `<之前的记忆>`，确保已进入排除账本、因而不会被 cc 再召回的背景仍能随切换进入 cc 私有上下文。只有 cc 严格写入成功才由 Haven 推进游标，`done` 会带本轮补入轮数；下一轮不会重复补入同一批对话或召回参考。浏览器断连后子进程会被回收，防止下次发言卡死。
 
 `cc-chat-selfhost/route.ts` 是独立的无状态聊天链路：浏览器只提交 `session_id`、`request_id`、`expected_last_round_id`、`persona_id` 和当前正文；服务端从 Haven 读取 Persona、窗口覆盖、完整分页历史、上游密钥与 MCP 配置，因此 cc 写入的历史会原样进入 selfhost 上下文，密钥和 MCP 请求头不返回浏览器。每轮当前用户内容末尾会按 cc 同一格式追加隐藏的北京时间运行时块；预算计算和真实上游请求使用同一份带时间文本，但浏览器气泡与 Haven `user_text` 仍只保存用户原话。预检阶段访问 Haven 的配置、Persona、会话与历史 GET 遇到连接级异常会短暂重试一次；HTTP 错误、写入和主动取消不重试，最终网络错误保留 undici `cause` 便于定位。`lib/selfhost/` 负责 Persona → recall 参考块、保守上下文预算、Anthropic-compatible `/v1/messages` 请求与 SSE 解析，以及远程 MCP 工具循环：只连接已启用的 HTTP/SSE server，并按服务端实时 `listTools` schema 注入权限最终为 `allow` 的工具；`ask`、`deny` 和 stdio 不注入。工具定义计入固定上下文预算，一轮最多执行 8 次工具调用；结果按现有 MCP 设置决定是否把截断正文持久化，状态与调用元数据仍随轮次保存。连接、发现或调用失败会作为工具错误/警告返回，不阻断普通聊天；达到上限后不再提供工具，要求模型完成正文。usage 累加各次上游调用，并只记录上游生成耗时，不混入工具、召回和 Haven 保存耗时。每个 selfhost 响应流持有独立 AbortController；浏览器取消 response stream 或入站 request signal 中断时都会 abort 召回、上游 fetch 与尚未完成的 Haven 写入，取消后不再发送 SSE 或保存该轮。cc 与 selfhost 召回前都读取 Haven 持久排除集合（已召回桶 + 本窗口新建桶），本轮召回/新建 ID 随严格写入落回 Haven，不依赖进程内缓存或 localStorage；MCP `hold` 只有结构化结果为 `status=success, action=created` 时才追加 `created_bucket_ids`，`merged/commented` 不算新桶，cc 仍兼容旧文本标记。selfhost 还会读取历史轮次 `raw_json.recall`，把此前已注入、因此不会再次召回的正文随对应历史轮次继续重放，并计入历史预算；实时和刷新后的召回按钮都从同一持久正文展示。上游完成后使用 Haven 严格 compare-and-append，写入成功才发送 `done`；幂等命中从 Haven 原轮次重放，生成后 409/写库失败只发送结构化 `error`。thinking 不设本地开关或请求参数：正式 `thinking_delta` 照常展示与保存；中转站若又把另一份字面 `<thinking>...</thinking>` 或 `<think>...</think>` 放进 `text_delta`，流式解析器会分别按配对标签跨 chunk 剔除该区段，避免进入正文和历史。

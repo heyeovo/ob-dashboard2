@@ -118,7 +118,7 @@ describe('runSelfhostTurn stream contract', () => {
         {
           role: 'user',
           content: expect.stringMatching(
-            /^现在的问题\n\n<运行时信息>\n当前北京时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\+08:00（Asia\/Shanghai）。这是系统提供的隐藏时间，不是用户消息。\n<\/运行时信息>$/,
+            /^现在的问题\n\n<运行时信息>\n当前北京时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}（星期[一二三四五六日]，UTC\+08:00，Asia\/Shanghai）。这是系统提供的隐藏时间，不是用户消息。\n<\/运行时信息>$/,
           ),
         },
       ],

@@ -91,6 +91,8 @@ export type RunTurnInput = {
   persona: HavenPersona | null
   /** 这一轮真正生效的配置快照（route 从 body + Haven 配置解析） */
   config: TurnConfig
+  /** route 为组装 system 预读的同一份 Haven 窗口状态，避免本轮重复请求。 */
+  sessionSnapshot?: Awaited<ReturnType<typeof getConversationSession>>
   /** 5.5 换窗 handoff。只随新会话首条带一次，之后几轮传空 */
   handoff: { bucketIds: string[]; turns: number; fromSession: string }
   /** 第 5 条 resume：前端从历史最后一轮读出的 claude code session id。
@@ -384,6 +386,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       model: config.model,
       effort: config.effort,
       thinking: config.thinking,
+      systemPromptKey: config.systemPromptKey,
     })
 
     if (live.busy) {
@@ -409,7 +412,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
     // 10.4：跨引擎补齐与召回排除都以 Haven 为事实源。每轮重读，才能跨刷新、
     // dev server 重启、Vercel 实例切换和设备切换；不能再依赖模块级 Map。
-    const sessionResult = await getConversationSession(sessionId, {
+    const sessionResult = input.sessionSnapshot || await getConversationSession(sessionId, {
       includeBucketExclusions: true,
       signal,
     })

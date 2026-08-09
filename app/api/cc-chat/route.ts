@@ -22,7 +22,7 @@ import {
 import { clearRecallPrefs, runTurn, setRecallPrefs } from '@/app/lib/cc/runTurn'
 import { clearTurnBucket } from '@/app/lib/cc/processCollector'
 import { encodeSse } from '@/app/lib/cc/sseEvents'
-import { getTurnByRequestId, type HavenTurn } from '@/app/lib/havenTurns'
+import { getConversationSession, getTurnByRequestId, type HavenTurn } from '@/app/lib/havenTurns'
 import { resolveAttachments } from '@/app/lib/havenAttachments'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
@@ -242,7 +242,14 @@ async function loadTurnInputs(body: ChatBody) {
     ? permissionRuleStrings(permanentPermissions.rules)
     : []
 
-  let personaAppend = buildPersonaAppend(persona)
+  const sessionSnapshot = await getConversationSession(body.session_id || '', {
+    includeBucketExclusions: true,
+  })
+  let personaAppend = buildPersonaAppend(
+    persona,
+    sessionSnapshot.session?.prompt_module_overrides,
+  )
+  const systemPromptKey = personaAppend
 
   // 5.5 换窗 handoff：勾选的记忆桶拼进 systemPrompt.append。
   // 为什么进系统提示而不是 user 正文：这批桶是「带过来的稳定背景」，希望它全程都在、
@@ -290,6 +297,7 @@ async function loadTurnInputs(body: ChatBody) {
     sessionId: body.session_id || '',
     mode,
     personaAppend,
+    systemPromptKey,
     cwd,
     additionalDirectories,
     activeWebTools,
@@ -310,6 +318,7 @@ async function loadTurnInputs(body: ChatBody) {
   return {
     persona,
     config,
+    sessionSnapshot,
     handoff: {
       bucketIds: handoffBucketIds,
       turns: Number(body.handoff_turns) || 0,
@@ -367,7 +376,7 @@ export async function POST(request: NextRequest) {
     return replayCcTurn(existing.turn, body)
   }
 
-  const { persona, config, handoff } = await loadTurnInputs(body)
+  const { persona, config, handoff, sessionSnapshot } = await loadTurnInputs(body)
   let attachments
   try {
     attachments = await resolveAttachments(attachmentIds, sessionId)
@@ -420,6 +429,7 @@ export async function POST(request: NextRequest) {
         attachments,
         persona,
         config,
+        sessionSnapshot,
         handoff,
         signal: request.signal,
         send,

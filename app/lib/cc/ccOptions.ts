@@ -26,7 +26,7 @@ import {
   mcpPermissionForTool,
   toSdkMcpServers,
 } from '@/app/lib/ccMcp'
-import { CHAT_MODE_PROMPT, type CcMode } from '@/app/lib/ccModes'
+import type { CcMode } from '@/app/lib/ccModes'
 import { autoAllowEdits, recordCommand, recordFileChange, requestPermission } from '@/app/lib/ccChannel'
 import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
 import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
@@ -61,6 +61,8 @@ export type TurnConfig = {
   sessionId: string
   mode: CcMode
   personaAppend: string
+  /** 只标识协作者身份与提示词模块；不包含仅在新窗口首轮装载的 handoff。 */
+  systemPromptKey: string
   cwd: string
   additionalDirectories: string[]
   /** 闲聊模式只给本窗口开启的联网工具；工作模式另有 7 个内置工具 */
@@ -308,11 +310,11 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     maxThinkingTokens: thinking ? undefined : 0,
     // 工作模式：协作者人设接在 claude code 自带系统提示**后面**，不替换它 ——
     //   那段里有工具怎么用、路径怎么写，换掉工具就废了。
-    // 闲聊模式：整段替换成用户自己写的那段（见 ccModes.ts），人设照旧接在后面 ——
-    //   不接的话切协作者就没意义了（谁都一样）。
+    // 闲聊模式：只使用协作者统一配置；不再额外注入一份写死的闲聊提示词。
+    // 同一份 personaAppend 也会用于工作模式和 selfhost，前端只需维护一次。
     systemPrompt:
       mode === 'chat'
-        ? [CHAT_MODE_PROMPT, personaAppend].filter(Boolean).join('\n\n')
+        ? personaAppend
         : personaAppend
           ? { type: 'preset', preset: 'claude_code', append: personaAppend }
           : { type: 'preset', preset: 'claude_code' },

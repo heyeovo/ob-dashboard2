@@ -6,7 +6,7 @@
 //
 //   |                | 闲聊                        | 工作（4.5b 起的现状）        |
 //   |----------------|-----------------------------|------------------------------|
-//   | systemPrompt   | 下面这段 + 人设 append      | preset + 人设 append         |
+//   | systemPrompt   | 协作者配置                  | preset + 协作者配置          |
 //   | cc 那 7 个工具 | 不给（tools: []）           | 给                           |
 //   | 日常 MCP       | 给                          | 给                           |
 //   | 批准闸门       | 用不上（没有写工具）        | 照现状                       |
@@ -23,16 +23,6 @@ export type CcMode = 'chat' | 'work'
 export function isCcMode(raw: unknown): raw is CcMode {
   return raw === 'chat' || raw === 'work'
 }
-
-/**
- * 闲聊模式的系统提示。用户给的，原样用，不要"优化"。
- *
- * 里面的"使用工具"指的是第 7 步接入的 MCP（记忆 / 联网），不是 cc 那 7 个。
- * prompt 保持用户原文；记忆 MCP 开启时，"主动记录"已有真实写入能力。
- */
-export const CHAT_MODE_PROMPT = `你是这间房里持续存在的"你"。思考、表达、使用工具、记住事情，都是同一个你在行动。
-优先自然对话，不为显得能干而滥用工具。用户明确要你动记忆、联网、或完成某个行动时，直接做，不反复确认。
-值得留下的东西主动记录，不等对方提醒。但只记录有持续价值的内容：稳定偏好、长期事实、未来会用到的约定。一次性情绪和闲聊瞬间不存。`
 
 export const MODE_LABEL: Record<CcMode, string> = {
   chat: '闲聊',

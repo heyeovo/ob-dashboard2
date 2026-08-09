@@ -80,6 +80,7 @@ type SessionHistorySnapshot = {
   ccPick: CcUpstreamPick
   selfhostPick: CcUpstreamPick
   webSettings: CcWebSettings
+  promptModuleOverrides: Record<string, boolean>
   credChosen: boolean
   resumeHint: string
   lastRoundId: number
@@ -121,6 +122,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [error, setError] = useState('')
   const [localEnginePreference, setLocalEnginePreference] = useState<CcEngine>('cc')
   const [engineSaving, setEngineSaving] = useState(false)
+  const [promptModuleOverrides, setPromptModuleOverrides] = useState<Record<string, boolean>>({})
+  const [promptModulesSaving, setPromptModulesSaving] = useState(false)
+  const promptModuleOverridesRef = useRef<Record<string, boolean>>({})
   const effectiveEngine = resolveEffectiveEngine(isRemote, localEnginePreference)
   const effectiveEngineRef = useRef<CcEngine>(effectiveEngine)
   useEffect(() => {
@@ -429,6 +433,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           ccPick: ccPickRef.current,
           selfhostPick: selfhostPickRef.current,
           webSettings,
+          promptModuleOverrides,
           credChosen,
           resumeHint: resumeHintRef.current,
           lastRoundId: lastRoundIdRef.current,
@@ -462,6 +467,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         ccPickRef.current = cached.ccPick
         selfhostPickRef.current = cached.selfhostPick
         setWebSettings(cached.webSettings)
+        const cachedPromptOverrides = cached.promptModuleOverrides || {}
+        setPromptModuleOverrides(cachedPromptOverrides)
+        promptModuleOverridesRef.current = cachedPromptOverrides
         setCredChosen(cached.credChosen)
         resumeHintRef.current = cached.resumeHint
         lastRoundIdRef.current = cached.lastRoundId
@@ -472,6 +480,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setHistoryBeforeId(null)
         setHasEarlierHistory(false)
         setLocalEnginePreference('cc')
+        setPromptModuleOverrides({})
+        promptModuleOverridesRef.current = {}
         setMode('chat')
         setWebSettings(webDefaults)
         setCredChosen(false)
@@ -512,10 +522,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           const sessionState = data.session as {
             local_engine_preference?: string
             selfhost_overrides?: { provider_id?: unknown; model?: unknown }
+            prompt_module_overrides?: Record<string, boolean>
           } | null
           const restoredEngine = sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc'
           const selfhostProviderId = String(sessionState?.selfhost_overrides?.provider_id || '').trim()
           const selfhostModel = String(sessionState?.selfhost_overrides?.model || '').trim()
+          const restoredPromptModuleOverrides = sessionState?.prompt_module_overrides
+            && typeof sessionState.prompt_module_overrides === 'object'
+            ? sessionState.prompt_module_overrides
+            : {}
           // 进程没了内存里的轮数就归零，用库里的行数补上。
           // 花费补不了（要价格表），保持 0。
           const knownTurnCount = sessions.find(session => session.session_id === nextId)?.turn_count || 0
@@ -573,6 +588,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           selfhostPickRef.current = restoredSelfhostPick
           setPick(restoredPick)
           setLocalEnginePreference(restoredEngine)
+          setPromptModuleOverrides(restoredPromptModuleOverrides)
+          promptModuleOverridesRef.current = restoredPromptModuleOverrides
           resumeHintRef.current = meta.ccSessionId
           lastRoundIdRef.current = restoredLastRoundId
           historyLoadedAtRef.current = restoredAt
@@ -588,6 +605,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             ccPick: restoredCcPick,
             selfhostPick: restoredSelfhostPick,
             webSettings: restoredWebSettings,
+            promptModuleOverrides: restoredPromptModuleOverrides,
             credChosen: restoredCredChosen,
             resumeHint: meta.ccSessionId,
             lastRoundId: restoredLastRoundId,
@@ -616,6 +634,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       localEnginePreference,
       pick,
       webSettings,
+      promptModuleOverrides,
       credChosen,
       webDefaults,
       sessions,
@@ -663,6 +682,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setAutoAllowEdits(false)
     setSettingsNote('')
     setLocalEnginePreference('cc')
+    setPromptModuleOverrides({})
+    promptModuleOverridesRef.current = {}
     lastRoundIdRef.current = 0
     setWebSettings(webDefaults)
     // 新对话没有接回点
@@ -756,6 +777,46 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }
   }, [isRemote, localEnginePreference, personaId, pick, sessionId])
 
+  const setPromptModuleEnabled = useCallback(async (
+    moduleId: string,
+    defaultEnabled: boolean,
+    enabled: boolean,
+  ): Promise<boolean> => {
+    const id = moduleId.trim()
+    if (!sessionId || !personaId || !id || promptModulesSaving) return false
+    const previous = promptModuleOverridesRef.current
+    const next = { ...previous }
+    if (enabled === defaultEnabled) delete next[id]
+    else next[id] = enabled
+    promptModuleOverridesRef.current = next
+    setPromptModuleOverrides(next)
+    setPromptModulesSaving(true)
+    setError('')
+    try {
+      const response = await fetch('/api/cc-turns', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          persona_id: personaId,
+          prompt_module_overrides: next,
+        }),
+      })
+      const payload = await response.json().catch(() => ({})) as Record<string, unknown>
+      if (!response.ok || payload.ok !== true) {
+        throw new Error(String(payload.error || '提示词模块状态保存失败'))
+      }
+      return true
+    } catch (reason) {
+      promptModuleOverridesRef.current = previous
+      setPromptModuleOverrides(previous)
+      setError(reason instanceof Error ? reason.message : '提示词模块状态保存失败')
+      return false
+    } finally {
+      setPromptModulesSaving(false)
+    }
+  }, [personaId, promptModulesSaving, sessionId])
+
   const startWithHandoff = useCallback(
     async (payload: HandoffPayload) => {
       // 先做 startNewSession 同款重置
@@ -772,6 +833,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       setHistoryBeforeId(null)
       setHasEarlierHistory(false)
       setLocalEnginePreference('cc')
+      setPromptModuleOverrides({})
+      promptModuleOverridesRef.current = {}
       lastRoundIdRef.current = 0
       setPending([])
       setDecided([])
@@ -1428,6 +1491,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     effectiveEngine,
     engineSaving,
     changeEngine,
+    promptModuleOverrides,
+    promptModulesSaving,
+    setPromptModuleEnabled,
     latestTurn,
     retryPersistence,
     clearAttachment,

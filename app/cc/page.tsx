@@ -701,6 +701,10 @@ export default function CcChatPage() {
             onClearKind={chat.clearAttachmentsByKind}
             activeImageCount={chat.activeImageCount}
             activeFileCount={chat.activeFileCount}
+            promptModules={people.active.promptModules}
+            promptModuleOverrides={chat.promptModuleOverrides}
+            promptModulesSaving={chat.promptModulesSaving}
+            onPromptModuleToggle={chat.setPromptModuleEnabled}
             onError={chat.setError}
             sending={chat.sending}
           />

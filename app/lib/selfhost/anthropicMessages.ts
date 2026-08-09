@@ -399,20 +399,22 @@ export async function streamAnthropicMessages(input: {
   onThinking?: (text: string, startedAt: number) => void
 }): Promise<AnthropicStreamResult> {
   let lastError = new AnthropicStreamError('没有可用的上游地址')
+  const requestBody = {
+    model: input.model,
+    max_tokens: Math.max(1, Math.floor(input.maxTokens)),
+    stream: true,
+    system: input.system,
+    messages: input.messages,
+    ...(input.tools?.length ? { tools: input.tools } : {}),
+  }
+  console.log('[selfhost-request-body]', JSON.stringify(requestBody, null, 2))
   for (const url of candidateAnthropicUrls(input.baseUrl)) {
     let response: Response
     try {
       response = await fetch(url, {
         method: 'POST',
         headers: anthropicHeaders(input.token),
-        body: JSON.stringify({
-          model: input.model,
-          max_tokens: Math.max(1, Math.floor(input.maxTokens)),
-          stream: true,
-          system: input.system,
-          messages: input.messages,
-          ...(input.tools?.length ? { tools: input.tools } : {}),
-        }),
+        body: JSON.stringify(requestBody),
         signal: input.signal,
         cache: 'no-store',
       })

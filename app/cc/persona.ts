@@ -7,11 +7,23 @@
 //   对话列表左上角 → 切换协作者（本文件的列表）
 //   对话列表右上角 → 当前这个协作者的设置（身份 / 提示词 / 记忆 / 引擎）
 //
-// ⚠️ 提示词和引擎都只在**新建对话**时生效 —— ccSession.ts 里一个会话对应一个
-// 已经起好的 claude code 子进程，systemPrompt 和额度是启动参数，中途换不了。
+// 提示词模块按协作者保存默认状态；每个窗口可另存启停覆盖。ccSession.ts 会在最终
+// system 内容变化时安全回收空闲子进程，下一轮用原 Claude 会话 resume 后生效。
+
+import {
+  DEFAULT_PERSONA_BASE_PROMPT,
+  LEGACY_SELFHOST_BASE_PROMPT,
+} from '@/app/lib/personaPrompt'
 
 /** 引擎 = 额度 + 请求拼装归谁。selfhost 是第 7 步的自建引擎，界面里灰着。 */
 export type CcEngine = 'subscription' | 'api' | 'selfhost'
+
+export type CcPromptModule = {
+  id: string
+  name: string
+  content: string
+  enabledByDefault: boolean
+}
 
 export type CcPersona = {
   id: string
@@ -27,8 +39,10 @@ export type CcPersona = {
   purpose: string
   /** 一句话印象，只在协作者列表里显示 */
   description: string
-  /** 协作者提示词，落到 systemPrompt.append */
-  prompt: string
+  /** 每个协作者自己的基础 system 提示词；允许明确保存为空 */
+  basePrompt: string
+  /** 可独立维护的 systemPrompt 模块；窗口可覆盖每个模块的默认启停 */
+  promptModules: CcPromptModule[]
   /** 手写的记忆条目，跟提示词一起 append（分开存是为了改一条不用动整段） */
   memoryEntries: string[]
   /** 关掉就不查 OB 记忆 */
@@ -62,7 +76,8 @@ export const FALLBACK_PERSONA: CcPersona = {
   userName: '',
   purpose: '',
   description: '',
-  prompt: '',
+  basePrompt: DEFAULT_PERSONA_BASE_PROMPT,
+  promptModules: [],
   memoryEntries: [],
   recallOn: true,
   semanticOn: true,
@@ -77,6 +92,28 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
   const entries = Array.isArray(row.memory_entries) ? row.memory_entries : []
   const dirs = Array.isArray(row.dirs) ? row.dirs : []
   const writeDirs = Array.isArray(row.write_dirs) ? row.write_dirs : []
+  const rawModules = Array.isArray(row.prompt_modules) ? row.prompt_modules : []
+  const promptModules = rawModules.flatMap((item, index): CcPromptModule[] => {
+    if (!item || typeof item !== 'object') return []
+    const value = item as Record<string, unknown>
+    const content = String(value.content || '').trim()
+    if (!content) return []
+    return [{
+      id: String(value.id || `module-${index + 1}`).trim() || `module-${index + 1}`,
+      name: String(value.name || '未命名模块').trim() || '未命名模块',
+      content,
+      enabledByDefault: value.enabled_by_default !== false,
+    }]
+  })
+  const legacyPrompt = String(row.prompt || '').trim()
+  if (promptModules.length === 0 && legacyPrompt) {
+    promptModules.push({
+      id: 'legacy-prompt',
+      name: '协作者提示词',
+      content: legacyPrompt,
+      enabledByDefault: true,
+    })
+  }
   return {
     id: String(row.id || ''),
     name: String(row.name || '') || '未命名',
@@ -85,7 +122,12 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
     userName: String(row.user_name || ''),
     purpose: String(row.purpose || ''),
     description: String(row.description || ''),
-    prompt: String(row.prompt || ''),
+    basePrompt: row.base_prompt === undefined || row.base_prompt === null
+      ? DEFAULT_PERSONA_BASE_PROMPT
+      : String(row.base_prompt) === LEGACY_SELFHOST_BASE_PROMPT
+        ? DEFAULT_PERSONA_BASE_PROMPT
+        : String(row.base_prompt),
+    promptModules,
     memoryEntries: entries.map(item => String(item ?? '')).filter(Boolean),
     recallOn: row.recall_on !== false,
     semanticOn: row.semantic_on !== false,
@@ -105,7 +147,16 @@ export function personaToPayload(persona: CcPersona): Record<string, unknown> {
     user_name: persona.userName,
     purpose: persona.purpose,
     description: persona.description,
-    prompt: persona.prompt,
+    base_prompt: persona.basePrompt,
+    // 兼容尚未部署 prompt_modules 的旧 Haven：模块仍是新事实源，同时镜像一份合并正文。
+    // 删除全部模块时这里自然为空，也不会被旧字段恢复。
+    prompt: persona.promptModules.map(module => module.content.trim()).filter(Boolean).join('\n\n'),
+    prompt_modules: persona.promptModules.map(module => ({
+      id: module.id,
+      name: module.name,
+      content: module.content,
+      enabled_by_default: module.enabledByDefault,
+    })),
     memory_entries: persona.memoryEntries,
     recall_on: persona.recallOn,
     semantic_on: persona.semanticOn,

@@ -6,7 +6,7 @@ import { ENGINE_OPTIONS, TINT_PRESETS, type CcEngine, type CcPersona } from './p
 //
 // 组织方式照 Polaris 的协作者信息页，但只留 cc 引擎下真会生效的项：
 //   身份    头像 / 名字 / 印象 / 你的称呼 / 协作者定位
-//   提示词  协作者提示词（落到 systemPrompt.append）
+//   提示词  可独立维护、排序和默认启停的 systemPrompt 模块
 //   记忆    手写记忆条目 + 两个召回开关
 //   引擎    订阅 / 中转站 / 自建（自建是第 7 步，灰着）
 //
@@ -46,6 +46,7 @@ export default function CcPersonaDialog({
   const [entryInput, setEntryInput] = useState('')
   const [dirInput, setDirInput] = useState('')
   const [writeDirInput, setWriteDirInput] = useState('')
+  const [editingPromptModuleId, setEditingPromptModuleId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [hint, setHint] = useState('')
 
@@ -70,6 +71,33 @@ export default function CcPersonaDialog({
     if (!text) return
     patch('memoryEntries', [...draft.memoryEntries, text])
     setEntryInput('')
+  }
+
+  const addPromptModule = () => {
+    const id = `prompt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+    patch('promptModules', [
+      ...draft.promptModules,
+      { id, name: '新模块', content: '', enabledByDefault: true },
+    ])
+    setEditingPromptModuleId(id)
+  }
+
+  const updatePromptModule = (
+    id: string,
+    changes: Partial<CcPersona['promptModules'][number]>,
+  ) => {
+    patch('promptModules', draft.promptModules.map(module =>
+      module.id === id ? { ...module, ...changes } : module,
+    ))
+  }
+
+  const movePromptModule = (id: string, direction: -1 | 1) => {
+    const index = draft.promptModules.findIndex(module => module.id === id)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= draft.promptModules.length) return
+    const next = [...draft.promptModules]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    patch('promptModules', next)
   }
 
   const addDir = () => {
@@ -105,6 +133,16 @@ export default function CcPersonaDialog({
       ...draft,
       name,
       initial: (draft.initial.trim() || name).slice(0, 2),
+      promptModules: draft.promptModules.flatMap((module, index) => {
+        const content = module.content.trim()
+        if (!content) return []
+        return [{
+          ...module,
+          id: module.id.trim() || `module-${index + 1}`,
+          name: module.name.trim() || '未命名模块',
+          content,
+        }]
+      }),
     }
     const res = await onSave(cleaned)
     setHint(res.ok ? '已保存' : '保存失败，看页面顶部的错误')
@@ -361,22 +399,88 @@ export default function CcPersonaDialog({
           {tab === 'prompt' ? (
             <div className="flex flex-col gap-3">
               <label className="cc-field">
-                <span className="cc-field-label">协作者提示词</span>
+                <span className="cc-field-label">基础提示词</span>
+                <span className="cc-field-hint">每个协作者独立保存，会放在 system 的最前面；允许留空。</span>
                 <textarea
                   className="cc-textarea font-mono"
-                  rows={14}
-                  value={draft.prompt}
-                  onChange={e => patch('prompt', e.target.value)}
-                  placeholder="TA 是谁、怎么说话、什么优先。这段会接在 claude code 自带的系统提示后面。"
+                  rows={6}
+                  value={draft.basePrompt}
+                  onChange={event => patch('basePrompt', event.target.value)}
+                  placeholder="填写这个协作者始终需要遵守的基础说明"
                 />
               </label>
-              <p className="cc-note">
-                走 systemPrompt 的 append，<b>不会</b>拼进你说的那句话里 —— 拼进用户原话会稀释语义、
-                把记忆召回压到 0 条（第 2 步实测过）。
-                <br />
-                改完<b>新对话</b>一定生效。老对话看运气：刚聊过的还带着老提示词
-                （后台那个进程还活着），放一会儿再回去就换新的了。
-              </p>
+              <div className="border-t border-[var(--color-border-light)]" />
+              {editingPromptModuleId ? (() => {
+                const module = draft.promptModules.find(item => item.id === editingPromptModuleId)
+                if (!module) return null
+                return (
+                  <div className="flex flex-col gap-4">
+                    <button type="button" className="w-fit text-sm text-[var(--color-text-secondary)]" onClick={() => setEditingPromptModuleId(null)}>
+                      ← 返回模块列表
+                    </button>
+                    <label className="cc-field">
+                      <span className="cc-field-label">模块名称</span>
+                      <input className="cc-input" value={module.name} onChange={event => updatePromptModule(module.id, { name: event.target.value })} placeholder="例如：互动规则" />
+                    </label>
+                    <label className="cc-field">
+                      <span className="cc-field-label">提示词内容</span>
+                      <textarea className="cc-textarea font-mono" rows={14} value={module.content} onChange={event => updatePromptModule(module.id, { content: event.target.value })} placeholder="这段内容会作为独立模块加入 system。" />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+                      <input type="checkbox" checked={module.enabledByDefault} onChange={event => updatePromptModule(module.id, { enabledByDefault: event.target.checked })} />
+                      新窗口默认开启
+                    </label>
+                    <button
+                      type="button"
+                      className="cc-btn-ghost w-fit text-[var(--color-danger)]"
+                      onClick={() => {
+                        patch('promptModules', draft.promptModules.filter(item => item.id !== module.id))
+                        setEditingPromptModuleId(null)
+                      }}
+                    >
+                      删除这个模块
+                    </button>
+                  </div>
+                )
+              })() : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="cc-field-label">提示词模块</div>
+                      <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">默认开启的模块会用于每个新窗口</div>
+                    </div>
+                    <button type="button" className="cc-btn-ghost" onClick={addPromptModule}>＋ 新增</button>
+                  </div>
+                  {draft.promptModules.length === 0 ? (
+                    <div className="cc-recall-empty">还没有提示词模块</div>
+                  ) : (
+                    <div className="flex flex-col gap-2.5">
+                      {draft.promptModules.map((module, index) => (
+                        <div key={module.id} className="rounded-2xl border border-[var(--color-border-light)] bg-white p-3.5">
+                          <button type="button" className="w-full text-left" onClick={() => setEditingPromptModuleId(module.id)}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-[var(--color-text-heading)]">{module.name || '未命名模块'}</div>
+                                <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-[var(--color-text-secondary)]">{module.content || '还没有内容'}</div>
+                              </div>
+                              <span className="shrink-0 text-[var(--color-text-tertiary)]">›</span>
+                            </div>
+                          </button>
+                          <div className="mt-3 flex items-center border-t border-[var(--color-border-light)] pt-2.5">
+                            <button type="button" disabled={index === 0} className="cc-btn-ghost px-2 disabled:opacity-30" onClick={() => movePromptModule(module.id, -1)} aria-label="上移">↑</button>
+                            <button type="button" disabled={index === draft.promptModules.length - 1} className="cc-btn-ghost px-2 disabled:opacity-30" onClick={() => movePromptModule(module.id, 1)} aria-label="下移">↓</button>
+                            <label className="ml-auto flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                              <input type="checkbox" checked={module.enabledByDefault} onChange={event => updatePromptModule(module.id, { enabledByDefault: event.target.checked })} />
+                              默认开启
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="cc-note">模块会进入 system，不会拼进用户原话。聊天里的「＋」只覆盖当前窗口，其他窗口仍使用这里的默认状态。</p>
+                </>
+              )}
             </div>
           ) : null}
 

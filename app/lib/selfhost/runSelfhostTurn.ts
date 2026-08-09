@@ -30,12 +30,6 @@ import {
 import { createSelfhostMcpRuntime, type SelfhostMcpRuntime } from '@/app/lib/selfhost/mcp'
 import { encodeSelfhostSse, type SelfhostErrorPayload } from '@/app/lib/selfhost/sse'
 
-const BASE_SYSTEM = [
-  '你正在 Ombre Brain 的自建聊天链路中回复用户。',
-  '你只能使用本轮明确提供的远程 MCP 工具；没有提供的文件、命令或工具能力一律不可声称已经执行。',
-  '优先遵循用户当前消息，并给出直接、诚实的回答。',
-].join('\n')
-
 export const MAX_SELFHOST_TOOL_CALLS = 8
 
 export type SelfhostRequest = {
@@ -204,8 +198,15 @@ function recallSystemBlock(context: string): string {
   ].join('\n')
 }
 
-export function assembleSystem(persona: HavenPersona, recalledContext: string): string {
-  return [BASE_SYSTEM, buildPersonaAppend(persona), recallSystemBlock(recalledContext)].filter(Boolean).join('\n\n')
+export function assembleSystem(
+  persona: HavenPersona,
+  recalledContext: string,
+  promptModuleOverrides: Record<string, boolean> = {},
+): string {
+  return [
+    buildPersonaAppend(persona, promptModuleOverrides),
+    recallSystemBlock(recalledContext),
+  ].filter(Boolean).join('\n\n')
 }
 
 function attachmentPromptBlocks(attachments: ResolvedAttachment[]): AnthropicContentBlock[] {
@@ -531,7 +532,11 @@ export function createSelfhostStream(
           excluded_count: prepared.bucketExclusionIds.length,
         })
 
-        const system = assembleSystem(prepared.persona, recall.ok ? recall.additionalContext : '')
+        const system = assembleSystem(
+          prepared.persona,
+          recall.ok ? recall.additionalContext : '',
+          prepared.session?.prompt_module_overrides,
+        )
         try {
           mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal)
         } catch (error) {

@@ -104,6 +104,8 @@ type LiveSession = {
   lastActiveAt: number
   /** 这个会话累计花的钱（result 事件里的 total_cost_usd 累加） */
   totalCostUsd: number
+  /** 协作者身份与提示词模块的组合指纹；变化时重建 query，handoff 不参与。 */
+  systemPromptKey: string
   turnCount: number
   /** 最后一次真正打到模型的时间，用来算 prompt cache 还有多久过期 */
   lastModelCallAt: number
@@ -277,11 +279,16 @@ export type EnsureSessionInput = {
   model: string
   effort: string
   thinking: boolean
+  systemPromptKey: string
 }
 
 /** 拿到（或新建）一个活着的会话。已有的直接复用，不重付缓存。 */
 export function ensureSession(input: EnsureSessionInput): LiveSession {
-  const existing = registry.get(input.sessionId)
+  let existing = registry.get(input.sessionId)
+  if (existing && existing.systemPromptKey !== input.systemPromptKey && !existing.busy) {
+    dropSession(input.sessionId)
+    existing = undefined
+  }
   if (existing) {
     existing.lastActiveAt = Date.now()
     armIdleTimer(existing)
@@ -303,6 +310,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     createdAt: Date.now(),
     lastActiveAt: Date.now(),
     totalCostUsd: 0,
+    systemPromptKey: input.systemPromptKey,
     turnCount: 0,
     lastModelCallAt: 0,
     boot: input.boot,

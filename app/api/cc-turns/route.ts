@@ -73,14 +73,11 @@ export async function GET(request: NextRequest) {
   })
   if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })
 
-  // 按协作者过滤。规则（用户拍板）：
-  //   · client 里写了归属的 → 只给对应那个协作者
-  //   · 无主的（4.5b 之前的老对话）→ 全算给 LEGACY_OWNER
-  //   · Polaris 那些 source != 'cc' 的会话不参与，照旧全都显示
+  // 按协作者过滤。所有来源统一遵守窗口归属，避免 Polaris / Gateway
+  // 导入窗口在每个协作者名下重复出现。无主旧窗口仍归 LEGACY_OWNER。
   const personaId = (sp.get('persona_id') || '').trim()
   const sessions = personaId
     ? res.sessions.filter(s => {
-        if (s.source !== 'cc' && s.source !== 'selfhost') return true
         const owner = s.persona_id || personaOfClient(s.client) || LEGACY_OWNER
         return owner === personaId
       })
@@ -101,20 +98,27 @@ export async function PATCH(request: NextRequest) {
     title?: string
     persona_id?: string
     local_engine_preference?: string
+    prompt_module_overrides?: Record<string, boolean>
     expected_state_version?: number
   } | null
   const sessionId = (body?.session_id || '').trim()
   const title = (body?.title || '').trim()
   const preference = body?.local_engine_preference
+  const hasPromptOverrides = body?.prompt_module_overrides !== undefined
   if (!sessionId) {
     return Response.json({ ok: false, error: 'session_id 不能为空' }, { status: 400 })
   }
   let session = null
-  if (preference === 'cc' || preference === 'selfhost') {
+  if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides) {
     const result = await patchConversationSessionState({
       sessionId,
       personaId: String(body?.persona_id || ''),
-      localEnginePreference: preference,
+      localEnginePreference: preference === 'cc' || preference === 'selfhost' ? preference : undefined,
+      promptModuleOverrides: hasPromptOverrides
+        ? body?.prompt_module_overrides && typeof body.prompt_module_overrides === 'object'
+          ? body.prompt_module_overrides
+          : {}
+        : undefined,
       expectedStateVersion: body?.expected_state_version,
     })
     if (!result.ok) {
@@ -129,7 +133,7 @@ export async function PATCH(request: NextRequest) {
     }
   }
   if (!title) {
-    return Response.json({ ok: false, error: 'title 或 local_engine_preference 不能为空' }, { status: 400 })
+    return Response.json({ ok: false, error: 'title 或窗口设置不能为空' }, { status: 400 })
   }
   const result = await renameConversationSession(sessionId, title)
   return Response.json(

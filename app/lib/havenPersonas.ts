@@ -12,6 +12,10 @@
 // 配置读不到时前端退回内置默认协作者，不能让聊天页整个白屏。
 
 import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
+import {
+  DEFAULT_PERSONA_BASE_PROMPT,
+  LEGACY_SELFHOST_BASE_PROMPT,
+} from './personaPrompt'
 
 const HAVEN_BASE = (
   process.env.HAVEN_GATEWAY_URL ||
@@ -28,6 +32,13 @@ const PATH = '/gateway/api/cc/personas'
 /** 引擎（= 额度 + 请求拼装归谁）。selfhost 是第 7 步的自建引擎，界面里灰着。 */
 export type CcEngine = 'subscription' | 'api' | 'selfhost'
 
+export type HavenPromptModule = {
+  id: string
+  name: string
+  content: string
+  enabled_by_default: boolean
+}
+
 /** Haven 返回的一条协作者（snake_case 原样带出，前端在 app/cc 里转驼峰）。 */
 export type HavenPersona = {
   id: string
@@ -37,7 +48,9 @@ export type HavenPersona = {
   user_name: string
   purpose: string
   description: string
+  base_prompt?: string
   prompt: string
+  prompt_modules?: HavenPromptModule[]
   memory_entries: string[]
   /** 能读哪些目录。第一个当 cwd，其余作附加目录。空 = 用默认（仓库根） */
   dirs: string[]
@@ -64,7 +77,9 @@ export type PersonaPatch = {
   user_name?: string
   purpose?: string
   description?: string
+  base_prompt?: string
   prompt?: string
+  prompt_modules?: HavenPromptModule[]
   memory_entries?: string[]
   dirs?: string[]
   write_dirs?: string[]
@@ -246,17 +261,56 @@ export async function getPersona(
  * 用户 prompt 越长，语义分越低、记忆召回越差（discriminative_anchor_missing），
  * 往原话里塞前缀会把召回压到 0 条。
  */
-export function buildPersonaAppend(persona: HavenPersona | null): string {
+export function promptModulesForPersona(persona: HavenPersona | null): HavenPromptModule[] {
+  if (!persona) return []
+  const modules = Array.isArray(persona.prompt_modules)
+    ? persona.prompt_modules.flatMap((item, index): HavenPromptModule[] => {
+        if (!item || typeof item !== 'object') return []
+        const content = String(item.content || '').trim()
+        if (!content) return []
+        return [{
+          id: String(item.id || `module-${index + 1}`).trim() || `module-${index + 1}`,
+          name: String(item.name || '未命名模块').trim() || '未命名模块',
+          content,
+          enabled_by_default: item.enabled_by_default !== false,
+        }]
+      })
+    : []
+  const legacy = String(persona.prompt || '').trim()
+  if (modules.length === 0 && legacy) {
+    modules.push({
+      id: 'legacy-prompt',
+      name: '协作者提示词',
+      content: legacy,
+      enabled_by_default: true,
+    })
+  }
+  return modules
+}
+
+export function buildPersonaAppend(
+  persona: HavenPersona | null,
+  moduleOverrides: Record<string, boolean> = {},
+): string {
   if (!persona) return ''
   const parts: string[] = []
-  const name = (persona.name || '').trim()
-  if (name) parts.push(`你在这个对话里的名字是「${name}」。`)
-  const userName = (persona.user_name || '').trim()
-  if (userName) parts.push(`称呼对方为「${userName}」。`)
+  const storedBasePrompt = persona.base_prompt === undefined || persona.base_prompt === null
+    ? DEFAULT_PERSONA_BASE_PROMPT
+    : String(persona.base_prompt)
+  const basePrompt = (
+    storedBasePrompt === LEGACY_SELFHOST_BASE_PROMPT
+      ? DEFAULT_PERSONA_BASE_PROMPT
+      : storedBasePrompt
+  ).trim()
+  if (basePrompt) parts.push(basePrompt)
   const purpose = (persona.purpose || '').trim()
   if (purpose) parts.push(`你的定位：\n${purpose}`)
-  const prompt = (persona.prompt || '').trim()
-  if (prompt) parts.push(prompt)
+  const enabledModules = promptModulesForPersona(persona).filter(module =>
+    moduleOverrides[module.id] ?? module.enabled_by_default,
+  )
+  if (enabledModules.length) {
+    parts.push(enabledModules.map(module => `【${module.name}】\n${module.content}`).join('\n\n'))
+  }
   const entries = (persona.memory_entries || []).map(e => String(e).trim()).filter(Boolean)
   if (entries.length) {
     parts.push(`以下是关于对方的固定事实，始终成立：\n${entries.map(e => `- ${e}`).join('\n')}`)

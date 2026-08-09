@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, DragEvent, KeyboardEvent } from 'react'
 import { isSupportedDocument, parseDocument } from '@/app/lib/attachments/documentParser'
 import type { CcAttachment } from './types'
+import type { CcPromptModule } from './persona'
 
 const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024
 const MAX_STORED_BYTES = 2 * 1024 * 1024
@@ -60,6 +61,10 @@ function FileIcon({ small = false }: { small?: boolean }) {
   return <svg viewBox="0 0 24 24" className={small ? 'size-5' : 'size-7'} fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8.5 12.5 14 7a3 3 0 0 1 4.2 4.2l-7.4 7.4a5 5 0 0 1-7.1-7.1l7.6-7.6"/></svg>
 }
 
+function LayersIcon() {
+  return <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
+}
+
 type Props = {
   sessionId: string
   value: string
@@ -70,6 +75,10 @@ type Props = {
   activeImageCount?: number
   activeFileCount?: number
   onError?: (message: string) => void
+  promptModules?: CcPromptModule[]
+  promptModuleOverrides?: Record<string, boolean>
+  promptModulesSaving?: boolean
+  onPromptModuleToggle?: (moduleId: string, defaultEnabled: boolean, enabled: boolean) => Promise<boolean>
   sending: boolean
   disabled?: boolean
   placeholder?: string
@@ -85,6 +94,10 @@ export default function CcComposer({
   activeImageCount = 0,
   activeFileCount = 0,
   onError,
+  promptModules = [],
+  promptModuleOverrides = {},
+  promptModulesSaving = false,
+  onPromptModuleToggle,
   sending,
   disabled,
   placeholder,
@@ -95,6 +108,7 @@ export default function CcComposer({
   const documentRef = useRef<HTMLInputElement>(null)
   const frameRef = useRef<number | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuView, setMenuView] = useState<'main' | 'prompts'>('main')
   const [attachments, setAttachments] = useState<CcAttachment[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -247,6 +261,9 @@ export default function CcComposer({
   }
 
   const hasContent = value.trim().length > 0 || attachments.length > 0
+  const activePromptModuleCount = promptModules.filter(module =>
+    promptModuleOverrides[module.id] ?? module.enabledByDefault,
+  ).length
 
   return (
     <div
@@ -285,27 +302,66 @@ export default function CcComposer({
         <div className="fixed inset-0 z-50 bg-black/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
           <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[28px] bg-white px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
             <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-black/15" />
-            <div className="grid grid-cols-3 gap-3">
-              <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); cameraRef.current?.click() }}>
-                <CameraIcon /><span>拍照</span>
-              </button>
-              <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); photoRef.current?.click() }}>
-                <PhotoIcon /><span>照片</span>
-              </button>
-              <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); documentRef.current?.click() }}>
-                <FileIcon /><span>上传文件</span>
-              </button>
-            </div>
-            <div className="mt-5 border-t border-[var(--color-border-light)] pt-2">
-              <button type="button" disabled={activeImageCount <= 0} className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-sm text-[var(--color-text-primary)] disabled:opacity-35" onClick={() => void clearKind('image')}><span>清除本窗口图片</span><span className="text-xs text-[var(--color-text-tertiary)]">{activeImageCount} 张 ›</span></button>
-              <button type="button" disabled={activeFileCount <= 0} className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-sm text-[var(--color-text-primary)] disabled:opacity-35" onClick={() => void clearKind('file')}><span>清除本窗口文件</span><span className="text-xs text-[var(--color-text-tertiary)]">{activeFileCount} 个 ›</span></button>
-            </div>
+            {menuView === 'main' ? (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); cameraRef.current?.click() }}>
+                    <CameraIcon /><span>拍照</span>
+                  </button>
+                  <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); photoRef.current?.click() }}>
+                    <PhotoIcon /><span>照片</span>
+                  </button>
+                  <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); documentRef.current?.click() }}>
+                    <FileIcon /><span>上传文件</span>
+                  </button>
+                </div>
+                <div className="mt-5 border-t border-[var(--color-border-light)] pt-2">
+                  <button type="button" className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-sm text-[var(--color-text-primary)]" onClick={() => setMenuView('prompts')}>
+                    <span className="flex items-center gap-3"><LayersIcon />提示词模块</span>
+                    <span className="text-xs text-[var(--color-text-tertiary)]">{activePromptModuleCount}/{promptModules.length} 已开启 ›</span>
+                  </button>
+                  <button type="button" disabled={activeImageCount <= 0} className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-sm text-[var(--color-text-primary)] disabled:opacity-35" onClick={() => void clearKind('image')}><span>清除本窗口图片</span><span className="text-xs text-[var(--color-text-tertiary)]">{activeImageCount} 张 ›</span></button>
+                  <button type="button" disabled={activeFileCount <= 0} className="flex w-full items-center justify-between rounded-xl px-3 py-3.5 text-left text-sm text-[var(--color-text-primary)] disabled:opacity-35" onClick={() => void clearKind('file')}><span>清除本窗口文件</span><span className="text-xs text-[var(--color-text-tertiary)]">{activeFileCount} 个 ›</span></button>
+                </div>
+              </>
+            ) : (
+              <div className="min-h-72">
+                <div className="mb-4 flex items-center">
+                  <button type="button" className="w-10 text-left text-2xl text-[var(--color-text-secondary)]" onClick={() => setMenuView('main')}>‹</button>
+                  <div className="flex-1 text-center text-base font-semibold text-[var(--color-text-heading)]">提示词模块</div>
+                  <div className="w-10" />
+                </div>
+                <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">未分组</div>
+                {promptModules.length === 0 ? (
+                  <div className="rounded-2xl bg-[var(--color-surface-secondary)] px-4 py-8 text-center text-sm text-[var(--color-text-tertiary)]">请先到协作者设置中新增模块</div>
+                ) : (
+                  <div className="max-h-[45vh] overflow-y-auto">
+                    {promptModules.map(module => {
+                      const enabled = promptModuleOverrides[module.id] ?? module.enabledByDefault
+                      return (
+                        <button
+                          key={module.id}
+                          type="button"
+                          disabled={promptModulesSaving}
+                          className="flex w-full items-center gap-3 rounded-xl px-2 py-3.5 text-left text-sm text-[var(--color-text-primary)] disabled:opacity-50"
+                          onClick={() => void onPromptModuleToggle?.(module.id, module.enabledByDefault, !enabled)}
+                        >
+                          <span className="text-[var(--color-primary)]"><LayersIcon /></span>
+                          <span className="min-w-0 flex-1 truncate">{module.name}</span>
+                          <span className={`text-xl ${enabled ? 'text-[var(--color-primary)]' : 'text-transparent'}`}>✓</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : null}
 
       <div className="flex items-end gap-2">
-        <button type="button" aria-label="添加" aria-expanded={menuOpen} disabled={disabled || sending || uploading} onClick={() => setMenuOpen(true)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40">+</button>
+        <button type="button" aria-label="添加" aria-expanded={menuOpen} disabled={disabled || sending || uploading} onClick={() => { setMenuView('main'); setMenuOpen(true) }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40">+</button>
         <textarea ref={ref} rows={1} value={value} onChange={event => onChange(event.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={disabled} placeholder={placeholder || '说点什么'} className="flex-1 border-0 bg-transparent px-1 py-1 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-disabled)] disabled:opacity-60" />
         <button type="button" onClick={sending ? onStop : submit} disabled={disabled || uploading || (!sending && !hasContent)} aria-label={sending ? '停止生成' : uploading ? '附件上传中' : '发送'} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition-colors ${sending ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]' : hasContent && !uploading ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-disabled)]'}`}>{sending ? '■' : '↑'}</button>
       </div>

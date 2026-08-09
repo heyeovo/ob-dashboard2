@@ -32,6 +32,26 @@ describe('/api/cc-turns 10.3 session state and deletion integration', () => {
     expect(haven.listSessions).toHaveBeenCalledWith(expect.objectContaining({ deleted: true }))
   })
 
+  it('filters imported and chat sessions by the same persona owner', async () => {
+    haven.listSessions.mockResolvedValue({
+      ok: true,
+      sessions: [
+        { session_id: 'chat-yanzhi', source: 'cc', persona_id: 'ombre', client: 'ob2-chat/ombre' },
+        { session_id: 'polaris-yanzhi', source: 'polaris', persona_id: 'ombre', client: 'polaris' },
+        { session_id: 'gateway-yanzhi', source: 'gateway', persona_id: '', client: '' },
+        { session_id: 'chat-ombre3', source: 'selfhost', persona_id: 'ombre3', client: 'ob2-selfhost/ombre3' },
+      ],
+      error: '',
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/cc-turns?persona_id=ombre3'))
+    const payload = await response.json()
+
+    expect(payload.sessions.map((session: { session_id: string }) => session.session_id)).toEqual([
+      'chat-ombre3',
+    ])
+  })
+
   it('loads session state together with turns', async () => {
     haven.getConversationSession.mockResolvedValue({
       ok: true,

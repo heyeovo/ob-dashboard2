@@ -158,6 +158,7 @@ function makeConfig(overrides: Partial<TurnConfig> = {}): TurnConfig {
     sessionId: 'ob2-test-session',
     mode: 'chat',
     personaAppend: '',
+    systemPromptKey: '',
     cwd: 'C:\\Users\\test\\repo',
     additionalDirectories: [],
     activeWebTools: [],
