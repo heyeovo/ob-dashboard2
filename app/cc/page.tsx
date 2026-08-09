@@ -1,5 +1,14 @@
 'use client'
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import CcComposer from './CcComposer'
 import CcMessageRow from './CcMessageRow'
 import { CcPermCard } from './CcPermCard'
@@ -50,8 +59,11 @@ function formatTokens(n: number) {
 
 function CcScrollJumps({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null)
   const [canGoUp, setCanGoUp] = useState(false)
   const [canGoDown, setCanGoDown] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [thumb, setThumb] = useState({ visible: false, top: 0, height: 0 })
 
   const update = useCallback(() => {
     const node = scrollRef.current
@@ -61,6 +73,19 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
     const nextCanGoDown = distanceFromBottom > 24
     setCanGoUp(current => current === nextCanGoUp ? current : nextCanGoUp)
     setCanGoDown(current => current === nextCanGoDown ? current : nextCanGoDown)
+    const trackHeight = Math.max(0, node.clientHeight - 16)
+    const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight)
+    if (trackHeight === 0 || maxScrollTop === 0) {
+      setThumb(current => current.visible ? { visible: false, top: 0, height: 0 } : current)
+      return
+    }
+    const height = Math.max(40, trackHeight * (node.clientHeight / node.scrollHeight))
+    const top = (node.scrollTop / maxScrollTop) * Math.max(0, trackHeight - height)
+    setThumb(current =>
+      current.visible && Math.abs(current.top - top) < 0.5 && Math.abs(current.height - height) < 0.5
+        ? current
+        : { visible: true, top, height },
+    )
   }, [])
 
   useEffect(() => {
@@ -76,6 +101,52 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
     scrollRef.current?.scrollTo({ top, behavior: 'smooth' })
   }
 
+  const beginThumbDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const node = scrollRef.current
+    if (!node) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = { pointerId: event.pointerId, startY: event.clientY, startScrollTop: node.scrollTop }
+    setDragging(true)
+  }
+
+  const moveThumb = (event: PointerEvent<HTMLButtonElement>) => {
+    const node = scrollRef.current
+    const drag = dragRef.current
+    if (!node || !drag || drag.pointerId !== event.pointerId) return
+    const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight)
+    const movableTrack = Math.max(1, node.clientHeight - 16 - thumb.height)
+    node.scrollTop = Math.min(
+      maxScrollTop,
+      Math.max(0, drag.startScrollTop + ((event.clientY - drag.startY) / movableTrack) * maxScrollTop),
+    )
+  }
+
+  const endThumbDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    setDragging(false)
+  }
+
+  const useThumbKeyboard = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const node = scrollRef.current
+    if (!node) return
+    const step = Math.max(80, node.clientHeight * 0.8)
+    if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+      event.preventDefault()
+      node.scrollBy({ top: -step, behavior: 'smooth' })
+    } else if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+      event.preventDefault()
+      node.scrollBy({ top: step, behavior: 'smooth' })
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      jump(0)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      jump(node.scrollHeight)
+    }
+  }
+
   return (
     <div className="relative min-h-0 flex-1">
       <div
@@ -85,8 +156,24 @@ function CcScrollJumps({ children }: { children: ReactNode }) {
       >
         {children}
       </div>
+      {thumb.visible ? (
+        <div className="pointer-events-none absolute inset-y-2 right-1 z-10 w-3 md:hidden">
+          <button
+            type="button"
+            aria-label="快速滚动对话"
+            title="拖动快速浏览对话"
+            onPointerDown={beginThumbDrag}
+            onPointerMove={moveThumb}
+            onPointerUp={endThumbDrag}
+            onPointerCancel={endThumbDrag}
+            onKeyDown={useThumbKeyboard}
+            className={`pointer-events-auto absolute right-0 w-1.5 touch-none rounded-full bg-[var(--color-text-tertiary)] shadow-sm transition-opacity ${dragging ? 'opacity-85' : 'opacity-45'}`}
+            style={{ top: thumb.top, height: thumb.height }}
+          />
+        </div>
+      ) : null}
       {canGoUp || canGoDown ? (
-        <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex flex-col gap-1.5">
+        <div className="pointer-events-none absolute bottom-3 right-4 z-20 flex flex-col gap-1.5">
           {canGoUp ? (
             <button
               type="button"

@@ -68,6 +68,41 @@ type RetryTurn = {
   attachmentIds: string[]
 }
 
+type SessionHistorySnapshot = {
+  cachedAt: number
+  messages: CcMessage[]
+  historyBeforeId: number | null
+  hasEarlierHistory: boolean
+  historyTurnCount: number
+  mode: CcMode
+  localEnginePreference: CcEngine
+  pick: CcUpstreamPick
+  ccPick: CcUpstreamPick
+  selfhostPick: CcUpstreamPick
+  webSettings: CcWebSettings
+  credChosen: boolean
+  resumeHint: string
+  lastRoundId: number
+}
+
+const INITIAL_HISTORY_LIMIT = 50
+const SESSION_HISTORY_CACHE_TTL_MS = 60_000
+const MAX_CACHED_SESSIONS = 5
+
+function rememberSessionHistory(
+  cache: Map<string, SessionHistorySnapshot>,
+  sessionId: string,
+  snapshot: SessionHistorySnapshot,
+) {
+  cache.delete(sessionId)
+  cache.set(sessionId, snapshot)
+  while (cache.size > MAX_CACHED_SESSIONS) {
+    const oldestSessionId = cache.keys().next().value
+    if (!oldestSessionId) break
+    cache.delete(oldestSessionId)
+  }
+}
+
 export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionId, setSessionId] = useState('')
   const [sessions, setSessions] = useState<CcSessionListItem[]>([])
@@ -124,6 +159,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
+  const historyCacheRef = useRef<Map<string, SessionHistorySnapshot>>(new Map())
+  const historyLoadedAtRef = useRef(0)
+  const historyAbortRef = useRef<AbortController | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const lastRoundIdRef = useRef(0)
   const activeTurnRef = useRef<{ assistantId: string; engine: CcEngine } | null>(null)
@@ -378,43 +416,99 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       if (nextId === sessionId) return
       // 存草稿
       draftsRef.current.set(sessionId, draft)
+      if (sessionId && !sending) {
+        rememberSessionHistory(historyCacheRef.current, sessionId, {
+          cachedAt: historyLoadedAtRef.current,
+          messages,
+          historyBeforeId,
+          hasEarlierHistory,
+          historyTurnCount,
+          mode,
+          localEnginePreference,
+          pick,
+          ccPick: ccPickRef.current,
+          selfhostPick: selfhostPickRef.current,
+          webSettings,
+          credChosen,
+          resumeHint: resumeHintRef.current,
+          lastRoundId: lastRoundIdRef.current,
+        })
+      } else if (sessionId) {
+        // 正在生成时的消息可能只是尚未落库的半截，不能覆盖已验证快照。
+        historyCacheRef.current.delete(sessionId)
+      }
       abortRef.current?.abort()
+      historyAbortRef.current?.abort()
+      historyAbortRef.current = null
       setSending(false)
       setSessionId(nextId)
       setDraft(draftsRef.current.get(nextId) || '')
       setError('')
-      setMessages([])
       setStats(EMPTY_STATS)
-      setHistoryTurnCount(0)
-      setHistoryBeforeId(null)
-      setHasEarlierHistory(false)
-      setLocalEnginePreference('cc')
-      lastRoundIdRef.current = 0
       // 待批准是按会话分的，切走先清空，轮询会把新会话那份拉回来
       setPending([])
       setDecided([])
       setAutoAllowEdits(false)
-      setWebSettings(webDefaults)
       const defaultPick = pickFromConfig(upstreamRef.current)
-      ccPickRef.current = defaultPick
-      selfhostPickRef.current = defaultPick
-      setPick(defaultPick)
+      const cached = historyCacheRef.current.get(nextId)
+      if (cached) {
+        setMessages(cached.messages)
+        setHistoryTurnCount(cached.historyTurnCount)
+        setHistoryBeforeId(cached.historyBeforeId)
+        setHasEarlierHistory(cached.hasEarlierHistory)
+        setMode(cached.mode)
+        setLocalEnginePreference(cached.localEnginePreference)
+        setPick(cached.pick)
+        ccPickRef.current = cached.ccPick
+        selfhostPickRef.current = cached.selfhostPick
+        setWebSettings(cached.webSettings)
+        setCredChosen(cached.credChosen)
+        resumeHintRef.current = cached.resumeHint
+        lastRoundIdRef.current = cached.lastRoundId
+        historyLoadedAtRef.current = cached.cachedAt
+      } else {
+        setMessages([])
+        setHistoryTurnCount(0)
+        setHistoryBeforeId(null)
+        setHasEarlierHistory(false)
+        setLocalEnginePreference('cc')
+        setMode('chat')
+        setWebSettings(webDefaults)
+        setCredChosen(false)
+        ccPickRef.current = defaultPick
+        selfhostPickRef.current = defaultPick
+        setPick(defaultPick)
+        resumeHintRef.current = ''
+        lastRoundIdRef.current = 0
+        historyLoadedAtRef.current = 0
+      }
 
-      setHistoryLoading(true)
+      const cacheIsFresh = cached && Date.now() - cached.cachedAt < SESSION_HISTORY_CACHE_TTL_MS
+      if (cacheIsFresh) {
+        setHistoryLoading(false)
+        return
+      }
+
+      setHistoryLoading(!cached)
+      const historyController = new AbortController()
+      historyAbortRef.current = historyController
       try {
         // raw=1：thinking 和工具调用都在 raw_json 里，不要它历史就只剩正文。
         // 体积可控 —— 存的是工具的调用参数（文件路径、搜索词），不是返回结果。
         const res = await fetch(
-          `/api/cc-turns?session_id=${encodeURIComponent(nextId)}&limit=100&raw=1`,
-          { cache: 'no-store' },
+          `/api/cc-turns?session_id=${encodeURIComponent(nextId)}&limit=${INITIAL_HISTORY_LIMIT}&raw=1`,
+          { cache: 'no-store', signal: historyController.signal },
         )
         const data = await res.json()
         if (data.ok && Array.isArray(data.turns)) {
           const turns = data.turns as HavenTurnRow[]
-          setMessages(turnsToMessages(turns))
-          setHistoryBeforeId(turns[0]?.id ?? null)
-          setHasEarlierHistory(turns.length === 100)
-          lastRoundIdRef.current = turns.reduce((largest, turn) => Math.max(largest, Number(turn.round_id || 0)), 0)
+          const restoredMessages = turnsToMessages(turns)
+          const restoredHistoryBeforeId = turns[0]?.id ?? null
+          const restoredHasEarlierHistory = turns.length === INITIAL_HISTORY_LIMIT
+          const restoredLastRoundId = turns.reduce(
+            (largest, turn) => Math.max(largest, Number(turn.round_id || 0)),
+            0,
+          )
           const sessionState = data.session as {
             local_engine_preference?: string
             selfhost_overrides?: { provider_id?: unknown; model?: unknown }
@@ -425,14 +519,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           // 进程没了内存里的轮数就归零，用库里的行数补上。
           // 花费补不了（要价格表），保持 0。
           const knownTurnCount = sessions.find(session => session.session_id === nextId)?.turn_count || 0
-          setHistoryTurnCount(Math.max(turns.length, knownTurnCount))
+          const restoredHistoryTurnCount = Math.max(turns.length, knownTurnCount)
           // 老会话是什么模式就照它显示，别让它看起来能改
-          setMode(modeOfTurns(turns))
+          const restoredMode = modeOfTurns(turns)
           // 第 4 + 5 条：从最后一轮读回本窗配置和 resume 接回点
           const meta = metaOfTurns(turns)
-          resumeHintRef.current = meta.ccSessionId
           let restoredCcPick = { ...defaultPick }
           let restoredSelfhostPick = { ...defaultPick }
+          let restoredWebSettings = webDefaults
+          let restoredCredChosen = false
           if (meta.settings) {
             const s = meta.settings
             const nextKind =
@@ -448,8 +543,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               thinking: s.thinkingOn ?? restoredCcPick.thinking,
             }
             // 存过 cred 就当「有人定过」，右上角照它显示订阅 / api
-            if (s.cred === 'subscription' || s.cred === 'api') setCredChosen(true)
-            if (s.web) setWebSettings(s.web)
+            if (s.cred === 'subscription' || s.cred === 'api') restoredCredChosen = true
+            if (s.web) restoredWebSettings = s.web
           }
           // selfhost 的事实源是 Haven 窗口覆盖，优先于最后一轮 cc 的运行时元数据。
           if (selfhostProviderId || selfhostModel) {
@@ -459,23 +554,73 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               providerId: selfhostProviderId || restoredSelfhostPick.providerId,
               model: selfhostModel || restoredSelfhostPick.model,
             }
-            setCredChosen(true)
+            restoredCredChosen = true
           }
-          ccPickRef.current = restoredCcPick
-          selfhostPickRef.current = restoredSelfhostPick
           // Vercel 必须保留本地首选（通常是 cc），但当前实际执行器固定为 selfhost。
           // 设置卡也要跟实际执行器走，不能因此显示 cc / 全局默认的 provider 和模型。
           const restoredEffectiveEngine = resolveEffectiveEngine(isRemote, restoredEngine)
-          setPick(restoredEffectiveEngine === 'selfhost' ? restoredSelfhostPick : restoredCcPick)
+          const restoredPick = restoredEffectiveEngine === 'selfhost' ? restoredSelfhostPick : restoredCcPick
+          const restoredAt = Date.now()
+
+          setMessages(restoredMessages)
+          setHistoryBeforeId(restoredHistoryBeforeId)
+          setHasEarlierHistory(restoredHasEarlierHistory)
+          setHistoryTurnCount(restoredHistoryTurnCount)
+          setMode(restoredMode)
+          setWebSettings(restoredWebSettings)
+          setCredChosen(restoredCredChosen)
+          ccPickRef.current = restoredCcPick
+          selfhostPickRef.current = restoredSelfhostPick
+          setPick(restoredPick)
           setLocalEnginePreference(restoredEngine)
+          resumeHintRef.current = meta.ccSessionId
+          lastRoundIdRef.current = restoredLastRoundId
+          historyLoadedAtRef.current = restoredAt
+          rememberSessionHistory(historyCacheRef.current, nextId, {
+            cachedAt: restoredAt,
+            messages: restoredMessages,
+            historyBeforeId: restoredHistoryBeforeId,
+            hasEarlierHistory: restoredHasEarlierHistory,
+            historyTurnCount: restoredHistoryTurnCount,
+            mode: restoredMode,
+            localEnginePreference: restoredEngine,
+            pick: restoredPick,
+            ccPick: restoredCcPick,
+            selfhostPick: restoredSelfhostPick,
+            webSettings: restoredWebSettings,
+            credChosen: restoredCredChosen,
+            resumeHint: meta.ccSessionId,
+            lastRoundId: restoredLastRoundId,
+          })
         }
-      } catch {
-        setError('历史消息读取失败')
+      } catch (cause) {
+        if (!(cause instanceof DOMException && cause.name === 'AbortError') && !cached) {
+          setError('历史消息读取失败')
+        }
       } finally {
-        setHistoryLoading(false)
+        if (historyAbortRef.current === historyController) {
+          historyAbortRef.current = null
+          setHistoryLoading(false)
+        }
       }
     },
-    [sessionId, draft, webDefaults, sessions, isRemote],
+    [
+      sessionId,
+      draft,
+      sending,
+      messages,
+      historyBeforeId,
+      hasEarlierHistory,
+      historyTurnCount,
+      mode,
+      localEnginePreference,
+      pick,
+      webSettings,
+      credChosen,
+      webDefaults,
+      sessions,
+      isRemote,
+    ],
   )
 
   const loadEarlierHistory = useCallback(async () => {
