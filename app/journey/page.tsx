@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import DetailPanel from '../components/DetailPanel'
+import WeeklyJourneyReview from './WeeklyJourneyReview'
 
 interface JourneyStage {
   id: string
@@ -263,6 +264,11 @@ export default function JourneyPage() {
             <div>{openCount} 个进行中</div>
           </div>
         </div>
+
+        <WeeklyJourneyReview
+          onOpenEvidence={bucketId => void openEvidenceBucket(bucketId)}
+          onJourneyChanged={loadStages}
+        />
 
         {loading ? (
           <div className="py-20 text-center text-sm text-[var(--color-text-disabled)]">读取中…</div>

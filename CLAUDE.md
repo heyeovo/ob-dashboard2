@@ -106,6 +106,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `daily-chat-memory/route.ts` | 每日聊天记忆 |
 | `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
 | `journeys/route.ts` + `[id]/route.ts` | 独立关系轨迹目录、详情与认证人工纠错代理 |
+| `automations/[...path]/route.ts` | weekly journey 自动化白名单代理；只允许状态、手动生成、候选读取/编辑/拒绝/确认并原样透传冲突状态 |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -122,7 +123,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `settings/memory-processing/page.tsx` | 记忆处理设置 |
 | `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
 | `settings/recall/page.tsx` | 召回设置 |
-| `settings/automation/page.tsx` | 自动化设置 |
+| `settings/automation/page.tsx` | 自动化设置；含 weekly journey 只读状态、最近运行、待确认数量、协作者选择和手动生成入口，不提供自动写入或启用调度开关 |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
 | `polaris/page.tsx` | Polaris 聊天历史导入 |
 | `impressions/page.tsx` | 日回顾月历：同时标记日回顾/记忆事件，查看与微调日回顾，并保留当天记忆事件及详情抽屉 |
@@ -130,7 +131,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
 | `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |
 | `journal/page.tsx` | 日记页（垂直时间轴） |
-| `journey/page.tsx` | 独立关系轨迹页：阶段时间轴、摘要/正文、证据桶名称与 ID、人工纠错及证据桶详情抽屉 |
+| `journey/page.tsx` | 独立关系轨迹页：阶段时间轴与人工纠错；页面顶部审核 weekly journey 候选，展示原始 preview、当前 draft/revision/hash、输入完整性、证据与预计差异，确认只提交 revision + hash |
 | `import/page.tsx` | 导入工作台：拖拽/粘贴、大/小模式、试跑、进度+费用、完成后审查 |
 | `trash/page.tsx` | 回收站：恢复/彻底删除/清空 |
 | `prompts/page.tsx` | Prompt 配置 |

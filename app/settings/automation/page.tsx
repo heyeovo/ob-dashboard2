@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import WeeklyJourneyStatusCard from './WeeklyJourneyStatusCard'
 
 /**
  * 自动化与状态配置页（dashboard.html「配置」tab 移植）。
@@ -494,6 +495,8 @@ export default function AutomationSettingsPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            <WeeklyJourneyStatusCard />
+
             {/* Persona */}
             <Section
               title="Persona"
