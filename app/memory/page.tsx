@@ -100,6 +100,8 @@ const DATE_PRESETS: { key: DatePreset; label: string }[] = [
 const isFeel = (b: Bucket) =>
   b.type === 'feel' || (b.domain ?? []).includes('feel') || (b.tags ?? []).includes('feel')
 
+const isJourney = (b: Bucket) => (b.domain ?? []).includes('journey')
+
 function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
   switch (f) {
     case 'all': return true
@@ -606,7 +608,7 @@ function HomeClient() {
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5, journey: false, valence: 0.5, arousal: 0.3 })
+  const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5, valence: 0.5, arousal: 0.3 })
   const [adding, setAdding] = useState(false)
   const [gridViewMode, setGridViewMode] = useState<'list' | 'card'>('list')
   const [sortBy, setSortBy] = useState<'score' | 'importance' | 'created'>('score')
@@ -619,7 +621,7 @@ function HomeClient() {
     return fetch(`/api/buckets?full=1&_t=${Date.now()}`, { signal })
       .then(r => r.json())
       .then(data => {
-        const all = Array.isArray(data) ? data : (data.buckets || [])
+        const all = (Array.isArray(data) ? data : (data.buckets || [])).filter((bucket: Bucket) => !isJourney(bucket))
         setBuckets(all)
         try { sessionStorage.setItem('ombra_buckets', JSON.stringify(all)) } catch {}
       })
@@ -633,7 +635,7 @@ function HomeClient() {
       if (cached) {
         const arr = JSON.parse(cached)
         if (Array.isArray(arr) && arr.length > 0) {
-          setBuckets(arr)
+          setBuckets(arr.filter((bucket: Bucket) => !isJourney(bucket)))
           setLoading(false)
         }
       }
@@ -1354,13 +1356,7 @@ function HomeClient() {
               <KnobRow label="效价 V" desc="0 负面 → 1 正面" value={addForm.valence} min={0} max={1} step={0.1} onChange={v => setAddForm(f => ({ ...f, valence: v }))} />
               <KnobRow label="唤醒 A" desc="0 平静 → 1 激动" value={addForm.arousal} min={0} max={1} step={0.1} onChange={v => setAddForm(f => ({ ...f, arousal: v }))} />
             </div>
-            <div className="flex items-end justify-between flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="addJourney" checked={addForm.journey}
-                  onChange={e => setAddForm(f => ({ ...f, journey: e.target.checked }))}
-                  className="accent-[var(--color-primary)] w-4 h-4" />
-                <label htmlFor="addJourney" className="text-sm text-[var(--color-text-secondary)] cursor-pointer select-none">存为轨迹桶</label>
-              </div>
+            <div className="flex items-end justify-end flex-shrink-0">
               <div className="flex gap-2">
                 <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消</button>
                 <button disabled={!addForm.content.trim() || adding}
@@ -1373,7 +1369,7 @@ function HomeClient() {
                     })
                     setAdding(false)
                     setShowAdd(false)
-                    setAddForm({ title: '', content: '', tags: '', importance: 5, journey: false, valence: 0.5, arousal: 0.3 })
+                    setAddForm({ title: '', content: '', tags: '', importance: 5, valence: 0.5, arousal: 0.3 })
                     setSearchResults(null)
                     await fetchBuckets()
                   }}

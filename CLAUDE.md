@@ -42,7 +42,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 **导航系：**
 | 文件 | 说明 |
 |------|------|
-| `SideRail.tsx` | 桌面端左侧竖栏（4.6 导航重构后取代原 NavBar，`md:flex`） |
+| `SideRail.tsx` | 桌面端左侧竖栏（4.6 导航重构后取代原 NavBar，`md:flex`；次级入口含 Polaris、日记、轨迹） |
 | `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar（主页/记忆库/聊天/工作台/设置，聊天为中间突起） |
 | `MemoryViewSwitch.tsx` | 记忆页时间线/记忆格/待处理三格切换 |
 | `MobileShell.tsx` | 全站布局容器：桌面端渲染 `SideRail`（fixed），手机端加底部安全间距 |
@@ -105,6 +105,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `persona/route.ts` | 用户画像状态 |
 | `daily-chat-memory/route.ts` | 每日聊天记忆 |
 | `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
+| `journeys/route.ts` + `[id]/route.ts` | 独立关系轨迹目录、详情与认证人工纠错代理 |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -129,6 +130,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
 | `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |
 | `journal/page.tsx` | 日记页（垂直时间轴） |
+| `journey/page.tsx` | 独立关系轨迹页：阶段时间轴、摘要/正文、证据桶名称与 ID、人工纠错及证据桶详情抽屉 |
 | `import/page.tsx` | 导入工作台：拖拽/粘贴、大/小模式、试跑、进度+费用、完成后审查 |
 | `trash/page.tsx` | 回收站：恢复/彻底删除/清空 |
 | `prompts/page.tsx` | Prompt 配置 |
@@ -148,7 +150,7 @@ cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes
 ## 导航架构
 
 ### 桌面端
-`SideRail` 左侧竖栏（fixed，`md:flex`）：上半段 = 手机 5 Tab 同批入口（主页/记忆库/聊天/工作台/设置），下半段 = 次级入口（Polaris/日记）。
+`SideRail` 左侧竖栏（fixed，`md:flex`）：上半段 = 手机 5 Tab 同批入口（主页/记忆库/聊天/工作台/设置），下半段 = 次级入口（Polaris/日记/轨迹）。
 
 ### 手机端
 `BottomTabBar` 固定在底部（`md:hidden`），5 个 Tab：
@@ -158,7 +160,7 @@ cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes
 - 工作台 → `/workbench`
 - 设置 → `/settings`
 
-次级入口（Polaris/日记）收在主页汉堡和设置聚合页里。所有页面通过 `MobileShell` 包裹。
+次级入口（Polaris/日记/轨迹）收在主页入口区。所有页面通过 `MobileShell` 包裹。
 
 ---
 

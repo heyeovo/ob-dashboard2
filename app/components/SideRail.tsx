@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation'
  * 下半段 = 手机端收在 Home 汉堡里的次级入口，桌面端常驻。
  */
 
-type Item = { slug: string; href: string; label: string; icon: 'home' | 'memory' | 'chat' | 'workbench' | 'settings' | 'polaris' | 'journal' }
+type Item = { slug: string; href: string; label: string; icon: 'home' | 'memory' | 'chat' | 'workbench' | 'settings' | 'polaris' | 'journal' | 'journey' }
 
 const PRIMARY: Item[] = [
   { slug: 'home', href: '/', label: '主页', icon: 'home' },
@@ -25,6 +25,7 @@ const PRIMARY: Item[] = [
 const SECONDARY: Item[] = [
   { slug: 'polaris', href: '/polaris', label: 'Polaris', icon: 'polaris' },
   { slug: 'journal', href: '/journal', label: '日记', icon: 'journal' },
+  { slug: 'journey', href: '/journey', label: '轨迹', icon: 'journey' },
 ]
 
 function Icon({ name }: { name: Item['icon'] }) {
@@ -44,6 +45,8 @@ function Icon({ name }: { name: Item['icon'] }) {
       return <svg {...common}><path d="M10 3l1.8 4.5L16.5 9l-4.7 1.5L10 15l-1.8-4.5L3.5 9l4.7-1.5L10 3Z" /></svg>
     case 'journal':
       return <svg {...common}><path d="M5 3.5h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5V3.5Z" /><path d="M5 3.5a1.5 1.5 0 0 0 0 3M8 8h4M8 11h4" /></svg>
+    case 'journey':
+      return <svg {...common}><circle cx="5" cy="15" r="1.5" /><circle cx="15" cy="5" r="1.5" /><path d="M6.3 13.8c1.5-1.2 1.4-3.1 3-4.2 1.4-1 2.8-.8 4.4-3.3" /></svg>
   }
 }
 
