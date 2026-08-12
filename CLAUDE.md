@@ -81,6 +81,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | 路径 | 说明 |
 |------|------|
 | `search/route.ts` | GET — 透传全部 query params（simulate, include_vector, include_noise, limit 等） |
+| `historical-chats/route.ts` | GET — 历史聊天只读代理；只允许窗口目录与单窗口原文分页参数，后端硬限定 `historical_archive` |
 | `edit-bucket/route.ts` | POST — 噪声标记/撤销、字段修改、delete:true 软删除 |
 | `breath-debug/route.ts` | GET — 模拟 breath 四维评分 |
 | `gateway/[...path]/route.ts` | cc 生态总代理 → OB Gateway（Bearer 网关鉴权） |
@@ -116,7 +117,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 |------|------|
 | `page.tsx` | 主页面（时间线/记忆格，含噪声筛选 + 隐藏开关 + 乐观更新） |
 | `memory/page.tsx` | 记忆库页（时间线/记忆格/待处理三格切换） |
-| `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、图片/文件底部添加抽屉、附件与文字分离显示、用户消息完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除） |
+| `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、图片/文件底部添加抽屉、附件与文字分离显示、用户消息完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除；会话栏含可折叠的 Claude/Kelivo 历史聊天，只读按时间向下分页和窗口内原文搜索） |
 | `workbench/page.tsx` | 工作台（批准执行 + 四格面板） |
 | `settings/page.tsx` | 设置聚合页（入口） |
 | `settings/upstream/page.tsx` | 上游模型配置 |

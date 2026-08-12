@@ -24,6 +24,8 @@ import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
 import CcWindowSettings from './CcWindowSettings'
 import CcHandoffDialog from './CcHandoffDialog'
+import CcHistoricalChat from './CcHistoricalChat'
+import { historicalKey, type HistoricalConversation } from './historicalChats'
 import { MODE_LABEL } from '@/app/lib/ccModes'
 import { modelLabel, modelsFor } from './upstream'
 import { requiresImportedSessionHandoff } from './engineRouting'
@@ -281,6 +283,7 @@ export default function CcChatPage() {
   const [searchSessionId, setSearchSessionId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearchMessageId, setActiveSearchMessageId] = useState('')
+  const [activeHistorical, setActiveHistorical] = useState<HistoricalConversation | null>(null)
 
   const searchVisible = searchOpen && searchSessionId === chat.sessionId
   const normalizedSearchQuery = searchVisible ? searchQuery.trim().toLocaleLowerCase() : ''
@@ -717,14 +720,22 @@ export default function CcChatPage() {
     <CcSessionRail
       sessions={chat.sessions}
       deletedSessions={chat.deletedSessions}
-      activeSessionId={chat.sessionId}
+      activeSessionId={activeHistorical ? '' : chat.sessionId}
+      activeHistoricalKey={activeHistorical ? historicalKey(activeHistorical) : ''}
       loading={chat.sessionsLoading}
       onPick={id => {
         setRailOpen(false)
+        setActiveHistorical(null)
         void chat.switchSession(id)
+      }}
+      onPickHistorical={conversation => {
+        setRailOpen(false)
+        setActiveHistorical(conversation)
+        closeSearch()
       }}
       onNew={() => {
         setRailOpen(false)
+        setActiveHistorical(null)
         setHandoffOpen({ fromSessionId: null })
       }}
       onRename={chat.renameSession}
@@ -773,9 +784,20 @@ export default function CcChatPage() {
         <div className="flex min-h-0 flex-1">
           <aside className="cc-rail-pane w-[var(--chat-rail-width)] shrink-0">{rail}</aside>
           <main className="flex min-w-0 flex-1 flex-col">
-            {header}
-            {thread()}
-            {composer}
+            {activeHistorical ? (
+              <CcHistoricalChat
+                key={historicalKey(activeHistorical)}
+                conversation={activeHistorical}
+                persona={people.active}
+                onOpenRail={() => setRailOpen(true)}
+              />
+            ) : (
+              <>
+                {header}
+                {thread()}
+                {composer}
+              </>
+            )}
           </main>
         </div>
       </div>
@@ -785,9 +807,20 @@ export default function CcChatPage() {
         className="cc-page flex flex-col md:hidden"
         style={{ height: 'calc(100dvh - 76px - env(safe-area-inset-bottom, 0px))' }}
       >
-        {header}
-        {thread()}
-        {composer}
+        {activeHistorical ? (
+          <CcHistoricalChat
+            key={historicalKey(activeHistorical)}
+            conversation={activeHistorical}
+            persona={people.active}
+            onOpenRail={() => setRailOpen(true)}
+          />
+        ) : (
+          <>
+            {header}
+            {thread()}
+            {composer}
+          </>
+        )}
       </div>
 
       {railOpen ? (

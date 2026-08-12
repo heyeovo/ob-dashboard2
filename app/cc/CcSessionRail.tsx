@@ -1,7 +1,13 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { CcSessionListItem } from './types'
+import {
+  historicalKey,
+  historicalSourceLabel,
+  type HistoricalConversation,
+  type HistoricalConversationResponse,
+} from './historicalChats'
 
 // 会话列表。数据来自 /api/cc-turns（Haven 的 conversation_turns）。
 //
@@ -12,8 +18,10 @@ type Props = {
   sessions: CcSessionListItem[]
   deletedSessions: CcSessionListItem[]
   activeSessionId: string
+  activeHistoricalKey: string
   loading: boolean
   onPick: (sessionId: string) => void
+  onPickHistorical: (conversation: HistoricalConversation) => void
   onNew: () => void
   onRename: (sessionId: string, title: string) => Promise<boolean>
   onDelete: (sessionId: string) => Promise<boolean>
@@ -38,15 +46,43 @@ export default function CcSessionRail({
   sessions,
   deletedSessions,
   activeSessionId,
+  activeHistoricalKey,
   loading,
   onPick,
+  onPickHistorical,
   onNew,
   onRename,
   onDelete,
   onPermanentDelete,
 }: Props) {
   const [menuId, setMenuId] = useState('')
+  const [historicalOpen, setHistoricalOpen] = useState(false)
+  const [historicalLoading, setHistoricalLoading] = useState(true)
+  const [historicalError, setHistoricalError] = useState('')
+  const [historical, setHistorical] = useState<HistoricalConversation[]>([])
   const [deletedOpen, setDeletedOpen] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const load = async () => {
+      try {
+        const res = await fetch('/api/historical-chats?limit=500', {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        const data = await res.json() as HistoricalConversationResponse
+        if (!res.ok || !data.ok) throw new Error(data.error || `读取失败（${res.status}）`)
+        setHistorical(data.items)
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setHistoricalError(reason instanceof Error ? reason.message : String(reason))
+      } finally {
+        setHistoricalLoading(false)
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [])
 
   const copySessionId = async (sessionId: string) => {
     await navigator.clipboard.writeText(sessionId)
@@ -144,6 +180,50 @@ export default function CcSessionRail({
         )}
 
         <div className="mt-3 border-t border-[var(--color-border-light)] pt-2">
+          <button
+            type="button"
+            onClick={() => setHistoricalOpen(value => !value)}
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
+          >
+            <span>历史聊天</span>
+            <span>{historicalLoading ? '…' : historical.length} {historicalOpen ? '⌃' : '⌄'}</span>
+          </button>
+          {historicalOpen ? (
+            <div className="mt-1 space-y-0.5">
+              {historicalLoading ? (
+                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--color-text-disabled)]">读取历史窗口</div>
+              ) : historicalError ? (
+                <div className="px-2.5 py-3 text-[11px] text-[var(--color-danger)]">{historicalError}</div>
+              ) : historical.length === 0 ? (
+                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--color-text-disabled)]">没有历史聊天</div>
+              ) : historical.map(item => {
+                const key = historicalKey(item)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onPickHistorical(item)}
+                    className={`cc-rail-item block w-full px-2.5 py-2 text-left ${key === activeHistoricalKey ? 'active' : ''}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-text-primary)]">
+                        {item.title || '未命名历史窗口'}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
+                        {historicalSourceLabel(item.source, item.client)}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">
+                      {item.message_count} 条 · {relativeTime(item.last_at)}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-2 border-t border-[var(--color-border-light)] pt-2">
           <button
             type="button"
             onClick={() => setDeletedOpen(value => !value)}
