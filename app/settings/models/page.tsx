@@ -309,7 +309,7 @@ export default function ModelsSettingsPage() {
                 <div>
                   <h2 className="font-semibold text-[var(--color-text-heading)]">日回顾模型</h2>
                   <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
-                    每天凌晨 4 点通过 Anthropic-compatible /v1/messages 整理前一天对话；单独保存，不进入记忆桶或语义召回。
+                    按「自动化与状态」中设置的时间整理上一 OB 日（04:00–次日 04:00）；单独保存，不进入记忆桶或语义召回。
                   </p>
                 </div>
                 <label className="flex shrink-0 items-center gap-2 text-sm">

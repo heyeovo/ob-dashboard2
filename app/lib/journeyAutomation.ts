@@ -66,6 +66,7 @@ export type AutomationStatus = {
     timezone?: string
     next_run_at?: string
     last_run_at?: string
+    last_error?: string
     policy?: Record<string, unknown>
   }
   latest_run: AutomationRun
@@ -141,6 +142,36 @@ export function candidateConfirmBody(candidate: Pick<AutomationCandidate, 'revis
 
 export function fetchWeeklyJourneyStatus() {
   return requestJson<AutomationStatus>('/api/automations/status?task_type=weekly_journey')
+}
+
+export function fetchDailyReviewStatus() {
+  return requestJson<AutomationStatus>('/api/automations/status?task_type=daily_review')
+}
+
+export function updateWeeklyJourneySchedule(input: {
+  enabled: boolean
+  weekday: number
+  hour: number
+  minute: number
+  personaId: string
+}) {
+  return requestJson<{ task_type: string; schedule: AutomationStatus['schedule'] }>(
+    '/api/automations/schedule',
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task_type: 'weekly_journey',
+        enabled: input.enabled,
+        policy: {
+          weekday: input.weekday,
+          hour: input.hour,
+          minute: input.minute,
+          persona_id: input.personaId,
+        },
+      }),
+    },
+  )
 }
 
 export function runWeeklyJourney(personaId: string) {

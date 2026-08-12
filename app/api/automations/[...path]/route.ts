@@ -3,6 +3,7 @@ import { BASE_URL, getSessionCookie } from '../../../lib/api'
 
 const ALLOWED_PATHS = [
   /^status$/,
+  /^schedule$/,
   /^weekly-journey\/run$/,
   /^candidates$/,
   /^candidates\/[A-Za-z0-9_-]+$/,

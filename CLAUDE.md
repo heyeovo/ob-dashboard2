@@ -106,7 +106,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `daily-chat-memory/route.ts` | 每日聊天记忆 |
 | `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
 | `journeys/route.ts` + `[id]/route.ts` | 独立关系轨迹目录、详情与认证人工纠错代理 |
-| `automations/[...path]/route.ts` | weekly journey 自动化白名单代理；只允许状态、手动生成、候选读取/编辑/拒绝/确认并原样透传冲突状态 |
+| `automations/[...path]/route.ts` | 自动化白名单代理；允许日回顾/weekly 状态、weekly 持久 schedule、手动生成和候选读取/编辑/拒绝/确认，并原样透传冲突状态 |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -123,7 +123,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `settings/memory-processing/page.tsx` | 记忆处理设置 |
 | `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
 | `settings/recall/page.tsx` | 召回设置 |
-| `settings/automation/page.tsx` | 自动化设置；含 weekly journey 只读状态、最近运行、待确认数量、协作者选择和手动生成入口，不提供自动写入或启用调度开关 |
+| `settings/automation/page.tsx` | 自动化与状态；日回顾支持启停和生成时分，weekly journey 支持启停、星期、时分、协作者与手动生成；显示上次/下次运行和错误，时区与 04:00 日界线固定，仍无自动写入开关 |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
 | `polaris/page.tsx` | Polaris 聊天历史导入 |
 | `impressions/page.tsx` | 日回顾月历：同时标记日回顾/记忆事件，查看与微调日回顾，并保留当天记忆事件及详情抽屉 |

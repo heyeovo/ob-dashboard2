@@ -10,7 +10,7 @@ vi.mock('@/app/lib/api', () => ({
   getSessionCookie: api.getSessionCookie,
 }))
 
-import { GET, POST } from '@/app/api/automations/[...path]/route'
+import { GET, PATCH, POST } from '@/app/api/automations/[...path]/route'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -55,5 +55,27 @@ describe('/api/automations allowlisted proxy', () => {
     expect(response.status).toBe(404)
     expect(api.getSessionCookie).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('allows the persisted schedule update endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      task_type: 'weekly_journey', schedule: { enabled: true },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const body = {
+      task_type: 'weekly_journey', enabled: true,
+      policy: { weekday: 0, hour: 5, minute: 0, persona_id: 'yan-zhi' },
+    }
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/automations/schedule', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ path: ['schedule'] }) },
+    )
+    expect(response.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://haven.test/api/automations/schedule',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify(body), cache: 'no-store' }),
+    )
   })
 })
