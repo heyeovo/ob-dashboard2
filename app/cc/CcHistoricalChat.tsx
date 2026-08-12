@@ -99,6 +99,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail }: 
     id: `historical-${message.id}`,
     role: message.role,
     text: message.text,
+    thinking: typeof message.metadata?.thinking === 'string' ? message.metadata.thinking : '',
     createdAt: Date.parse(message.created_at) || 0,
     fromHistory: true,
   })), [messages])

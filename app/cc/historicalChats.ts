@@ -17,6 +17,11 @@ export type HistoricalMessage = {
   created_at: string
   conversation_id: string
   client: string
+  metadata?: {
+    thinking?: string
+    has_reasoning?: boolean
+    [key: string]: unknown
+  }
 }
 
 export type HistoricalConversationResponse = {

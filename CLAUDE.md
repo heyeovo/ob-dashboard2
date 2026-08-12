@@ -117,7 +117,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 |------|------|
 | `page.tsx` | 主页面（时间线/记忆格，含噪声筛选 + 隐藏开关 + 乐观更新） |
 | `memory/page.tsx` | 记忆库页（时间线/记忆格/待处理三格切换） |
-| `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、图片/文件底部添加抽屉、附件与文字分离显示、用户消息完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除；会话栏含可折叠的 Claude/Kelivo 历史聊天，只读按时间向下分页和窗口内原文搜索） |
+| `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、图片/文件底部添加抽屉、附件与文字分离显示、用户消息完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除；会话栏含可折叠的 Claude/Kelivo 历史聊天，只读按时间向下分页和窗口内原文搜索，归档 thinking 与正文分离并复用现有折叠样式） |
 | `workbench/page.tsx` | 工作台（批准执行 + 四格面板） |
 | `settings/page.tsx` | 设置聚合页（入口） |
 | `settings/upstream/page.tsx` | 上游模型配置 |
