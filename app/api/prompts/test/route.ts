@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    return NextResponse.json(await res.json())
+    return NextResponse.json(await res.json(), { status: res.status })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
