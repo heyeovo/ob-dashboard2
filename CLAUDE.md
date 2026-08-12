@@ -134,7 +134,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `journey/page.tsx` | 独立关系轨迹页：阶段时间轴与人工纠错；页面顶部审核 weekly journey 候选，展示原始 preview、当前 draft/revision/hash、输入完整性、证据与预计差异，确认只提交 revision + hash |
 | `import/page.tsx` | 导入工作台：拖拽/粘贴、大/小模式、试跑、进度+费用、完成后审查 |
 | `trash/page.tsx` | 回收站：恢复/彻底删除/清空 |
-| `prompts/page.tsx` | 四类产品 Prompt 配置：自动打标、记忆合并、独立日回顾、每周关系轨迹；显示系统默认/用户自定义，支持持久保存、撤销草稿、恢复默认与无污染试跑 |
+| `prompts/page.tsx` | 四类产品 Prompt 配置：自动打标、记忆合并、独立日回顾、每周关系轨迹；显示系统默认/用户自定义，支持持久保存、撤销草稿、恢复默认与无污染试跑，并只读展示运行时叠加、模型硬约束全文和返回后服务端校验 |
 | `cc/import/page.tsx` | cc 会话导入 |
 | `tools/mcp/page.tsx` | MCP 工具管理页 |
 
@@ -198,7 +198,7 @@ params 是 Promise，必须 `const { id } = await params`。
 `getSessionCookie()` 5min 内存缓存。避免每次 API 请求重复 POST `/auth/login`。
 
 ### Prompt 配置
-Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionStorage` 或浏览器持久化。每项携带 `source/customized/revision/updated_at`；保存和恢复默认都带 expected revision，冲突时要求刷新，不静默覆盖。保存成功明确显示“已保存并立即生效”。只有自动打标和记忆合并提供草稿试跑，测试正文只作为本次请求的局部 override，不会保存或修改正式运行实例；日回顾和 weekly journey 不创建测试表记录或自动化候选。
+Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionStorage` 或浏览器持久化。每项携带 `source/customized/revision/updated_at`，以及只读的 `runtime_layers/model_hard_constraints/server_validations`；页面把可编辑产品层、运行时自动叠加、实际模型固定约束和模型返回后程序校验分区展示，后三区不能编辑。保存和恢复默认都带 expected revision，冲突时要求刷新，不静默覆盖。保存成功明确显示“已保存并立即生效”。只有自动打标和记忆合并提供草稿试跑，测试正文只作为本次请求的局部 override，不会保存或修改正式运行实例；日回顾和 weekly journey 不创建测试表记录或自动化候选。
 
 ### cc 聊天架构
 协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和“新窗口默认开启”状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖；不在输入框或消息详情增加模块标签。窗口覆盖缺省时跟随协作者默认，因此以后新增模块仍可自然继承默认状态。

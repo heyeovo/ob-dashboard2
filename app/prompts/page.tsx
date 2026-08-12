@@ -13,6 +13,9 @@ type PromptItem = {
   revision: number
   updated_at: string
   test_supported: boolean
+  runtime_layers: string[]
+  model_hard_constraints: string
+  server_validations: string[]
 }
 
 const PROMPT_META: Record<string, { label: string; description: string }> = {
@@ -212,10 +215,53 @@ export default function PromptsPage() {
               </div>
               {note?.text && <div className={`px-4 sm:px-6 pb-3 text-xs ${note.type === 'error' ? 'text-red-500' : 'text-[var(--color-digested)]'}`}>{note.text}</div>}
               {!collapsed[name] && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
+                <div className="mt-4 mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium text-[var(--color-text-primary)]">可编辑的产品提示词</div>
+                    <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">控制文风、关注重点、判断尺度和篇幅</div>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FEF3EE] text-[#C86B45]">可编辑</span>
+                </div>
                 <textarea value={editing[name] || ''} onChange={e => setEditing(prev => ({ ...prev, [name]: e.target.value }))}
                   rows={Math.max(7, (editing[name] || '').split('\n').length + 2)}
-                  className="w-full mt-4 text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
+                  className="w-full text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
                 <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{(editing[name] || '').length} 字符</div>
+
+                <div className="mt-5 grid gap-3">
+                  <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-3.5">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="text-xs font-medium text-[var(--color-text-primary)]">运行时自动叠加</div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                    </div>
+                    <ul className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                      {(item.runtime_layers || []).map((line, index) => <li key={index} className="flex gap-2"><span>•</span><span>{line}</span></li>)}
+                    </ul>
+                  </div>
+
+                  <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[#F7F7F5] overflow-hidden">
+                    <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--color-text-primary)]">模型不可覆盖的固定约束</div>
+                        <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">实际发送给模型，始终生效，不会被上方内容覆盖</div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                    </summary>
+                    <pre className="mx-3.5 mb-3.5 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-white border border-[var(--color-border-light)] p-3 text-[11px] font-mono leading-relaxed text-[var(--color-text-tertiary)]">{item.model_hard_constraints}</pre>
+                  </details>
+
+                  <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[#F7F7F5] overflow-hidden">
+                    <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--color-text-primary)]">模型返回后的服务端校验</div>
+                        <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">这些不是 Prompt 文字，而是 Haven 程序继续执行的安全边界</div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                    </summary>
+                    <ul className="mx-3.5 mb-3.5 space-y-1.5 rounded-md bg-white border border-[var(--color-border-light)] p-3 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                      {(item.server_validations || []).map((line, index) => <li key={index} className="flex gap-2"><span>•</span><span>{line}</span></li>)}
+                    </ul>
+                  </details>
+                </div>
               </div>}
             </Card>
           })}
