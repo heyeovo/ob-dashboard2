@@ -11,26 +11,31 @@ interface JournalEntry {
   name: string
   author: string
   created: string
+  updated_at?: string
+  event_time: string
   locked: boolean
   content: string | null
   unlock_hint?: string
 }
 
-interface JournalDetailMeta {
-  name: string
-  created: string
-  last_active: string
-  [key: string]: unknown
-}
-
-interface BucketDetailResponse {
-  id: string
-  content: string
-  score?: number
-  metadata: JournalDetailMeta
-}
-
 type Author = '言之' | '小羊' | '共同'
+
+function currentBeijingDateTimeLocal(): string {
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
+  return parts.replace(' ', 'T')
+}
+
+function toDateTimeLocal(value: string): string {
+  const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  return match ? `${match[1]}T${match[2]}` : ''
+}
+
+function toBeijingIso(value: string): string {
+  return value ? `${value}:00+08:00` : ''
+}
 
 function formatJournalDate(dateStr: string): string {
   const datePart = formatBeijingDate(dateStr)
@@ -61,12 +66,16 @@ export default function JournalPage() {
   // ---- 详情弹窗 ----
   const [detail, setDetail] = useState<{
     entry: JournalEntry
-    meta: JournalDetailMeta | null
     fullContent: string
   } | null>(null)
   const [detailFetching, setDetailFetching] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editAuthor, setEditAuthor] = useState<Author>('共同')
+  const [editEventTime, setEditEventTime] = useState('')
+  const [editLocked, setEditLocked] = useState(false)
+  const [editUnlockHint, setEditUnlockHint] = useState('')
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -75,6 +84,7 @@ export default function JournalPage() {
   const [newName, setNewName] = useState('')
   const [newContent, setNewContent] = useState('')
   const [newAuthor, setNewAuthor] = useState<Author>('共同')
+  const [newEventTime, setNewEventTime] = useState(currentBeijingDateTimeLocal)
   const [newLocked, setNewLocked] = useState(false)
   const [newUnlockHint, setNewUnlockHint] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -109,7 +119,7 @@ export default function JournalPage() {
       const s = dateStart ? new Date(dateStart).getTime() : 0
       const e = dateEnd ? new Date(dateEnd).getTime() + 86400000 : Infinity
       arr = arr.filter(item => {
-        const t = new Date(item.created).getTime()
+        const t = new Date(item.event_time || item.created).getTime()
         return t >= s && t <= e
       })
     }
@@ -120,12 +130,12 @@ export default function JournalPage() {
   const dateGroups = useMemo(() => {
     const groups = new Map<string, JournalEntry[]>()
     for (const e of filtered) {
-      const date = formatBeijingDate(e.created)
+      const date = formatBeijingDate(e.event_time || e.created)
       if (!groups.has(date)) groups.set(date, [])
       groups.get(date)!.push(e)
     }
     for (const [, list] of groups) {
-      list.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime())
+      list.sort((a, b) => new Date(b.event_time || b.created).getTime() - new Date(a.event_time || a.created).getTime())
     }
     return Array.from(groups.entries()).sort(([a], [b]) => b.localeCompare(a))
   }, [filtered])
@@ -141,19 +151,18 @@ export default function JournalPage() {
   // ---- 详情弹窗操作 ----
   const openDetail = async (entry: JournalEntry) => {
     setEditing(false)
-    setDetail({ entry, meta: null, fullContent: entry.content ?? '' })
+    setDetail({ entry, fullContent: entry.content ?? '' })
     setDetailFetching(true)
     try {
-      const res = await fetch(`/api/bucket/${entry.id}`)
+      const res = await fetch(`/api/journal/${entry.id}`)
       if (res.ok) {
-        const data: BucketDetailResponse = await res.json()
+        const data: JournalEntry = await res.json()
         setDetail({
-          entry,
-          meta: data.metadata ?? null,
+          entry: data,
           fullContent: data.content ?? entry.content ?? '',
         })
       }
-    } catch { /* 静默失败 */ }
+    } catch (e) { setError(`读取日记失败：${String(e)}`) }
     setDetailFetching(false)
   }
 
@@ -167,24 +176,22 @@ export default function JournalPage() {
     if (!detail) return
     setSaving(true)
     try {
-      await fetch('/api/edit-bucket', {
-        method: 'POST',
+      const res = await fetch(`/api/journal/${detail.entry.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: detail.entry.id, content: editContent }),
+        body: JSON.stringify({
+          name: editName.trim(), content: editContent, author: editAuthor,
+          event_time: toBeijingIso(editEventTime), locked: editLocked,
+          unlock_hint: editLocked ? editUnlockHint : '',
+        }),
       })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '保存失败')
       setEditing(false)
-      const res = await fetch(`/api/bucket/${detail.entry.id}`)
-      if (res.ok) {
-        const data: BucketDetailResponse = await res.json()
-        setDetail({
-          entry: { ...detail.entry, content: data.content },
-          meta: data.metadata ?? detail.meta,
-          fullContent: data.content,
-        })
-      }
+      setDetail({ entry: data, fullContent: data.content })
       await load()
     } catch (e) {
-      console.error('保存失败', e)
+      setError(`保存日记失败：${e instanceof Error ? e.message : String(e)}`)
     }
     setSaving(false)
   }
@@ -192,11 +199,13 @@ export default function JournalPage() {
   const deleteJournal = async () => {
     if (!detail || !confirm('确定抹除此日记？不可恢复。')) return
     try {
-      await fetch(`/api/journal/${detail.entry.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/journal/${detail.entry.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '删除失败')
       closeDetail()
       await load()
     } catch (e) {
-      console.error('删除失败', e)
+      setError(`删除日记失败：${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -219,6 +228,7 @@ export default function JournalPage() {
           content: newContent,
           name: newName.trim() || undefined,
           author: newAuthor,
+          event_time: toBeijingIso(newEventTime),
           locked: newLocked,
           unlock_hint: newLocked ? newUnlockHint : '',
         }),
@@ -242,6 +252,7 @@ export default function JournalPage() {
     setNewName('')
     setNewContent('')
     setNewAuthor('共同')
+    setNewEventTime(currentBeijingDateTimeLocal())
     setNewLocked(false)
     setNewUnlockHint('')
   }
@@ -346,7 +357,7 @@ export default function JournalPage() {
             {dateGroups.map(([date, items]) => (
               <div key={date}>
                 <TimelineDayGroup
-                  date={formatJournalDate(items[0].created)}
+                  date={formatJournalDate(items[0].event_time || items[0].created)}
                   count={items.length}
                   unit="篇"
                 >
@@ -402,10 +413,10 @@ export default function JournalPage() {
                         <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${authorColor(detail.entry.author)}`}>
                           {detail.entry.author}
                         </span>
-                        <span>日记: {formatBeijingDate(detail.entry.created)}</span>
+                        <span>日记: {formatBeijingDateTime(detail.entry.event_time || detail.entry.created)}</span>
                         <span>创建: {formatBeijingDateTime(detail.entry.created)}</span>
-                        {detail.meta?.last_active && detail.meta.last_active !== detail.entry.created && (
-                          <span>修改: {formatBeijingDateTime(detail.meta.last_active)}</span>
+                        {detail.entry.updated_at && detail.entry.updated_at !== detail.entry.created && (
+                          <span>修改: {formatBeijingDateTime(detail.entry.updated_at)}</span>
                         )}
                       </div>
                     </div>
@@ -416,20 +427,36 @@ export default function JournalPage() {
 
                 {/* 内容区 — 仅此区域可滚 */}
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scroll px-6 py-4">
-                  {detail.entry.locked && detail.fullContent === (detail.entry.content ?? '') ? (
-                    <p className="text-sm text-[var(--color-text-disabled)] italic py-6 text-center">
-                      已上锁{detail.entry.unlock_hint ? ` · 提示：${detail.entry.unlock_hint}` : ''}
-                    </p>
-                  ) : !editing ? (
+                  {!editing ? (
                     <div className="text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap">{detail.fullContent}</div>
                   ) : (
-                    <textarea
-                      value={editContent}
-                      onChange={e => setEditContent(e.target.value)}
-                      className="w-full text-sm leading-relaxed resize-none outline-none border border-[var(--color-primary)] rounded-xl p-4 min-h-[200px]"
-                      style={{ background: 'var(--color-surface-elevated)' }}
-                      rows={14}
-                    />
+                    <div className="space-y-3">
+                      <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="标题"
+                        className="w-full text-sm outline-none border border-[var(--color-border)] rounded-xl px-3 py-2" />
+                      <input type="datetime-local" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
+                        className="w-full text-sm outline-none border border-[var(--color-border)] rounded-xl px-3 py-2" />
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-2">
+                          {(['言之', '小羊', '共同'] as Author[]).map(a => (
+                            <button key={a} onClick={() => setEditAuthor(a)}
+                              className={`text-xs px-3 py-1.5 rounded-full font-medium ${editAuthor === a ? authorColor(a) : 'bg-white border border-[var(--color-border)] text-[var(--color-text-tertiary)]'}`}>
+                              {a}
+                            </button>
+                          ))}
+                        </div>
+                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                          <input type="checkbox" checked={editLocked} onChange={e => setEditLocked(e.target.checked)} className="accent-[var(--color-primary)]" />
+                          上锁
+                        </label>
+                      </div>
+                      {editLocked && (
+                        <input value={editUnlockHint} onChange={e => setEditUnlockHint(e.target.value)} placeholder="解锁提示"
+                          className="w-full text-xs outline-none border border-[var(--color-border)] rounded-xl px-3 py-2" />
+                      )}
+                      <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
+                        className="w-full text-sm leading-relaxed resize-none outline-none border border-[var(--color-primary)] rounded-xl p-4 min-h-[200px]"
+                        style={{ background: 'var(--color-surface-elevated)' }} rows={12} />
+                    </div>
                   )}
                 </div>
 
@@ -441,7 +468,15 @@ export default function JournalPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       {!editing ? (
-                        <button onClick={() => { setEditing(true); setEditContent(detail.fullContent) }}
+                        <button onClick={() => {
+                          setEditing(true)
+                          setEditContent(detail.fullContent)
+                          setEditName(detail.entry.name)
+                          setEditAuthor(detail.entry.author as Author)
+                          setEditEventTime(toDateTimeLocal(detail.entry.event_time || detail.entry.created))
+                          setEditLocked(detail.entry.locked)
+                          setEditUnlockHint(detail.entry.unlock_hint || '')
+                        }}
                           className="text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors">
                           编辑
                         </button>
@@ -484,7 +519,11 @@ export default function JournalPage() {
         <h3 className="text-[var(--color-text-primary)] font-semibold mb-4 flex-shrink-0">写新日记</h3>
 
             <input value={newName} onChange={e => setNewName(e.target.value)}
-              placeholder="标题（可选，留空自动生成）"
+              placeholder="标题（可选，留空取正文开头）"
+              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
+
+            <label className="text-xs text-[var(--color-text-tertiary)] mb-1">日记时间</label>
+            <input type="datetime-local" value={newEventTime} onChange={e => setNewEventTime(e.target.value)}
               className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
 
             <textarea value={newContent} onChange={e => setNewContent(e.target.value)}

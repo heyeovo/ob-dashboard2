@@ -605,6 +605,7 @@ function HomeClient() {
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
   const detailCache = useRef<Map<string, BucketDetail>>(new Map())
+  const openedQueryBucket = useRef('')
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
@@ -709,6 +710,13 @@ function HomeClient() {
     setSelected(data)
     setDetailLoading(false)
   }
+
+  useEffect(() => {
+    const bucketId = searchParams.get('bucket') || ''
+    if (!bucketId || bucketId === openedQueryBucket.current) return
+    openedQueryBucket.current = bucketId
+    void openBucket(bucketId)
+  }, [searchParams])
 
   const traceOp = async (id: string, args: Record<string, unknown>) => {
     // Optimistic update — instant UI feedback for metadata changes

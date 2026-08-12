@@ -35,7 +35,39 @@ interface BucketDetail {
     event_time?: string
     source?: string       // 单桶接口在此
     wish?: boolean
+    comments?: Array<{
+      id?: string
+      created?: string
+      author?: string
+      kind?: string
+      content?: string
+    }>
   }
+}
+
+interface MomentItem {
+  moment_id: string
+  bucket_id: string
+  section: string
+  ordinal?: number
+  text?: string
+}
+
+interface MomentEdge {
+  source: string
+  target: string
+  relation_type: string
+  confidence?: number
+  reason?: string
+}
+
+interface CrossBucketEdge {
+  direction: 'incoming' | 'outgoing'
+  related_bucket_id: string
+  related_bucket_name: string
+  relation_type: string
+  confidence?: number
+  reason?: string
 }
 
 // ==================== Props ====================
@@ -100,6 +132,13 @@ export default function BucketDetailDrawer({
   const [mergePreviewLoading, setMergePreviewLoading] = useState(false)
   const [mergeCommitting, setMergeCommitting] = useState(false)
   const [embEnabled, setEmbEnabled] = useState(true)
+  const [momentData, setMomentData] = useState<{
+    moments: MomentItem[]
+    edges: MomentEdge[]
+    cross_bucket_edges: CrossBucketEdge[]
+  } | null>(null)
+  const [momentsLoading, setMomentsLoading] = useState(false)
+  const [momentsError, setMomentsError] = useState('')
 
   const fetchSimilar = async (id: string) => {
     setSimilarLoading(true)
@@ -117,6 +156,26 @@ export default function BucketDetailDrawer({
     setSimilarLoading(false)
   }
 
+  const fetchMoments = async (id: string) => {
+    setMomentsLoading(true)
+    setMomentsError('')
+    try {
+      const res = await fetch(`/api/moments?bucket_id=${encodeURIComponent(id)}&limit=200`)
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || '读取失败')
+      setMomentData({
+        moments: Array.isArray(data.moments) ? data.moments : [],
+        edges: Array.isArray(data.edges) ? data.edges : [],
+        cross_bucket_edges: Array.isArray(data.cross_bucket_edges) ? data.cross_bucket_edges : [],
+      })
+    } catch (error) {
+      setMomentData(null)
+      setMomentsError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setMomentsLoading(false)
+    }
+  }
+
   // Fetch similar buckets when selected changes
   const prevSelectedId = useRef<string | null>(null)
   useEffect(() => {
@@ -125,7 +184,9 @@ export default function BucketDetailDrawer({
       setSimilarBuckets([])
       setMergeTarget(null)
       setMergePreview(null)
+      setMomentData(null)
       fetchSimilar(selected.id)
+      fetchMoments(selected.id)
     }
   }, [selected?.id])
 
@@ -448,6 +509,90 @@ export default function BucketDetailDrawer({
                 )}
               </div>
             )}
+
+            {/* Moments, relations, and rings */}
+            <div className="mb-4 bg-white border border-[var(--color-border)] rounded-xl p-4 space-y-5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">Moments 与关联</span>
+                <button onClick={() => fetchMoments(selected.id)} disabled={momentsLoading}
+                  className="text-xs text-[var(--color-primary)] disabled:opacity-50">
+                  {momentsLoading ? '读取中…' : '刷新'}
+                </button>
+              </div>
+              {momentsError ? <div className="text-xs text-[var(--color-danger)]">{momentsError}</div> : null}
+              {!momentsLoading && momentData?.moments.length === 0 ? (
+                <div className="text-xs text-[var(--color-text-disabled)]">没有派生 moment</div>
+              ) : (
+                <div className="space-y-2">
+                  {(momentData?.moments || []).map(moment => (
+                    <div key={moment.moment_id} className="rounded-lg border border-[var(--color-border-light)] px-3 py-2">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-[11px] font-medium text-[var(--color-primary)]">{moment.section || 'moment'}</span>
+                        <span className="text-[10px] text-[var(--color-text-disabled)] font-mono truncate">{moment.moment_id}</span>
+                      </div>
+                      <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap break-words">{moment.text}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">桶内关联</div>
+                {(momentData?.edges || []).length === 0 ? (
+                  <div className="text-xs text-[var(--color-text-disabled)]">没有桶内关联</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {(momentData?.edges || []).map((edge, index) => (
+                      <div key={`${edge.source}-${edge.target}-${edge.relation_type}-${index}`} className="text-xs text-[var(--color-text-secondary)] break-all">
+                        <span className="font-mono">{edge.source}</span>
+                        <span className="mx-1 text-[var(--color-primary)]">— {edge.relation_type} →</span>
+                        <span className="font-mono">{edge.target}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">跨桶关联</div>
+                {(momentData?.cross_bucket_edges || []).length === 0 ? (
+                  <div className="text-xs text-[var(--color-text-disabled)]">没有跨桶关联</div>
+                ) : (
+                  <div className="space-y-2">
+                    {(momentData?.cross_bucket_edges || []).map((edge, index) => (
+                      <div key={`${edge.related_bucket_id}-${edge.relation_type}-${index}`} className="flex items-center gap-2 text-xs">
+                        <span className="text-[var(--color-text-tertiary)]">{edge.direction === 'outgoing' ? '指向' : '来自'}</span>
+                        <a href={`/memory?bucket=${encodeURIComponent(edge.related_bucket_id)}`}
+                          className="min-w-0 flex-1 text-[var(--color-primary)] hover:underline truncate">
+                          {edge.related_bucket_name || edge.related_bucket_id}
+                        </a>
+                        <span className="text-[var(--color-text-disabled)]">{edge.relation_type}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">年轮</div>
+                {(selected.metadata.comments || []).length === 0 ? (
+                  <div className="text-xs text-[var(--color-text-disabled)]">还没有年轮</div>
+                ) : (
+                  <div className="space-y-2">
+                    {(selected.metadata.comments || []).map((comment, index) => (
+                      <div key={comment.id || index} className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
+                        <div className="flex flex-wrap gap-x-2 text-[10px] text-[var(--color-text-disabled)] mb-1">
+                          <span>{comment.created ? formatBeijingDateTime(comment.created) : '时间未知'}</span>
+                          <span>{comment.author || '作者未知'}</span>
+                          <span>{comment.kind || 'comment'}</span>
+                        </div>
+                        <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap">{comment.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Similar Buckets / 相似记忆 */}
             <div className="mb-4 bg-white border border-[var(--color-border)] rounded-xl p-4">

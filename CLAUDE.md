@@ -51,7 +51,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | 文件 | 说明 |
 |------|------|
 | `DetailPanel.tsx` | 统一弹窗壳：`mode="drawer"` 右侧滑入，`mode="modal"` 居中弹出 |
-| `BucketDetailDrawer.tsx` | 桶详情内容区，含噪声标记、相似记忆推荐、合并预览 |
+| `BucketDetailDrawer.tsx` | 桶详情内容区，含噪声标记、moments/桶内与跨桶关联/年轮展示、相似记忆推荐、合并预览 |
 
 **UI 原子组件：**
 | 文件 | 说明 |
@@ -131,7 +131,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `care/page.tsx` | 照顾备忘 + 待办 |
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
 | `graph/page.tsx` | 关系图谱（力导向 + 抽屉） |
-| `journal/page.tsx` | 日记页（垂直时间轴） |
+| `journal/page.tsx` | 日记页（按 event time 的垂直时间轴；专属接口新建/查看/完整编辑标题、正文、作者、时间和锁定状态） |
 | `journey/page.tsx` | 独立关系轨迹页：阶段时间轴与人工纠错；页面顶部审核 weekly journey 候选，展示原始 preview、当前 draft/revision/hash、输入完整性、证据与预计差异，确认只提交 revision + hash |
 | `import/page.tsx` | 导入工作台：拖拽/粘贴、大/小模式、试跑、进度+费用、完成后审查 |
 | `trash/page.tsx` | 回收站：恢复/彻底删除/清空 |
@@ -191,6 +191,9 @@ params 是 Promise，必须 `const { id } = await params`。
 2. 点击「合并预览」→ POST merge-preview → LLM 生成合并结果 + 费用估算
 3. 弹窗三栏对比（A 源 / B 目标 / 合并结果）
 4. 确认 → POST merge-commit → 更新 B 内容+元数据，删除 A
+
+### 桶详情可观测性
+`BucketDetailDrawer` 打开普通桶时通过 `/api/moments?bucket_id=...` 读取派生 moments、桶内 moment 边和带目标桶名称的跨桶边，并从桶 metadata 单独展示年轮。跨桶目标链接到 `/memory?bucket=...` 自动打开对应桶；这些展示不改变 Markdown 正文、moment 索引或年轮的事实源。
 
 ### 乐观更新
 主页对 touch、archive、noise 标记等操作使用乐观更新，先改 UI 再等后端确认。
