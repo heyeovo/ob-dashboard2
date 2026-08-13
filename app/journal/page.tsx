@@ -398,14 +398,14 @@ export default function JournalPage() {
 
       {/* ===== 详情弹窗 ===== */}
       {detail && (
-        <DetailPanel open={true} onClose={closeDetail} mode="modal" width="max-w-2xl">
+        <DetailPanel open={true} onClose={closeDetail} mode="modal" width="max-w-6xl" className="!p-0 overflow-hidden">
 
             {detailFetching ? (
               <div className="flex items-center justify-center py-20 text-sm text-[var(--color-text-disabled)]">读取中...</div>
             ) : (
-              <div className="flex flex-col" style={{ height: '65vh', maxHeight: '75vh' }}>
+              <div className="flex h-[82vh] max-h-[82vh] flex-col">
                 {/* 头部 */}
-                <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-[var(--color-border-light)]">
+                <div className="flex-shrink-0 border-b border-[var(--color-border-light)] px-5 py-4 sm:px-7">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">{detail.entry.name}</h2>
@@ -425,46 +425,64 @@ export default function JournalPage() {
                   </div>
                 </div>
 
-                {/* 内容区 — 仅此区域可滚 */}
-                <div className="flex-1 min-h-0 overflow-y-auto custom-scroll px-6 py-4">
-                  {!editing ? (
+                {/* 阅读态只有一个主滚动区；编辑态把大部分空间留给正文 */}
+                {!editing ? (
+                  <div className="custom-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
                     <div className="text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap">{detail.fullContent}</div>
-                  ) : (
-                    <div className="space-y-3">
-                      <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="标题"
-                        className="w-full text-sm outline-none border border-[var(--color-border)] rounded-xl px-3 py-2" />
-                      <input type="datetime-local" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
-                        className="w-full text-sm outline-none border border-[var(--color-border)] rounded-xl px-3 py-2" />
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-2">
+                  </div>
+                ) : (
+                  <div className="custom-scroll grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden">
+                    <div className="flex min-h-[430px] flex-col bg-[var(--color-surface-secondary)]/45 p-4 sm:p-6 lg:min-h-0">
+                      <label className="mb-2 text-xs font-medium text-[var(--color-text-tertiary)]">正文</label>
+                      <textarea value={editContent} onChange={e => setEditContent(e.target.value)} autoFocus
+                        className="min-h-[380px] w-full flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-white p-5 text-sm leading-7 text-[var(--color-text-primary)] outline-none transition-shadow focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 lg:min-h-0" />
+                    </div>
+
+                    <aside className="space-y-5 border-t border-[var(--color-border-light)] bg-white p-5 sm:p-6 lg:border-l lg:border-t-0">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-tertiary)]">标题</label>
+                        <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="标题"
+                          className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-tertiary)]">日记时间</label>
+                        <input type="datetime-local" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
+                          className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-medium text-[var(--color-text-tertiary)]">作者</label>
+                        <div className="flex flex-wrap gap-2">
                           {(['言之', '小羊', '共同'] as Author[]).map(a => (
                             <button key={a} onClick={() => setEditAuthor(a)}
-                              className={`text-xs px-3 py-1.5 rounded-full font-medium ${editAuthor === a ? authorColor(a) : 'bg-white border border-[var(--color-border)] text-[var(--color-text-tertiary)]'}`}>
+                              className={`rounded-full px-3 py-1.5 text-xs font-medium ${editAuthor === a ? authorColor(a) : 'border border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'}`}>
                               {a}
                             </button>
                           ))}
                         </div>
-                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                      </div>
+
+                      <div className="rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60 p-3">
+                        <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-[var(--color-text-secondary)]">
+                          <span>上锁这篇日记</span>
                           <input type="checkbox" checked={editLocked} onChange={e => setEditLocked(e.target.checked)} className="accent-[var(--color-primary)]" />
-                          上锁
                         </label>
                       </div>
+
                       {editLocked && (
                         <input value={editUnlockHint} onChange={e => setEditUnlockHint(e.target.value)} placeholder="解锁提示"
-                          className="w-full text-xs outline-none border border-[var(--color-border)] rounded-xl px-3 py-2" />
+                          className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
                       )}
-                      <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
-                        className="w-full text-sm leading-relaxed resize-none outline-none border border-[var(--color-primary)] rounded-xl p-4 min-h-[200px]"
-                        style={{ background: 'var(--color-surface-elevated)' }} rows={12} />
-                    </div>
-                  )}
-                </div>
+                    </aside>
+                  </div>
+                )}
 
                 {/* 底部操作区 */}
-                <div className="flex-shrink-0 px-6 py-4 border-t border-[var(--color-border-light)]">
+                <div className="flex-shrink-0 border-t border-[var(--color-border-light)] bg-white px-5 py-3 sm:px-7">
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div className="text-[11px] text-[#B0A590] font-mono">
-                      {stats(detail.fullContent).chars} 字 · ~{stats(detail.fullContent).tokens} tokens
+                      {stats(editing ? editContent : detail.fullContent).chars} 字 · ~{stats(editing ? editContent : detail.fullContent).tokens} tokens
                     </div>
                     <div className="flex items-center gap-3">
                       {!editing ? (
@@ -500,7 +518,7 @@ export default function JournalPage() {
                     </div>
                   </div>
 
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-2 flex items-center gap-2">
                     <span className="text-[11px] text-[var(--color-text-disabled)] font-mono">bucket_id: {detail.entry.id}</span>
                     <button onClick={copyId}
                       className="text-[11px] text-[var(--color-primary)] hover:underline flex-shrink-0">
