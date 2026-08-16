@@ -33,7 +33,7 @@ ENV NODE_ENV=production \
     CLAUDE_CONFIG_DIR=/home/cc/.claude
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes ca-certificates git tini \
+    && apt-get install --no-install-recommends --yes ca-certificates curl git tini \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 cc \
     && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/cc --shell /bin/bash cc \
