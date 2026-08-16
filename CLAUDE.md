@@ -5,7 +5,7 @@
 
 ## 项目概述
 
-ob-dashboard2 是 Ombre Brain 记忆系统的前端看板，Next.js 15 App Router + Tailwind CSS + TypeScript，部署在 Vercel。OB 后端（Python FastMCP + Starlette）部署在 Zeabur。
+ob-dashboard2 是 Ombre Brain 记忆系统的前端看板，Next.js 16 App Router + Tailwind CSS + TypeScript。当前线上版本部署在 Vercel，仓库同时提供 VPS production Docker 构建与启动配置；OB 后端（Python FastMCP + Starlette）部署在 Zeabur。
 
 - **前端仓库**：github.com/heyeovo/ob-dashboard2
 - **OB后端仓库**：github.com/heyeovo/Ombre-Brain
@@ -18,7 +18,10 @@ ob-dashboard2 是 Ombre Brain 记忆系统的前端看板，Next.js 15 App Route
 npm install
 npm run dev      # 本地开发 → http://localhost:3000
 npm run build    # 生产构建
+npm run start    # 启动已经完成 build 的生产服务器
 ```
+
+VPS production 使用仓库根目录 `Dockerfile` 多阶段构建，容器内以固定 UID/GID `10001:10001` 的非 root `cc` 用户运行 `npm run start`。`/workspace/dashboard`、`/workspace/haven` 和 `/home/cc/.claude` 为后续 Coolify bind mount 预留；本机开发继续使用 `npm run dev`，不通过 Docker 启动。
 
 ## 环境变量（.env.local）
 

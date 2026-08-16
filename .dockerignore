@@ -1,0 +1,9 @@
+.claude
+.env*
+.git
+.next
+node_modules
+npm-debug.log*
+
+polaris/.next
+polaris/node_modules
