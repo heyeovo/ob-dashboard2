@@ -1,9 +1,8 @@
 // Ombre Brain Service Worker
-// Strategy: Cache static assets aggressively, network-first for API + HTML
+// Strategy: cache immutable code assets only. Private HTML and images always use the network.
 
-const CACHE_VERSION = 'ombre-v1'
+const CACHE_VERSION = 'ombre-v2'
 const STATIC_CACHE = `ombre-static-${CACHE_VERSION}`
-const IMAGE_CACHE = `ombre-images-${CACHE_VERSION}`
 
 // --- Install: pre-cache nothing (Next.js has its own hashed filenames) ---
 self.addEventListener('install', (event) => {
@@ -36,7 +35,7 @@ self.addEventListener('fetch', (event) => {
   // Only handle same-origin
   if (url.origin !== self.location.origin) return
 
-  // API calls: don't cache
+  // API calls and HTML/private files: don't intercept or cache.
   if (url.pathname.startsWith('/api/')) {
     return // let browser handle normally
   }
@@ -51,19 +50,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Images & icons: Stale While Revalidate
-  if (
-    url.pathname.startsWith('/icons/') ||
-    url.pathname.startsWith('/chat-app/icons/') ||
-    url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp)$/)
-  ) {
-    event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE))
-    return
-  }
-
-  // HTML pages: Stale-while-revalidate for instant PWA display
-  // 即时显示缓存版本，后台静默拉取最新，避免白屏等待
-  event.respondWith(staleWhileRevalidate(request, STATIC_CACHE))
+  // Everything else, including HTML and images, passes through to Dashboard auth.
 })
 
 // --- Strategies ---
@@ -79,28 +66,4 @@ async function cacheFirst(request, cacheName) {
   } catch {
     return new Response('Offline', { status: 503 })
   }
-}
-
-async function networkFirst(request, cacheName) {
-  try {
-    const response = await fetch(request)
-    if (response.ok) {
-      const cache = await caches.open(cacheName)
-      cache.put(request, response.clone())
-    }
-    return response
-  } catch {
-    const cached = await caches.open(cacheName).then((c) => c.match(request))
-    return cached || new Response('Offline', { status: 503 })
-  }
-}
-
-async function staleWhileRevalidate(request, cacheName) {
-  const cache = await caches.open(cacheName)
-  const cached = await cache.match(request)
-  const fetchPromise = fetch(request).then((response) => {
-    if (response.ok) cache.put(request, response.clone())
-    return response
-  })
-  return cached || fetchPromise
 }

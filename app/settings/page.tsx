@@ -73,6 +73,19 @@ export default function SettingsPage() {
         <EntryGrid title="数据" entries={DATA_ENTRIES} />
         <EntryGrid title="引擎与记忆" entries={ENGINE_ENTRIES} />
         <EntryGrid title="模型与外观" entries={MODEL_ENTRIES} />
+
+        <section className="mt-8 border-t border-[var(--color-border)] pt-6">
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">登录状态</h2>
+          <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">退出后，这台设备需要重新输入 Dashboard 口令。</p>
+          <form action="/api/auth/logout" method="post" className="mt-3">
+            <button
+              type="submit"
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-secondary)]"
+            >
+              退出登录
+            </button>
+          </form>
+        </section>
       </main>
     </div>
   )

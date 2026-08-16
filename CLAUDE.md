@@ -34,11 +34,19 @@ OMBRE_BASE_URL=https://foryan.zeabur.app
 OMBRE_SESSION=<密码>
 NEXT_PUBLIC_OMBRE_BASE_URL=https://foryan.zeabur.app
 NEXT_PUBLIC_OMBRE_SESSION=<密码>
+
+# Dashboard 公网登录（production 两项都必须配置）
+DASHBOARD_LOGIN_SECRET=<至少 12 字符的登录口令>
+DASHBOARD_SESSION_SECRET=<至少 32 字符的独立随机签名 secret>
 ```
 
 ## 认证方式
 
-`lib/api.ts` 中 `getSessionCookie()` 统一管理。已加 5 分钟内存缓存，避免每次 fetch 重复 POST `/auth/login`。所有 API proxy route 共用同一份。
+Dashboard 自身公网入口由根 `proxy.ts` 统一保护。`/login` 只通过 POST body 提交口令；成功后签发 HMAC-SHA256 签名、7 天过期的 `ob2_session` cookie，production 设置 `HttpOnly + Secure + SameSite=Strict + Path=/`。production 缺少或弱化 `DASHBOARD_LOGIN_SECRET` / `DASHBOARD_SESSION_SECRET` 任一项时，私人页面和 API 都返回 503，不默认开放；旧 `?k=` 与明文 `ob2_lan` cookie 不再接受。未配置鉴权变量的本机 `npm run dev` 继续直开，非 production 可用旧 `OB2_LAN_SECRET` 作为兼容登录口令并派生仅开发用签名 key。
+
+登录失败按客户端做指数退避，并有单实例全局失败上限；这部分只属于允许重启丢失的运行态，不作为持久用户数据。退出入口位于设置页，POST `/api/auth/logout` 清 cookie 与浏览器 cache；轮换 `DASHBOARD_SESSION_SECRET` 会让全部旧 session 失效。公开边界只含登录、`/api/health`、精确 PWA 文件与 `/_next/static/*`，其余 Dashboard 页面、cc/批准接口、Gateway/Haven/MCP 代理和私人 API 都校验 session。service worker 只缓存不可变代码资源，不缓存 HTML、API 或私人图片。
+
+Dashboard 到 Haven 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 统一管理，并使用 5 分钟内存缓存避免每次 fetch 重复 POST Haven `/auth/login`；这与浏览器访问 Dashboard 的 `ob2_session` 是两套隔离凭据。
 
 ---
 
@@ -115,6 +123,8 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
 | `journeys/route.ts` + `[id]/route.ts` | 独立关系轨迹目录、详情与认证人工纠错代理 |
 | `automations/[...path]/route.ts` | 自动化白名单代理；允许日回顾/weekly 状态、weekly 持久 schedule、手动生成和候选读取/编辑/拒绝/确认，并原样透传冲突状态 |
+| `auth/login/route.ts` + `auth/logout/route.ts` | Dashboard 正式公网登录/退出：POST 口令、签名 session cookie、失败退避与清除 session |
+| `health/route.ts` | 无私人信息的公开存活检查，只返回 `{ok:true}` |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
 
@@ -127,6 +137,7 @@ NEXT_PUBLIC_OMBRE_SESSION=<密码>
 | `cc/page.tsx` | **聊天主页**（本地 cc/selfhost 人工切换、Vercel 强制 selfhost、统一 SSE/严格保存状态、实际引擎/Provider/模型/上下文/usage 展示、图片/文件底部添加抽屉、附件与文字分离显示、用户消息完整本地日期时间、手机上下文详情受模型信息卡边界约束、对话顶部/底部快捷跳转、已删除窗口永久删除；会话栏含可折叠的 Claude/Kelivo 历史聊天，只读按时间向下分页和窗口内原文搜索，归档 thinking 与正文分离并复用现有折叠样式） |
 | `workbench/page.tsx` | 工作台（批准执行 + 四格面板） |
 | `settings/page.tsx` | 设置聚合页（入口） |
+| `login/page.tsx` | Dashboard 独立登录页；表单只向 `/api/auth/login` POST 口令，不使用 URL 口令 |
 | `settings/upstream/page.tsx` | 上游模型配置 |
 | `settings/memory-processing/page.tsx` | 记忆处理设置 |
 | `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
