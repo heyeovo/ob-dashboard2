@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 
 // 第 1 步最小验证：确认 Agent SDK 能在 Next.js 路由里起 claude code 子进程、
 // Windows 路径正确、流能出来。不接 hook、不接对话存储、不给它碰文件。
@@ -10,50 +11,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
-
-type CredMode = 'api' | 'subscription'
-
-// 如果 dev server 本身是从某个 claude code 会话里启动的，process.env 会带着
-// 父会话的标记（CLAUDECODE / CLAUDE_CODE_SESSION_ID / 遥测配置等）。原样传给
-// 子进程会让它误认自己属于那个会话，上报遥测失败并直接崩（Windows 0xC0000409）。
-const PARENT_SESSION_VARS = [
-  'CLAUDECODE',
-  'CLAUDE_PID',
-  'CLAUDE_EFFORT',
-  'CLAUDE_AGENT_SDK_VERSION',
-]
-const PARENT_SESSION_PREFIXES = ['CLAUDE_CODE_', 'OTEL_']
-
-/** 构造子进程环境。设了 env 就完全替换，所以必须先 spread process.env。 */
-function buildEnv(mode: CredMode, overrides: {
-  baseUrl?: string
-  authToken?: string
-}): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = {
-    ...process.env,
-  }
-
-  for (const key of Object.keys(env)) {
-    if (PARENT_SESSION_VARS.includes(key)) delete env[key]
-    else if (PARENT_SESSION_PREFIXES.some((p) => key.startsWith(p))) delete env[key]
-  }
-  env.CLAUDE_AGENT_SDK_CLIENT_APP = 'ob-dashboard2/0.1.0'
-
-  if (mode === 'subscription') {
-    // 走本机 claude 的登录态，任何指向第三方上游的变量都要清掉
-    delete env.ANTHROPIC_BASE_URL
-    delete env.ANTHROPIC_AUTH_TOKEN
-    delete env.ANTHROPIC_API_KEY
-    return env
-  }
-
-  // api 模式：显式指定上游，不依赖"环境里刚好有"
-  const baseUrl = overrides.baseUrl || process.env.ANTHROPIC_BASE_URL
-  const authToken = overrides.authToken || process.env.ANTHROPIC_AUTH_TOKEN
-  if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl
-  if (authToken) env.ANTHROPIC_AUTH_TOKEN = authToken
-  return env
-}
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
@@ -85,9 +42,10 @@ export async function GET(request: NextRequest) {
         settingSources: [],         // 隔离：不加载 ~/.claude 和项目 settings
         includePartialMessages: false,
         abortController: abort,
-        env: buildEnv(cred, {
+        env: buildCcEnv(cred, {
           baseUrl: sp.get('base_url') || undefined,
           authToken: sp.get('auth_token') || undefined,
+          mainModel: model,
         }),
         stderr: (data) => {
           if (stderrLines.length < 40) stderrLines.push(data.trimEnd())

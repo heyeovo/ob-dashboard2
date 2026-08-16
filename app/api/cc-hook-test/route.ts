@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
         env: buildCcEnv(cred, {
           baseUrl: sp.get('base_url') || undefined,
           authToken: sp.get('auth_token') || undefined,
+          mainModel: model,
         }),
         hooks: {
           UserPromptSubmit: [

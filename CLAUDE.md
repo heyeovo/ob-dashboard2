@@ -25,6 +25,8 @@ VPS production 使用仓库根目录 `Dockerfile` 多阶段构建，容器内以
 
 cc 文件工具在 VPS production（`NODE_ENV=production`）只允许 `/workspace/dashboard` 与 `/workspace/haven` 两个根；Persona 未配置读目录时默认 `/workspace/dashboard`，写目录仍为空即全拒。`Read/Grep/Glob/Write/Edit/NotebookEdit` 对已存在目标校验 `realpath`，新目标校验最近已存在父目录的 `realpath`，因此 workspace 内文件/目录 symlink 不能逃到根外；Bash 仍逐次人工批准。本机 `npm run dev` 保留 Windows 绝对路径、按 `process.cwd()` 解析相对路径及空读目录回退本机仓库根的现有方式。
 
+Claude Code 子进程环境从空对象按明确 allowlist 构造，不继承 Dashboard/Haven/数据库/部署平台或其他模型 secret。Linux production 只传运行所需的基础系统变量、`CLAUDE_CONFIG_DIR` 与固定 SDK client 标识；Windows 本机开发另保留系统、用户配置和临时目录等标准路径变量。API 模式只额外传当次选定的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 与主模型 family 映射，未从 Haven 取得覆盖时仍可逐键回退本机 `.env.local`；subscription/OAuth 模式不传任何 `ANTHROPIC_*`，继续使用 Claude 配置目录中的登录状态。
+
 ## 环境变量（.env.local）
 
 ```
