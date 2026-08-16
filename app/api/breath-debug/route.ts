@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     if (arousal) params.set('arousal', arousal)
     if (threshold) params.set('threshold', threshold)
 
-    const res = await fetch(`${BASE_URL}/api/breath-debug?${params}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/breath-debug?${params}`, {
       headers: { Cookie: cookie },
     })
     const data = await res.json()

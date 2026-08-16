@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 async function relay(response: Response) {
   const body = await response.text()
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const cookie = await getSessionCookie()
     const params = new URLSearchParams(request.nextUrl.searchParams)
-    const response = await fetch(`${BASE_URL}/api/daily-reviews?${params.toString()}`, {
+    const response = await fetch(`${getHavenBaseUrl()}/api/daily-reviews?${params.toString()}`, {
       headers: { Cookie: cookie },
       cache: 'no-store',
     })
@@ -27,7 +27,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const cookie = await getSessionCookie()
     const body = await request.text()
-    const response = await fetch(`${BASE_URL}/api/daily-reviews`, {
+    const response = await fetch(`${getHavenBaseUrl()}/api/daily-reviews`, {
       method: 'PATCH',
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body,
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     const cookie = await getSessionCookie()
     const body = await request.text()
-    const response = await fetch(`${BASE_URL}/api/daily-reviews/run`, {
+    const response = await fetch(`${getHavenBaseUrl()}/api/daily-reviews/run`, {
       method: 'POST',
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body,

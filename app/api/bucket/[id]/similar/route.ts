@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../../../lib/api'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const n = searchParams.get('n') || '5'
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/bucket/${id}/similar?n=${n}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/bucket/${id}/similar?n=${n}`, {
       headers: { Cookie: cookie },
     })
     const data = await res.json()

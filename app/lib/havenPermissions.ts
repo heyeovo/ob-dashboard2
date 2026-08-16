@@ -9,15 +9,7 @@ import {
   webSettingsToHaven,
   type CcWebSettings,
 } from '@/app/cc/webSettings'
-
-const HAVEN_BASE = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-).replace(/\/+$/, '')
-
-const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
+import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 const PATH = '/gateway/api/cc/permissions'
 const MAX_RULES = 100
 const MAX_RULE_CHARS = 500
@@ -65,16 +57,13 @@ async function havenFetch(
   method: 'GET' | 'POST',
   body?: unknown,
 ): Promise<{ ok: boolean; payload: Record<string, unknown>; error: string }> {
-  if (!GATEWAY_TOKEN) {
-    return { ok: false, payload: {}, error: 'OMBRE_GATEWAY_TOKEN 未配置，永久权限无法读取或保存' }
-  }
-
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), 15_000)
   try {
-    const headers: Record<string, string> = { Authorization: `Bearer ${GATEWAY_TOKEN}` }
+    const { baseUrl, token } = getHavenGatewayConnection()
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
-    const res = await fetch(`${HAVEN_BASE}${PATH}`, {
+    const res = await fetch(joinHavenUrl(baseUrl, PATH), {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

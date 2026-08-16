@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../../lib/api'
 
 const ALLOWED_PATHS = [
   /^status$/,
@@ -28,7 +28,7 @@ async function relay(
     const cookie = await getSessionCookie()
     const body = request.method === 'GET' ? undefined : await request.text()
     const response = await fetch(
-      `${BASE_URL}/api/automations/${upstreamPath}${request.nextUrl.search}`,
+      `${getHavenBaseUrl()}/api/automations/${upstreamPath}${request.nextUrl.search}`,
       {
         method: request.method,
         headers: {

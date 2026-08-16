@@ -1,11 +1,10 @@
 import { NextRequest } from 'next/server'
-
-const GATEWAY_URL = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-)
+import {
+  getHavenGatewayConnection,
+  HavenConfigurationError,
+  joinHavenUrl,
+  redactHavenSecrets,
+} from '@/app/lib/havenConfig'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
@@ -19,11 +18,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pat
 
 async function proxy(req: NextRequest, subpath: string, method: string) {
   try {
+    const { baseUrl, token } = getHavenGatewayConnection()
     const sessionId = req.headers.get('x-ombre-session-id') || 'main'
-    const backendUrl = `${GATEWAY_URL}/gateway/${subpath}${req.nextUrl.search}`
+    const backendUrl = `${joinHavenUrl(baseUrl, `/gateway/${subpath}`)}${req.nextUrl.search}`
 
     const headers: Record<string, string> = {
       'X-Ombre-Session-Id': sessionId,
+      Authorization: `Bearer ${token}`,
     }
     const skipHandoff = req.headers.get('x-ombre-skip-handoff')
     if (skipHandoff) headers['X-Ombre-Skip-Handoff'] = skipHandoff
@@ -31,10 +32,6 @@ async function proxy(req: NextRequest, subpath: string, method: string) {
     if (forceHandoff) headers['X-Ombre-Force-Handoff'] = forceHandoff
     const handoffBuckets = req.headers.get('x-ombre-handoff-buckets')
     if (handoffBuckets) headers['X-Ombre-Handoff-Buckets'] = handoffBuckets
-    const auth = req.headers.get('authorization')
-    if (auth) headers['Authorization'] = auth
-    const apiKey = req.headers.get('x-api-key')
-    if (apiKey) headers['x-api-key'] = apiKey
     const ct = req.headers.get('content-type')
     if (ct) headers['Content-Type'] = ct
 
@@ -48,7 +45,7 @@ async function proxy(req: NextRequest, subpath: string, method: string) {
 
     if (!upstreamRes.ok) {
       const errText = await upstreamRes.text()
-      return new Response(errText, { status: upstreamRes.status })
+      return new Response(redactHavenSecrets(errText), { status: upstreamRes.status })
     }
 
     return new Response(upstreamRes.body, {
@@ -60,9 +57,14 @@ async function proxy(req: NextRequest, subpath: string, method: string) {
       },
     })
   } catch (e) {
+    const configurationError = e instanceof HavenConfigurationError
     return new Response(
-      JSON.stringify({ error: 'Gateway proxy failed', detail: String(e) }),
-      { status: 502, headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify({
+        error: configurationError
+          ? e.message
+          : 'Gateway proxy failed',
+      }),
+      { status: configurationError ? 503 : 502, headers: { 'Content-Type': 'application/json' } },
     )
   }
 }

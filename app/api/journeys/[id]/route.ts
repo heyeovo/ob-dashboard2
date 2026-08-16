@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../../lib/api'
 
 async function relay(
   req: NextRequest,
@@ -9,7 +9,7 @@ async function relay(
   try {
     const cookie = await getSessionCookie()
     const body = req.method === 'GET' ? undefined : await req.text()
-    const res = await fetch(`${BASE_URL}/api/journeys/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/journeys/${encodeURIComponent(id)}`, {
       method: req.method,
       headers: {
         Cookie: cookie,

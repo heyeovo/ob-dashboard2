@@ -30,15 +30,17 @@ Claude Code 子进程环境从空对象按明确 allowlist 构造，不继承 Da
 ## 环境变量（.env.local）
 
 ```
-OMBRE_BASE_URL=https://foryan.zeabur.app
-OMBRE_SESSION=<密码>
-NEXT_PUBLIC_OMBRE_BASE_URL=https://foryan.zeabur.app
-NEXT_PUBLIC_OMBRE_SESSION=<密码>
+# Dashboard 服务端连接 Haven（production 三项必须配置）
+HAVEN_GATEWAY_URL=<Haven 基础 URL，不带末尾斜杠>
+OMBRE_SESSION=<Haven Brain 登录密码>
+OMBRE_GATEWAY_TOKEN=<Haven Gateway Bearer token>
 
 # Dashboard 公网登录（production 两项都必须配置）
 DASHBOARD_LOGIN_SECRET=<至少 12 字符的登录口令>
 DASHBOARD_SESSION_SECRET=<至少 32 字符的独立随机签名 secret>
 ```
+
+production 只认服务端 `HAVEN_GATEWAY_URL`、`OMBRE_SESSION` 与 `OMBRE_GATEWAY_TOKEN`，不使用 `OMBRE_BASE_URL` 或 `NEXT_PUBLIC_OMBRE_*` fallback。基础 URL 在请求期校验，只接受 http/https，不得携带账号密码、query 或 hash，并拒绝 localhost、`127.0.0.0/8`、`::1` 与 `0.0.0.0`；缺配置时对应 Haven/Gateway 功能返回明确错误，不会静默连接容器自身。本机 `npm run dev` 继续兼容旧 `OMBRE_BASE_URL` / `NEXT_PUBLIC_OMBRE_*` 与原有默认地址。
 
 ## 认证方式
 
@@ -46,7 +48,7 @@ Dashboard 自身公网入口由根 `proxy.ts` 统一保护。`/login` 只通过 
 
 登录失败按客户端做指数退避，并有单实例全局失败上限；这部分只属于允许重启丢失的运行态，不作为持久用户数据。退出入口位于设置页，POST `/api/auth/logout` 清 cookie 与浏览器 cache；轮换 `DASHBOARD_SESSION_SECRET` 会让全部旧 session 失效。公开边界只含登录、`/api/health`、精确 PWA 文件与 `/_next/static/*`，其余 Dashboard 页面、cc/批准接口、Gateway/Haven/MCP 代理和私人 API 都校验 session。service worker 只缓存不可变代码资源，不缓存 HTML、API 或私人图片。
 
-Dashboard 到 Haven 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 统一管理，并使用 5 分钟内存缓存避免每次 fetch 重复 POST Haven `/auth/login`；这与浏览器访问 Dashboard 的 `ob2_session` 是两套隔离凭据。
+Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 统一管理，并使用 5 分钟内存缓存避免每次 fetch 重复 POST Haven `/auth/login`；Gateway/cc 持久化调用只由服务端注入 `OMBRE_GATEWAY_TOKEN`，不接受浏览器提供的 Haven 认证头。这与浏览器访问 Dashboard 的 `ob2_session` 是两套隔离凭据。
 
 ---
 
@@ -99,8 +101,8 @@ Dashboard 到 Haven 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 
 | `historical-chats/route.ts` | GET — 历史聊天只读代理；只允许窗口目录与单窗口原文分页参数，后端硬限定 `historical_archive` |
 | `edit-bucket/route.ts` | POST — 噪声标记/撤销、字段修改、delete:true 软删除 |
 | `breath-debug/route.ts` | GET — 模拟 breath 四维评分 |
-| `gateway/[...path]/route.ts` | cc 生态总代理 → OB Gateway（Bearer 网关鉴权） |
-| `haven/[...path]/route.ts` | 通用 OB 后端代理（Haven 接口） |
+| `gateway/[...path]/route.ts` | cc 生态总代理 → OB Gateway；保持 `/gateway/*` 契约并只由服务端注入 Bearer 网关鉴权 |
+| `haven/[...path]/route.ts` | 通用 OB 后端代理（Haven Brain `/api/*` 接口），地址与登录凭据只在服务端读取 |
 | `mcp-relay/[...path]/route.ts` | cc MCP 工具调用中继 |
 | `provider-relay/route.ts` | 上游 provider 测试中继 |
 | `cc-chat/route.ts` | cc 聊天主入口：严格发送 payload、初始化窗口模式与固定日回顾快照、Haven 幂等预检/重放、SSE 流式执行，写入成功后才完成 |
@@ -110,7 +112,7 @@ Dashboard 到 Haven 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
 | `cc-personas/route.ts` | 协作者（persona 列表/保存/删除，含可自定义基础提示词、可排序提示词模块及默认启停） |
 | `cc-upstream/route.ts` | 上游模型配置 |
-| `cc-mcp/route.ts` | cc MCP 工具配置 |
+| `cc-mcp/route.ts` | cc MCP 工具配置；production 只使用 Haven 持久配置，拒绝 loopback，缺失时安全禁用 |
 | `cc-permission/route.ts` | 写权限批准 |
 | `cc-session-settings/route.ts` | 本窗会话配置：cc 运行时模型/力度/思考；selfhost 供应商/模型合并写入 Haven 窗口覆盖 |
 | `cc-web-settings/route.ts` | web 工具开关 |
@@ -161,7 +163,7 @@ Dashboard 到 Haven 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 
 
 ### `app/lib/`
 
-`api.ts`：`getSessionCookie()`（带 5min 缓存）、`clearSessionCookie()`、`getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`。
+`havenConfig.ts`：Haven/Gateway 服务端运行时配置、URL 校验/拼接、production loopback 拒绝和错误 secret 擦除。`api.ts`：`getSessionCookie()`（带 5min 缓存）、`clearSessionCookie()`、`getBuckets()`, `getBucket(id)`, `searchBuckets(q, includeArchived)`。
 
 cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes.ts`）、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts`、`ccEnv.ts`、`ccDirs.ts`、`haven*`（`havenPersonas.ts`/`havenUpstream.ts`/`havenTurns.ts`/`havenAttachments.ts`/`havenRecall.ts`/`havenPermissions.ts`）、`attachments/*`（移植自 Polaris 的 PDF/DOCX/CSV/纯文本浏览器解析）、`cc/runTurn.ts`、`cc/ccOptions.ts`、`cc/ccHistory.ts`、`cc/processCollector.ts`、`cc/sseEvents.ts`、`cc/turnState.ts`、`selfhost/mcp.ts`、`polarisExport.ts`、`format.ts`、`ccDiff.ts`。
 

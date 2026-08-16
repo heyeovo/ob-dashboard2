@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function GET() {
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/trash`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/trash`, {
       headers: { Cookie: cookie },
     })
     const data = await res.json()
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST() {
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/trash/empty`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/trash/empty`, {
       method: 'POST',
       headers: { Cookie: cookie },
     })

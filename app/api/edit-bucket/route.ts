@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 // 编辑/删除桶——原来走 MCP trace 工具，现在改用 REST：
 // 普通字段更新 → PATCH /api/bucket/{id}，硬删除 → DELETE /api/bucket/{id}
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const cookie = await getSessionCookie()
 
     if (del) {
-      const res = await fetch(`${BASE_URL}/api/bucket/${id}`, {
+      const res = await fetch(`${getHavenBaseUrl()}/api/bucket/${id}`, {
         method: 'DELETE',
         headers: { Cookie: cookie },
       })
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, result: data })
     }
 
-    const res = await fetch(`${BASE_URL}/api/bucket/${id}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/bucket/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify(fields),

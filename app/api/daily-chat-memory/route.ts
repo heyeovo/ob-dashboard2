@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 async function relayResponse(res: Response) {
   const body = await res.text()
@@ -14,7 +14,7 @@ async function relayResponse(res: Response) {
 export async function GET() {
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/daily-chat-memory/pending?status=pending&limit=200`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/daily-chat-memory/pending?status=pending&limit=200`, {
       headers: { Cookie: cookie },
       cache: 'no-store',
     })
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/daily-chat-memory/confirm`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/daily-chat-memory/confirm`, {
       method: 'POST',
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

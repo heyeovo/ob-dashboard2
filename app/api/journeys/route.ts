@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function GET() {
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/journeys`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/journeys`, {
       headers: { Cookie: cookie },
       cache: 'no-store',
     })

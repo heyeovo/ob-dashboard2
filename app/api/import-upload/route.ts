@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function POST(req: NextRequest) {
   const contentType = req.headers.get('content-type') || ''
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       const targetForm = new FormData()
       if (file) targetForm.set('file', file)
 
-      res = await fetch(`${BASE_URL}/api/import/upload?${params}`, {
+      res = await fetch(`${getHavenBaseUrl()}/api/import/upload?${params}`, {
         method: 'POST',
         headers: { Cookie: cookie },
         body: targetForm,
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       if (!params.get('mode')) params.set('mode', 'large')
 
       const body = await req.text()
-      res = await fetch(`${BASE_URL}/api/import/upload?${params}`, {
+      res = await fetch(`${getHavenBaseUrl()}/api/import/upload?${params}`, {
         method: 'POST',
         headers: { 'Cookie': cookie, 'Content-Type': 'text/plain' },
         body,

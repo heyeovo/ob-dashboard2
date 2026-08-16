@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   try {
     const cookie = await getSessionCookie()
     const params = new URLSearchParams({ limit })
-    const res = await fetch(`${BASE_URL}/api/recent-searches?${params}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/recent-searches?${params}`, {
       headers: { Cookie: cookie },
     })
     const data = await res.json()

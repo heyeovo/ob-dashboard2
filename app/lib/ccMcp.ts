@@ -4,6 +4,13 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
 import {
+  assertProductionMcpUrl,
+  getHavenGatewayConnection,
+  isProductionEnvironment,
+  joinHavenUrl,
+  redactHavenSecrets,
+} from './havenConfig'
+import {
   MCP_SECRET_MASK,
   type CcMcpConfig,
   type CcMcpPermission,
@@ -13,18 +20,11 @@ import {
 } from './ccMcpTypes'
 
 const LEGACY_CONFIG_PATH = path.join(process.cwd(), '.data', 'cc-mcp.json')
-const HAVEN_BASE = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-).replace(/\/+$/, '')
-const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
 const HAVEN_MCP_PATH = '/gateway/api/cc/mcp'
 
-// 用户现有的 OB MCP（Ombre-Brain-Haven/.mcp.json）作为第一条默认配置。
-// 它是本机 HTTP 服务，不带密钥；没启动时只会显示连接失败，不影响聊天。
-const DEFAULT_CONFIG: CcMcpConfig = {
+// 本机开发沿用 Ombre-Brain-Haven/.mcp.json 对应的旧默认值。
+// production 不读取这个 localhost fallback，缺失配置时保持 MCP 空清单。
+const DEVELOPMENT_DEFAULT_CONFIG: CcMcpConfig = {
   version: 1,
   servers: [
     {
@@ -54,6 +54,12 @@ const state: McpState =
 
 function cloneConfig(config: CcMcpConfig): CcMcpConfig {
   return JSON.parse(JSON.stringify(config)) as CcMcpConfig
+}
+
+export function fallbackMcpConfig(): CcMcpConfig {
+  return isProductionEnvironment()
+    ? { version: 1, servers: [] }
+    : cloneConfig(DEVELOPMENT_DEFAULT_CONFIG)
 }
 
 function cleanRecord(value: unknown): Record<string, string> {
@@ -175,7 +181,7 @@ function normalizeServer(value: unknown): CcMcpServer {
   }
 }
 
-function validateConfig(value: unknown): CcMcpConfig {
+export function validateMcpConfig(value: unknown): CcMcpConfig {
   const raw =
     value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
@@ -203,6 +209,7 @@ function validateConfig(value: unknown): CcMcpConfig {
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         throw new Error(`MCP「${server.name}」只接受 http/https URL`)
       }
+      assertProductionMcpUrl(server.url)
     }
   }
 
@@ -265,21 +272,14 @@ async function havenMcpFetch(
   method: 'GET' | 'POST',
   config?: CcMcpConfig,
 ): Promise<HavenMcpResult> {
-  if (!GATEWAY_TOKEN) {
-    return {
-      ok: false,
-      payload: {},
-      error: 'OMBRE_GATEWAY_TOKEN 未配置，MCP 配置无法持久化到 Haven',
-    }
-  }
-
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), 15_000)
   try {
-    const res = await fetch(`${HAVEN_BASE}${HAVEN_MCP_PATH}`, {
+    const { baseUrl, token } = getHavenGatewayConnection()
+    const res = await fetch(joinHavenUrl(baseUrl, HAVEN_MCP_PATH), {
       method,
       headers: {
-        Authorization: `Bearer ${GATEWAY_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         ...(config ? { 'Content-Type': 'application/json' } : {}),
       },
       body: config ? JSON.stringify(config) : undefined,
@@ -288,19 +288,21 @@ async function havenMcpFetch(
     })
     const raw = await res.text()
     if (!res.ok) {
-      return { ok: false, payload: {}, error: `HTTP ${res.status}: ${raw.slice(0, 300)}` }
+      return { ok: false, payload: {}, error: redactHavenSecrets(`HTTP ${res.status}: ${raw.slice(0, 300)}`) }
     }
     try {
       return { ok: true, payload: JSON.parse(raw) as Record<string, unknown>, error: '' }
     } catch {
-      return { ok: false, payload: {}, error: `非 JSON 响应: ${raw.slice(0, 200)}` }
+      return { ok: false, payload: {}, error: redactHavenSecrets(`非 JSON 响应: ${raw.slice(0, 200)}`) }
     }
   } catch (error) {
     const err = error as Error
     return {
       ok: false,
       payload: {},
-      error: err.name === 'AbortError' ? 'MCP 配置请求 Haven 超时' : String(err.message || err),
+      error: err.name === 'AbortError'
+        ? 'MCP 配置请求 Haven 超时'
+        : redactHavenSecrets(String(err.message || err)),
     }
   } finally {
     clearTimeout(timer)
@@ -308,14 +310,15 @@ async function havenMcpFetch(
 }
 
 async function legacyOrDefaultConfig(): Promise<CcMcpConfig> {
+  if (isProductionEnvironment()) return fallbackMcpConfig()
   try {
     const text = await readFile(LEGACY_CONFIG_PATH, 'utf8')
-    return validateConfig(JSON.parse(text))
+    return validateMcpConfig(JSON.parse(text))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       console.warn('[cc-mcp] 旧配置迁移读取失败，使用默认配置：', (error as Error).message)
     }
-    return cloneConfig(DEFAULT_CONFIG)
+    return fallbackMcpConfig()
   }
 }
 
@@ -332,19 +335,22 @@ export async function loadMcpConfig(): Promise<CcMcpConfig> {
         !Array.isArray(remote) &&
         Array.isArray((remote as Record<string, unknown>).servers)
       ) {
-        return validateConfig(remote)
+        return validateMcpConfig(remote)
       }
 
       // Haven 第一次部署还没有这一行：优先迁移旧本机文件；Vercel 没旧文件时写入默认值。
       const initial = await legacyOrDefaultConfig()
       const seeded = await havenMcpFetch('POST', initial)
-      if (seeded.ok) return validateConfig(seeded.payload.config)
+      if (seeded.ok) return validateMcpConfig(seeded.payload.config)
       console.warn('[cc-mcp] 初始配置写入 Haven 失败：', seeded.error)
       return initial
     }
 
+    if (isProductionEnvironment()) {
+      throw new Error(`production 无法读取 Haven MCP 配置，MCP 已禁用：${loaded.error}`)
+    }
     console.warn('[cc-mcp] Haven 配置读取失败，临时使用当前进程缓存：', loaded.error)
-    return state.config ? validateConfig(state.config) : legacyOrDefaultConfig()
+    return state.config ? validateMcpConfig(state.config) : legacyOrDefaultConfig()
   })()
 
   try {
@@ -357,10 +363,10 @@ export async function loadMcpConfig(): Promise<CcMcpConfig> {
 
 export async function saveMcpConfig(value: unknown): Promise<CcMcpConfig> {
   const previous = await loadMcpConfig()
-  const clean = mergeMaskedSecrets(validateConfig(value), previous)
+  const clean = mergeMaskedSecrets(validateMcpConfig(value), previous)
   const saved = await havenMcpFetch('POST', clean)
   if (!saved.ok) throw new Error(`MCP 配置保存到 Haven 失败：${saved.error}`)
-  state.config = validateConfig(saved.payload.config)
+  state.config = validateMcpConfig(saved.payload.config)
   return cloneConfig(state.config)
 }
 
@@ -378,6 +384,7 @@ export function toSdkMcpServers(config: CcMcpConfig): Record<string, McpServerCo
         alwaysLoad: true,
       }
     } else {
+      assertProductionMcpUrl(server.url!)
       out[server.name] = {
         type: server.transport,
         url: server.url!,

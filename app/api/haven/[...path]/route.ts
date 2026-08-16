@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../../lib/api'
+import { getSessionCookie } from '../../../lib/api'
+import { getHavenBaseUrl, joinHavenUrl } from '../../../lib/havenConfig'
 
 /**
  * 画像（Portrait / Profile）dashboard API 的 catch-all 代理。
@@ -25,7 +26,7 @@ async function relay(req: NextRequest, context: { params: Promise<{ path: string
     const cookie = await getSessionCookie()
     const query = req.nextUrl.search
     const body = req.method === 'GET' ? undefined : await req.text()
-    const res = await fetch(`${BASE_URL}/api/${upstreamPath}${query}`, {
+    const res = await fetch(`${joinHavenUrl(getHavenBaseUrl(), `/api/${upstreamPath}`)}${query}`, {
       method: req.method,
       headers: {
         Cookie: cookie,

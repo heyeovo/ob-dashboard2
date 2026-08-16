@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../../lib/api'
 
 export async function POST(
   req: NextRequest,
@@ -8,7 +8,7 @@ export async function POST(
   try {
     const { id } = await params
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/unarchive/${id}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/unarchive/${id}`, {
       method: 'POST',
       headers: { Cookie: cookie },
     })

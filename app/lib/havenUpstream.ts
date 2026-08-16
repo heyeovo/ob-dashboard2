@@ -7,15 +7,7 @@
 // 配置读不到时引擎层退回 .env.local 那一条，不能让聊天页发不了话。
 
 import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
-
-const HAVEN_BASE = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-).replace(/\/+$/, '')
-
-const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
+import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 const PATH = '/gateway/api/cc/upstream'
 
 /** Haven 存的一个中转站（snake_case 原样带出，前端在 app/cc/upstream.ts 转驼峰）。 */
@@ -42,20 +34,13 @@ async function havenFetch(
   method: 'GET' | 'POST',
   body?: unknown,
 ): Promise<{ ok: boolean; payload: Record<string, unknown>; error: string }> {
-  if (!GATEWAY_TOKEN) {
-    return {
-      ok: false,
-      payload: {},
-      error: 'OMBRE_GATEWAY_TOKEN 未配置（.env.local），上游模型配置会被 Haven 401',
-    }
-  }
-
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), 15_000)
   try {
-    const headers: Record<string, string> = { Authorization: `Bearer ${GATEWAY_TOKEN}` }
+    const { baseUrl, token } = getHavenGatewayConnection()
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
-    const res = await fetchHavenWithReadRetry(`${HAVEN_BASE}${PATH}`, {
+    const res = await fetchHavenWithReadRetry(joinHavenUrl(baseUrl, PATH), {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

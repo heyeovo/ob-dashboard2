@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const cookie = await getSessionCookie()
     const params = new URLSearchParams({ limit, include_zero, order, exclude_gated })
-    const res = await fetch(`${BASE_URL}/api/hit-stats?${params}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/hit-stats?${params}`, {
       headers: { Cookie: cookie },
     })
     const data = await res.json()
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 export async function POST() {
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/hit-stats/reset`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/hit-stats/reset`, {
       method: 'POST',
       headers: { Cookie: cookie },
     })

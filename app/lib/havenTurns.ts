@@ -15,16 +15,7 @@
 
 import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
 import type { HavenAttachment } from './havenAttachments'
-
-const HAVEN_BASE = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-).replace(/\/+$/, '')
-
-// 网关密码，跟看板登录密码 OMBRE_SESSION 不是同一个
-const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
+import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 
 /** 来源标记。第一版只有 cc（新前端）和 gateway（Haven 自己那条链写的）。
  *  polaris 留给第 6 步迁历史用。 */
@@ -137,15 +128,6 @@ type FetchOptions = {
 async function havenFetch(
   options: FetchOptions,
 ): Promise<{ ok: boolean; payload: Record<string, unknown>; error: string; httpStatus: number | null }> {
-  if (!GATEWAY_TOKEN) {
-    return {
-      ok: false,
-      payload: {},
-      error: 'OMBRE_GATEWAY_TOKEN 未配置（.env.local），对话存储会被 Haven 401',
-      httpStatus: null,
-    }
-  }
-
   // 自己的超时 + 外部 signal 一起生效，谁先到算谁
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), options.timeoutMs ?? 15_000)
@@ -153,13 +135,14 @@ async function havenFetch(
   options.signal?.addEventListener('abort', onOuterAbort, { once: true })
 
   try {
+    const { baseUrl, token } = getHavenGatewayConnection()
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${GATEWAY_TOKEN}`,
+      Authorization: `Bearer ${token}`,
     }
     if (options.sessionId) headers['X-Ombre-Session-Id'] = options.sessionId
     if (options.body !== undefined) headers['Content-Type'] = 'application/json'
 
-    const res = await fetchHavenWithReadRetry(`${HAVEN_BASE}${options.path}`, {
+    const res = await fetchHavenWithReadRetry(joinHavenUrl(baseUrl, options.path), {
       method: options.method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),

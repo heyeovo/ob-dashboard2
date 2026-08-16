@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../../../lib/api'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -7,7 +7,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const into = searchParams.get('into') || ''
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/bucket/${id}/merge-preview?into=${into}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/bucket/${id}/merge-preview?into=${into}`, {
       method: 'POST',
       headers: { Cookie: cookie },
     })

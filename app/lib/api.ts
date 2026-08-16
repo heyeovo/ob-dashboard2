@@ -1,5 +1,12 @@
-export const BASE_URL = process.env.OMBRE_BASE_URL || process.env.NEXT_PUBLIC_OMBRE_BASE_URL!;
-const PASSWORD = process.env.OMBRE_SESSION || process.env.NEXT_PUBLIC_OMBRE_SESSION!;
+import 'server-only'
+
+import {
+    getHavenBaseUrl,
+    getHavenSessionPassword,
+    joinHavenUrl,
+} from './havenConfig'
+
+export { getHavenBaseUrl } from './havenConfig'
 
 // --- Session cookie cache: avoid re-login on every request / 缓存 cookie 避免重复登录 ---
 // getSessionCookie() was called once per fetch. Opening the bucket drawer
@@ -16,10 +23,12 @@ export async function getSessionCookie(): Promise<string> {
     if (_cookieCache && !_cookieExpired()) {
         return _cookieCache.value;
     }
-    const loginRes = await fetch(`${BASE_URL}/auth/login`, {
+    const baseUrl = getHavenBaseUrl()
+    const password = getHavenSessionPassword()
+    const loginRes = await fetch(joinHavenUrl(baseUrl, '/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PASSWORD }),
+        body: JSON.stringify({ password }),
     });
     if (!loginRes.ok) {
         throw new Error('登录后端失败，请检查 OMBRE_SESSION 变量中的密码是否正确');
@@ -39,7 +48,8 @@ export function clearSessionCookie() {
 
 export async function getBuckets(full?: boolean) {
     const cookie = await getSessionCookie();
-    const url = full ? `${BASE_URL}/api/buckets?full=1` : `${BASE_URL}/api/buckets`;
+    const baseUrl = getHavenBaseUrl()
+    const url = full ? `${baseUrl}/api/buckets?full=1` : `${baseUrl}/api/buckets`;
     const res = await fetch(url, {
         headers: { 'Cookie': cookie },
     });
@@ -48,7 +58,7 @@ export async function getBuckets(full?: boolean) {
 }
 
 export interface PaginatedBuckets {
-    buckets: any[];
+    buckets: unknown[];
     count: number;
     limit: number;
     offset: number;
@@ -60,7 +70,7 @@ export async function getBucketsPaginated(limit: number, offset: number, full?: 
     params.set('limit', String(limit));
     params.set('offset', String(offset));
     if (full) params.set('full', '1');
-    const url = `${BASE_URL}/api/buckets?${params.toString()}`;
+    const url = `${getHavenBaseUrl()}/api/buckets?${params.toString()}`;
     const res = await fetch(url, {
         headers: { 'Cookie': cookie },
     });
@@ -70,7 +80,7 @@ export async function getBucketsPaginated(limit: number, offset: number, full?: 
 
 export async function getBucket(id: string) {
     const cookie = await getSessionCookie();
-    const res = await fetch(`${BASE_URL}/api/bucket/${id}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/bucket/${id}`, {
         headers: { 'Cookie': cookie },
     });
     if (!res.ok) throw new Error('Failed to fetch bucket');
@@ -79,7 +89,7 @@ export async function getBucket(id: string) {
 
 export async function searchBuckets(q: string, includeArchived: boolean = false) {
     const cookie = await getSessionCookie();
-    const url = `${BASE_URL}/api/search?q=${encodeURIComponent(q)}${includeArchived ? "&include_archive=true" : ""}`;
+    const url = `${getHavenBaseUrl()}/api/search?q=${encodeURIComponent(q)}${includeArchived ? "&include_archive=true" : ""}`;
     const res = await fetch(url, {
         method: 'GET',
         headers: { 'Cookie': cookie }

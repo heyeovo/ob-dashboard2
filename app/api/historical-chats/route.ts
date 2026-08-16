@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 const ALLOWED_PARAMS = new Set(['conversation_id', 'source', 'q', 'limit', 'offset'])
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const cookie = await getSessionCookie()
-    const res = await fetch(`${BASE_URL}/api/${endpoint}?${params.toString()}`, {
+    const res = await fetch(`${getHavenBaseUrl()}/api/${endpoint}?${params.toString()}`, {
       headers: { Cookie: cookie },
       cache: 'no-store',
     })

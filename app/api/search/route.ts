@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { BASE_URL, getSessionCookie } from '../../lib/api'
+import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
 export async function GET(req: NextRequest) {
   // Forward all query params transparently — needed for simulate, include_vector, limit, etc.
   // 透传全部 query 参数给后端
-  const backendUrl = `${BASE_URL}/api/search?${new URL(req.url).searchParams.toString()}`
+  const backendUrl = `${getHavenBaseUrl()}/api/search?${new URL(req.url).searchParams.toString()}`
   try {
     const cookie = await getSessionCookie()
     const res = await fetch(backendUrl, {

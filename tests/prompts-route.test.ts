@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 const api = vi.hoisted(() => ({ getSessionCookie: vi.fn() }))
 
 vi.mock('@/app/lib/api', () => ({
-  BASE_URL: 'https://haven.test',
+  getHavenBaseUrl: () => 'https://haven.test',
   getSessionCookie: api.getSessionCookie,
 }))
 

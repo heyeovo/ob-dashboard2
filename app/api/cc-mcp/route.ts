@@ -7,13 +7,21 @@ import {
 import { discoverMcpServer } from '@/app/lib/ccMcpDiscovery'
 import { applyMcpServersToLiveSessions } from '@/app/lib/ccSession'
 import type { CcMcpConfig, CcMcpServerStatus } from '@/app/lib/ccMcpTypes'
+import { redactHavenSecrets } from '@/app/lib/havenConfig'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const config = await loadMcpConfig()
-  return Response.json({ ok: true, config: publicMcpConfig(config) })
+  try {
+    const config = await loadMcpConfig()
+    return Response.json({ ok: true, config: publicMcpConfig(config) })
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: redactHavenSecrets((error as Error).message || String(error)) },
+      { status: 503 },
+    )
+  }
 }
 
 async function refreshCatalog(
@@ -56,7 +64,7 @@ export async function PUT(request: NextRequest) {
     return Response.json({ ok: true, config: publicMcpConfig(config), apply, status })
   } catch (error) {
     return Response.json(
-      { ok: false, error: (error as Error).message || String(error) },
+      { ok: false, error: redactHavenSecrets((error as Error).message || String(error)) },
       { status: 400 },
     )
   }
@@ -76,7 +84,7 @@ export async function POST() {
     })
   } catch (error) {
     return Response.json(
-      { ok: false, error: (error as Error).message || String(error) },
+      { ok: false, error: redactHavenSecrets((error as Error).message || String(error)) },
       { status: 500 },
     )
   }

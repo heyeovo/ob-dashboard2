@@ -6,16 +6,7 @@
 // ⚠️ 三个 allow_* 默认是关的（只做关键词匹配、不跑向量检索），必须显式传 "1"，
 // 否则语义命中的桶会全部返回 0 张卡，看起来像门控在拦。开了单次 4-6 秒。
 // ⚠️ 已知缺口：这条路没有 date_recall，「昨天我们聊了什么」拿不到东西（第 2.5 步的活）。
-
-const HAVEN_BASE = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-).replace(/\/+$/, '')
-
-// 网关密码，跟看板登录密码 OMBRE_SESSION 不是同一个
-const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
+import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 
 export type HavenRecallResult = {
   ok: boolean
@@ -69,9 +60,6 @@ export async function recallForPrompt(
 
   const text = (query || '').trim()
   if (!text) return fail('empty query')
-  if (!GATEWAY_TOKEN) {
-    return fail('OMBRE_GATEWAY_TOKEN 未配置（.env.local），hook 召回会被 Haven 401')
-  }
 
   const semantic = options.semantic !== false
   const body: Record<string, unknown> = {
@@ -98,11 +86,12 @@ export async function recallForPrompt(
   options.signal?.addEventListener('abort', onOuterAbort, { once: true })
 
   try {
-    const res = await fetch(`${HAVEN_BASE}/gateway/api/hook/recall`, {
+    const { baseUrl, token } = getHavenGatewayConnection()
+    const res = await fetch(joinHavenUrl(baseUrl, '/gateway/api/hook/recall'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${GATEWAY_TOKEN}`,
+        Authorization: `Bearer ${token}`,
         'X-Ombre-Session-Id': options.sessionId,
       },
       body: JSON.stringify(body),

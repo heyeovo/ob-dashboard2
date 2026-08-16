@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({
 }))
 
 vi.mock('@/app/lib/api', () => ({
-  BASE_URL: 'https://haven.test',
+  getHavenBaseUrl: () => 'https://haven.test',
   getSessionCookie: api.getSessionCookie,
 }))
 

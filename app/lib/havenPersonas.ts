@@ -16,16 +16,7 @@ import {
   DEFAULT_PERSONA_BASE_PROMPT,
   LEGACY_SELFHOST_BASE_PROMPT,
 } from './personaPrompt'
-
-const HAVEN_BASE = (
-  process.env.HAVEN_GATEWAY_URL ||
-  process.env.OMBRE_BASE_URL ||
-  process.env.NEXT_PUBLIC_OMBRE_BASE_URL ||
-  'https://foryan.zeabur.app'
-).replace(/\/+$/, '')
-
-// 网关密码，跟看板登录密码 OMBRE_SESSION 不是同一个
-const GATEWAY_TOKEN = process.env.OMBRE_GATEWAY_TOKEN || ''
+import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 
 const PATH = '/gateway/api/cc/personas'
 
@@ -101,27 +92,19 @@ type FetchOptions = {
 async function havenFetch(
   options: FetchOptions,
 ): Promise<{ ok: boolean; payload: Record<string, unknown>; error: string; httpStatus: number | null }> {
-  if (!GATEWAY_TOKEN) {
-    return {
-      ok: false,
-      payload: {},
-      error: 'OMBRE_GATEWAY_TOKEN 未配置（.env.local），协作者配置会被 Haven 401',
-      httpStatus: null,
-    }
-  }
-
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), options.timeoutMs ?? 15_000)
   const onOuterAbort = () => ac.abort()
   options.signal?.addEventListener('abort', onOuterAbort, { once: true })
 
   try {
+    const { baseUrl, token } = getHavenGatewayConnection()
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${GATEWAY_TOKEN}`,
+      Authorization: `Bearer ${token}`,
     }
     if (options.body !== undefined) headers['Content-Type'] = 'application/json'
 
-    const res = await fetchHavenWithReadRetry(`${HAVEN_BASE}${options.path}`, {
+    const res = await fetchHavenWithReadRetry(joinHavenUrl(baseUrl, options.path), {
       method: options.method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
