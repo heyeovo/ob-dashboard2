@@ -21,7 +21,7 @@ npm run build    # 生产构建
 npm run start    # 启动已经完成 build 的生产服务器
 ```
 
-VPS production 使用仓库根目录 `Dockerfile` 多阶段构建，容器内以固定 UID/GID `10001:10001` 的非 root `cc` 用户运行 `npm run start`。`/workspace/dashboard`、`/workspace/haven` 和 `/home/cc/.claude` 为后续 Coolify bind mount 预留；本机开发继续使用 `npm run dev`，不通过 Docker 启动。
+VPS production 使用仓库根目录 `Dockerfile` 多阶段构建，容器内以固定 UID/GID `10001:10001` 的非 root `cc` 用户运行 `npm run start`。运行镜像包含 `curl`，供 Coolify 对公开 `/api/health` 执行容器内 HTTP healthcheck。`/workspace/dashboard`、`/workspace/haven` 和 `/home/cc/.claude` 作为 Coolify bind mount 目标；本机开发继续使用 `npm run dev`，不通过 Docker 启动。
 
 cc 文件工具在 VPS production（`NODE_ENV=production`）只允许 `/workspace/dashboard` 与 `/workspace/haven` 两个根；Persona 未配置读目录时默认 `/workspace/dashboard`，写目录仍为空即全拒。`Read/Grep/Glob/Write/Edit/NotebookEdit` 对已存在目标校验 `realpath`，新目标校验最近已存在父目录的 `realpath`，因此 workspace 内文件/目录 symlink 不能逃到根外；Bash 仍逐次人工批准。本机 `npm run dev` 保留 Windows 绝对路径、按 `process.cwd()` 解析相对路径及空读目录回退本机仓库根的现有方式。
 
@@ -46,7 +46,7 @@ production 只认服务端 `HAVEN_GATEWAY_URL`、`OMBRE_SESSION` 与 `OMBRE_GATE
 
 Dashboard 自身公网入口由根 `proxy.ts` 统一保护。`/login` 只通过 POST body 提交口令；成功后签发 HMAC-SHA256 签名、7 天过期的 `ob2_session` cookie，production 设置 `HttpOnly + Secure + SameSite=Strict + Path=/`。production 缺少或弱化 `DASHBOARD_LOGIN_SECRET` / `DASHBOARD_SESSION_SECRET` 任一项时，私人页面和 API 都返回 503，不默认开放；旧 `?k=` 与明文 `ob2_lan` cookie 不再接受。未配置鉴权变量的本机 `npm run dev` 继续直开，非 production 可用旧 `OB2_LAN_SECRET` 作为兼容登录口令并派生仅开发用签名 key。
 
-登录失败按客户端做指数退避，并有单实例全局失败上限；这部分只属于允许重启丢失的运行态，不作为持久用户数据。退出入口位于设置页，POST `/api/auth/logout` 清 cookie 与浏览器 cache；轮换 `DASHBOARD_SESSION_SECRET` 会让全部旧 session 失效。公开边界只含登录、`/api/health`、精确 PWA 文件与 `/_next/static/*`，其余 Dashboard 页面、cc/批准接口、Gateway/Haven/MCP 代理和私人 API 都校验 session。service worker 只缓存不可变代码资源，不缓存 HTML、API 或私人图片。
+登录失败按客户端做指数退避，并有单实例全局失败上限；这部分只属于允许重启丢失的运行态，不作为持久用户数据。登录成功、失败和退出均返回相对 `Location`，避免 Coolify/Traefik 反向代理下把容器内 `localhost:3000` 泄露为浏览器跳转目标。退出入口位于设置页，POST `/api/auth/logout` 清 cookie 与浏览器 cache；轮换 `DASHBOARD_SESSION_SECRET` 会让全部旧 session 失效。公开边界只含登录、`/api/health`、精确 PWA 文件与 `/_next/static/*`，其余 Dashboard 页面、cc/批准接口、Gateway/Haven/MCP 代理和私人 API 都校验 session。service worker 只缓存不可变代码资源，不缓存 HTML、API 或私人图片。
 
 Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 统一管理，并使用 5 分钟内存缓存避免每次 fetch 重复 POST Haven `/auth/login`；Gateway/cc 持久化调用只由服务端注入 `OMBRE_GATEWAY_TOKEN`，不接受浏览器提供的 Haven 认证头。这与浏览器访问 Dashboard 的 `ob2_session` 是两套隔离凭据。
 
@@ -125,7 +125,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
 | `journeys/route.ts` + `[id]/route.ts` | 独立关系轨迹目录、详情与认证人工纠错代理 |
 | `automations/[...path]/route.ts` | 自动化白名单代理；允许日回顾/weekly 状态、weekly 持久 schedule、手动生成和候选读取/编辑/拒绝/确认，并原样透传冲突状态 |
-| `auth/login/route.ts` + `auth/logout/route.ts` | Dashboard 正式公网登录/退出：POST 口令、签名 session cookie、失败退避与清除 session |
+| `auth/login/route.ts` + `auth/logout/route.ts` | Dashboard 正式公网登录/退出：POST 口令、签名 session cookie、失败退避、清除 session，并使用相对跳转兼容反向代理 |
 | `health/route.ts` | 无私人信息的公开存活检查，只返回 `{ok:true}` |
 
 其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理，完整接口参考见 **Ombre Brain CLAUDE.md**。
