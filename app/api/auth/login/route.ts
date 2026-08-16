@@ -21,6 +21,13 @@ function privateResponse(response: NextResponse): NextResponse {
   return response
 }
 
+function relativeRedirect(location: string): NextResponse {
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: location },
+  })
+}
+
 function loginError(request: NextRequest, next: string, retryAfter: number): NextResponse {
   if ((request.headers.get('accept') || '').includes('application/json')) {
     const response = NextResponse.json(
@@ -30,10 +37,9 @@ function loginError(request: NextRequest, next: string, retryAfter: number): Nex
     response.headers.set('Retry-After', String(retryAfter))
     return privateResponse(response)
   }
-  const url = new URL('/login', request.url)
-  url.searchParams.set('error', 'invalid')
-  if (next !== '/') url.searchParams.set('next', next)
-  const response = NextResponse.redirect(url, 303)
+  const params = new URLSearchParams({ error: 'invalid' })
+  if (next !== '/') params.set('next', next)
+  const response = relativeRedirect(`/login?${params}`)
   response.headers.set('Retry-After', String(retryAfter))
   return privateResponse(response)
 }
@@ -41,7 +47,7 @@ function loginError(request: NextRequest, next: string, retryAfter: number): Nex
 export async function POST(request: NextRequest) {
   const auth = getDashboardAuthConfig()
   if (!auth.enabled) {
-    return privateResponse(NextResponse.redirect(new URL('/', request.url), 303))
+    return privateResponse(relativeRedirect('/'))
   }
   if (!auth.configured) {
     return privateResponse(NextResponse.json(
@@ -78,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   recordLoginSuccess(clientKey)
   const session = createDashboardSession(auth.sessionSecret)
-  const response = NextResponse.redirect(new URL(next, request.url), 303)
+  const response = relativeRedirect(next)
   response.cookies.set(
     DASHBOARD_SESSION_COOKIE,
     session.token,

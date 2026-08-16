@@ -6,10 +6,13 @@ import {
   getDashboardAuthConfig,
 } from '@/app/lib/dashboardAuth'
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   const auth = getDashboardAuthConfig()
   const destination = auth.enabled ? '/login?logged_out=1' : '/'
-  const response = NextResponse.redirect(new URL(destination, request.url), 303)
+  const response = new NextResponse(null, {
+    status: 303,
+    headers: { Location: destination },
+  })
   response.cookies.set(DASHBOARD_SESSION_COOKIE, '', {
     ...dashboardSessionCookieOptions(auth.production),
     expires: new Date(0),

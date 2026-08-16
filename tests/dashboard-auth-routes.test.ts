@@ -9,8 +9,12 @@ const LOGIN_SECRET = 'route-test-login-passphrase'
 const SESSION_SECRET = 'route-test-session-signing-secret-at-least-32-bytes'
 const ORIGINAL_ENV = { ...process.env }
 
-function loginRequest(password: string, headers: Record<string, string> = {}) {
-  return new NextRequest('https://dashboard.example/api/auth/login', {
+function loginRequest(
+  password: string,
+  headers: Record<string, string> = {},
+  url = 'https://dashboard.example/api/auth/login',
+) {
+  return new NextRequest(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
@@ -39,11 +43,18 @@ describe('Dashboard login/logout routes', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const response = await login(loginRequest(LOGIN_SECRET))
+    const response = await login(loginRequest(
+      LOGIN_SECRET,
+      {
+        'x-forwarded-host': 'dashboard.example',
+        'x-forwarded-proto': 'https',
+      },
+      'http://localhost:3000/api/auth/login',
+    ))
     const serialized = `${response.headers}\n${await response.text()}`
 
     expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('https://dashboard.example/cc?view=chat')
+    expect(response.headers.get('location')).toBe('/cc?view=chat')
     expect(response.headers.get('set-cookie')).toMatch(/ob2_session=[^;]+/)
     expect(response.headers.get('set-cookie')).toContain('HttpOnly')
     expect(response.headers.get('set-cookie')).toContain('Secure')
@@ -60,7 +71,7 @@ describe('Dashboard login/logout routes', () => {
     const wrong = 'wrong-password-from-test'
     const response = await login(loginRequest(wrong))
     expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toContain('/login?error=invalid')
+    expect(response.headers.get('location')).toBe('/login?error=invalid&next=%2Fcc%3Fview%3Dchat')
     expect(`${response.headers}\n${await response.text()}`).not.toContain(wrong)
 
     const blocked = await login(loginRequest(wrong, { accept: 'application/json' }))
@@ -78,11 +89,15 @@ describe('Dashboard login/logout routes', () => {
   })
 
   it('clears the session cookie and browser cache on logout', async () => {
-    const response = await logout(new NextRequest('https://dashboard.example/api/auth/logout', {
+    const response = await logout(new NextRequest('http://localhost:3000/api/auth/logout', {
       method: 'POST',
+      headers: {
+        'x-forwarded-host': 'dashboard.example',
+        'x-forwarded-proto': 'https',
+      },
     }))
     expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('https://dashboard.example/login?logged_out=1')
+    expect(response.headers.get('location')).toBe('/login?logged_out=1')
     expect(response.headers.get('set-cookie')).toContain('ob2_session=')
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0')
     expect(response.headers.get('clear-site-data')).toBe('"cache"')
