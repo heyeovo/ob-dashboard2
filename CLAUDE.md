@@ -23,6 +23,8 @@ npm run start    # 启动已经完成 build 的生产服务器
 
 VPS production 使用仓库根目录 `Dockerfile` 多阶段构建，容器内以固定 UID/GID `10001:10001` 的非 root `cc` 用户运行 `npm run start`。`/workspace/dashboard`、`/workspace/haven` 和 `/home/cc/.claude` 为后续 Coolify bind mount 预留；本机开发继续使用 `npm run dev`，不通过 Docker 启动。
 
+cc 文件工具在 VPS production（`NODE_ENV=production`）只允许 `/workspace/dashboard` 与 `/workspace/haven` 两个根；Persona 未配置读目录时默认 `/workspace/dashboard`，写目录仍为空即全拒。`Read/Grep/Glob/Write/Edit/NotebookEdit` 对已存在目标校验 `realpath`，新目标校验最近已存在父目录的 `realpath`，因此 workspace 内文件/目录 symlink 不能逃到根外；Bash 仍逐次人工批准。本机 `npm run dev` 保留 Windows 绝对路径、按 `process.cwd()` 解析相对路径及空读目录回退本机仓库根的现有方式。
+
 ## 环境变量（.env.local）
 
 ```

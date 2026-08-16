@@ -298,12 +298,12 @@ async function loadTurnInputs(body: ChatBody) {
   personaAppend = [personaAppend, dailyReviewBlock].filter(Boolean).join('\n\n')
   const systemPromptKey = personaAppend
 
-  // 能读哪些目录：协作者自己配的，没配就是仓库根。
+  // 能读哪些目录：本机没配退回仓库根；production 没配只进 dashboard workspace。
   // 敏感文件的拦截跟这个无关，是 ccOptions 里 PreToolUse 那道硬规则。
-  const { cwd, additionalDirectories } = resolveDirs(persona?.dirs)
+  const { cwd, additionalDirectories } = await resolveDirs(persona?.dirs)
   // 能写哪些目录：另一份更窄的清单，**空 = 一个字都不许写**（跟读的规则相反）。
   // 每轮重存，所以配置改完立刻生效 —— 不像提示词要等新对话。
-  const writeDirs = resolveWriteDirs(persona?.write_dirs)
+  const writeDirs = await resolveWriteDirs(persona?.write_dirs)
   setWriteDirs(body.session_id || '', writeDirs)
 
   // 两个召回开关同样是 body 优先、协作者兜底，存进表让 runTurn 每轮重读

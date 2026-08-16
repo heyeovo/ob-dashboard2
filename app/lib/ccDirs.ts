@@ -1,3 +1,4 @@
+import { lstat, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 
 // 协作者能读哪些目录，以及哪些文件一律不给读。
@@ -7,33 +8,97 @@ import path from 'node:path'
 //   风险文件是**硬规则**（写死在这里）—— 不是配置项，没有开关，任何协作者都拦
 //
 // 第 5 步起有写权限了，所以这里有**两份**目录清单，别搞混：
-//   dirs        能读哪些（resolveDirs）—— 空 = 退回仓库根
+//   dirs        能读哪些（resolveDirs）—— 空 = 本机退回仓库根，production 退回 dashboard workspace
 //   write_dirs  能写哪些（resolveWriteDirs）—— 空 = 一个字都不许写
 // 风险文件那道硬规则对读和写都生效。
 
-/** dirs 没配时用哪些。就是仓库自己。 */
-export function defaultDirs(): string[] {
-  return [process.cwd()]
+/** VPS production 允许挂进 Claude Code 的全部 workspace；不是 Persona 默认授权。 */
+export const VPS_WORKSPACE_ROOTS = ['/workspace/dashboard', '/workspace/haven'] as const
+
+type ResolveDirOptions = {
+  cwd?: string
+  production?: boolean
+  /** 只给测试注入临时 Linux workspace；正式调用不能传。 */
+  productionRoots?: readonly string[]
+}
+
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+function cleanPath(target: string): string {
+  return String(target || '').trim().replace(/^["']|["']$/g, '')
+}
+
+async function existingDirectory(target: string): Promise<string> {
+  const resolved = await realpath(target)
+  if (!(await stat(resolved)).isDirectory()) throw new Error(`不是目录：${target}`)
+  return resolved
+}
+
+async function productionRoots(options: ResolveDirOptions): Promise<string[]> {
+  const configured = options.productionRoots || VPS_WORKSPACE_ROOTS
+  const roots: string[] = []
+  for (const root of configured) {
+    const lexical = path.resolve(root)
+    const resolved = await existingDirectory(lexical)
+    // production 的固定 mount point 自己也不能是跳到别处的 symlink。
+    if (resolved !== lexical) throw new Error(`production workspace 根不是实际目录：${lexical}`)
+    roots.push(resolved)
+  }
+  return roots
+}
+
+/**
+ * 本机 dev 保留原来的 process.cwd() fallback；production 不把运行镜像 /app 当 workspace，
+ * 未配置 Persona dirs 时只默认进入 /workspace/dashboard。
+ */
+export function defaultDirs(options: ResolveDirOptions = {}): string[] {
+  const cwd = options.cwd || process.cwd()
+  const production = options.production ?? process.env.NODE_ENV === 'production'
+  if (!production) return [cwd]
+  return [String((options.productionRoots || VPS_WORKSPACE_ROOTS)[0])]
+}
+
+async function resolveConfiguredDirs(
+  dirs: string[] | undefined,
+  options: ResolveDirOptions,
+  fallback: boolean,
+): Promise<string[]> {
+  const cwd = options.cwd || process.cwd()
+  const production = options.production ?? process.env.NODE_ENV === 'production'
+  const raw = (dirs || []).map(cleanPath).filter(Boolean)
+  const candidates = raw.length > 0 ? raw.map(dir => path.resolve(cwd, dir)) : fallback ? defaultDirs(options) : []
+  const allowedRoots = production ? await productionRoots(options) : null
+  const resolved: string[] = []
+
+  for (const candidate of candidates) {
+    const actual = await existingDirectory(candidate)
+    if (allowedRoots && !allowedRoots.some(root => isInside(root, actual))) {
+      throw new Error(
+        `目录不在 VPS workspace 白名单内：${candidate}。只允许：${allowedRoots.join('、')}`,
+      )
+    }
+    resolved.push(actual)
+  }
+  return [...new Set(resolved)]
 }
 
 /**
  * 能**写**哪些目录（第 5 步）。跟上面那份读的清单故意不共用，规则也相反：
  *
- *   读：空 = 退回仓库根（不然它连自己的代码都看不了，等于不能干活）
+ *   读：空 = 退回默认工作区（本机仓库根；production 的 dashboard workspace）
  *   写：空 = 一个字都不许写
  *
  * 为什么反过来：读错了顶多浪费一次上下文，写错了是把文件改坏。
  * 所以第一次用写权限之前必须去协作者设置里明确加一行 —— 这个麻烦是故意的。
  */
-export function resolveWriteDirs(dirs: string[] | undefined): string[] {
-  return [
-    ...new Set(
-      (dirs || [])
-        .map(d => String(d || '').trim())
-        .filter(Boolean)
-        .map(d => path.resolve(process.cwd(), d)),
-    ),
-  ]
+export async function resolveWriteDirs(
+  dirs: string[] | undefined,
+  options: ResolveDirOptions = {},
+): Promise<string[]> {
+  return resolveConfiguredDirs(dirs, options, false)
 }
 
 /**
@@ -42,19 +107,60 @@ export function resolveWriteDirs(dirs: string[] | undefined): string[] {
  * 用 path.relative 判断包含关系，不用字符串前缀 —— 前缀比对会把
  * `C:\x\ob-dashboard2-backup` 当成 `C:\x\ob-dashboard2` 的子目录放过去。
  */
-export function isWritablePath(target: string, writeDirs: string[]): boolean {
-  const raw = String(target || '').trim().replace(/^["']|["']$/g, '')
-  if (!raw) return false
-  if (writeDirs.length === 0) return false
-  const abs = path.resolve(process.cwd(), raw)
-  return writeDirs.some(dir => {
-    const rel = path.relative(dir, abs)
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
-  })
+export async function isWritablePath(
+  target: string,
+  writeDirs: string[],
+  cwd = process.cwd(),
+): Promise<boolean> {
+  return isPathWithinRoots(target, writeDirs, cwd)
+}
+
+/** 只读工具也必须留在本窗口 SDK 实际拿到的 cwd/additionalDirectories 内。 */
+export async function isReadablePath(target: string, readDirs: string[], cwd: string): Promise<boolean> {
+  return isPathWithinRoots(target, readDirs, cwd)
+}
+
+/**
+ * 已存在目标校验自己的 realpath；新目标逐级向上寻找最近已存在父目录。
+ * 遇到 dangling symlink 会拒绝，不能把它误当成普通的新文件。
+ */
+export async function isPathWithinRoots(
+  target: string,
+  roots: string[],
+  cwd = process.cwd(),
+): Promise<boolean> {
+  const raw = cleanPath(target)
+  if (!raw || roots.length === 0) return false
+  const absolute = path.resolve(cwd, raw)
+  if (!roots.some(root => isInside(root, absolute))) return false
+
+  let probe = absolute
+  while (true) {
+    try {
+      const actual = await realpath(probe)
+      return roots.some(root => isInside(root, actual))
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT') return false
+      try {
+        // lstat 成功但 realpath ENOENT，说明这里是 dangling symlink。
+        await lstat(probe)
+        return false
+      } catch (lstatError) {
+        if ((lstatError as NodeJS.ErrnoException).code !== 'ENOENT') return false
+      }
+      const parent = path.dirname(probe)
+      if (parent === probe) return false
+      probe = parent
+    }
+  }
 }
 
 /** 会改文件的工具。批准闸和写目录检查都按这张表来。 */
 export const WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit']
+
+/** 有文件系统路径入参的只读工具。 */
+export const READ_PATH_TOOLS = ['Read', 'Grep', 'Glob']
 
 /** 会跑命令的工具。永远一条一条问，不进「本会话放行」那个开关。 */
 export const EXEC_TOOLS = ['Bash', 'BashOutput', 'KillShell']
@@ -110,21 +216,19 @@ export function scrubDeniedLines(output: string): { text: string; removed: numbe
 /**
  * 配置里的目录清单 → SDK 的 cwd + additionalDirectories。
  *
- * 空配置退回仓库根 —— 不是「什么都不能读」。真要收紧得靠下面的 denylist，
+ * 空配置退回默认工作区 —— 不是「什么都不能读」。真要收紧得靠下面的 denylist，
  * 不是靠给一个空目录列表（那样它连自己的代码都读不了，等于不能干活）。
  */
-export function resolveDirs(dirs: string[] | undefined): {
+export async function resolveDirs(
+  dirs: string[] | undefined,
+  options: ResolveDirOptions = {},
+): Promise<{
   cwd: string
   additionalDirectories: string[]
-} {
-  const cleaned = (dirs || [])
-    .map(d => String(d || '').trim())
-    .filter(Boolean)
-    // 相对路径按仓库根解析，免得配了个 ../x 落到意料之外的地方
-    .map(d => path.resolve(process.cwd(), d))
-  const unique = [...new Set(cleaned)]
+}> {
+  const unique = await resolveConfiguredDirs(dirs, options, true)
   if (unique.length === 0) {
-    const fallback = defaultDirs()
+    const fallback = await resolveConfiguredDirs(undefined, options, true)
     return { cwd: fallback[0], additionalDirectories: fallback.slice(1) }
   }
   return { cwd: unique[0], additionalDirectories: unique.slice(1) }
@@ -188,4 +292,25 @@ export function pathsFromToolInput(input: unknown): string[] {
     if (typeof value === 'string' && value.trim()) out.push(value)
   }
   return out
+}
+
+/**
+ * 取出 SDK 内建文件工具真正用于访问文件系统的路径。
+ * Grep / Glob 没有传 path 时会从 SDK cwd 开始，glob 是匹配式而不是目录。
+ */
+export function pathTargetFromToolInput(
+  toolName: string,
+  input: unknown,
+  cwd: string,
+): string | null {
+  if (!input || typeof input !== 'object') return null
+  const obj = input as Record<string, unknown>
+  if (toolName === 'NotebookEdit') return cleanPath(String(obj.notebook_path || '')) || null
+  if (toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') {
+    return cleanPath(String(obj.file_path || '')) || null
+  }
+  if (toolName === 'Grep' || toolName === 'Glob') {
+    return cleanPath(String(obj.path || '')) || cwd
+  }
+  return null
 }

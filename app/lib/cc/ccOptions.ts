@@ -14,9 +14,12 @@ import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import {
   EXEC_TOOLS,
   GREP_EXCLUDE_GLOB,
+  READ_PATH_TOOLS,
   WRITE_TOOLS,
   isDeniedPath,
+  isReadablePath,
   isWritablePath,
+  pathTargetFromToolInput,
   pathsFromToolInput,
   scrubDeniedLines,
 } from '@/app/lib/ccDirs'
@@ -263,7 +266,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
 
     // 写清单之外的一律硬拒，不弹卡片 —— 这不是「要不要批准」的问题，
     // 是根本没配。空清单时这里会拒掉所有写操作，界面上会提示去哪加。
-    if (WRITE_TOOLS.includes(toolName) && !isWritablePath(filePath, dirs)) {
+    if (WRITE_TOOLS.includes(toolName) && !(await isWritablePath(filePath, dirs, cwd))) {
       return {
         behavior: 'deny',
         message: dirs.length
@@ -376,7 +379,8 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
  * 消息，中转站不认这种 role，静默丢掉 —— 模型压根收不到记忆卡。
  */
 function buildCcHooks(config: TurnConfig): Options['hooks'] {
-  const { sessionId, webSettings } = config
+  const { sessionId, webSettings, cwd, additionalDirectories } = config
+  const readDirs = [cwd, ...additionalDirectories]
 
   return {
     // ↓ 缓存排查用（见 OB基础知识/HANDOFF-cc缓存排查-第2版.md）。
@@ -508,6 +512,36 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
                       .join('\n\n'),
                   },
                 },
+              }
+            }
+
+            const pathTarget = pathTargetFromToolInput(name, toolInput, cwd)
+            if (READ_PATH_TOOLS.includes(name)) {
+              if (!pathTarget || !(await isReadablePath(pathTarget, readDirs, cwd))) {
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    permissionDecision: 'deny' as const,
+                    permissionDecisionReason:
+                      `这个读取路径不在允许的 workspace 内（${pathTarget || '未提供路径'}）。` +
+                      `能读的是：${readDirs.join('、')}。`,
+                  },
+                }
+              }
+            }
+            if (WRITE_TOOLS.includes(name)) {
+              const writeDirs = writeDirsBySession.get(sessionId) || []
+              if (!pathTarget || !(await isWritablePath(pathTarget, writeDirs, cwd))) {
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    permissionDecision: 'deny' as const,
+                    permissionDecisionReason: writeDirs.length
+                      ? `这个写入路径不在允许的 workspace 内（${pathTarget || '未提供路径'}）。` +
+                        `能写的是：${writeDirs.join('、')}。`
+                      : '这个协作者还没配「能写哪些目录」，所以现在一个文件都不能改。',
+                  },
+                }
               }
             }
 
