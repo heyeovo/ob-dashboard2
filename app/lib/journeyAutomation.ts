@@ -68,8 +68,22 @@ export type AutomationStatus = {
     last_run_at?: string
     last_error?: string
     policy?: Record<string, unknown>
+    execution_engine?: 'api' | 'pro'
+    execution_model?: string
   }
   latest_run: AutomationRun
+  latest_execution?: {
+    execution_id?: string
+    trigger?: string
+    requested_engine?: string
+    actual_engine?: string
+    model?: string
+    status?: string
+    error_code?: string
+    error?: string
+    started_at?: string
+    completed_at?: string
+  }
   pending_candidates: number
 }
 
@@ -170,6 +184,21 @@ export function updateWeeklyJourneySchedule(input: {
           persona_id: input.personaId,
         },
       }),
+    },
+  )
+}
+
+export function updateAutomationExecution(
+  taskType: 'daily_review' | 'weekly_journey',
+  engine: 'api' | 'pro',
+  model: string,
+) {
+  return requestJson<{ task_type: string; schedule: AutomationStatus['schedule'] }>(
+    '/api/automations/execution',
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_type: taskType, engine, model }),
     },
   )
 }

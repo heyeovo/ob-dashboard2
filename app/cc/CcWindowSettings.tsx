@@ -67,6 +67,12 @@ function fmtK(n: number) {
   return String(n)
 }
 
+function fmtCache(ms: number) {
+  if (ms <= 0) return ''
+  const minutes = Math.ceil(ms / 60_000)
+  return minutes >= 60 ? `${Math.ceil(minutes / 60)}h` : `${minutes}m`
+}
+
 const ROW = 'flex items-center justify-between gap-3 py-1.5 text-[11.5px]'
 const KEY = 'shrink-0 text-[var(--color-text-tertiary)]'
 const VAL = 'truncate text-right text-[var(--color-text-secondary)]'
@@ -115,6 +121,8 @@ export default function CcWindowSettings({
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
   const recent = stats.recentCostUsd || []
   const recentSum = recent.reduce((a, b) => a + b, 0)
+  const cacheSystem = fmtCache(stats.cacheSystemRemainingMs)
+  const cacheSession = fmtCache(stats.cacheRemainingMs)
   // 订阅侧不按量计费，SDK 报的那个数字对用户没意义 —— 直接显示 $0（用户拍板的）。
   const subscription = pick.kind === 'subscription'
   const usageRows = [
@@ -176,6 +184,15 @@ export default function CcWindowSettings({
                 </span>
               </div>
             ) : null}
+            <div className={ROW}>
+              <span className={KEY}>Prompt cache</span>
+              <span className={VAL}>
+                {cacheSystem
+                  ? `系统约 ${cacheSystem} · ${cacheSession ? `会话约 ${cacheSession}` : '会话已过期'}`
+                  : '尚无活跃缓存'}
+              </span>
+            </div>
+            <div className={`${HINT} text-right`}>按最后一次模型调用估算；单条回复 usage 才是实际读写记录</div>
             <div className={ROW}>
               <span className={KEY}>本轮花费</span>
               <span className={VAL}>

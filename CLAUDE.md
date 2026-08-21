@@ -116,6 +116,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `cc-permission/route.ts` | 写权限批准 |
 | `cc-session-settings/route.ts` | 本窗会话配置：CC Pro/API 路由及各自 provider/模型/力度/思考、selfhost 供应商/模型合并写入 Haven 窗口覆盖 |
 | `cc-pro-usage/route.ts` | 只读取当前已有 Pro SDK session 的实验性 5 小时/本周用量与重置时间；不新建 query、不触发模型调用，失败时明确不可用 |
+| `automation-pro-runner/route.ts` | 日回顾 / 每周轨迹专用 Claude Pro 单次执行入口；固定白名单任务、禁用 tools、进程内串行 |
 | `cc-web-settings/route.ts` | web 工具开关 |
 | `cc-workbench/route.ts` | 工作台数据 |
 | `cc-polaris-import/route.ts` | Polaris 聊天历史导入 |
@@ -125,7 +126,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `daily-chat-memory/route.ts` | 每日聊天记忆 |
 | `daily-reviews/route.ts` | 日回顾列表、手动微调与指定日期生成代理 |
 | `journeys/route.ts` + `[id]/route.ts` | 独立关系轨迹目录、详情与认证人工纠错代理 |
-| `automations/[...path]/route.ts` | 自动化白名单代理；允许日回顾/weekly 状态、weekly 持久 schedule、手动生成和候选读取/编辑/拒绝/确认，并原样透传冲突状态 |
+| `automations/[...path]/route.ts` | 自动化白名单代理；允许日回顾/weekly 状态、逐任务执行线路、持久 schedule、手动生成和候选读取/编辑/拒绝/确认，并原样透传冲突状态 |
 | `auth/login/route.ts` + `auth/logout/route.ts` | Dashboard 正式公网登录/退出：POST 口令、签名 session cookie、失败退避、清除 session，并使用相对跳转兼容反向代理 |
 | `health/route.ts` | 无私人信息的公开存活检查，只返回 `{ok:true}` |
 
@@ -145,7 +146,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `settings/memory-processing/page.tsx` | 记忆处理设置 |
 | `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
 | `settings/recall/page.tsx` | 召回设置 |
-| `settings/automation/page.tsx` | 自动化与状态；日回顾支持启停和生成时分，weekly journey 支持启停、星期、时分、协作者与手动生成；显示上次/下次运行和错误，时区与 04:00 日界线固定，仍无自动写入开关 |
+| `settings/automation/page.tsx` | 自动化与状态；日回顾、weekly journey 分别持久选择 API / Claude Pro，显示最近实际线路与分类失败；另支持各自排程与手动生成，时区与 04:00 日界线固定，仍无自动写入或自动 fallback |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
 | `polaris/page.tsx` | Polaris 聊天历史导入 |
 | `impressions/page.tsx` | 日回顾月历：同时标记日回顾/记忆事件，查看与微调日回顾，并保留当天记忆事件及详情抽屉 |
@@ -226,6 +227,8 @@ params 是 Promise，必须 `const { id } = await params`。
 Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionStorage` 或浏览器持久化。每项携带 `source/customized/revision/updated_at`，以及只读的 `runtime_layers/model_hard_constraints/server_validations`；页面把可编辑产品层、运行时自动叠加、实际模型固定约束和模型返回后程序校验分区展示，后三区不能编辑。保存和恢复默认都带 expected revision，冲突时要求刷新，不静默覆盖。保存成功明确显示“已保存并立即生效”。只有自动打标和记忆合并提供草稿试跑，测试正文只作为本次请求的局部 override，不会保存或修改正式运行实例；日回顾和 weekly journey 不创建测试表记录或自动化候选。
 
 ### cc 聊天架构
+“本窗口设置”同时显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时估算，供手机端查看；倒计时来自最近模型调用时间，不冒充上游实时缓存状态，单条消息 usage 仍是实际命中依据。
+
 协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和“新窗口默认开启”状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖；不在输入框或消息详情增加模块标签。窗口覆盖缺省时跟随协作者默认，因此以后新增模块仍可自然继承默认状态。
 
 新对话与换窗共用的弹窗默认勾选“注入最近三天日回顾”。首次发送时把 `mode` 和该选择写入 Haven，并复制最近三个已结束日历日的日回顾正文成为窗口固定快照；之后日期推进或日回顾被微调都不会改变已创建窗口。cc 和 selfhost 都把这份快照作为稳定 system 背景注入，关闭选项则该窗口固定为空快照。

@@ -78,4 +78,23 @@ describe('/api/automations allowlisted proxy', () => {
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify(body), cache: 'no-store' }),
     )
   })
+
+  it('allows the persisted execution-choice endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      task_type: 'daily_review', schedule: { execution_engine: 'pro' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const body = { task_type: 'daily_review', engine: 'pro', model: 'claude-sonnet-4-6' }
+    const response = await PATCH(
+      new NextRequest('http://localhost/api/automations/execution', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ path: ['execution'] }) },
+    )
+    expect(response.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://haven.test/api/automations/execution',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify(body), cache: 'no-store' }),
+    )
+  })
 })

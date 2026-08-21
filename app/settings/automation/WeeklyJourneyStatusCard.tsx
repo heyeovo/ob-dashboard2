@@ -7,12 +7,14 @@ import {
   fetchDailyReviewStatus,
   fetchWeeklyJourneyStatus,
   runWeeklyJourney,
+  updateAutomationExecution,
   updateWeeklyJourneySchedule,
   type AutomationStatus,
 } from '../../lib/journeyAutomation'
 
 type PersonaOption = { id: string; name?: string }
 type DailyConfig = { enabled?: boolean; daily_hour?: number; daily_minute?: number }
+type ExecutionEngine = 'api' | 'pro'
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
@@ -44,10 +46,15 @@ export default function WeeklyJourneyStatusCard() {
   const [dailyEnabled, setDailyEnabled] = useState(true)
   const [dailyHour, setDailyHour] = useState(4)
   const [dailyMinute, setDailyMinute] = useState(30)
+  const [dailyEngine, setDailyEngine] = useState<ExecutionEngine>('api')
+  const [dailyModel, setDailyModel] = useState('claude-sonnet-4-6')
+  const [weeklyEngine, setWeeklyEngine] = useState<ExecutionEngine>('api')
+  const [weeklyModel, setWeeklyModel] = useState('claude-sonnet-4-6')
   const [loading, setLoading] = useState(true)
   const [savingDaily, setSavingDaily] = useState(false)
   const [savingWeekly, setSavingWeekly] = useState(false)
   const [running, setRunning] = useState(false)
+  const [savingExecution, setSavingExecution] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -79,6 +86,10 @@ export default function WeeklyJourneyStatusCard() {
       setDailyEnabled(dailyConfig.enabled !== false)
       setDailyHour(numberValue(dailyConfig.daily_hour, 4))
       setDailyMinute(numberValue(dailyConfig.daily_minute, 30))
+      setDailyEngine(daily.schedule?.execution_engine === 'pro' ? 'pro' : 'api')
+      setDailyModel(String(daily.schedule?.execution_model || 'claude-sonnet-4-6'))
+      setWeeklyEngine(weekly.schedule?.execution_engine === 'pro' ? 'pro' : 'api')
+      setWeeklyModel(String(weekly.schedule?.execution_model || 'claude-sonnet-4-6'))
     } catch (loadError) {
       setError(readableError(loadError))
     } finally {
@@ -86,7 +97,10 @@ export default function WeeklyJourneyStatusCard() {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0)
+    return () => window.clearTimeout(timer)
+  }, [load])
 
   const saveDaily = async () => {
     setSavingDaily(true); setError(''); setNotice('')
@@ -127,12 +141,56 @@ export default function WeeklyJourneyStatusCard() {
     } catch (runError) { await load(); setError(readableError(runError)) } finally { setRunning(false) }
   }
 
+  const saveExecution = async (
+    taskType: 'daily_review' | 'weekly_journey',
+    engine: ExecutionEngine,
+    model: string,
+  ) => {
+    setSavingExecution(taskType); setError(''); setNotice('')
+    try {
+      await updateAutomationExecution(taskType, engine, model)
+      setNotice(`${taskType === 'daily_review' ? '日回顾' : '每周关系轨迹'}执行方式已保存；下一次运行生效。`)
+      await load()
+    } catch (saveError) { setError(readableError(saveError)) } finally { setSavingExecution('') }
+  }
+
   if (loading) return <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white py-8 text-center text-sm text-[var(--color-text-disabled)]">读取自动化调度中…</div>
   if (error && !weeklyStatus) return <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}<button onClick={() => void load()} className="ml-3 underline">重试</button></div>
 
   const weeklySchedule = weeklyStatus?.schedule || {}
   const dailySchedule = dailyStatus?.schedule || {}
   const weeklyLatest = weeklyStatus?.latest_run || {}
+  const dailyExecution = dailyStatus?.latest_execution || {}
+  const weeklyExecution = weeklyStatus?.latest_execution || {}
+
+  const executionControls = (
+    taskType: 'daily_review' | 'weekly_journey',
+    engine: ExecutionEngine,
+    setEngine: (value: ExecutionEngine) => void,
+    model: string,
+    setModel: (value: string) => void,
+    latest: NonNullable<AutomationStatus['latest_execution']>,
+  ) => (
+    <div className="mt-3 rounded-xl border border-[var(--color-border)] p-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-xs text-[var(--color-text-tertiary)]">执行方式
+          <select value={engine} onChange={event => setEngine(event.target.value as ExecutionEngine)} className="mt-1 block rounded-md border bg-white px-2 py-2 text-sm">
+            <option value="api">API</option><option value="pro">Claude Pro</option>
+          </select>
+        </label>
+        {engine === 'pro' ? <label className="text-xs text-[var(--color-text-tertiary)]">Pro 模型
+          <select value={model} onChange={event => setModel(event.target.value)} className="mt-1 block rounded-md border bg-white px-2 py-2 text-sm">
+            <option value="claude-sonnet-4-6">Sonnet 4.6</option><option value="claude-opus-4-6">Opus 4.6</option>
+          </select>
+        </label> : <div className="pb-2 text-xs text-[var(--color-text-disabled)]">沿用“模型设置”中的当前 API 连接</div>}
+        <button onClick={() => void saveExecution(taskType, engine, model)} disabled={savingExecution === taskType} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 py-2 text-sm disabled:opacity-40">{savingExecution === taskType ? '保存中…' : '保存执行方式'}</button>
+      </div>
+      <div className="mt-2 text-[10.5px] leading-5 text-[var(--color-text-disabled)]">不会自动 fallback；失败后先在这里人工换线，再手动重试。</div>
+      {latest.started_at ? <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${latest.status === 'failed' ? 'bg-red-50 text-red-700' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'}`}>
+        最近实际执行：{latest.actual_engine === 'pro' ? 'Claude Pro' : 'API'} · {latest.model || '默认模型'} · {latest.status === 'failed' ? `失败（${latest.error_code || 'model_error'}）：${latest.error || '未知错误'}` : '完成'} · {displayTime(latest.completed_at || latest.started_at)}
+      </div> : null}
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -152,6 +210,7 @@ export default function WeeklyJourneyStatusCard() {
           <label className="text-xs text-[var(--color-text-tertiary)]">分钟<input type="number" min={0} max={59} value={dailyMinute} onChange={event => setDailyMinute(numberValue(event.target.value, 30))} className="mt-1 block w-20 rounded-md border px-2 py-2 text-sm" /></label>
           <button onClick={() => void saveDaily()} disabled={savingDaily} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40">{savingDaily ? '保存中…' : '保存日回顾时间'}</button>
         </div>
+        {executionControls('daily_review', dailyEngine, setDailyEngine, dailyModel, setDailyModel, dailyExecution)}
         {dailySchedule.last_error && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">最近运行失败：{dailySchedule.last_error}</div>}
       </section>
 
@@ -174,6 +233,7 @@ export default function WeeklyJourneyStatusCard() {
           <label className="text-xs text-[var(--color-text-tertiary)]">协作者<select value={personaId} onChange={event => setPersonaId(event.target.value)} className="mt-1 block w-full rounded-md border bg-white px-2 py-2 text-sm"><option value="">请选择</option>{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select></label>
           <div className="flex gap-2 sm:col-span-2 lg:col-span-5"><button onClick={() => void saveWeekly()} disabled={savingWeekly} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40">{savingWeekly ? '保存中…' : '保存每周时间'}</button><button onClick={() => void runNow()} disabled={running || !personaId} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 py-2 text-sm disabled:opacity-40">{running ? '正在生成…' : '立即生成候选'}</button></div>
         </div>
+        {executionControls('weekly_journey', weeklyEngine, setWeeklyEngine, weeklyModel, setWeeklyModel, weeklyExecution)}
         {weeklySchedule.last_error && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">最近运行失败：{weeklySchedule.last_error}</div>}
       </section>
 
