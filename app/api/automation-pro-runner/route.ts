@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, type Options } from '@anthropic-ai/claude-agent-sdk'
 import { buildCcEnv } from '@/app/lib/ccEnv'
 
 export const runtime = 'nodejs'
@@ -8,6 +8,50 @@ export const maxDuration = 360
 const TASKS = new Set(['daily_review', 'weekly_journey'])
 const MODEL_PATTERN = /^claude-(?:sonnet|opus)-[a-z0-9-]+$/i
 const LOCK_KEY = '__ob2_automation_pro_runner_busy__'
+const STRING_ARRAY_SCHEMA = { type: 'array', items: { type: 'string' } } as const
+const WEEKLY_JOURNEY_OUTPUT_FORMAT: NonNullable<Options['outputFormat']> = {
+  type: 'json_schema',
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['candidate_type', 'rationale', 'evidence_bucket_ids', 'proposal'],
+    properties: {
+      candidate_type: { type: 'string', enum: ['no_change', 'append_current', 'transition'] },
+      rationale: STRING_ARRAY_SCHEMA,
+      evidence_bucket_ids: STRING_ARRAY_SCHEMA,
+      proposal: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          append_content: { type: 'string' },
+          summary: { type: 'string' },
+          evidence_bucket_ids: STRING_ARRAY_SCHEMA,
+          close: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['stage_end', 'summary'],
+            properties: {
+              stage_end: { type: 'string' },
+              summary: { type: 'string' },
+            },
+          },
+          create: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['name', 'stage_start', 'summary', 'content', 'evidence_bucket_ids'],
+            properties: {
+              name: { type: 'string' },
+              stage_start: { type: 'string' },
+              summary: { type: 'string' },
+              content: { type: 'string' },
+              evidence_bucket_ids: STRING_ARRAY_SCHEMA,
+            },
+          },
+        },
+      },
+    },
+  },
+}
 
 type RunnerGlobal = typeof globalThis & { [LOCK_KEY]?: boolean }
 
@@ -27,6 +71,7 @@ function errorCode(message: string) {
   if (value.includes('usage limit') || value.includes('rate limit') || value.includes('resets')) return 'pro_limit'
   if (value.includes('login') || value.includes('oauth') || value.includes('authentication')) return 'pro_auth'
   if (value.includes('abort') || value.includes('timeout')) return 'pro_timeout'
+  if (value.includes('structured output')) return 'pro_structured_output'
   return 'pro_runner_failed'
 }
 
@@ -34,6 +79,7 @@ function publicError(code: string) {
   if (code === 'pro_limit') return 'Claude Pro 额度不足或正在限流'
   if (code === 'pro_auth') return 'Claude Pro 登录已失效，需要人工重新登录'
   if (code === 'pro_timeout') return 'Claude Pro 自动化执行超时'
+  if (code === 'pro_structured_output') return 'Claude Pro 未能生成有效的结构化轨迹候选'
   return 'Claude Pro 自动化执行失败'
 }
 
@@ -75,23 +121,26 @@ export async function POST(request: Request) {
     let text = ''
     let actualModel = model
     let usage: unknown = null
+    let structuredOutput: unknown
+    const options: Options = {
+      model,
+      systemPrompt: system,
+      cwd: process.cwd(),
+      maxTurns: 1,
+      tools: [],
+      allowedTools: [],
+      mcpServers: {},
+      strictMcpConfig: true,
+      permissionMode: 'dontAsk',
+      settingSources: [],
+      includePartialMessages: false,
+      abortController,
+      env: buildCcEnv('subscription', { mainModel: model }),
+    }
+    if (taskType === 'weekly_journey') options.outputFormat = WEEKLY_JOURNEY_OUTPUT_FORMAT
     const stream = query({
       prompt: user,
-      options: {
-        model,
-        systemPrompt: system,
-        cwd: process.cwd(),
-        maxTurns: 1,
-        tools: [],
-        allowedTools: [],
-        mcpServers: {},
-        strictMcpConfig: true,
-        permissionMode: 'dontAsk',
-        settingSources: [],
-        includePartialMessages: false,
-        abortController,
-        env: buildCcEnv('subscription', { mainModel: model }),
-      },
+      options,
     })
     for await (const message of stream) {
       if (message.type === 'system' && message.subtype === 'init') actualModel = message.model || model
@@ -102,12 +151,19 @@ export async function POST(request: Request) {
       }
       if (message.type === 'result') {
         usage = message.usage
-        if (message.is_error) {
+        if (message.subtype !== 'success') {
           const detail = 'errors' in message ? message.errors.join('; ') : 'Claude Pro 执行失败'
           throw new Error(detail)
         }
-        if (!text.trim() && message.subtype === 'success') text = message.result
+        structuredOutput = message.structured_output
+        if (!text.trim()) text = message.result
       }
+    }
+    if (taskType === 'weekly_journey') {
+      if (!structuredOutput || typeof structuredOutput !== 'object' || Array.isArray(structuredOutput)) {
+        throw new Error('Claude Pro structured output missing')
+      }
+      text = JSON.stringify(structuredOutput)
     }
     if (!text.trim()) throw new Error('Claude Pro 返回了空内容')
     return Response.json({ ok: true, text: text.trim(), task_type: taskType, model: actualModel, usage })

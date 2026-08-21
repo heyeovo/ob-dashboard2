@@ -116,7 +116,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `cc-permission/route.ts` | 写权限批准 |
 | `cc-session-settings/route.ts` | 本窗会话配置：CC Pro/API 路由及各自 provider/模型/力度/思考、selfhost 供应商/模型合并写入 Haven 窗口覆盖 |
 | `cc-pro-usage/route.ts` | 只读取当前已有 Pro SDK session 的实验性 5 小时/本周用量与重置时间；不新建 query、不触发模型调用，失败时明确不可用 |
-| `automation-pro-runner/route.ts` | 日回顾 / 每周轨迹专用 Claude Pro 单次执行入口；固定白名单任务、禁用 tools、进程内串行 |
+| `automation-pro-runner/route.ts` | 日回顾 / 每周轨迹专用 Claude Pro 单次执行入口；固定白名单任务、禁用 tools、进程内串行；每周轨迹使用 Agent SDK JSON Schema 结构化输出，日回顾保持普通正文 |
 | `cc-web-settings/route.ts` | web 工具开关 |
 | `cc-workbench/route.ts` | 工作台数据 |
 | `cc-polaris-import/route.ts` | Polaris 聊天历史导入 |

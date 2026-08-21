@@ -41,6 +41,55 @@ describe('/api/automation-pro-runner', () => {
     expect(sdk.query).toHaveBeenCalledWith(expect.objectContaining({
       options: expect.objectContaining({ tools: [], allowedTools: [], permissionMode: 'dontAsk' }),
     }))
+    expect(sdk.query.mock.calls[0][0].options).not.toHaveProperty('outputFormat')
+  })
+
+  it('uses Agent SDK structured output for weekly journey candidates', async () => {
+    const candidate = {
+      candidate_type: 'no_change',
+      rationale: ['没有实质变化'],
+      evidence_bucket_ids: [],
+      proposal: {},
+    }
+    sdk.query.mockReturnValue((async function* () {
+      yield { type: 'assistant', message: { content: [{ type: 'text', text: '{broken json' }] } }
+      yield {
+        type: 'result', subtype: 'success', is_error: false, result: '{broken json',
+        structured_output: candidate, usage: {},
+      }
+    })())
+    const response = await POST(request({
+      task_type: 'weekly_journey', system: 'system', user: 'material',
+      model: 'claude-sonnet-4-6', max_tokens: 2400,
+    }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, text: JSON.stringify(candidate) })
+    expect(sdk.query).toHaveBeenCalledWith(expect.objectContaining({
+      options: expect.objectContaining({
+        outputFormat: expect.objectContaining({
+          type: 'json_schema',
+          schema: expect.objectContaining({ required: expect.arrayContaining(['candidate_type', 'proposal']) }),
+        }),
+      }),
+    }))
+  })
+
+  it('fails clearly when weekly journey structured output is missing', async () => {
+    sdk.query.mockReturnValue((async function* () {
+      yield {
+        type: 'result', subtype: 'success', is_error: false,
+        result: '{"candidate_type":"no_change"}', usage: {},
+      }
+    })())
+    const response = await POST(request({
+      task_type: 'weekly_journey', system: 'system', user: 'material', model: 'claude-sonnet-4-6',
+    }))
+    expect(response.status).toBe(502)
+    expect(await response.json()).toEqual({
+      ok: false,
+      error_code: 'pro_structured_output',
+      error: 'Claude Pro 未能生成有效的结构化轨迹候选',
+    })
   })
 
   it('rejects task types outside the two automation allowlist', async () => {
