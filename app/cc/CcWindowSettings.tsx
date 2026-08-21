@@ -111,7 +111,7 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const models = modelsFor(upstream, pick.kind, pick.providerId)
-  const shownActiveModel = modelLabel(activeModel, models)
+  const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
   const recent = stats.recentCostUsd || []
   const recentSum = recent.reduce((a, b) => a + b, 0)

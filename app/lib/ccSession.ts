@@ -22,6 +22,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import { cancelAllPending, hasPending } from './ccChannel'
 import type { CcMcpApplySummary } from './ccMcpTypes'
+import type { CredMode } from './ccEnv'
 
 /** 闲置多久回收子进程。跟 prompt cache 的 5 分钟没关系，纯粹是别让子进程无限堆着。 */
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -83,7 +84,7 @@ export type SessionBoot = {
   /** chat = 闲聊模式（不带 preset、零工具），work = 工作模式（preset + 7 个工具） */
   mode: 'chat' | 'work'
   /** subscription | api */
-  credKind: string
+  credKind: CredMode
   /** 哪个中转站（api 时有值），显示用 */
   providerId: string
   providerLabel: string

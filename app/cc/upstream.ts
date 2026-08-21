@@ -167,9 +167,13 @@ export function modelsFor(config: CcUpstreamConfig, kind: CcProviderKind, provid
  * 界面和本窗口配置继续显示 Haven 中配置的原始模型；候选列表为空时保留别名，
  * 等上游配置加载后再按候选模型还原。
  */
-export function providerModelForSdkModel(model: string, candidates: string[] = []): string {
+export function providerModelForSdkModel(
+  model: string,
+  candidates: string[] = [],
+  kind: CcProviderKind = 'api',
+): string {
   const value = model.trim()
-  if (!value || !/\[1m\]$/i.test(value)) return value
+  if (!value || kind === 'subscription' || !/\[1m\]$/i.test(value)) return value
 
   const base = value.replace(/\[1m\]$/i, '')
   if (candidates.includes(base)) return base
@@ -185,12 +189,16 @@ export function providerModelForSdkModel(model: string, candidates: string[] = [
   return candidates.length > 0 ? base : value
 }
 
-/** 仅用于界面文字；没有候选列表时也不把 `[1m]` 露给用户。 */
-export function modelLabel(model: string, candidates: string[] = []): string {
+/** 仅用于界面文字；动态 1M 别名不再冒充固定的 Opus 4.6。 */
+export function modelLabel(
+  model: string,
+  candidates: string[] = [],
+  kind: CcProviderKind = 'api',
+): string {
   const value = model.trim()
   if (!value) return ''
-  const normalized = providerModelForSdkModel(value, candidates)
+  const normalized = providerModelForSdkModel(value, candidates, kind)
   if (normalized !== value) return normalized
-  if (/^opus\[1m\]$/i.test(value)) return 'claude-opus-4-6'
-  return value.replace(/\[1m\]$/i, '')
+  if (/^opus\[1m\]$/i.test(value)) return 'opus（1M 动态别名）'
+  return value.replace(/\[1m\]$/i, '（1M）')
 }

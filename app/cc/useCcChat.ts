@@ -250,7 +250,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             : ''
           const candidates = modelsFor(config, current.kind, providerId)
           const model = current.model
-            ? providerModelForSdkModel(current.model, candidates)
+            ? providerModelForSdkModel(current.model, candidates, current.kind)
             : candidates[0] || ''
           return { ...current, providerId, model }
         }
@@ -638,7 +638,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               ...restoredCcPick,
               kind: s.cred === 'subscription' ? 'subscription' : s.cred === 'api' ? 'api' : restoredCcPick.kind,
               providerId: s.providerId ?? restoredCcPick.providerId,
-              model: s.model ? providerModelForSdkModel(s.model, candidates) : restoredCcPick.model,
+              model: s.model
+                ? providerModelForSdkModel(s.model, candidates, nextKind || 'api')
+                : restoredCcPick.model,
               effort: (s.effort as CcUpstreamPick['effort']) ?? restoredCcPick.effort,
               thinking: s.thinkingOn ?? restoredCcPick.thinking,
             }
@@ -665,7 +667,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 ...current,
                 providerId,
                 model: raw.model
-                  ? providerModelForSdkModel(String(raw.model), candidates)
+                  ? providerModelForSdkModel(String(raw.model), candidates, kind)
                   : current.model,
                 effort: (raw.effort as CcUpstreamPick['effort']) || current.effort,
                 thinking: typeof raw.thinking === 'boolean' ? raw.thinking : current.thinking,

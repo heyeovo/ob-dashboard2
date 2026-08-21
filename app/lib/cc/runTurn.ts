@@ -733,7 +733,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         noteContextUsage(
           sessionId,
           turnUsage.inputTokens + turnUsage.cacheReadTokens + turnUsage.cacheWriteTokens,
-          sdkModelForProvider(live.model),
+          sdkModelForProvider(live.model, live.boot.credKind),
         )
         break
       }

@@ -13,8 +13,14 @@ describe('cc model labels', () => {
     expect(providerModelForSdkModel('opus[1m]', [configured])).toBe(configured)
   })
 
-  it('keeps the SDK alias until candidates load, but never shows it as a label', () => {
+  it('does not present a moving SDK alias as fixed Opus 4.6', () => {
     expect(providerModelForSdkModel('opus[1m]')).toBe('opus[1m]')
-    expect(modelLabel('opus[1m]')).toBe('claude-opus-4-6')
+    expect(modelLabel('opus[1m]')).toBe('opus（1M 动态别名）')
+  })
+
+  it('never maps a subscription model through the API provider alias', () => {
+    const configured = 'claude-opus-4-6'
+    expect(providerModelForSdkModel('opus[1m]', [configured], 'subscription')).toBe('opus[1m]')
+    expect(modelLabel('opus[1m]', [configured], 'subscription')).toBe('opus（1M 动态别名）')
   })
 })

@@ -329,7 +329,7 @@ async function loadTurnInputs(body: ChatBody) {
     cwd,
     additionalDirectories,
     activeWebTools,
-    sdkModel: sdkModelForProvider(model),
+    sdkModel: sdkModelForProvider(model, cred),
     effort,
     thinking,
     sdkMcpServers: toSdkMcpServers(mcpConfig),

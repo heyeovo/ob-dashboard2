@@ -48,13 +48,14 @@ const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
 const WORK_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
 
 /**
- * 中转站要求收到自己的模型 ID，但 Claude Code 需要认识模型身份才能采用正确上下文。
+ * API 中转站要求收到自己的模型 ID，但 Claude Code 需要认识模型身份才能采用正确上下文。
  * `opus[1m]` 会在子进程内按 Opus 1M 管理上下文，再由 ANTHROPIC_DEFAULT_OPUS_MODEL
- * 映射回中转原始 ID。只识别明确的 Opus 4.6，其他名称保持原样。
+ * 映射回中转原始 ID。订阅线路必须原样传完整模型 ID；`opus[1m]` 是会随
+ * Claude Code 升级改变目标的动态别名，不能用来固定 Opus 4.6。
  */
-export function sdkModelForProvider(providerModel: string): string {
+export function sdkModelForProvider(providerModel: string, cred: CredMode): string {
   const model = providerModel.trim()
-  if (/(?:^|[-_.])opus[-_.]?4[-_.]?6(?:$|[-_.])/i.test(model)) return 'opus[1m]'
+  if (cred === 'api' && /(?:^|[-_.])opus[-_.]?4[-_.]?6(?:$|[-_.])/i.test(model)) return 'opus[1m]'
   return model
 }
 
