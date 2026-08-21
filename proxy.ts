@@ -12,6 +12,7 @@ const PUBLIC_PATHS = new Set([
   '/login',
   '/api/auth/login',
   '/api/health',
+  '/api/automation-pro-runner',
   '/favicon.ico',
   '/manifest.json',
   '/ob-icon-192.png',

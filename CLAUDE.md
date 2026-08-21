@@ -46,7 +46,7 @@ production 只认服务端 `HAVEN_GATEWAY_URL`、`OMBRE_SESSION` 与 `OMBRE_GATE
 
 Dashboard 自身公网入口由根 `proxy.ts` 统一保护。`/login` 只通过 POST body 提交口令；成功后签发 HMAC-SHA256 签名、7 天过期的 `ob2_session` cookie，production 设置 `HttpOnly + Secure + SameSite=Strict + Path=/`。production 缺少或弱化 `DASHBOARD_LOGIN_SECRET` / `DASHBOARD_SESSION_SECRET` 任一项时，私人页面和 API 都返回 503，不默认开放；旧 `?k=` 与明文 `ob2_lan` cookie 不再接受。未配置鉴权变量的本机 `npm run dev` 继续直开，非 production 可用旧 `OB2_LAN_SECRET` 作为兼容登录口令并派生仅开发用签名 key。
 
-登录失败按客户端做指数退避，并有单实例全局失败上限；这部分只属于允许重启丢失的运行态，不作为持久用户数据。登录成功、失败和退出均返回相对 `Location`，避免 Coolify/Traefik 反向代理下把容器内 `localhost:3000` 泄露为浏览器跳转目标。退出入口位于设置页，POST `/api/auth/logout` 清 cookie 与浏览器 cache；轮换 `DASHBOARD_SESSION_SECRET` 会让全部旧 session 失效。公开边界只含登录、`/api/health`、精确 PWA 文件与 `/_next/static/*`，其余 Dashboard 页面、cc/批准接口、Gateway/Haven/MCP 代理和私人 API 都校验 session。service worker 只缓存不可变代码资源，不缓存 HTML、API 或私人图片。
+登录失败按客户端做指数退避，并有单实例全局失败上限；这部分只属于允许重启丢失的运行态，不作为持久用户数据。登录成功、失败和退出均返回相对 `Location`，避免 Coolify/Traefik 反向代理下把容器内 `localhost:3000` 泄露为浏览器跳转目标。退出入口位于设置页，POST `/api/auth/logout` 清 cookie 与浏览器 cache；轮换 `DASHBOARD_SESSION_SECRET` 会让全部旧 session 失效。公开边界只含登录、`/api/health`、精确 PWA 文件、`/_next/static/*`，以及由自身共享 Bearer token 严格认证的精确 `/api/automation-pro-runner`；其余 Dashboard 页面、cc/批准接口、Gateway/Haven/MCP 代理和私人 API 都校验 session。service worker 只缓存不可变代码资源，不缓存 HTML、API 或私人图片。
 
 Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCookie()` 统一管理，并使用 5 分钟内存缓存避免每次 fetch 重复 POST Haven `/auth/login`；Gateway/cc 持久化调用只由服务端注入 `OMBRE_GATEWAY_TOKEN`，不接受浏览器提供的 Haven 认证头。这与浏览器访问 Dashboard 的 `ob2_session` 是两套隔离凭据。
 
