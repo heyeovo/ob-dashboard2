@@ -8,52 +8,90 @@ export const maxDuration = 360
 const TASKS = new Set(['daily_review', 'weekly_journey'])
 const MODEL_PATTERN = /^claude-(?:sonnet|opus)-[a-z0-9-]+$/i
 const LOCK_KEY = '__ob2_automation_pro_runner_busy__'
-const STRING_ARRAY_SCHEMA = { type: 'array', items: { type: 'string' } } as const
+const WEEKLY_JOURNEY_FLAT_FIELDS = [
+  'candidate_type',
+  'rationale_text',
+  'evidence_bucket_ids_text',
+  'append_content',
+  'summary',
+  'close_stage_end',
+  'close_summary',
+  'create_name',
+  'create_stage_start',
+  'create_summary',
+  'create_content',
+] as const
 const WEEKLY_JOURNEY_OUTPUT_FORMAT: NonNullable<Options['outputFormat']> = {
   type: 'json_schema',
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['candidate_type', 'rationale', 'evidence_bucket_ids', 'proposal'],
+    required: WEEKLY_JOURNEY_FLAT_FIELDS,
     properties: {
       candidate_type: { type: 'string', enum: ['no_change', 'append_current', 'transition'] },
-      rationale: STRING_ARRAY_SCHEMA,
-      evidence_bucket_ids: STRING_ARRAY_SCHEMA,
-      proposal: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          append_content: { type: 'string' },
-          summary: { type: 'string' },
-          evidence_bucket_ids: STRING_ARRAY_SCHEMA,
-          close: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['stage_end', 'summary'],
-            properties: {
-              stage_end: { type: 'string' },
-              summary: { type: 'string' },
-            },
-          },
-          create: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['name', 'stage_start', 'summary', 'content', 'evidence_bucket_ids'],
-            properties: {
-              name: { type: 'string' },
-              stage_start: { type: 'string' },
-              summary: { type: 'string' },
-              content: { type: 'string' },
-              evidence_bucket_ids: STRING_ARRAY_SCHEMA,
-            },
-          },
-        },
-      },
+      rationale_text: { type: 'string' },
+      evidence_bucket_ids_text: { type: 'string' },
+      append_content: { type: 'string' },
+      summary: { type: 'string' },
+      close_stage_end: { type: 'string' },
+      close_summary: { type: 'string' },
+      create_name: { type: 'string' },
+      create_stage_start: { type: 'string' },
+      create_summary: { type: 'string' },
+      create_content: { type: 'string' },
     },
   },
 }
+const WEEKLY_JOURNEY_TRANSPORT_INSTRUCTION = `
+为绕开当前 Agent SDK 对嵌套 structured output 的已知限制，最终传输格式是扁平对象。
+rationale_text 每条理由单独一行；evidence_bucket_ids_text 每个 materials 证据 ID 单独一行。
+append_current 使用 append_content、summary；transition 使用 close_stage_end、close_summary、create_name、create_stage_start、create_summary、create_content。
+当前 candidate_type 不使用的字符串字段必须输出空字符串。runner 会确定性还原为产品要求的 proposal 对象，再由 Haven 做最终严格校验。`.trim()
 
 type RunnerGlobal = typeof globalThis & { [LOCK_KEY]?: boolean }
+
+function splitFlatList(value: unknown) {
+  return Array.from(new Set(
+    String(value || '').split(/[\r\n,，]+/).map(item => item.trim()).filter(Boolean),
+  ))
+}
+
+function restoreWeeklyJourneyCandidate(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Claude Pro structured output missing')
+  }
+  const flat = value as Record<string, unknown>
+  const candidateType = String(flat.candidate_type || '').trim()
+  const evidenceIds = splitFlatList(flat.evidence_bucket_ids_text)
+  let proposal: Record<string, unknown> = {}
+  if (candidateType === 'append_current') {
+    proposal = {
+      append_content: String(flat.append_content || '').trim(),
+      summary: String(flat.summary || '').trim(),
+      evidence_bucket_ids: evidenceIds,
+    }
+  } else if (candidateType === 'transition') {
+    proposal = {
+      close: {
+        stage_end: String(flat.close_stage_end || '').trim(),
+        summary: String(flat.close_summary || '').trim(),
+      },
+      create: {
+        name: String(flat.create_name || '').trim(),
+        stage_start: String(flat.create_stage_start || '').trim(),
+        summary: String(flat.create_summary || '').trim(),
+        content: String(flat.create_content || '').trim(),
+        evidence_bucket_ids: evidenceIds,
+      },
+    }
+  }
+  return {
+    candidate_type: candidateType,
+    rationale: splitFlatList(flat.rationale_text),
+    evidence_bucket_ids: evidenceIds,
+    proposal,
+  }
+}
 
 function secureMatch(actual: string, expected: string) {
   const a = Buffer.from(actual)
@@ -124,7 +162,9 @@ export async function POST(request: Request) {
     let structuredOutput: unknown
     const options: Options = {
       model,
-      systemPrompt: system,
+      systemPrompt: taskType === 'weekly_journey'
+        ? `${system}\n\n${WEEKLY_JOURNEY_TRANSPORT_INSTRUCTION}`
+        : system,
       cwd: process.cwd(),
       maxTurns: 1,
       tools: [],
@@ -152,6 +192,9 @@ export async function POST(request: Request) {
       if (message.type === 'result') {
         usage = message.usage
         if (message.subtype !== 'success') {
+          if (message.subtype === 'error_max_structured_output_retries') {
+            throw new Error('Claude Pro structured output retries exhausted')
+          }
           const detail = 'errors' in message ? message.errors.join('; ') : 'Claude Pro 执行失败'
           throw new Error(detail)
         }
@@ -160,10 +203,7 @@ export async function POST(request: Request) {
       }
     }
     if (taskType === 'weekly_journey') {
-      if (!structuredOutput || typeof structuredOutput !== 'object' || Array.isArray(structuredOutput)) {
-        throw new Error('Claude Pro structured output missing')
-      }
-      text = JSON.stringify(structuredOutput)
+      text = JSON.stringify(restoreWeeklyJourneyCandidate(structuredOutput))
     }
     if (!text.trim()) throw new Error('Claude Pro 返回了空内容')
     return Response.json({ ok: true, text: text.trim(), task_type: taskType, model: actualModel, usage })
