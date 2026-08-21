@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
-import { buildCcOptions, sdkModelForProvider, type TurnConfig } from '@/app/lib/cc/ccOptions'
+import {
+  buildCcOptions,
+  sdkModelForProvider,
+  thinkingConfigForModel,
+  type TurnConfig,
+} from '@/app/lib/cc/ccOptions'
 
 function config(mode: TurnConfig['mode']): TurnConfig {
   return {
@@ -31,6 +36,30 @@ describe('cc 基础提示词渠道一致性', () => {
   it('订阅固定模型不改写，API 中转仍使用 1M 映射', () => {
     expect(sdkModelForProvider('claude-opus-4-6', 'subscription')).toBe('claude-opus-4-6')
     expect(sdkModelForProvider('provider-opus-4-6', 'api')).toBe('opus[1m]')
+  })
+
+  it('为 4.6+ 显式开启 adaptive thinking，并兼容旧模型', () => {
+    expect(thinkingConfigForModel('claude-opus-4-6', true)).toEqual({
+      type: 'adaptive', display: 'summarized',
+    })
+    expect(thinkingConfigForModel('opus[1m]', true)).toEqual({
+      type: 'adaptive', display: 'summarized',
+    })
+    expect(thinkingConfigForModel('claude-opus-4-5-20251101', true)).toEqual({
+      type: 'enabled', budgetTokens: 10_000, display: 'summarized',
+    })
+    expect(thinkingConfigForModel('unknown-provider-model', true)).toBeUndefined()
+    expect(thinkingConfigForModel('claude-opus-4-6', false)).toEqual({ type: 'disabled' })
+  })
+
+  it('把显式 thinking 配置交给 Agent SDK', () => {
+    const adaptive = config('chat')
+    adaptive.sdkModel = 'claude-opus-4-6'
+    expect(buildCcOptions(adaptive, null).thinking).toEqual({
+      type: 'adaptive', display: 'summarized',
+    })
+    adaptive.thinking = false
+    expect(buildCcOptions(adaptive, null).thinking).toEqual({ type: 'disabled' })
   })
 
   it('闲聊模式只注入一次协作者配置', () => {

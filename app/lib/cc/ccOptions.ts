@@ -59,6 +59,28 @@ export function sdkModelForProvider(providerModel: string, cred: CredMode): stri
   return model
 }
 
+const LEGACY_THINKING_BUDGET = 10_000
+
+/**
+ * 新模型必须显式开 adaptive；旧 Claude thinking 模型继续使用固定预算。
+ * 认不出的中转模型保持 SDK 默认，避免给不兼容的非 Claude 模型硬塞参数。
+ */
+export function thinkingConfigForModel(
+  model: string,
+  enabled: boolean,
+): Options['thinking'] | undefined {
+  if (!enabled) return { type: 'disabled' }
+  const value = model.trim().toLowerCase()
+  const movingAlias = /^(?:opus|sonnet|fable|mythos)(?:\[1m\])?$/.test(value)
+  const adaptiveClaude = /(?:^|[-_.])(?:opus|sonnet)[-_.]?(?:4[-_.]?(?:6|[7-9])|[5-9])(?:$|[-_.])/.test(value)
+  if (movingAlias || adaptiveClaude) return { type: 'adaptive', display: 'summarized' }
+  const legacyClaude = /(?:^|[-_.])(?:opus|sonnet|haiku)[-_.]?(?:3|4[-_.]?[0-5])(?:$|[-_.])/.test(value)
+  if (legacyClaude) {
+    return { type: 'enabled', budgetTokens: LEGACY_THINKING_BUDGET, display: 'summarized' }
+  }
+  return undefined
+}
+
 /* ── 这一轮真正生效的配置快照 ── */
 
 export type TurnConfig = {
@@ -317,7 +339,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
   return {
     model: sdkModel || undefined,
     effort: (effort || undefined) as Options['effort'],
-    maxThinkingTokens: thinking ? undefined : 0,
+    thinking: thinkingConfigForModel(sdkModel, thinking),
     // 工作模式：协作者人设接在 claude code 自带系统提示**后面**，不替换它 ——
     //   那段里有工具怎么用、路径怎么写，换掉工具就废了。
     // 闲聊模式：只使用协作者统一配置；不再额外注入一份写死的闲聊提示词。

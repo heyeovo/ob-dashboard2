@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
-import { dropSession, getProUsage } from '@/app/lib/ccSession'
+import { applyRuntimeSettings, dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import type { TurnConfig } from '@/app/lib/cc/ccOptions'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -440,6 +440,30 @@ describe('runTurn：普通回复', () => {
     expect(sdk.queryOptions[2].resume).toBe('api-native-session')
     expect((sdk.queryOptions[1].env as Record<string, string>).ANTHROPIC_AUTH_TOKEN).toBeUndefined()
     expect((sdk.queryOptions[2].env as Record<string, string>).ANTHROPIC_AUTH_TOKEN).toBe('api-secret')
+  })
+
+  it('中途开启 thinking 会重建 query、resume 原生 session 并显式使用 adaptive', async () => {
+    const offConfig = makeConfig({
+      cred: 'subscription', laneId: 'subscription', providerId: '', envOverrides: {},
+      model: 'claude-opus-4-6', sdkModel: 'claude-opus-4-6', thinking: false,
+    })
+    await driveTurn([initMsg('thinking-native-session'), textDelta('先直接答'), resultMsg()], {
+      config: offConfig,
+    }).promise
+    expect(sdk.queryOptions[0].thinking).toEqual({ type: 'disabled' })
+
+    expect(await applyRuntimeSettings('ob2-test-session', { thinking: true })).toEqual({
+      ok: true, error: '',
+    })
+    const onConfig = { ...offConfig, thinking: true }
+    await driveTurn([initMsg('thinking-native-session-2'), thinkingDelta('思考摘要'), textDelta('再回答'), resultMsg()], {
+      requestId: 'request-thinking-on', expectedLastRoundId: 1, config: onConfig,
+    }).promise
+
+    expect(sdk.queryCalls).toBe(2)
+    expect(sdk.queryOptions[1].resume).toBe('thinking-native-session')
+    expect(sdk.queryOptions[1].thinking).toEqual({ type: 'adaptive', display: 'summarized' })
+    expect(turns.recordTurn.mock.calls[1][0].raw.thinking).toBe('思考摘要')
   })
 
   it('CC 线路只补最终文字，不同步 thinking 或附件内容', async () => {

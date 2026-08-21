@@ -568,6 +568,13 @@ export async function applyRuntimeSettings(
   if (live.busy) return { ok: false, error: '这一轮还没答完，等它结束再换' }
 
   try {
+    if (patch.thinking !== undefined && patch.thinking !== live.thinking) {
+      // thinking 的新接口只在 query 启动时接受。保留原生 session id，回收空闲
+      // query；下一句话按 Haven 已保存的新配置 resume，不丢该线路上下文。
+      rememberResumePoint(live.resumeKey, live.ccSessionId)
+      dropSession(sessionId)
+      return { ok: true, error: '' }
+    }
     if (patch.model !== undefined && patch.model !== live.model) {
       await live.q.setModel(patch.model || undefined)
       live.model = patch.model
@@ -577,11 +584,6 @@ export async function applyRuntimeSettings(
     if (patch.effort !== undefined && patch.effort !== live.effort) {
       await live.q.applyFlagSettings({ effortLevel: (patch.effort || null) as never })
       live.effort = patch.effort
-    }
-    if (patch.thinking !== undefined && patch.thinking !== live.thinking) {
-      // 关掉 = 不给 thinking 预算；打开 = 交回模型自己按 effort 决定（传 null 清掉上限）
-      await live.q.setMaxThinkingTokens(patch.thinking ? null : 0, patch.thinking ? null : 'omitted')
-      live.thinking = patch.thinking
     }
     return { ok: true, error: '' }
   } catch (e) {
