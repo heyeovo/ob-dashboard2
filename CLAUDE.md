@@ -146,7 +146,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `settings/memory-processing/page.tsx` | 记忆处理设置 |
 | `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
 | `settings/recall/page.tsx` | 召回设置 |
-| `settings/automation/page.tsx` | 自动化与状态；日回顾、weekly journey 分别持久选择 API / Claude Pro，显示最近实际线路与分类失败；另支持各自排程与手动生成，时区与 04:00 日界线固定，仍无自动写入或自动 fallback |
+| `settings/automation/page.tsx` | 自动化与状态；日回顾、weekly journey 分别持久选择 API / Claude Pro；轨迹设置显示并编辑“已梳理至”和服务端计算的连续读取范围，积压最多 31 天分段；另支持排程、手动候选、实际线路与分类失败，仍无自动写入或自动 fallback |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
 | `polaris/page.tsx` | Polaris 聊天历史导入 |
 | `impressions/page.tsx` | 日回顾月历：同时标记日回顾/记忆事件，查看与微调日回顾，并保留当天记忆事件及详情抽屉 |

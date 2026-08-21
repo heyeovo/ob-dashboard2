@@ -39,10 +39,13 @@ export default function WeeklyJourneyStatusCard() {
   const [dailyStatus, setDailyStatus] = useState<AutomationStatus | null>(null)
   const [personas, setPersonas] = useState<PersonaOption[]>([])
   const [personaId, setPersonaId] = useState('')
+  const [savedPersonaId, setSavedPersonaId] = useState('')
+  const [savedReviewedThroughDate, setSavedReviewedThroughDate] = useState('')
   const [weeklyEnabled, setWeeklyEnabled] = useState(false)
   const [weekday, setWeekday] = useState(0)
   const [weeklyHour, setWeeklyHour] = useState(5)
   const [weeklyMinute, setWeeklyMinute] = useState(0)
+  const [reviewedThroughDate, setReviewedThroughDate] = useState('')
   const [dailyEnabled, setDailyEnabled] = useState(true)
   const [dailyHour, setDailyHour] = useState(4)
   const [dailyMinute, setDailyMinute] = useState(30)
@@ -82,7 +85,12 @@ export default function WeeklyJourneyStatusCard() {
       setWeekday(numberValue(weeklyPolicy.weekday, 0))
       setWeeklyHour(numberValue(weeklyPolicy.hour, 5))
       setWeeklyMinute(numberValue(weeklyPolicy.minute, 0))
-      setPersonaId(String(weeklyPolicy.persona_id || (rows.length === 1 ? rows[0].id || '' : '')))
+      const configuredPersonaId = String(weeklyPolicy.persona_id || (rows.length === 1 ? rows[0].id || '' : ''))
+      const configuredReviewedThrough = String(weeklyPolicy.reviewed_through_date || '')
+      setReviewedThroughDate(configuredReviewedThrough)
+      setSavedReviewedThroughDate(configuredReviewedThrough)
+      setPersonaId(configuredPersonaId)
+      setSavedPersonaId(configuredPersonaId)
       setDailyEnabled(dailyConfig.enabled !== false)
       setDailyHour(numberValue(dailyConfig.daily_hour, 4))
       setDailyMinute(numberValue(dailyConfig.daily_minute, 30))
@@ -121,22 +129,25 @@ export default function WeeklyJourneyStatusCard() {
 
   const saveWeekly = async () => {
     if (weeklyEnabled && !personaId) { setError('启用 weekly journey 前请先选择协作者。'); return }
+    if (!reviewedThroughDate) { setError('请先填写“已梳理至”日期。'); return }
     setSavingWeekly(true); setError(''); setNotice('')
     try {
       await updateWeeklyJourneySchedule({
         enabled: weeklyEnabled, weekday, hour: weeklyHour, minute: weeklyMinute, personaId,
+        reviewedThroughDate,
       })
-      setNotice('每周关系轨迹时间已保存并立即生效。')
+      setNotice('每周关系轨迹设置已保存并立即生效。')
       await load()
     } catch (saveError) { setError(readableError(saveError)) } finally { setSavingWeekly(false) }
   }
 
   const runNow = async () => {
     if (!personaId) { setError('请先选择本次候选使用的协作者。'); return }
+    if (!reviewedThroughDate) { setError('请先保存“已梳理至”日期。'); return }
     setRunning(true); setError(''); setNotice('')
     try {
       const result = await runWeeklyJourney(personaId)
-      setNotice(result.status === 'exists' ? '相同周次和输入已经有候选，没有重复创建。' : result.status === 'running' ? '这次候选正在生成，请稍后刷新状态。' : '候选已经生成，等待你到关系轨迹页审核。')
+      setNotice(result.status === 'pending_exists' ? '这个协作者已有待处理候选，请先审核或重试，未再次调用模型。' : result.status === 'exists' ? '相同范围和输入已经有候选，没有重复创建。' : result.status === 'running' ? '这次候选正在生成，请稍后刷新状态。' : '候选已经生成，等待你到关系轨迹页审核。')
       await load()
     } catch (runError) { await load(); setError(readableError(runError)) } finally { setRunning(false) }
   }
@@ -162,6 +173,7 @@ export default function WeeklyJourneyStatusCard() {
   const weeklyLatest = weeklyStatus?.latest_run || {}
   const dailyExecution = dailyStatus?.latest_execution || {}
   const weeklyExecution = weeklyStatus?.latest_execution || {}
+  const reviewWindow = weeklyStatus?.review_window || {}
 
   const executionControls = (
     taskType: 'daily_review' | 'weekly_journey',
@@ -187,7 +199,7 @@ export default function WeeklyJourneyStatusCard() {
       </div>
       <div className="mt-2 text-[10.5px] leading-5 text-[var(--color-text-disabled)]">不会自动 fallback；失败后先在这里人工换线，再手动重试。</div>
       {latest.started_at ? <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${latest.status === 'failed' ? 'bg-red-50 text-red-700' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'}`}>
-        最近实际执行：{latest.actual_engine === 'pro' ? 'Claude Pro' : 'API'} · {latest.model || '默认模型'} · {latest.status === 'failed' ? `失败（${latest.error_code || 'model_error'}）：${latest.error || '未知错误'}` : '完成'} · {displayTime(latest.completed_at || latest.started_at)}
+        最近实际执行：{latest.actual_engine === 'pro' ? 'Claude Pro' : 'API'} · {latest.model || '默认模型'} · {latest.status === 'failed' ? `失败（${latest.error_code || 'model_error'}）：${latest.error || '未知错误'}` : latest.status === 'skipped' ? '未调用模型（已有候选或相同输入）' : '完成'} · {displayTime(latest.completed_at || latest.started_at)}
       </div> : null}
     </div>
   )
@@ -216,23 +228,26 @@ export default function WeeklyJourneyStatusCard() {
 
       <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-[var(--color-text-heading)]">每周关系轨迹候选</h2><span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">只生成候选</span></div><p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">周范围固定为周一 04:00–下周一 04:00；定时运行绝不自动确认或写入 journey。</p></div>
+          <div><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold text-[var(--color-text-heading)]">每周关系轨迹候选</h2><span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">只生成候选</span></div><p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">每周触发，但读取范围从上次人工确认的截止日连续到最近完整日；单次最多 31 天。</p></div>
           <Link href="/journey" className="text-xs text-[var(--color-primary)]">去审核候选 →</Link>
         </div>
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">待确认</div><div className="mt-1 text-sm">{weeklyStatus?.pending_candidates ?? 0} 条</div></div>
           <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">最近运行</div><div className="mt-1 text-sm">{displayTime(weeklySchedule.last_run_at || weeklyLatest.started_at)}</div></div>
           <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">下次运行</div><div className="mt-1 text-sm">{weeklyEnabled ? displayTime(weeklySchedule.next_run_at) : '已停用'}</div></div>
           <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">时区</div><div className="mt-1 text-sm">Asia/Hong_Kong（固定）</div></div>
+          <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">本次将读取</div><div className="mt-1 text-sm">{reviewWindow.review_start_date && reviewWindow.review_end_date ? `${reviewWindow.review_start_date} ～ ${reviewWindow.review_end_date}` : reviewWindow.error === 'weekly journey has no newly completed day to review' ? '暂无新完整日' : '请先设置截止日'}</div>{reviewWindow.range_truncated && <div className="mt-1 text-[10px] text-amber-700">积压超过 31 天，本次先处理最早一段</div>}</div>
         </div>
-        <div className="grid gap-3 rounded-xl border border-[var(--color-border)] p-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 rounded-xl border border-[var(--color-border)] p-3 sm:grid-cols-2 lg:grid-cols-6">
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={weeklyEnabled} onChange={event => setWeeklyEnabled(event.target.checked)} />启用每周生成</label>
           <label className="text-xs text-[var(--color-text-tertiary)]">星期<select value={weekday} onChange={event => setWeekday(numberValue(event.target.value, 0))} className="mt-1 block w-full rounded-md border bg-white px-2 py-2 text-sm">{WEEKDAYS.map((label, index) => <option key={label} value={index}>{label}</option>)}</select></label>
           <label className="text-xs text-[var(--color-text-tertiary)]">小时<input type="number" min={0} max={23} value={weeklyHour} onChange={event => setWeeklyHour(numberValue(event.target.value, 5))} className="mt-1 block w-full rounded-md border px-2 py-2 text-sm" /></label>
           <label className="text-xs text-[var(--color-text-tertiary)]">分钟<input type="number" min={0} max={59} value={weeklyMinute} onChange={event => setWeeklyMinute(numberValue(event.target.value, 0))} className="mt-1 block w-full rounded-md border px-2 py-2 text-sm" /></label>
-          <label className="text-xs text-[var(--color-text-tertiary)]">协作者<select value={personaId} onChange={event => setPersonaId(event.target.value)} className="mt-1 block w-full rounded-md border bg-white px-2 py-2 text-sm"><option value="">请选择</option>{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select></label>
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-5"><button onClick={() => void saveWeekly()} disabled={savingWeekly} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40">{savingWeekly ? '保存中…' : '保存每周时间'}</button><button onClick={() => void runNow()} disabled={running || !personaId} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 py-2 text-sm disabled:opacity-40">{running ? '正在生成…' : '立即生成候选'}</button></div>
+          <label className="text-xs text-[var(--color-text-tertiary)]">协作者<select value={personaId} onChange={event => { const value = event.target.value; setPersonaId(value); setReviewedThroughDate(value === savedPersonaId ? savedReviewedThroughDate : '') }} className="mt-1 block w-full rounded-md border bg-white px-2 py-2 text-sm"><option value="">请选择</option>{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select></label>
+          <label className="text-xs text-[var(--color-text-tertiary)]">已梳理至<input type="date" value={reviewedThroughDate} onChange={event => setReviewedThroughDate(event.target.value)} className="mt-1 block w-full rounded-md border px-2 py-2 text-sm" /></label>
+          <div className="flex gap-2 sm:col-span-2 lg:col-span-6"><button onClick={() => void saveWeekly()} disabled={savingWeekly} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-40">{savingWeekly ? '保存中…' : '保存每周设置'}</button><button onClick={() => void runNow()} disabled={running || !personaId || !reviewedThroughDate || !reviewWindow.review_start_date || Boolean(weeklyStatus?.pending_candidates)} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 py-2 text-sm disabled:opacity-40">{running ? '正在生成…' : '立即生成候选'}</button></div>
         </div>
+        <div className="mt-2 text-[10.5px] leading-5 text-[var(--color-text-disabled)]">候选确认成功或人工确认 no_change 后才推进截止日；失败、拒绝、冲突和仅生成候选均不推进。{weeklyStatus?.pending_candidates ? ' 当前已有待确认候选，已暂停重复生成。' : ''}</div>
         {executionControls('weekly_journey', weeklyEngine, setWeeklyEngine, weeklyModel, setWeeklyModel, weeklyExecution)}
         {weeklySchedule.last_error && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">最近运行失败：{weeklySchedule.last_error}</div>}
       </section>

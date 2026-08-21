@@ -7,6 +7,7 @@ import {
   confirmJourneyCandidate,
   journeyCandidateStatusText,
   saveJourneyCandidate,
+  updateWeeklyJourneySchedule,
   type AutomationCandidate,
 } from '@/app/lib/journeyAutomation'
 
@@ -37,6 +38,28 @@ describe('weekly journey approval requests', () => {
     expect(candidateConfirmBody(candidate())).toEqual({
       expected_revision: 3,
       approved_payload_hash: 'a'.repeat(64),
+    })
+  })
+
+  it('persists the continuous review cursor with weekly cadence settings', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      task_type: 'weekly_journey', schedule: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateWeeklyJourneySchedule({
+      enabled: true, weekday: 0, hour: 5, minute: 0,
+      personaId: 'yan-zhi', reviewedThroughDate: '2026-08-11',
+    })
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(String(init.body))).toEqual({
+      task_type: 'weekly_journey',
+      enabled: true,
+      policy: {
+        weekday: 0, hour: 5, minute: 0, persona_id: 'yan-zhi',
+        reviewed_through_date: '2026-08-11',
+      },
     })
   })
 

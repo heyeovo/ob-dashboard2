@@ -84,6 +84,18 @@ export type AutomationStatus = {
     started_at?: string
     completed_at?: string
   }
+  review_window?: {
+    configured?: boolean
+    reviewed_through_date?: string
+    review_start_date?: string
+    review_end_date?: string
+    available_through_date?: string
+    range_truncated?: boolean
+    max_review_days?: number
+    window_start?: string
+    window_end?: string
+    error?: string
+  }
   pending_candidates: number
 }
 
@@ -168,6 +180,7 @@ export function updateWeeklyJourneySchedule(input: {
   hour: number
   minute: number
   personaId: string
+  reviewedThroughDate: string
 }) {
   return requestJson<{ task_type: string; schedule: AutomationStatus['schedule'] }>(
     '/api/automations/schedule',
@@ -182,6 +195,7 @@ export function updateWeeklyJourneySchedule(input: {
           hour: input.hour,
           minute: input.minute,
           persona_id: input.personaId,
+          reviewed_through_date: input.reviewedThroughDate,
         },
       }),
     },
