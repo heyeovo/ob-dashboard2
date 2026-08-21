@@ -19,3 +19,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - 每次代码改动完成后，按 `MAINTENANCE_CONTRACT.md` 的「变更 → 同步表」确认需要同步的文档，文档同步后才算完成。
 - 已排入后续窗口的工作写入对应 handoff；短期不处理、没有明确排期的遗留问题才写入 `TECH_DEBT.md`。具体分类遵循全局 `AGENTS.md`，本文件不重复维护通用规则。
+
+## Coolify 手动发布
+
+- 涉及 VPS、Coolify、发布、回滚或 Dashboard/Haven 跨仓库联动时，开始前必须同时读取本文件与相邻 `Ombre-Brain-Haven/AGENTS.md`；不能只读当前仓库规则。
+- VPS 正式 Dashboard 的 Coolify Application 来源为 Public GitHub `heyeovo/ob-dashboard2`、分支 `main`、Commit SHA `HEAD`，但 `Auto deploy` 为 `Manual deployments only` 且 Preview deployments 关闭。用户 commit + push 只更新 GitHub，不会上线。
+- 需要正式发布时，必须先提醒用户确认目标 commit，再到 Coolify `Ombre Brain → production → ob-dashboard2:main-… → Actions → Redeploy` 手动部署；部署完成后检查目标 commit、healthcheck 和关键功能。不得把 push 成功当成 VPS 已更新。
+- 回滚路径为 `Git Source → Commit SHA` 填入上一完整 SHA，保存后手动 `Redeploy`；恢复时填回目标 SHA 或 `HEAD` 再部署。实际回滚正式 Dashboard 前必须再次取得用户确认。
+- 每次涉及可部署代码的任务收尾，都要主动告诉用户“本次是否需要上线”。需要上线时给出上述点击路径；纯文档或不需上线的改动明确说“本次不用部署”。

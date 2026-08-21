@@ -6,6 +6,7 @@ import type {
   CcMessage,
   CcPermDecided,
   CcPermRequest,
+  CcProUsage,
   CcSessionListItem,
   CcSessionStats,
   CcToolEvent,
@@ -79,12 +80,38 @@ type SessionHistorySnapshot = {
   localEnginePreference: CcEngine
   pick: CcUpstreamPick
   ccPick: CcUpstreamPick
+  ccRoutePicks: CcRoutePicks
   selfhostPick: CcUpstreamPick
   webSettings: CcWebSettings
   promptModuleOverrides: Record<string, boolean>
   credChosen: boolean
   resumeHint: string
+  resumeHintLaneId: string
   lastRoundId: number
+}
+
+type CcRoutePicks = {
+  subscription: CcUpstreamPick
+  api: CcUpstreamPick
+}
+
+function routePicksFromConfig(config: CcUpstreamConfig): CcRoutePicks {
+  const base = pickFromConfig(config)
+  const provider = config.providers.find(item => item.id === config.defaultProviderId) || config.providers[0]
+  const subscriptionModel = config.defaultKind === 'subscription'
+    ? config.defaultModel || config.subscriptionModels[0] || ''
+    : config.subscriptionModels[0] || ''
+  const apiModel = config.defaultKind === 'api'
+    ? config.defaultModel || provider?.models[0] || ''
+    : provider?.models[0] || ''
+  return {
+    subscription: { ...base, kind: 'subscription', providerId: '', model: subscriptionModel },
+    api: { ...base, kind: 'api', providerId: provider?.id || '', model: apiModel },
+  }
+}
+
+function laneIdForPick(pick: CcUpstreamPick): string {
+  return pick.kind === 'subscription' ? 'subscription' : `api:${pick.providerId || 'default'}`
 }
 
 const INITIAL_HISTORY_LIMIT = 50
@@ -118,6 +145,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [stats, setStats] = useState<CcSessionStats>(EMPTY_STATS)
+  const [proUsage, setProUsage] = useState<CcProUsage | null>(null)
   // 读历史时数出来的轮数。进程被回收后 stats.turnCount 归零，用它兜底
   const [historyTurnCount, setHistoryTurnCount] = useState(0)
   const [error, setError] = useState('')
@@ -149,6 +177,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const initialPick = pickFromConfig(EMPTY_UPSTREAM)
   const [pick, setPick] = useState<CcUpstreamPick>(initialPick)
   const ccPickRef = useRef<CcUpstreamPick>(initialPick)
+  const ccRoutePicksRef = useRef<CcRoutePicks>(routePicksFromConfig(EMPTY_UPSTREAM))
   const selfhostPickRef = useRef<CcUpstreamPick>(initialPick)
   const [settingsNote, setSettingsNote] = useState('')
   const [webDefaults, setWebDefaults] = useState<CcWebSettings>(DEFAULT_WEB_SETTINGS)
@@ -161,6 +190,29 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
    * 塞了的话，Haven 里还没配上游的时候，所有协作者都会被拽到 api 那边去。
    */
   const [credChosen, setCredChosen] = useState(false)
+
+  const refreshProUsage = useCallback(async () => {
+    if (!sessionId) return
+    try {
+      const res = await fetch(`/api/cc-pro-usage?session_id=${encodeURIComponent(sessionId)}`, {
+        cache: 'no-store',
+      })
+      const data = await res.json()
+      if (res.ok && data.ok && data.usage) setProUsage(data.usage as CcProUsage)
+    } catch {
+      // 额度是辅助信息，读取失败不能影响聊天。
+    }
+  }, [sessionId])
+
+  useEffect(() => {
+    if (effectiveEngine !== 'cc' || pick.kind !== 'subscription') return
+    const initialTimer = window.setTimeout(() => void refreshProUsage(), 0)
+    const pollTimer = window.setInterval(() => void refreshProUsage(), 60_000)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(pollTimer)
+    }
+  }, [effectiveEngine, pick.kind, refreshProUsage])
 
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
@@ -175,6 +227,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   // 第 5 条 resume：切回旧会话时从历史最后一轮读出的 cc session id。
   // 进程已丢时随下一句带给服务端接回上下文；服务端有活进程会忽略它。
   const resumeHintRef = useRef('')
+  const resumeHintLaneIdRef = useRef('')
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
   const handoffRef = useRef<{ bucketIds: string[]; turns: number; fromSessionId: string | null } | null>(null)
   const dailyReviewEnabledRef = useRef(true)
@@ -192,12 +245,20 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setUpstream(config)
         // 上游配置可能比旧会话历史晚返回；已有窗口选择不能被默认模型覆盖。
         const normalizeLoadedPick = (current: CcUpstreamPick) => {
-          if (!current.model) return pickFromConfig(config)
-          const candidates = modelsFor(config, current.kind, current.providerId)
-          const model = providerModelForSdkModel(current.model, candidates)
-          return model === current.model ? current : { ...current, model }
+          const providerId = current.kind === 'api'
+            ? current.providerId || config.defaultProviderId || config.providers[0]?.id || ''
+            : ''
+          const candidates = modelsFor(config, current.kind, providerId)
+          const model = current.model
+            ? providerModelForSdkModel(current.model, candidates)
+            : candidates[0] || ''
+          return { ...current, providerId, model }
         }
-        ccPickRef.current = normalizeLoadedPick(ccPickRef.current)
+        ccRoutePicksRef.current = {
+          subscription: normalizeLoadedPick(ccRoutePicksRef.current.subscription),
+          api: normalizeLoadedPick(ccRoutePicksRef.current.api),
+        }
+        ccPickRef.current = ccRoutePicksRef.current[ccPickRef.current.kind]
         selfhostPickRef.current = normalizeLoadedPick(selfhostPickRef.current)
         setPick(effectiveEngineRef.current === 'selfhost' ? selfhostPickRef.current : ccPickRef.current)
         // 配过东西（有中转站 / 填过订阅模型）才算「定过」，空配置不抢协作者的 engine
@@ -434,11 +495,13 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           localEnginePreference,
           pick,
           ccPick: ccPickRef.current,
+          ccRoutePicks: ccRoutePicksRef.current,
           selfhostPick: selfhostPickRef.current,
           webSettings,
           promptModuleOverrides,
           credChosen,
           resumeHint: resumeHintRef.current,
+          resumeHintLaneId: resumeHintLaneIdRef.current,
           lastRoundId: lastRoundIdRef.current,
         })
       } else if (sessionId) {
@@ -469,6 +532,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setLocalEnginePreference(cached.localEnginePreference)
         setPick(cached.pick)
         ccPickRef.current = cached.ccPick
+        ccRoutePicksRef.current = cached.ccRoutePicks || routePicksFromConfig(upstreamRef.current)
         selfhostPickRef.current = cached.selfhostPick
         setWebSettings(cached.webSettings)
         const cachedPromptOverrides = cached.promptModuleOverrides || {}
@@ -476,6 +540,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         promptModuleOverridesRef.current = cachedPromptOverrides
         setCredChosen(cached.credChosen)
         resumeHintRef.current = cached.resumeHint
+        resumeHintLaneIdRef.current = cached.resumeHintLaneId
         lastRoundIdRef.current = cached.lastRoundId
         historyLoadedAtRef.current = cached.cachedAt
       } else {
@@ -490,10 +555,13 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         dailyReviewEnabledRef.current = true
         setWebSettings(webDefaults)
         setCredChosen(false)
-        ccPickRef.current = defaultPick
+        const defaultRoutes = routePicksFromConfig(upstreamRef.current)
+        ccRoutePicksRef.current = defaultRoutes
+        ccPickRef.current = defaultRoutes[defaultPick.kind]
         selfhostPickRef.current = defaultPick
         setPick(defaultPick)
         resumeHintRef.current = ''
+        resumeHintLaneIdRef.current = ''
         lastRoundIdRef.current = 0
         historyLoadedAtRef.current = 0
       }
@@ -527,6 +595,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           const sessionState = data.session as {
             local_engine_preference?: string
             selfhost_overrides?: { provider_id?: unknown; model?: unknown }
+            cc_overrides?: {
+              active_cred?: unknown
+              subscription?: { model?: unknown; effort?: unknown; thinking?: unknown }
+              api?: { provider_id?: unknown; model?: unknown; effort?: unknown; thinking?: unknown }
+            }
             prompt_module_overrides?: Record<string, boolean>
             mode?: string
             daily_review_enabled?: boolean
@@ -549,7 +622,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           const restoredDailyReviewEnabled = sessionState?.daily_review_enabled !== false
           // 第 4 + 5 条：从最后一轮读回本窗配置和 resume 接回点
           const meta = metaOfTurns(turns)
-          let restoredCcPick = { ...defaultPick }
+          let restoredCcRoutePicks = routePicksFromConfig(upstreamRef.current)
+          let restoredCcKind: CcUpstreamPick['kind'] = defaultPick.kind
+          let restoredCcPick = restoredCcRoutePicks[restoredCcKind]
           let restoredSelfhostPick = { ...defaultPick }
           let restoredWebSettings = webDefaults
           let restoredCredChosen = false
@@ -567,10 +642,43 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               effort: (s.effort as CcUpstreamPick['effort']) ?? restoredCcPick.effort,
               thinking: s.thinkingOn ?? restoredCcPick.thinking,
             }
+            restoredCcKind = restoredCcPick.kind
+            restoredCcRoutePicks = { ...restoredCcRoutePicks, [restoredCcKind]: restoredCcPick }
             // 存过 cred 就当「有人定过」，右上角照它显示订阅 / api
             if (s.cred === 'subscription' || s.cred === 'api') restoredCredChosen = true
             if (s.web) restoredWebSettings = s.web
           }
+          const storedCc = sessionState?.cc_overrides
+          const applyStoredCcPick = (
+            kind: CcUpstreamPick['kind'],
+            raw: { provider_id?: unknown; model?: unknown; effort?: unknown; thinking?: unknown } | undefined,
+          ) => {
+            if (!raw) return
+            const current = restoredCcRoutePicks[kind]
+            const providerId = kind === 'api'
+              ? String(raw.provider_id || current.providerId).trim()
+              : ''
+            const candidates = modelsFor(upstreamRef.current, kind, providerId)
+            restoredCcRoutePicks = {
+              ...restoredCcRoutePicks,
+              [kind]: {
+                ...current,
+                providerId,
+                model: raw.model
+                  ? providerModelForSdkModel(String(raw.model), candidates)
+                  : current.model,
+                effort: (raw.effort as CcUpstreamPick['effort']) || current.effort,
+                thinking: typeof raw.thinking === 'boolean' ? raw.thinking : current.thinking,
+              },
+            }
+          }
+          applyStoredCcPick('subscription', storedCc?.subscription)
+          applyStoredCcPick('api', storedCc?.api)
+          if (storedCc?.active_cred === 'subscription' || storedCc?.active_cred === 'api') {
+            restoredCcKind = storedCc.active_cred
+            restoredCredChosen = true
+          }
+          restoredCcPick = restoredCcRoutePicks[restoredCcKind]
           // selfhost 的事实源是 Haven 窗口覆盖，优先于最后一轮 cc 的运行时元数据。
           if (selfhostProviderId || selfhostModel) {
             restoredSelfhostPick = {
@@ -596,12 +704,21 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           setWebSettings(restoredWebSettings)
           setCredChosen(restoredCredChosen)
           ccPickRef.current = restoredCcPick
+          ccRoutePicksRef.current = restoredCcRoutePicks
           selfhostPickRef.current = restoredSelfhostPick
           setPick(restoredPick)
           setLocalEnginePreference(restoredEngine)
           setPromptModuleOverrides(restoredPromptModuleOverrides)
           promptModuleOverridesRef.current = restoredPromptModuleOverrides
           resumeHintRef.current = meta.ccSessionId
+          const legacyMetaKind = meta.settings?.cred === 'subscription'
+            ? 'subscription'
+            : meta.settings?.cred === 'api'
+              ? 'api'
+              : null
+          resumeHintLaneIdRef.current = legacyMetaKind
+            ? laneIdForPick({ ...restoredCcPick, kind: legacyMetaKind, providerId: meta.settings?.providerId || '' })
+            : ''
           lastRoundIdRef.current = restoredLastRoundId
           historyLoadedAtRef.current = restoredAt
           rememberSessionHistory(historyCacheRef.current, nextId, {
@@ -615,11 +732,13 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             localEnginePreference: restoredEngine,
             pick: restoredPick,
             ccPick: restoredCcPick,
+            ccRoutePicks: restoredCcRoutePicks,
             selfhostPick: restoredSelfhostPick,
             webSettings: restoredWebSettings,
             promptModuleOverrides: restoredPromptModuleOverrides,
             credChosen: restoredCredChosen,
             resumeHint: meta.ccSessionId,
+            resumeHintLaneId: resumeHintLaneIdRef.current,
             lastRoundId: restoredLastRoundId,
           })
         }
@@ -700,10 +819,12 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setWebSettings(webDefaults)
     // 新对话没有接回点
     resumeHintRef.current = ''
+    resumeHintLaneIdRef.current = ''
     dailyReviewEnabledRef.current = true
     // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
     const defaultPick = pickFromConfig(upstream)
-    ccPickRef.current = defaultPick
+    ccRoutePicksRef.current = routePicksFromConfig(upstream)
+    ccPickRef.current = ccRoutePicksRef.current[defaultPick.kind]
     selfhostPickRef.current = defaultPick
     setPick(defaultPick)
   }, [sessionId, draft, upstream, webDefaults])
@@ -855,8 +976,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       setSettingsNote('')
       setWebSettings(webDefaults)
       resumeHintRef.current = ''
+      resumeHintLaneIdRef.current = ''
       const defaultPick = pickFromConfig(upstream)
-      ccPickRef.current = defaultPick
+      ccRoutePicksRef.current = routePicksFromConfig(upstream)
+      ccPickRef.current = ccRoutePicksRef.current[defaultPick.kind]
       selfhostPickRef.current = defaultPick
       setPick(defaultPick)
       setMode(payload.mode)
@@ -907,7 +1030,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
    *
    * 三档待遇，界面上要说清楚：
    *   · model / effort / thinking → 打 /api/cc-session-settings，当场生效（换模型会清缓存）
-   *   · cc 的 kind / providerId 是子进程启动参数，已经开口后锁定
+   *   · cc 的 kind / providerId 切换独立 Claude session，并从 Haven 补中间轮次
    *   · selfhost 每轮重新直连，providerId / model 保存到 Haven 后下一轮立即生效
    */
   // 换窗带来的消息只是新会话的上下文，不代表这一窗已经开口。
@@ -921,7 +1044,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   const applyPick = useCallback(
     async (next: Partial<CcUpstreamPick>) => {
-      const merged: CcUpstreamPick = { ...pick, ...next }
+      if (sending) {
+        setSettingsNote('正在回复，结束后才能切换线路')
+        return
+      }
+      const requestedKind = next.kind || pick.kind
+      const base = effectiveEngine === 'cc' && requestedKind !== pick.kind
+        ? ccRoutePicksRef.current[requestedKind]
+        : pick
+      const merged: CcUpstreamPick = { ...base, ...next, kind: requestedKind }
       const switchedUpstream = merged.kind !== pick.kind || merged.providerId !== pick.providerId
 
       if (switchedUpstream) {
@@ -964,17 +1095,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         }
         return
       }
+      const previousRoutes = ccRoutePicksRef.current
       ccPickRef.current = merged
-      if (switchedUpstream) {
-        setSettingsNote(
-          sessionStarted ? '换供应商要新建对话才生效（这一窗还是原来那套）' : '已选好，这一窗生效',
-        )
-        return
-      }
-      if (!sessionStarted) {
-        setSettingsNote('已选好，发第一句时生效')
-        return
-      }
+      ccRoutePicksRef.current = { ...previousRoutes, [merged.kind]: merged }
+      setCredChosen(true)
 
       try {
         const res = await fetch('/api/cc-session-settings', {
@@ -982,25 +1106,33 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             session_id: sessionId,
+            engine: 'cc',
+            persona_id: personaId,
+            cred: merged.kind,
+            provider_id: merged.providerId,
             model: merged.model,
             effort: merged.effort,
             thinking: merged.thinking,
           }),
         })
         const data = await res.json()
-        if (!data.ok) {
-          setSettingsNote(String(data.error || '这次没改上，等这一轮说完再试'))
-          return
-        }
+        if (!res.ok || !data.ok) throw new Error(String(data.error || '保存失败'))
         if (data.stats) setStats(data.stats as CcSessionStats)
         setSettingsNote(
-          data.applied === false ? String(data.note || '下一句话时生效') : '已生效',
+          switchedUpstream
+            ? '线路已切换；下一句话会恢复目标线路，并补入中间对话'
+            : data.applied === false
+              ? '已保存，下一句话时生效'
+              : '已生效',
         )
-      } catch {
-        setSettingsNote('设置没送到，等下再试')
+      } catch (reason) {
+        ccRoutePicksRef.current = previousRoutes
+        ccPickRef.current = previousPick
+        setPick(previousPick)
+        setSettingsNote(`没有改上：${reason instanceof Error ? reason.message : '保存失败'}`)
       }
     },
-    [pick, sessionStarted, upstream, sessionId, effectiveEngine, personaId],
+    [pick, upstream, sessionId, effectiveEngine, personaId, sending],
   )
 
   const applyWebSettings = useCallback(
@@ -1081,6 +1213,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const requestId = retry?.requestId || newTurnRequestId()
       const expectedLastRoundId = retry?.expectedLastRoundId ?? lastRoundIdRef.current
       const turnEngine = retry?.engine || effectiveEngine
+      const turnPick = { ...pick }
       const userMsg: CcMessage = {
         id: localId(),
         role: 'user',
@@ -1139,8 +1272,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           // persona_id 每轮都带上：服务端按它取提示词/记忆/引擎。
           // 会话中途换人不生效（子进程已经起来了），服务端会沿用第一轮那个。
           //
-          // 5.2 起还带这一窗选的那套上游。同样是「第一轮定死」的那几项
-          //（mode / cred / provider_id）后面几轮送过去也不会改，服务端沿用启动时那份。
+          // 每轮带当前手动选择。mode 仍由窗口锁定；cred / provider_id 改变时，
+          // 服务端切到目标线路自己的 Claude session，不跨凭据复用 query。
           body: JSON.stringify(turnEngine === 'selfhost' ? strictPayload : {
             ...strictPayload,
             // 没人定过就不送 cred，让服务端照协作者的 engine 走
@@ -1159,6 +1292,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             web_domains: webSettings.domains,
             // 第 5 条：进程已丢时靠它 resume 接回上下文；有活进程服务端会忽略
             ...(resumeHintRef.current ? { resume_hint: resumeHintRef.current } : {}),
+            ...(resumeHintLaneIdRef.current ? { resume_hint_lane_id: resumeHintLaneIdRef.current } : {}),
             // 5.5 换窗 handoff：首条消息带桶 id 和源会话 id，服务端拉内容注入
             ...(handoffRef.current ? {
               handoff_bucket_ids: handoffRef.current.bucketIds,
@@ -1340,7 +1474,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 deliveryNote: replayed
                   ? '已从 Haven 幂等重放，没有重复生成或写入。'
                   : continuityTurns > 0
-                    ? `已向 cc 补入自建引擎期间 ${continuityTurns} 轮对话；已保存到 Haven`
+                    ? `已向当前 CC 线路补入其他线路期间 ${continuityTurns} 轮对话；已保存到 Haven`
                     : '已保存到 Haven',
               }
             })
@@ -1350,6 +1484,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
             // 这个事件只更新顶部那几个数字和会话列表。
             if (payload.stats) setStats(payload.stats as CcSessionStats)
+            if (turnEngine === 'cc' && turnPick.kind === 'subscription') void refreshProUsage()
             void refreshSessions()
           },
           onError: payload => {
@@ -1399,7 +1534,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setSending(false)
       }
     },
-    [sessionId, sending, personaId, refreshSessions, refreshPending, mode, pick, credChosen, webSettings, effectiveEngine],
+    [sessionId, sending, personaId, refreshSessions, refreshPending, refreshProUsage, mode, pick, credChosen, webSettings, effectiveEngine],
   )
 
   const retryPersistence = useCallback((message: CcMessage) => {
@@ -1493,6 +1628,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setDraft,
     sending,
     stats: mergedStats,
+    proUsage,
+    refreshProUsage,
     error,
     setError,
     send,
@@ -1521,8 +1658,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setMode,
     /** cc 已经在这个窗口开口 —— 模式和联网工具不能再改。 */
     modeLocked: ccSessionStarted,
-    /** cc provider 随子进程锁定；selfhost 每轮直连，可以中途切换。 */
-    providerLocked: providerSelectionLocked(effectiveEngine, sessionStarted),
+    /** 生成期间不允许换线路；空闲时 Pro / API / selfhost 都可手动往返。 */
+    providerLocked: providerSelectionLocked(effectiveEngine, sending),
     upstream,
     upstreamLoaded,
     pick,

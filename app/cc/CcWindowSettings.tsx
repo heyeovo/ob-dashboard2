@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import type { CcEngine, CcSessionStats } from './types'
+import type { CcEngine, CcProUsage, CcSessionStats } from './types'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
   EFFORT_OPTIONS,
@@ -18,7 +18,7 @@ import type { CcWebSettings } from './webSettings'
 //
 // 三档待遇，界面上必须写清楚，不然用户会以为点了就生效：
 //   · 模型 / 力度 / 深度思考 —— 当场生效（换模型会把 prompt cache 清掉）
-//   · cc 的订阅 / 中转站 —— 子进程环境变量，只有新对话能改
+//   · cc 的订阅 / 中转站 —— 同一 Dashboard 窗口内切换独立 Claude session
 //   · selfhost 的中转站 —— 每轮重新直连，保存到 Haven 后下一句生效
 //
 // ⚠️ 中转站的 token 不下发到浏览器，这里只显示名字。要改去「上游模型」页。
@@ -42,6 +42,8 @@ type Props = {
   contextMaxTokens: number
   upstream: CcUpstreamConfig
   pick: CcUpstreamPick
+  proUsage: CcProUsage | null
+  onRefreshProUsage: () => void
   onPick: (next: Partial<CcUpstreamPick>) => void
   web: CcWebSettings
   onWebChange: (next: Partial<CcWebSettings>) => void
@@ -91,6 +93,8 @@ export default function CcWindowSettings({
   contextMaxTokens,
   upstream,
   pick,
+  proUsage,
+  onRefreshProUsage,
   onPick,
   web,
   onWebChange,
@@ -113,6 +117,10 @@ export default function CcWindowSettings({
   const recentSum = recent.reduce((a, b) => a + b, 0)
   // 订阅侧不按量计费，SDK 报的那个数字对用户没意义 —— 直接显示 $0（用户拍板的）。
   const subscription = pick.kind === 'subscription'
+  const usageRows = [
+    ['5 小时', proUsage?.fiveHour],
+    ['本周', proUsage?.sevenDay],
+  ] as const
 
   return (
     <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -253,9 +261,49 @@ export default function CcWindowSettings({
           ) : null}
 
           {providerLocked ? (
-            <div className={HINT}>换供应商要新建对话（这一窗的凭据在启动时就定了）</div>
+            <div className={HINT}>正在回复，结束后才能切换线路。</div>
           ) : engine === 'selfhost' ? (
             <div className={HINT}>自建引擎每轮重新连接；切换中转站后，下一句话立即使用新选择。</div>
+          ) : (
+            <div className={HINT}>可在同一窗口切换 Pro / API；目标线路会恢复自己的 Claude 会话，并补入中间文字对话。</div>
+          )}
+
+          {engine === 'cc' && subscription ? (
+            <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className={KEY}>Pro 额度</span>
+                <button type="button" onClick={onRefreshProUsage} className="text-[10.5px] text-[var(--color-primary)]">
+                  刷新
+                </button>
+              </div>
+              {proUsage?.available ? usageRows.map(([label, window]) => {
+                if (!window || window.utilization == null) {
+                  return <div key={label} className={HINT}>{label}额度暂不可用</div>
+                }
+                const used = Math.max(0, Math.min(100, Number(window?.utilization || 0)))
+                const remaining = Math.max(0, 100 - used)
+                const reset = window?.resetsAt
+                  ? new Date(window.resetsAt).toLocaleString('zh-HK', {
+                      timeZone: 'Asia/Hong_Kong', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                    })
+                  : '未知'
+                return (
+                  <div key={label} className="mb-2 last:mb-0">
+                    <div className="mb-1 flex justify-between text-[10.5px] text-[var(--color-text-secondary)]">
+                      <span>{label}</span><span>剩余 {remaining.toFixed(0)}% · {reset} 重置</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-border-light)]">
+                      <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${remaining}%` }} />
+                    </div>
+                  </div>
+                )
+              }) : (
+                <div className={HINT}>{proUsage?.note || '使用 Pro 线路完成一轮后可读取额度'}</div>
+              )}
+              <div className="mt-1 text-[9.5px] text-[var(--color-text-disabled)]">
+                {proUsage?.stale ? '上次读取值 · ' : ''}Agent SDK 实验性数据，接口变化时会自动显示不可用
+              </div>
+            </div>
           ) : null}
 
           {/* ── 模型 / 力度 / 思考：能中途改 ── */}

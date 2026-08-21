@@ -79,11 +79,17 @@ export type TurnConfig = {
   webSettings: CcWebSettings
   permanentAllowRules: string[]
   cred: CredMode
+  /** 同一 Dashboard 窗口内隔离 Claude 原生 session 的线路键。 */
+  laneId: string
   envOverrides: { baseUrl?: string; authToken?: string }
   model: string
   /** 启动时定死的中转站（api 时有值），会话状态里照实显示用 */
   providerId: string
   providerLabel: string
+}
+
+export function ccLaneId(cred: CredMode, providerId: string): string {
+  return cred === 'subscription' ? 'subscription' : `api:${providerId.trim() || 'default'}`
 }
 
 /** 这个会话能写哪些目录。同样每轮重读 —— 改完配置开新对话生效，跟提示词一致。 */
@@ -360,7 +366,8 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     includePartialMessages: true,
     resume: resumeFrom || undefined,
     // 中转站地址和 token 从 Haven 那份配置里来（api 模式）。
-    // ⚠️ 这是子进程的环境变量，spawn 时定死 —— 换中转站 / 换订阅只能新建对话。
+    // ⚠️ 这是子进程的环境变量，spawn 时定死。线路切换由 ccSession 回收当前
+    // query，再按独立 resumeKey 恢复目标线路，不能跨凭据复用原生 session。
     env: buildCcEnv(cred, { ...envOverrides, mainModel: model }),
     hooks: buildCcHooks(config),
   }

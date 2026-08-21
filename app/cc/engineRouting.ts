@@ -13,8 +13,8 @@ export function requiresImportedSessionHandoff(source: string, engine: CcEngine)
   return engine === 'cc'
 }
 
-export function providerSelectionLocked(engine: CcEngine, sessionStarted: boolean): boolean {
-  return engine === 'cc' && sessionStarted
+export function providerSelectionLocked(engine: CcEngine, turnActive: boolean): boolean {
+  return engine === 'cc' && turnActive
 }
 
 export function normalizeProviderUsage(value: unknown): CcTurnUsage | null {

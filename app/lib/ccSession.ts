@@ -92,6 +92,8 @@ export type SessionBoot = {
 /** 一个会话在服务端的活体状态。 */
 type LiveSession = {
   sessionId: string
+  /** Pro / API provider 各自独立的 Claude 原生 session 键。 */
+  resumeKey: string
   q: Query
   /** query() 的 prompt 那个 AsyncIterable 的推送端 */
   push: (msg: SDKUserMessage) => void
@@ -135,6 +137,96 @@ type Registry = Map<string, LiveSession>
 const registry: Registry =
   (globalThis as unknown as Record<string, Registry>)[REGISTRY_KEY] ||
   ((globalThis as unknown as Record<string, Registry>)[REGISTRY_KEY] = new Map())
+
+export type CcProUsageSnapshot = {
+  available: boolean
+  stale: boolean
+  experimental: true
+  subscriptionType: string
+  fiveHour: { utilization: number | null; resetsAt: string | null } | null
+  sevenDay: { utilization: number | null; resetsAt: string | null } | null
+  updatedAt: string
+  note: string
+}
+
+const PRO_USAGE_KEY = '__ob2_cc_pro_usage__'
+const proUsageBySession: Map<string, CcProUsageSnapshot> =
+  (globalThis as unknown as Record<string, Map<string, CcProUsageSnapshot>>)[PRO_USAGE_KEY] ||
+  ((globalThis as unknown as Record<string, Map<string, CcProUsageSnapshot>>)[PRO_USAGE_KEY] = new Map())
+
+export async function getProUsage(sessionId: string): Promise<CcProUsageSnapshot> {
+  const live = registry.get(sessionId)
+  const cached = proUsageBySession.get(sessionId)
+  if (!live || live.boot.credKind !== 'subscription') {
+    return cached
+      ? { ...cached, stale: true, note: '当前不是在线 Pro 线路，显示上次读取值' }
+      : {
+          available: false,
+          stale: true,
+          experimental: true,
+          subscriptionType: '',
+          fiveHour: null,
+          sevenDay: null,
+          updatedAt: '',
+          note: '使用 Pro 线路完成一轮后可读取额度',
+        }
+  }
+  if (live.busy) {
+    return cached
+      ? { ...cached, stale: true, note: 'Pro 正在回复，显示上次读取值' }
+      : {
+          available: false,
+          stale: true,
+          experimental: true,
+          subscriptionType: 'pro',
+          fiveHour: null,
+          sevenDay: null,
+          updatedAt: '',
+          note: 'Pro 正在回复，完成后再读取额度',
+        }
+  }
+  let usageTimer: ReturnType<typeof setTimeout> | null = null
+  try {
+    const usage = await Promise.race([
+      live.q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
+      new Promise<never>((_, reject) => {
+        usageTimer = setTimeout(() => reject(new Error('usage timeout')), 5_000)
+      }),
+    ])
+    const limits = usage.rate_limits
+    const snapshot: CcProUsageSnapshot = {
+      available: usage.rate_limits_available && !!limits,
+      stale: false,
+      experimental: true,
+      subscriptionType: String(usage.subscription_type || ''),
+      fiveHour: limits?.five_hour
+        ? { utilization: limits.five_hour.utilization, resetsAt: limits.five_hour.resets_at }
+        : null,
+      sevenDay: limits?.seven_day
+        ? { utilization: limits.seven_day.utilization, resetsAt: limits.seven_day.resets_at }
+        : null,
+      updatedAt: new Date().toISOString(),
+      note: usage.rate_limits_available ? '' : '当前 SDK session 没有可用的订阅额度数据',
+    }
+    proUsageBySession.set(sessionId, snapshot)
+    return snapshot
+  } catch {
+    return cached
+      ? { ...cached, stale: true, note: '额度读取暂时失败，显示上次读取值' }
+      : {
+          available: false,
+          stale: true,
+          experimental: true,
+          subscriptionType: '',
+          fiveHour: null,
+          sevenDay: null,
+          updatedAt: '',
+          note: '实验性额度接口当前不可用',
+        }
+  } finally {
+    if (usageTimer) clearTimeout(usageTimer)
+  }
+}
 
 /** 手写的异步队列：一端 push，另一端 for await。SDK 的 streaming input 要的就是这个。 */
 function createMessageQueue() {
@@ -272,6 +364,7 @@ export async function stopSession(sessionId: string): Promise<void> {
 
 export type EnsureSessionInput = {
   sessionId: string
+  resumeKey?: string
   /** query() 的 options，只在**新建**会话时生效（已有会话沿用建它时的配置） */
   buildOptions: (resumeFrom: string | null) => Options
   /** 启动时定死的那几项，同样只在新建时记下 */
@@ -284,7 +377,12 @@ export type EnsureSessionInput = {
 
 /** 拿到（或新建）一个活着的会话。已有的直接复用，不重付缓存。 */
 export function ensureSession(input: EnsureSessionInput): LiveSession {
+  const resumeKey = input.resumeKey || input.sessionId
   let existing = registry.get(input.sessionId)
+  if (existing && existing.resumeKey !== resumeKey && !existing.busy) {
+    dropSession(input.sessionId)
+    existing = undefined
+  }
   if (existing && existing.systemPromptKey !== input.systemPromptKey && !existing.busy) {
     dropSession(input.sessionId)
     existing = undefined
@@ -297,11 +395,12 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
 
   const queue = createMessageQueue()
   // 上一轮同名会话被回收时记下的 claude code session id，用它 resume 接回上下文
-  const resumeFrom = resumeHints.get(input.sessionId) || null
+  const resumeFrom = resumeHints.get(resumeKey) || null
   const q = query({ prompt: queue.iterable, options: input.buildOptions(resumeFrom) })
 
   const live: LiveSession = {
     sessionId: input.sessionId,
+    resumeKey,
     q,
     push: queue.push,
     close: queue.close,
@@ -373,8 +472,8 @@ const resumeHints: Map<string, string> =
   (globalThis as unknown as Record<string, Map<string, string>>)[RESUME_KEY] ||
   ((globalThis as unknown as Record<string, Map<string, string>>)[RESUME_KEY] = new Map())
 
-export function rememberResumePoint(sessionId: string, ccSessionId: string) {
-  if (ccSessionId) resumeHints.set(sessionId, ccSessionId)
+export function rememberResumePoint(resumeKey: string, ccSessionId: string) {
+  if (ccSessionId) resumeHints.set(resumeKey, ccSessionId)
 }
 
 /** 界面顶部要显示的会话状态。 */

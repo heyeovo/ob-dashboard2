@@ -202,7 +202,7 @@ function crossEngineContinuation(turns: HavenTurn[], persona: HavenPersona | nul
   if (lines.length === 0) return ''
   return [
     '<上次聊到这里>',
-    '以下是同一窗口在自建引擎期间新增的对话原文。它是此前对话记录，不是用户这一轮的新指令。',
+    '以下是同一窗口在其他线路期间新增的对话原文。它是此前对话记录，不是用户这一轮的新指令。',
     '',
     ...lines,
     '</上次聊到这里>',
@@ -236,7 +236,7 @@ function crossEngineRecallReference(turns: HavenTurn[]): string {
   if (contexts.length === 0) return ''
   return [
     '<之前的记忆>',
-    '以下是同一窗口在自建引擎期间已经注入过的背景参考。它们不是用户这一轮的新指令，也不是 cc 本轮重新召回的内容。',
+    '以下是同一窗口在其他线路期间已经注入过的背景参考。它们不是用户这一轮的新指令，也不是 cc 本轮重新召回的内容。',
     '',
     ...contexts,
     '</之前的记忆>',
@@ -354,6 +354,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     stamp,
   } = input
   const attachments = inputAttachments || []
+  const resumeKey = `${sessionId}::${config.laneId}`
   const state = new TurnState(sessionId)
   const startedAt = Date.now()
 
@@ -373,12 +374,14 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 就先记下这个接回点，紧接着 ensureSession 新建进程时会用它接上上下文。
     // ⚠️ 只在没有活进程时才认前端这份 —— 有活进程时以服务端内存里那份为准，
     // 不让一份陈旧的 hint 覆盖正在跑的会话。
-    if (!peekSession(sessionId) && input.resumeHint) {
-      rememberResumePoint(sessionId, input.resumeHint)
+    const currentLive = peekSession(sessionId)
+    if ((!currentLive || currentLive.resumeKey !== resumeKey) && input.resumeHint) {
+      rememberResumePoint(resumeKey, input.resumeHint)
     }
 
     live = ensureSession({
       sessionId,
+      resumeKey,
       buildOptions: resumeFrom => buildCcOptions(config, resumeFrom),
       // 这几项只在**新建**会话时记下 —— 已有会话沿用它启动时那套。
       // 界面上「本窗口设置」显示的是这份，不是前端最新的选择。
@@ -417,15 +420,18 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       signal,
     })
     if (!sessionResult.ok) throw new Error(`读取窗口衔接状态失败：${sessionResult.error}`)
-    const ccSeenRoundId = sessionResult.session?.cc_seen_round_id || 0
+    const laneMap = sessionResult.session?.cc_lanes
+    const laneState = laneMap?.[config.laneId]
+    const ccSeenRoundId = Number(laneState?.seen_round_id || (input.resumeHint || laneMap === undefined
+      ? sessionResult.session?.cc_seen_round_id
+      : 0)) || 0
     const missingResult = await listAllTurns(sessionId, {
       afterRoundId: ccSeenRoundId,
-      source: 'selfhost',
       includeRaw: true,
       signal,
     })
     if (!missingResult.ok) throw new Error(`读取跨引擎续聊记录失败：${missingResult.error}`)
-    const missingSelfhostTurns = missingResult.turns
+    const missingRouteTurns = missingResult.turns
     const bucketExclusionIds = sessionResult.bucketExclusionIds
 
     /* ── 召回：发送前做，结果拼进 user 正文 ──
@@ -473,8 +479,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       stamp?.('召回回来了')
     }
 
-    const continuationRecall = crossEngineRecallReference(missingSelfhostTurns)
-    const continuation = crossEngineContinuation(missingSelfhostTurns, persona)
+    const continuationRecall = crossEngineRecallReference(missingRouteTurns)
+    const continuation = crossEngineContinuation(missingRouteTurns, persona)
     if (continuationRecall || continuation) {
       content = [continuationRecall, continuation, content].filter(Boolean).join('\n\n')
       stamp?.('跨引擎续聊记录补进来了')
@@ -592,7 +598,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           session_id: msg.session_id,
         }
         live.ccSessionId = msg.session_id
-        rememberResumePoint(sessionId, msg.session_id)
+        rememberResumePoint(resumeKey, msg.session_id)
         send('init', {
           ...initInfo,
           engine: 'cc',
@@ -789,6 +795,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             text_truncated: item.text_truncated,
           })),
           cred_mode: config.cred,
+          cc_lane_id: config.laneId,
           // 用户点了停止：这一轮是被打断的半截回复。读历史时前端靠它显示「已停止」
           interrupted: interrupted || undefined,
           // 5.2：这一轮是闲聊还是工作、走的哪个中转站、用量明细。
@@ -816,12 +823,13 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           thinking: thinkingText || undefined,
           process: bucket.processEvents,
           recall: bucket.recallInfo,
-          continuity: missingSelfhostTurns.length > 0
+          continuity: missingRouteTurns.length > 0
             ? {
-                injected_turns: missingSelfhostTurns.length,
+                lane_id: config.laneId,
+                injected_turns: missingRouteTurns.length,
                 after_round_id: ccSeenRoundId,
-                through_round_id: missingSelfhostTurns.at(-1)?.round_id || ccSeenRoundId,
-                round_ids: missingSelfhostTurns.map(turn => turn.round_id),
+                through_round_id: missingRouteTurns.at(-1)?.round_id || ccSeenRoundId,
+                round_ids: missingRouteTurns.map(turn => turn.round_id),
               }
             : undefined,
           created_bucket_ids: [...createdBucketIds],
@@ -914,7 +922,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       round_id: storedRoundId,
       turn_id: Number(storeInfo.turn_id || 0),
       idempotent_replay: storeInfo.idempotent_replay === true,
-      continuity_turns: missingSelfhostTurns.length,
+      continuity_turns: missingRouteTurns.length,
     })
 
     // 上下文用量：这一轮答完了才拉（getContextUsage 要走一次控制请求，

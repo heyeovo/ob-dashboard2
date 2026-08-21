@@ -1,21 +1,15 @@
 import { NextRequest } from 'next/server'
 import { applyRuntimeSettings, getSessionStats, peekSession } from '@/app/lib/ccSession'
 import { getConversationSession, patchConversationSessionState } from '@/app/lib/havenTurns'
+import { ccLaneId } from '@/app/lib/cc/ccOptions'
 
 // 「本窗口设置」里能中途改的那几项（5.2）。
 //
-//   cc:       { session_id, model?, effort?, thinking? }
+//   cc:       { session_id, engine: 'cc', persona_id, cred, provider_id?, model, effort, thinking }
 //   selfhost: { session_id, engine: 'selfhost', persona_id, provider_id, model }
 //
-// ⚠️ 能改的只有这三项。改不了的（要新建对话）：
-//   · 闲聊 / 工作模式 —— systemPrompt 和 tools 是子进程启动参数
-//   · 订阅 ↔ 中转站、换哪个中转站 —— 是子进程的环境变量，spawn 时定死
-//
-// 换模型会让 prompt cache 整个作废（不同模型不共享缓存，换回来也不恢复），
-// 所以下一句要重付一次缓存写入。界面上写了这句话。
-//
-// resume 那条路（重启子进程 + 把历史接回来，让跨中转站也能同窗口切）留作待办，
-// 见 HANDOFF「闲聊 / 工作双模式」那节末尾。
+// CC 线路切换只保存选择；下一句话由 ccSession 回收当前 query，并用目标线路
+// 自己的 resume 点恢复。不同凭据绝不共享 Claude 原生 session。
 
 export const runtime = 'nodejs'
 
@@ -31,6 +25,56 @@ export async function POST(request: NextRequest) {
 
   const sessionId = String(body.session_id || '').trim()
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
+
+  if (body.engine === 'cc') {
+    const personaId = String(body.persona_id || '').trim()
+    const cred = body.cred === 'subscription' ? 'subscription' : body.cred === 'api' ? 'api' : ''
+    const providerId = String(body.provider_id || '').trim()
+    const model = String(body.model || '').trim()
+    const effort = String(body.effort || '').trim()
+    const thinking = body.thinking !== false
+    if (!personaId || !cred || (cred === 'api' && (!providerId || !model))) {
+      return Response.json(
+        { ok: false, error: 'CC 线路需要 persona_id、credential、model，API 线路还需要 provider_id' },
+        { status: 400 },
+      )
+    }
+    if (effort && !EFFORTS.includes(effort)) {
+      return Response.json({ ok: false, error: `effort 只能是 ${EFFORTS.join(' / ')}` }, { status: 400 })
+    }
+
+    const current = await getConversationSession(sessionId)
+    if (!current.ok) {
+      return Response.json({ ok: false, error: current.error || '读取本窗口设置失败' }, { status: 502 })
+    }
+    const existing = current.session?.cc_overrides || {}
+    const subscription = { ...(existing.subscription || {}) }
+    const api = { ...(existing.api || {}) }
+    const routeSettings = { model, effort, thinking }
+    if (cred === 'subscription') Object.assign(subscription, routeSettings)
+    else Object.assign(api, routeSettings, { provider_id: providerId })
+    const result = await patchConversationSessionState({
+      sessionId,
+      personaId,
+      ccOverrides: { active_cred: cred, subscription, api },
+      expectedStateVersion: current.session?.state_version ?? 0,
+    })
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, error: result.error || '保存 CC 线路失败' },
+        { status: result.httpStatus || 502 },
+      )
+    }
+
+    const live = peekSession(sessionId)
+    const laneId = ccLaneId(cred, providerId)
+    if (!live || live.resumeKey !== `${sessionId}::${laneId}`) {
+      return Response.json({ ok: true, applied: false, session: result.session })
+    }
+    const runtime = await applyRuntimeSettings(sessionId, { ...(model ? { model } : {}), effort, thinking })
+    if (!runtime.ok) return Response.json({ ok: false, error: runtime.error }, { status: 409 })
+    return Response.json({ ok: true, applied: true, session: result.session, stats: getSessionStats(sessionId) })
+  }
 
   if (body.engine === 'selfhost') {
     const personaId = String(body.persona_id || '').trim()

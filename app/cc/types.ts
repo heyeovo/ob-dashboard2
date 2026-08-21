@@ -3,6 +3,17 @@
 
 export type CcRole = 'user' | 'assistant'
 export type CcEngine = 'cc' | 'selfhost'
+
+export type CcProUsage = {
+  available: boolean
+  stale: boolean
+  experimental: true
+  subscriptionType: string
+  fiveHour: { utilization: number | null; resetsAt: string | null } | null
+  sevenDay: { utilization: number | null; resetsAt: string | null } | null
+  updatedAt: string
+  note: string
+}
 export type CcToolStatus = 'running' | 'completed' | 'error' | 'denied'
 
 export type CcDeliveryState =

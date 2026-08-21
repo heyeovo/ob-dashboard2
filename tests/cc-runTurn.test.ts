@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
-import { dropSession } from '@/app/lib/ccSession'
+import { dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import type { TurnConfig } from '@/app/lib/cc/ccOptions'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -28,12 +28,15 @@ const sdk = vi.hoisted(() => ({
   script: [] as unknown[],
   queryCalls: 0,
   promptIterators: [] as AsyncIterator<SDKUserMessage>[],
+  queryOptions: [] as Array<Record<string, unknown>>,
+  usageResult: null as Record<string, unknown> | null,
 }))
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-  query: ({ prompt }: { prompt: AsyncIterable<SDKUserMessage> }) => {
+  query: ({ prompt, options }: { prompt: AsyncIterable<SDKUserMessage>; options: Record<string, unknown> }) => {
     sdk.queryCalls += 1
     sdk.promptIterators.push(prompt[Symbol.asyncIterator]())
+    sdk.queryOptions.push(options)
     const iter = makeIterator(sdk.script)
     return {
       [Symbol.asyncIterator]: () => iter,
@@ -41,6 +44,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
       setModel: async () => undefined,
       applyFlagSettings: async () => undefined,
       setMaxThinkingTokens: async () => undefined,
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => sdk.usageResult,
     }
   },
 }))
@@ -85,14 +89,14 @@ vi.mock('@/app/lib/havenRecall', () => ({
 
 /* ── 消息构造 ── */
 
-function initMsg(): SDKMessage {
+function initMsg(sessionId = 'cc-test-1'): SDKMessage {
   return {
     type: 'system',
     subtype: 'init',
     claude_code_version: 'test',
     model: 'test-model',
     cwd: 'C:\\Users\\test',
-    session_id: 'cc-test-1',
+    session_id: sessionId,
   } as SDKMessage
 }
 
@@ -170,6 +174,7 @@ function makeConfig(overrides: Partial<TurnConfig> = {}): TurnConfig {
     webSettings: DEFAULT_WEB_SETTINGS,
     permanentAllowRules: [],
     cred: 'api',
+    laneId: 'api:default',
     envOverrides: {},
     model: 'test-model',
     providerId: '',
@@ -231,6 +236,14 @@ beforeEach(() => {
   sdk.script = []
   sdk.queryCalls = 0
   sdk.promptIterators = []
+  sdk.queryOptions = []
+  sdk.usageResult = {
+    subscription_type: 'pro', rate_limits_available: true,
+    rate_limits: {
+      five_hour: { utilization: 25, resets_at: '2026-08-22T08:00:00Z' },
+      seven_day: { utilization: 40, resets_at: '2026-08-29T08:00:00Z' },
+    },
+  }
   recall.run.mockReset()
   recall.run.mockResolvedValue({
     ok: false,
@@ -319,13 +332,14 @@ describe('runTurn：普通回复', () => {
     expect(done.data.interrupted).toBeUndefined()
   })
 
-  it('把 cc 游标后的 selfhost 原文一次性补入可 resume 的 SDK 消息，并记录补齐元数据', async () => {
+  it('把当前 CC 线路游标后的其他线路原文一次性补入 SDK 消息，并记录补齐元数据', async () => {
     turns.getSession.mockResolvedValueOnce({
       ok: true,
       found: true,
       session: {
         profile_id: 'default', session_id: 'ob2-test-session', persona_id: 'ombre', title: '',
         local_engine_preference: 'cc', selfhost_overrides: {}, cc_seen_round_id: 1,
+        cc_lanes: { 'api:default': { seen_round_id: 1 } },
         state_version: 0, deleted_at: null, updated_at: '',
       },
       bucketExclusionIds: ['already-recalled', 'created-here'],
@@ -360,7 +374,6 @@ describe('runTurn：普通回复', () => {
     expect(content.lastIndexOf('你好')).toBeGreaterThan(content.indexOf('</上次聊到这里>'))
     expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
       afterRoundId: 1,
-      source: 'selfhost',
       includeRaw: true,
     }))
     expect(recall.run).toHaveBeenCalledWith('你好', expect.objectContaining({
@@ -369,6 +382,7 @@ describe('runTurn：普通回复', () => {
     const recInput = turns.recordTurn.mock.calls[0][0]
     expect(recInput.userText).toBe('你好')
     expect(recInput.raw.continuity).toEqual({
+      lane_id: 'api:default',
       injected_turns: 1,
       after_round_id: 1,
       through_round_id: 2,
@@ -377,13 +391,14 @@ describe('runTurn：普通回复', () => {
     expect(handle.events.find(event => event.event === 'done')?.data.continuity_turns).toBe(1)
   })
 
-  it('Haven 游标已经推进后不再重复补入同一批 selfhost 轮次', async () => {
+  it('当前 CC 线路游标已经推进后不再重复补入同一批轮次', async () => {
     turns.getSession.mockResolvedValueOnce({
       ok: true,
       found: true,
       session: {
         profile_id: 'default', session_id: 'ob2-test-session', persona_id: 'ombre', title: '',
         local_engine_preference: 'cc', selfhost_overrides: {}, cc_seen_round_id: 3,
+        cc_lanes: { 'api:default': { seen_round_id: 3 } },
         state_version: 1, deleted_at: null, updated_at: '',
       },
       bucketExclusionIds: [], error: '', httpStatus: 200,
@@ -395,9 +410,97 @@ describe('runTurn：普通回复', () => {
     expect(String(pushed.value?.message.content || '')).not.toContain('<上次聊到这里>')
     expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
       afterRoundId: 3,
-      source: 'selfhost',
     }))
     expect(turns.recordTurn.mock.calls[0][0].raw.continuity).toBeUndefined()
+  })
+
+  it('Pro 与 API 使用独立 Claude session，切回 API 只 resume 自己的接回点', async () => {
+    const apiConfig = makeConfig({
+      cred: 'api', laneId: 'api:provider-a', providerId: 'provider-a',
+      envOverrides: { baseUrl: 'https://api.example.test', authToken: 'api-secret' },
+    })
+    await driveTurn([initMsg('api-native-session'), textDelta('API 一'), resultMsg()], {
+      config: apiConfig,
+    }).promise
+
+    const proConfig = makeConfig({
+      cred: 'subscription', laneId: 'subscription', providerId: '', envOverrides: {},
+    })
+    await driveTurn([initMsg('pro-native-session'), textDelta('Pro 一'), resultMsg()], {
+      requestId: 'request-pro-1', expectedLastRoundId: 1, config: proConfig,
+    }).promise
+
+    await driveTurn([initMsg('api-native-session-2'), textDelta('API 二'), resultMsg()], {
+      requestId: 'request-api-2', expectedLastRoundId: 2, config: apiConfig,
+    }).promise
+
+    expect(sdk.queryCalls).toBe(3)
+    expect(sdk.queryOptions[0].resume).toBeUndefined()
+    expect(sdk.queryOptions[1].resume).toBeUndefined()
+    expect(sdk.queryOptions[2].resume).toBe('api-native-session')
+    expect((sdk.queryOptions[1].env as Record<string, string>).ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+    expect((sdk.queryOptions[2].env as Record<string, string>).ANTHROPIC_AUTH_TOKEN).toBe('api-secret')
+  })
+
+  it('CC 线路只补最终文字，不同步 thinking 或附件内容', async () => {
+    turns.getSession.mockResolvedValueOnce({
+      ok: true, found: true,
+      session: {
+        profile_id: 'default', session_id: 'ob2-test-session', persona_id: 'ombre', title: '',
+        local_engine_preference: 'cc', selfhost_overrides: {}, cc_seen_round_id: 1,
+        cc_lanes: { 'api:default': { seen_round_id: 1 } },
+        state_version: 0, deleted_at: null, updated_at: '',
+      },
+      bucketExclusionIds: [], error: '', httpStatus: 200,
+    })
+    turns.listAllTurns.mockResolvedValueOnce({
+      ok: true,
+      turns: [{
+        id: 2, session_id: 'ob2-test-session', round_id: 2, created_at: '',
+        user_text: '请看那张图', assistant_text: '图里是一只猫', model: '', client: '',
+        route: '/api/cc-chat', source: 'cc',
+        raw_json: JSON.stringify({
+          cred_mode: 'subscription', thinking: '不能跨线路同步的推理',
+          attachments: [{ filename: 'secret-image.png', extracted_text: '附件正文' }],
+        }),
+      }],
+      error: '',
+    })
+
+    const handle = driveTurn([initMsg(), textDelta('接住了'), resultMsg()])
+    await handle.promise
+    const pushed = await sdk.promptIterators[0].next()
+    const content = String(pushed.value?.message.content || '')
+    expect(content).toContain('请看那张图')
+    expect(content).toContain('图里是一只猫')
+    expect(content).not.toContain('不能跨线路同步的推理')
+    expect(content).not.toContain('secret-image.png')
+    expect(content).not.toContain('附件正文')
+  })
+
+  it('在线 Pro session 可读取五小时和周额度，API session 不冒充订阅额度', async () => {
+    const proConfig = makeConfig({
+      cred: 'subscription', laneId: 'subscription', providerId: '', envOverrides: {},
+    })
+    await driveTurn([initMsg('pro-usage-session'), textDelta('Pro'), resultMsg()], {
+      config: proConfig,
+    }).promise
+    const usage = await getProUsage('ob2-test-session')
+    expect(usage).toMatchObject({
+      available: true,
+      stale: false,
+      subscriptionType: 'pro',
+      fiveHour: { utilization: 25 },
+      sevenDay: { utilization: 40 },
+    })
+
+    await driveTurn([initMsg('api-after-pro'), textDelta('API'), resultMsg()], {
+      requestId: 'request-api-after-pro', expectedLastRoundId: 1,
+      config: makeConfig({ cred: 'api', laneId: 'api:default' }),
+    }).promise
+    const stale = await getProUsage('ob2-test-session')
+    expect(stale.available).toBe(true)
+    expect(stale.stale).toBe(true)
   })
 
   it('把现有 hold 新建结果里的桶 ID 写进本窗口排除账本', async () => {

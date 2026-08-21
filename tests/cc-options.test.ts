@@ -19,6 +19,7 @@ function config(mode: TurnConfig['mode']): TurnConfig {
     webSettings: DEFAULT_WEB_SETTINGS,
     permanentAllowRules: [],
     cred: 'api',
+    laneId: 'api:default',
     envOverrides: {},
     model: 'test-model',
     providerId: '',

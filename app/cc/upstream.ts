@@ -125,8 +125,8 @@ export function draftProvider(): CcProvider {
 /**
  * 一个窗口当前用哪套上游。发给 /api/cc-chat 的就是这个形状。
  *
- * ⚠️ kind / providerId 只在**新建对话**时生效（子进程的环境变量是启动时定死的）。
- * model / effort / thinking 可以中途换（SDK 的 setModel / setMaxThinkingTokens）。
+ * kind / providerId 改变时会切换到独立 Claude 原生 session；model / effort / thinking
+ * 在当前线路中可中途修改（SDK 的 setModel / setMaxThinkingTokens）。
  */
 export type CcUpstreamPick = {
   kind: CcProviderKind

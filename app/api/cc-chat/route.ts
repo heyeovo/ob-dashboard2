@@ -15,6 +15,7 @@ import { isCcMode, type CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings } from '@/app/cc/webSettings'
 import {
   clearWriteDirs,
+  ccLaneId,
   sdkModelForProvider,
   setWriteDirs,
   type TurnConfig,
@@ -71,7 +72,7 @@ type ChatBody = {
   mode?: string
   /** 新窗口是否冻结并注入最近三天日回顾；默认开启。 */
   include_daily_review?: boolean
-  /** 5.2：哪个中转站（api 时）。只在第一轮生效，服务端翻成 baseUrl + token */
+  /** API 线路的中转站；切换时进入该 provider 独立的 Claude session。 */
   provider_id?: string
   /** 5.2：reasoning effort。第一轮生效，之后走 /api/cc-session-settings 中途改 */
   effort?: string
@@ -90,6 +91,8 @@ type ChatBody = {
    * 只在服务端进程已丢（重启 / 回收）时用来接回上下文；已有活进程则忽略。
    */
   resume_hint?: string
+  /** 旧会话过渡用：只有 hint 所属线路与本轮实际线路一致时才允许 resume。 */
+  resume_hint_lane_id?: string
   /**
    * 5.5 换窗 handoff：只随新会话首条带一次，之后几轮不带。
    *   handoff_bucket_ids   勾选的记忆桶 id → 服务端拉正文，拼进 systemPrompt（全程稳定、可缓存）
@@ -260,6 +263,12 @@ async function loadTurnInputs(body: ChatBody) {
   const sessionSnapshot = await getConversationSession(body.session_id || '', {
     includeBucketExclusions: true,
   })
+  const laneId = ccLaneId(cred, providerId)
+  const laneState = sessionSnapshot.session?.cc_lanes?.[laneId]
+  const persistedResumeHint = String(laneState?.cc_session_id || '').trim()
+  const legacyResumeHint = String(body.resume_hint_lane_id || '').trim() === laneId
+    ? String(body.resume_hint || '').trim()
+    : ''
   let personaAppend = buildPersonaAppend(
     persona,
     sessionSnapshot.session?.prompt_module_overrides,
@@ -328,6 +337,7 @@ async function loadTurnInputs(body: ChatBody) {
     webSettings,
     permanentAllowRules,
     cred,
+    laneId,
     envOverrides,
     model,
     providerId,
@@ -338,6 +348,7 @@ async function loadTurnInputs(body: ChatBody) {
     persona,
     config,
     sessionSnapshot,
+    resumeHint: persistedResumeHint || legacyResumeHint,
     handoff: {
       bucketIds: handoffBucketIds,
       turns: Number(body.handoff_turns) || 0,
@@ -394,7 +405,7 @@ export async function POST(request: NextRequest) {
     return replayCcTurn(existing.turn, body)
   }
 
-  const { persona, config, handoff, sessionSnapshot } = await loadTurnInputs(body)
+  const { persona, config, handoff, sessionSnapshot, resumeHint } = await loadTurnInputs(body)
   let attachments
   try {
     attachments = await resolveAttachments(attachmentIds, sessionId)
@@ -453,7 +464,7 @@ export async function POST(request: NextRequest) {
         send,
         close,
         stamp,
-        resumeHint: body.resume_hint,
+        resumeHint,
       })
     },
   })

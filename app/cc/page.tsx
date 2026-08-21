@@ -876,6 +876,8 @@ export default function CcChatPage() {
           contextMaxTokens={ctxMax}
           upstream={chat.upstream}
           pick={chat.pick}
+          proUsage={chat.proUsage}
+          onRefreshProUsage={() => void chat.refreshProUsage()}
           onPick={next => void chat.applyPick(next)}
           web={chat.webSettings}
           onWebChange={chat.applyWebSettings}

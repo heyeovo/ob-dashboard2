@@ -45,6 +45,18 @@ export type HavenConversationSession = {
   title: string
   local_engine_preference: 'cc' | 'selfhost'
   selfhost_overrides: Record<string, unknown>
+  cc_overrides: {
+    active_cred?: 'subscription' | 'api'
+    subscription?: { model?: unknown; effort?: unknown; thinking?: unknown }
+    api?: { provider_id?: unknown; model?: unknown; effort?: unknown; thinking?: unknown }
+  }
+  cc_lanes: Record<string, {
+    cred?: unknown
+    provider_id?: unknown
+    model?: unknown
+    cc_session_id?: unknown
+    seen_round_id?: unknown
+  }>
   prompt_module_overrides: Record<string, boolean>
   mode: 'chat' | 'work'
   daily_review_enabled: boolean
@@ -501,6 +513,7 @@ export async function patchConversationSessionState(input: {
   personaId: string
   localEnginePreference?: 'cc' | 'selfhost'
   selfhostOverrides?: Record<string, unknown>
+  ccOverrides?: HavenConversationSession['cc_overrides']
   promptModuleOverrides?: Record<string, boolean>
   mode?: 'chat' | 'work'
   dailyReviewEnabled?: boolean
@@ -512,13 +525,14 @@ export async function patchConversationSessionState(input: {
   if (!sessionId || !personaId) {
     return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
   }
-  if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.promptModuleOverrides === undefined
+  if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.ccOverrides === undefined && input.promptModuleOverrides === undefined
     && input.mode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot) {
     return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
   const body: Record<string, unknown> = { session_id: sessionId, persona_id: personaId }
   if (input.localEnginePreference) body.local_engine_preference = input.localEnginePreference
   if (input.selfhostOverrides) body.selfhost_overrides = input.selfhostOverrides
+  if (input.ccOverrides) body.cc_overrides = input.ccOverrides
   if (input.promptModuleOverrides !== undefined) body.prompt_module_overrides = input.promptModuleOverrides
   if (input.mode !== undefined) body.mode = input.mode
   if (input.dailyReviewEnabled !== undefined) body.daily_review_enabled = input.dailyReviewEnabled
