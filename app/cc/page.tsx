@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import CcComposer from './CcComposer'
-import CcMessageRow from './CcMessageRow'
+import CcMessageRow, { ccMessageVisibleText } from './CcMessageRow'
 import { CcPermCard } from './CcPermCard'
 import CcPersonaDialog from './CcPersonaDialog'
 import CcPersonaRail from './CcPersonaRail'
@@ -283,6 +283,45 @@ export default function CcChatPage() {
   const [activeSearchMessageId, setActiveSearchMessageId] = useState('')
   const [activeHistorical, setActiveHistorical] = useState<HistoricalConversation | null>(null)
   const [forwardedBlock, setForwardedBlock] = useState<{ title: string; lines: string[] } | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
+
+  const startSelecting = (messageId?: string) => {
+    setSelectMode(true)
+    setSelectedMessageIds(messageId ? new Set([messageId]) : new Set())
+  }
+
+  const stopSelecting = () => {
+    setSelectMode(false)
+    setSelectedMessageIds(new Set())
+  }
+
+  const toggleSelectedMessage = (messageId: string) => {
+    setSelectedMessageIds(current => {
+      const next = new Set(current)
+      if (next.has(messageId)) next.delete(messageId)
+      else next.add(messageId)
+      return next
+    })
+  }
+
+  const forwardSelectedMessages = () => {
+    const lines = chat.messages.flatMap(message => {
+      if (!selectedMessageIds.has(message.id)) return []
+      const text = ccMessageVisibleText(message).trim()
+      if (!text) return []
+      const messagePersona = message.personaId
+        ? people.personas.find(persona => persona.id === message.personaId)
+        : undefined
+      const speaker = message.role === 'user'
+        ? '小羊'
+        : messagePersona?.name || people.active.name
+      return [`[${new Date(message.createdAt).toLocaleString('zh-CN')}] ${speaker}: ${text}`]
+    })
+    if (lines.length === 0) return
+    setForwardedBlock({ title: chat.sessionTitle || '当前聊天', lines })
+    stopSelecting()
+  }
 
   const searchVisible = searchOpen && searchSessionId === chat.sessionId
   const normalizedSearchQuery = searchVisible ? searchQuery.trim().toLocaleLowerCase() : ''
@@ -355,10 +394,19 @@ export default function CcChatPage() {
 
   const header = (
     <div className="cc-topbar flex items-center gap-2 px-3 py-2.5 md:gap-3 md:px-4">
+      {selectMode ? (
+        <div className="flex min-w-0 flex-1 items-center justify-between md:hidden">
+          <button type="button" onClick={stopSelecting} className="rounded-full px-2 py-1 text-xs text-[var(--color-text-secondary)]">
+            取消
+          </button>
+          <span className="text-xs font-medium text-[var(--color-text-primary)]">已选 {selectedMessageIds.size} 条</span>
+          <span className="w-10" aria-hidden="true" />
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() => setRailOpen(true)}
-        className="rounded-[var(--radius-md)] px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] md:hidden"
+        className={`${selectMode ? 'hidden' : ''} rounded-[var(--radius-md)] px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] md:hidden`}
       >
         对话
       </button>
@@ -366,7 +414,7 @@ export default function CcChatPage() {
       <button
         type="button"
         onClick={() => setPersonaRailOpen(true)}
-        className="cc-persona-chip"
+        className={`${selectMode ? 'hidden md:flex' : ''} cc-persona-chip`}
         title="切换协作者"
       >
         <span className="cc-avatar" style={{ background: people.active.tint }} aria-hidden="true">
@@ -375,7 +423,7 @@ export default function CcChatPage() {
         {/* 手机上只留头像，名字省掉 —— 顶栏横向就那么点地方 */}
         <span className="hidden max-w-[7rem] truncate md:inline">{people.active.name}</span>
       </button>
-      <div className="min-w-0 flex-1">
+      <div className={`${selectMode ? 'hidden md:block' : ''} min-w-0 flex-1`}>
         <button
           type="button"
           title="点击修改窗口标题"
@@ -439,7 +487,14 @@ export default function CcChatPage() {
         </div>
       </div>
       {/* 右：本窗口设置（这一个对话的模型/供应商）+ 协作者设置（跨对话的人设） */}
-      <div className="flex shrink-0 items-center gap-1 md:gap-2">
+      <div className={`${selectMode ? 'hidden md:flex' : 'flex'} shrink-0 items-center gap-1 md:gap-2`}>
+        <button
+          type="button"
+          onClick={() => selectMode ? stopSelecting() : startSelecting()}
+          className="hidden rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex"
+        >
+          {selectMode ? '取消选择' : '选择'}
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -580,6 +635,10 @@ export default function CcChatPage() {
                 onClearAttachment={chat.clearAttachment}
                 searchQuery={normalizedSearchQuery}
                 searchActive={m.id === shownActiveSearchMessageId}
+                selectMode={selectMode}
+                selected={selectedMessageIds.has(m.id)}
+                onToggleSelect={toggleSelectedMessage}
+                onStartSelect={startSelecting}
               />
             ),
           )
@@ -614,6 +673,22 @@ export default function CcChatPage() {
   const composer = (
     <div className="px-4 pb-4 pt-1">
       <div className="mx-auto max-w-[var(--chat-assistant-width)]">
+        {selectMode ? (
+          <div className="flex items-center justify-between rounded-2xl border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-4 py-2.5 shadow-sm">
+            <span className="text-xs text-[var(--color-primary)]">
+              {selectedMessageIds.size > 0 ? `已选 ${selectedMessageIds.size} 条消息` : '请选择消息'}
+            </span>
+            <button
+              type="button"
+              disabled={selectedMessageIds.size === 0}
+              onClick={forwardSelectedMessages}
+              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+            >
+              转发所选消息
+            </button>
+          </div>
+        ) : (
+          <>
         {searchVisible ? (
           <div className="mb-2">
             <div className="flex items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-white px-2 py-1.5 shadow-sm">
@@ -719,6 +794,8 @@ export default function CcChatPage() {
             onClearForward={() => setForwardedBlock(null)}
           />
         )}
+          </>
+        )}
       </div>
     </div>
   )
@@ -733,16 +810,19 @@ export default function CcChatPage() {
       onPick={id => {
         setRailOpen(false)
         setActiveHistorical(null)
+        stopSelecting()
         void chat.switchSession(id)
       }}
       onPickHistorical={conversation => {
         setRailOpen(false)
         setActiveHistorical(conversation)
+        stopSelecting()
         closeSearch()
       }}
       onNew={() => {
         setRailOpen(false)
         setActiveHistorical(null)
+        stopSelecting()
         setHandoffOpen({ fromSessionId: null })
       }}
       onRename={chat.renameSession}
