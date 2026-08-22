@@ -371,6 +371,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
           : []
         : [
             ...READ_ONLY_TOOLS,
+            'Bash',
             ...(webSettings.searchEnabled ? ['WebSearch'] : []),
           ],
     // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
@@ -611,13 +612,9 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
               }
             }
 
-            // 写文件 + Bash：强制走「问一次」。
-            //
-            // ⚠️ 光靠 permissionMode: 'default' + 不放进 allowedTools 是不够的 ——
-            // SDK 会直接放行某些看起来安全的写操作和”无害”命令（echo/ls）。
-            // 在 hook 层显式 'ask'，所有写操作和命令都会走到 canUseTool 弹卡片，
-            // SDK 的细粒度”本次对话 / 始终允许”规则才能真正生效。
-            if (WRITE_TOOLS.includes(String(toolName)) || EXEC_TOOLS.includes(String(toolName))) {
+            // 写文件：强制走「问一次」，让 canUseTool 弹卡片。
+            // Bash 已加入 allowedTools，由 SDK 内置安全检查决定是否拦截。
+            if (WRITE_TOOLS.includes(String(toolName))) {
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
