@@ -4,6 +4,15 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## CC 工作窗口协作规范
+
+- 先讨论后动手：高风险改动（多文件、数据结构、持久化、部署）先列 3-5 行清单等确认再改；单文件小改可以直接执行
+- 不扩散修改范围：用户说改什么就只改什么，不顺手重构相邻代码
+- 排障用假设→验证：开始调查前先写假设和验证方法，被推翻再换方向
+- 结论导向：交付结论和操作路径，不贴大段代码走查
+- Git：CC 可直接 commit + push；VPS 部署仍需用户手动到 Coolify 触发
+- 换窗交接：一个窗口一个问题，换窗前更新 handoff
+
 ## cc 数据持久化规则
 
 新增 cc 配置或用户数据前，必须先判断它是否需要跨重启、跨部署或跨设备保留。
