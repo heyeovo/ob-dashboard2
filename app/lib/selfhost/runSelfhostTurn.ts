@@ -567,7 +567,7 @@ export function createSelfhostStream(
         }))
         // 与 cc 保持一致：当前时间只进入本轮模型请求，不改浏览器气泡或 Haven user_text。
         // 预算和实际请求必须使用同一份文本，避免隐藏时间绕过上下文上限计算。
-        const currentUserText = `${request.text}\n\n${beijingRuntimeContext()}`
+        const currentUserText = `${request.text}\n\n${beijingRuntimeContext(new Date(), request.sessionId)}`
         const currentAttachments = prepared.currentAttachments || []
         const history = historyWithPersistedRecall(prepared.history)
         const replayableImageTurnIds = new Set(

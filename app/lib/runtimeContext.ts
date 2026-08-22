@@ -16,16 +16,18 @@ const BEIJING_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   weekday: 'long',
 })
 
-export function beijingRuntimeContext(now = new Date()): string {
+export function beijingRuntimeContext(now = new Date(), sessionId?: string): string {
   const parts = Object.fromEntries(
     BEIJING_TIME_FORMATTER.formatToParts(now).map(part => [part.type, part.value]),
   )
   const timestamp = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
   const weekday = BEIJING_WEEKDAY_FORMATTER.format(now)
+  const sessionLine = sessionId ? `当前会话 session_id：${sessionId}\n` : ''
   return (
     '<运行时信息>\n' +
     `当前北京时间：${timestamp}（${weekday}，UTC+08:00，Asia/Shanghai）。` +
     '这是系统提供的隐藏时间，不是用户消息。\n' +
+    sessionLine +
     '</运行时信息>'
   )
 }
