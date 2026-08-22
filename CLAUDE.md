@@ -59,7 +59,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 **导航系：**
 | 文件 | 说明 |
 |------|------|
-| `SideRail.tsx` | 桌面端左侧竖栏（4.6 导航重构后取代原 NavBar，`md:flex`；次级入口含 Polaris、日记、轨迹） |
+| `SideRail.tsx` | 桌面端左侧竖栏（4.6 导航重构后取代原 NavBar，`md:flex`；次级入口含日记、轨迹） |
 | `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar（主页/记忆库/聊天/工作台/设置，聊天为中间突起） |
 | `MemoryViewSwitch.tsx` | 记忆页时间线/记忆格/待处理三格切换 |
 | `MobileShell.tsx` | 全站布局容器：桌面端渲染 `SideRail`（fixed），手机端加底部安全间距 |
@@ -148,7 +148,6 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `settings/recall/page.tsx` | 召回设置 |
 | `settings/automation/page.tsx` | 自动化与状态；日回顾、weekly journey 分别持久选择 API / Claude Pro；轨迹设置显示并编辑“已梳理至”和服务端计算的连续读取范围，积压最多 31 天分段；另支持排程、手动候选、实际线路与分类失败，仍无自动写入或自动 fallback |
 | `persona/page.tsx` | 用户画像（状态/编辑/事实/提案 tabs） |
-| `polaris/page.tsx` | Polaris 聊天历史导入 |
 | `impressions/page.tsx` | 日回顾月历：同时标记日回顾/记忆事件，查看与微调日回顾，并保留当天记忆事件及详情抽屉 |
 | `care/page.tsx` | 照顾备忘 + 待办 |
 | `breath-sim/page.tsx` | 5 Tab：Pipeline / 即时模拟 / 检索评分旋钮 / 命中统计 / 检索追溯 |
@@ -174,7 +173,7 @@ cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes
 ## 导航架构
 
 ### 桌面端
-`SideRail` 左侧竖栏（fixed，`md:flex`）：上半段 = 手机 5 Tab 同批入口（主页/记忆库/聊天/工作台/设置），下半段 = 次级入口（Polaris/日记/轨迹）。
+`SideRail` 左侧竖栏（fixed，`md:flex`）：上半段 = 手机 5 Tab 同批入口（主页/记忆库/聊天/工作台/设置），下半段 = 次级入口（日记/轨迹）。
 
 ### 手机端
 `BottomTabBar` 固定在底部（`md:hidden`），5 个 Tab：
@@ -184,7 +183,7 @@ cc 生态的客户端库：`ccMcp*`（`ccMcp.ts`/`ccMcpDiscovery.ts`/`ccMcpTypes
 - 工作台 → `/workbench`
 - 设置 → `/settings`
 
-次级入口（Polaris/日记/轨迹）收在主页入口区。所有页面通过 `MobileShell` 包裹。
+次级入口（日记/轨迹）收在主页入口区。所有页面通过 `MobileShell` 包裹。
 
 ---
 

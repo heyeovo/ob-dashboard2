@@ -1,7 +1,7 @@
 // Ombre Brain Service Worker
 // Strategy: cache immutable code assets only. Private HTML and images always use the network.
 
-const CACHE_VERSION = 'ombre-v2'
+const CACHE_VERSION = 'ombre-v3'
 const STATIC_CACHE = `ombre-static-${CACHE_VERSION}`
 
 // --- Install: pre-cache nothing (Next.js has its own hashed filenames) ---
@@ -40,10 +40,9 @@ self.addEventListener('fetch', (event) => {
     return // let browser handle normally
   }
 
-  // Static assets (Next.js + Polaris): Cache First
+  // Static assets: Cache First
   if (
     url.pathname.startsWith('/_next/static/') ||
-    url.pathname.startsWith('/chat-app/assets/') ||
     url.pathname.match(/\.(js|css|woff2?|ttf|otf)$/)
   ) {
     event.respondWith(cacheFirst(request, STATIC_CACHE))

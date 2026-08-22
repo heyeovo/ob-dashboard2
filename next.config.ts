@@ -23,11 +23,6 @@ const nextConfig: NextConfig = {
     '172.30.*.*',
     '172.31.*.*',
   ],
-  async rewrites() {
-    return [
-      { source: '/chat-app', destination: '/chat-app/index.html' },
-    ]
-  },
   async headers() {
     return [
       {

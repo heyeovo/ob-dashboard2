@@ -36,8 +36,6 @@ import { requiresImportedSessionHandoff } from './engineRouting'
 // 记忆：UserPromptSubmit hook → Haven /api/hook/recall（服务端做，前端只看结果）。
 // 存储：每轮写回 Haven 的 conversation_turns，跟 Polaris 同一张表。
 // 权限：第一版只读（Read / Grep / Glob）。写文件和跑命令等第 5 步的 diff 批准。
-//
-// ⚠️ / 上那个 Polaris iframe 保持不动，两个并存。等这页用顺了再谈谁接管 /。
 
 function formatCost(usd: number) {
   if (!usd) return '$0'

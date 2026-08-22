@@ -9,8 +9,6 @@ import HomeToolDrawer from './components/HomeToolDrawer'
  *
  * 新架构里聊天是中心、记忆库是底座，Home 是门面：记忆向的入口 + 以后的美化内容
  * （纪念日之类）。第一版**只做入口卡片，不做内容展示**（用户定的）。
- *
- * 原来挂在这里的 Polaris iframe 搬到了 /polaris，入口在下面「其它」那一组。
  */
 
 const MEMORY_ENTRIES: Entry[] = [
@@ -30,7 +28,6 @@ const TOOL_ENTRIES: Entry[] = [
 ]
 
 const OTHER_ENTRIES: Entry[] = [
-  { key: 'polaris', label: 'Polaris', desc: '旧聊天前端，暂时并存', href: '/polaris' },
   { key: 'settings', label: '设置', desc: '导入 / 回收站 / 各项配置', href: '/settings' },
   { key: 'mcp', label: '工具 · MCP', desc: '工具清单与 MCP 服务', href: '/tools/mcp' },
   { key: 'usage', label: '用量统计', desc: '订阅额度与花费', todo: true },

@@ -80,7 +80,6 @@ describe('Dashboard proxy protection', () => {
     }
     for (const path of [
       '/private.png',
-      '/chat-app/index.html',
       '/api/auth/logout',
       '/api/mcp-relay/private',
       '/api/provider-relay',

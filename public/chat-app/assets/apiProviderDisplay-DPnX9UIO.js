@@ -1,1 +1,0 @@
-import"./assetStore-D5gexnoN.js";import{h as t}from"./main-5MspIEwC.js";import"./capacitor-DubZox_v.js";const e="Polaris 内置线路";function l(i){return t(i).route.isBuiltInTrial}function u(i,r="还没填模型",o=e){return l(i)?o:i.model||r}export{u as g,l as i};
