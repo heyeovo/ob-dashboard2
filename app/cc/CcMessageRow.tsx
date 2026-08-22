@@ -5,6 +5,7 @@ import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcMessage, CcProcessEvent, CcToolEvent } from './types'
 import { modelLabel } from './upstream'
+import { parseForwardedMessage } from './forwardedMessage'
 
 // 一条消息。
 //
@@ -72,7 +73,7 @@ type Props = {
 }
 
 export function ccMessageVisibleText(message: CcMessage): string {
-  if (message.role === 'user') return message.text
+  if (message.role === 'user') return parseForwardedMessage(message.text)?.userText ?? message.text
   const process = message.process || []
   if (!process.some(event => event.type === 'text')) return message.text
   const last = process.at(-1)
@@ -106,6 +107,7 @@ export default function CcMessageRow({
   const [usageOpen, setUsageOpen] = useState(false)
   // 上下文预算是诊断信息，收进图标浮窗，避免元数据行过长。
   const [contextOpen, setContextOpen] = useState(false)
+  const [forwardOpen, setForwardOpen] = useState(false)
   const timerRef = useRef<number | null>(null)
   const suppressClickRef = useRef(false)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -138,6 +140,20 @@ export default function CcMessageRow({
     }
   }, [contextOpen])
 
+  useEffect(() => {
+    if (!forwardOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setForwardOpen(false)
+    }
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [forwardOpen])
+
   useEffect(
     () => () => {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current)
@@ -157,6 +173,8 @@ export default function CcMessageRow({
   }
 
   const canSelect = Boolean(ccMessageVisibleText(message).trim()) && !message.streaming
+  const forwardedMessage = isUser ? parseForwardedMessage(message.text) : null
+  const userText = forwardedMessage?.userText ?? message.text
 
   const beginLongPress = (pointerType: string) => {
     if (pointerType === 'mouse' || !canSelect) return
@@ -195,6 +213,7 @@ export default function CcMessageRow({
   /* ---------- 用户侧 ---------- */
   if (isUser) {
     return (
+      <>
       <div
         className={`cc-row flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
         data-role="user"
@@ -292,9 +311,43 @@ export default function CcMessageRow({
                 ))}
               </div>
             ) : null}
-            {message.text ? (
+            {forwardedMessage ? (
+              <button
+                type="button"
+                className="w-full max-w-[360px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left"
+                aria-label={`查看转发消息：${forwardedMessage.title}`}
+                onClick={event => {
+                  event.stopPropagation()
+                  if (suppressClickRef.current) {
+                    suppressClickRef.current = false
+                    return
+                  }
+                  if (selectMode && canSelect) {
+                    onToggleSelect?.(message.id)
+                    return
+                  }
+                  setForwardOpen(true)
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-[11px] font-medium text-[var(--color-text-secondary)]">
+                    转发 · {forwardedMessage.title} · {forwardedMessage.lines.length} 条
+                  </span>
+                  <span className="shrink-0 text-sm text-[var(--color-text-tertiary)]" aria-hidden="true">›</span>
+                </div>
+                <div className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                  {forwardedMessage.lines.slice(0, 3).map((line, index) => (
+                    <div key={index} className="truncate">{line}</div>
+                  ))}
+                  {forwardedMessage.lines.length > 3 ? (
+                    <div>…还有 {forwardedMessage.lines.length - 3} 条</div>
+                  ) : null}
+                </div>
+              </button>
+            ) : null}
+            {userText ? (
               <div className="cc-bubble-user">
-                {highlightSearchText(message.text, searchQuery, searchActive)}
+                {highlightSearchText(userText, searchQuery, searchActive)}
               </div>
             ) : null}
           </div>
@@ -304,8 +357,8 @@ export default function CcMessageRow({
               <button
                 type="button"
                 className="cc-popmenu-item"
-                onClick={() => {
-                  onCopy(message.text)
+                  onClick={() => {
+                  onCopy(userText)
                   setMenuOpen(false)
                 }}
               >
@@ -316,7 +369,7 @@ export default function CcMessageRow({
                   type="button"
                   className="cc-popmenu-item"
                   onClick={() => {
-                    onEditAndResend(message.text)
+                    onEditAndResend(userText)
                     setMenuOpen(false)
                   }}
                 >
@@ -329,6 +382,35 @@ export default function CcMessageRow({
           <div className="cc-row-actions cc-time mt-1 pr-1">{formatTime(message.createdAt)}</div>
         </div>
       </div>
+      {forwardedMessage && forwardOpen ? (
+        <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
+          <button type="button" aria-label="关闭转发消息" onClick={() => setForwardOpen(false)} className="absolute inset-0" />
+          <div role="dialog" aria-modal="true" aria-label={`转发消息：${forwardedMessage.title}`} className="cc-modal cc-tool-sheet relative flex max-h-[86vh] w-full max-w-2xl flex-col">
+            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-black/10 sm:hidden" />
+            <div className="flex items-start gap-3 border-b border-[var(--color-border-light)] px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-[15px] font-semibold text-[var(--color-text-heading)]">
+                  转发 · {forwardedMessage.title}
+                </h2>
+                <p className="mt-1 text-[10px] text-[var(--color-text-disabled)]">共 {forwardedMessage.lines.length} 条消息</p>
+              </div>
+              <button type="button" onClick={() => setForwardOpen(false)} className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">
+                关闭
+              </button>
+            </div>
+            <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
+              <div className="space-y-3">
+                {forwardedMessage.lines.map((line, index) => (
+                  <div key={index} className="whitespace-pre-wrap break-words rounded-xl bg-[var(--color-surface-secondary)] px-3 py-2.5 text-[12.5px] leading-relaxed text-[var(--color-text-secondary)]">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      </>
     )
   }
 
