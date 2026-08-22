@@ -82,6 +82,8 @@ type Props = {
   sending: boolean
   disabled?: boolean
   placeholder?: string
+  forwardedBlock?: { title: string; lines: string[] } | null
+  onClearForward?: () => void
 }
 
 export default function CcComposer({
@@ -101,6 +103,8 @@ export default function CcComposer({
   sending,
   disabled,
   placeholder,
+  forwardedBlock,
+  onClearForward,
 }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -272,6 +276,22 @@ export default function CcComposer({
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
     >
+      {forwardedBlock && forwardedBlock.lines.length > 0 ? (
+        <div className="mb-2 ml-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
+              转发 · {forwardedBlock.title} · {forwardedBlock.lines.length} 条
+            </span>
+            <button type="button" onClick={onClearForward} className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]" aria-label="移除转发">×</button>
+          </div>
+          <div className="mt-1 max-h-24 overflow-y-auto text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+            {forwardedBlock.lines.slice(0, 3).map((line, i) => (
+              <div key={i} className="truncate">{line}</div>
+            ))}
+            {forwardedBlock.lines.length > 3 ? <div>…还有 {forwardedBlock.lines.length - 3} 条</div> : null}
+          </div>
+        </div>
+      ) : null}
       {attachments.length > 0 || uploading ? (
         <div className="mb-2 flex flex-wrap gap-2 pl-10">
           {attachments.map(attachment => (

@@ -282,6 +282,7 @@ export default function CcChatPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearchMessageId, setActiveSearchMessageId] = useState('')
   const [activeHistorical, setActiveHistorical] = useState<HistoricalConversation | null>(null)
+  const [forwardedBlock, setForwardedBlock] = useState<{ title: string; lines: string[] } | null>(null)
 
   const searchVisible = searchOpen && searchSessionId === chat.sessionId
   const normalizedSearchQuery = searchVisible ? searchQuery.trim().toLocaleLowerCase() : ''
@@ -697,7 +698,13 @@ export default function CcChatPage() {
             sessionId={chat.sessionId}
             value={chat.draft}
             onChange={chat.setDraft}
-            onSubmit={attachments => chat.send(chat.draft, undefined, attachments)}
+            onSubmit={attachments => {
+              const prefix = forwardedBlock
+                ? `<转发的消息 来源="${forwardedBlock.title}">\n${forwardedBlock.lines.join('\n---\n')}\n</转发的消息>\n\n`
+                : ''
+              chat.send(prefix + chat.draft, undefined, attachments)
+              setForwardedBlock(null)
+            }}
             onStop={chat.stop}
             onClearKind={chat.clearAttachmentsByKind}
             activeImageCount={chat.activeImageCount}
@@ -708,6 +715,8 @@ export default function CcChatPage() {
             onPromptModuleToggle={chat.setPromptModuleEnabled}
             onError={chat.setError}
             sending={chat.sending}
+            forwardedBlock={forwardedBlock}
+            onClearForward={() => setForwardedBlock(null)}
           />
         )}
       </div>
@@ -788,6 +797,7 @@ export default function CcChatPage() {
                 conversation={activeHistorical}
                 persona={people.active}
                 onOpenRail={() => setRailOpen(true)}
+                onForward={block => { setForwardedBlock(block); setActiveHistorical(null) }}
               />
             ) : (
               <>
