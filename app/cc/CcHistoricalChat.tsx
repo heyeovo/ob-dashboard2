@@ -51,11 +51,13 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
   const [queryDraft, setQueryDraft] = useState('')
   const [query, setQuery] = useState('')
   const [selectMode, setSelectMode] = useState(false)
-  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const longPressTimerRef = useRef<number | null>(null)
+  const suppressClickRef = useRef(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const toggleSelect = (id: number) => {
+  const toggleSelect = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -64,10 +66,37 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
     })
   }
 
+  const clearLongPress = () => {
+    if (longPressTimerRef.current === null) return
+    window.clearTimeout(longPressTimerRef.current)
+    longPressTimerRef.current = null
+  }
+
+  useEffect(() => () => clearLongPress(), [])
+
+  const beginLongPress = (id: string, pointerType: string) => {
+    if (pointerType === 'mouse') return
+    clearLongPress()
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null
+      suppressClickRef.current = true
+      setSelectMode(true)
+      setSelected(new Set([id]))
+    }, 360)
+  }
+
+  const clickMessage = (id: string) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    if (selectMode) toggleSelect(id)
+  }
+
   const doForward = () => {
     if (!onForward || selected.size === 0) return
     const picked = messages
-      .filter(m => selected.has(m.id))
+      .filter(m => selected.has(`historical-${m.id}`))
       .map(m => {
         const speaker = m.role === 'user' ? '小羊' : '言之'
         return `[${formatMessageTime(m.created_at)}] ${speaker}: ${m.text}`
@@ -160,6 +189,16 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="cc-topbar flex items-center gap-2 px-3 py-2.5 md:gap-3 md:px-4">
+        {selectMode ? (
+          <div className="flex min-w-0 flex-1 items-center justify-between md:hidden">
+            <button type="button" onClick={() => { setSelectMode(false); setSelected(new Set()) }} className="rounded-full px-2 py-1 text-xs text-[var(--color-text-secondary)]">
+              取消
+            </button>
+            <span className="text-xs font-medium text-[var(--color-text-primary)]">已选 {selected.size} 条</span>
+            <span className="w-10" aria-hidden="true" />
+          </div>
+        ) : null}
+        <div className={`${selectMode ? 'hidden md:flex' : 'flex'} min-w-0 flex-1 items-center gap-2`}>
         <button
           type="button"
           onClick={onOpenRail}
@@ -180,16 +219,17 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
             历史聊天 · {formatDate(conversation.first_at)} · {conversation.message_count} 条消息
           </div>
         </div>
+        </div>
         {onForward ? (
           <button
             type="button"
             onClick={() => { setSelectMode(prev => !prev); setSelected(new Set()) }}
-            className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] ${selectMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'}`}
+            className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] md:inline-flex ${selectMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'}`}
           >
             {selectMode ? '取消选择' : '选择'}
           </button>
         ) : (
-          <span className="shrink-0 rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)]">
+          <span className="hidden shrink-0 rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex">
             只读
           </span>
         )}
@@ -208,14 +248,23 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
               {query ? '这个窗口里没有匹配的原文' : '这个历史窗口没有可显示的消息'}
             </div>
           ) : (
-            uiMessages.map((message, idx) => (
-              <div key={message.id} className={`flex items-start gap-2 ${selectMode ? 'cursor-pointer' : ''}`} onClick={selectMode ? () => toggleSelect(messages[idx].id) : undefined}>
+            uiMessages.map(message => (
+              <div
+                key={message.id}
+                className={`flex items-start gap-2 ${selectMode ? 'cursor-pointer' : ''}`}
+                onClick={() => clickMessage(message.id)}
+                onPointerDown={event => beginLongPress(message.id, event.pointerType)}
+                onPointerUp={clearLongPress}
+                onPointerCancel={clearLongPress}
+                onPointerMove={clearLongPress}
+                onPointerLeave={clearLongPress}
+              >
                 {selectMode ? (
                   <div className="flex shrink-0 pt-1">
                     <input
                       type="checkbox"
-                      checked={selected.has(messages[idx].id)}
-                      onChange={() => toggleSelect(messages[idx].id)}
+                      checked={selected.has(message.id)}
+                      onChange={() => toggleSelect(message.id)}
                       onClick={e => e.stopPropagation()}
                       className="size-4 accent-[var(--color-primary)]"
                     />
@@ -252,13 +301,14 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
       </div>
 
       <div className="px-4 pb-4 pt-1">
-        {selectMode && selected.size > 0 ? (
+        {selectMode ? (
           <div className="mx-auto flex max-w-[var(--chat-assistant-width)] items-center justify-between rounded-2xl border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-4 py-2.5 shadow-sm">
-            <span className="text-xs text-[var(--color-primary)]">已选 {selected.size} 条消息</span>
+            <span className="text-xs text-[var(--color-primary)]">{selected.size > 0 ? `已选 ${selected.size} 条消息` : '请选择消息'}</span>
             <button
               type="button"
               onClick={doForward}
-              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-white"
+              disabled={selected.size === 0}
+              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
             >
               转发到当前对话
             </button>

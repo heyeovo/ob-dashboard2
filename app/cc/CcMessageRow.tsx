@@ -65,6 +65,18 @@ type Props = {
   onClearAttachment?: (messageId: string, attachmentId: string) => void
   searchQuery?: string
   searchActive?: boolean
+  selectMode?: boolean
+  selected?: boolean
+  onToggleSelect?: (messageId: string) => void
+  onStartSelect?: (messageId: string) => void
+}
+
+export function ccMessageVisibleText(message: CcMessage): string {
+  if (message.role === 'user') return message.text
+  const process = message.process || []
+  if (!process.some(event => event.type === 'text')) return message.text
+  const last = process.at(-1)
+  return last?.type === 'text' ? last.text : ''
 }
 
 export default function CcMessageRow({
@@ -78,6 +90,10 @@ export default function CcMessageRow({
   onClearAttachment,
   searchQuery = '',
   searchActive = false,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
+  onStartSelect,
 }: Props) {
   const isUser = message.role === 'user'
   const shownModel = modelLabel(message.model || '')
@@ -91,6 +107,7 @@ export default function CcMessageRow({
   // 上下文预算是诊断信息，收进图标浮窗，避免元数据行过长。
   const [contextOpen, setContextOpen] = useState(false)
   const timerRef = useRef<number | null>(null)
+  const suppressClickRef = useRef(false)
   const frameRef = useRef<HTMLDivElement>(null)
   const contextRef = useRef<HTMLDivElement>(null)
 
@@ -139,11 +156,58 @@ export default function CcMessageRow({
     setMenuOpen(true)
   }
 
+  const canSelect = Boolean(ccMessageVisibleText(message).trim()) && !message.streaming
+
+  const beginLongPress = (pointerType: string) => {
+    if (pointerType === 'mouse' || !canSelect) return
+    clearTimer()
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      if (onStartSelect) {
+        suppressClickRef.current = true
+        setMenuOpen(false)
+        onStartSelect(message.id)
+        return
+      }
+      openMenu()
+    }, LONG_PRESS_MS)
+  }
+
+  const handleSelectClick = () => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    if (selectMode && canSelect) onToggleSelect?.(message.id)
+  }
+
+  const selectionCheckbox = selectMode && canSelect ? (
+    <input
+      type="checkbox"
+      checked={selected}
+      readOnly
+      tabIndex={-1}
+      aria-label={selected ? '取消选择这条消息' : '选择这条消息'}
+      className="mt-1 size-4 shrink-0 accent-[var(--color-primary)]"
+    />
+  ) : null
+
   /* ---------- 用户侧 ---------- */
   if (isUser) {
     return (
-      <div className="cc-row flex flex-col gap-1" data-role="user" data-message-id={message.id}>
-        <div ref={frameRef} className="flex flex-col items-end">
+      <div
+        className={`cc-row flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
+        data-role="user"
+        data-message-id={message.id}
+        onClick={handleSelectClick}
+        onPointerDown={event => beginLongPress(event.pointerType)}
+        onPointerUp={clearTimer}
+        onPointerCancel={clearTimer}
+        onPointerMove={clearTimer}
+        onPointerLeave={clearTimer}
+      >
+        {selectionCheckbox}
+        <div ref={frameRef} className="min-w-0 flex-1 flex flex-col items-end">
           <div
             className="flex max-w-full flex-col items-end gap-2"
             onContextMenu={e => {
@@ -152,12 +216,8 @@ export default function CcMessageRow({
               openMenu()
             }}
             onPointerDown={e => {
-              if (e.pointerType === 'mouse') return
-              clearTimer()
-              timerRef.current = window.setTimeout(() => {
-                timerRef.current = null
-                openMenu()
-              }, LONG_PRESS_MS)
+              if (onStartSelect) return
+              beginLongPress(e.pointerType)
             }}
             onPointerUp={clearTimer}
             onPointerCancel={clearTimer}
@@ -311,8 +371,19 @@ export default function CcMessageRow({
   const usage = message.usage || null
 
   return (
-    <div className="cc-row flex flex-col" data-role="assistant" data-message-id={message.id}>
-      <div className="cc-assistant-block">
+    <div
+      className={`cc-row flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
+      data-role="assistant"
+      data-message-id={message.id}
+      onClick={handleSelectClick}
+      onPointerDown={event => beginLongPress(event.pointerType)}
+      onPointerUp={clearTimer}
+      onPointerCancel={clearTimer}
+      onPointerMove={clearTimer}
+      onPointerLeave={clearTimer}
+    >
+      {selectionCheckbox}
+      <div className="cc-assistant-block min-w-0 flex-1">
         {/* 名字行：头像 + 名字 + 时间，最右是这一轮的召回按钮 */}
         <div className="cc-namerow">
           <span className="cc-avatar" style={{ background: persona.tint }} aria-hidden="true">
