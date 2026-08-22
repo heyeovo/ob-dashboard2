@@ -1458,6 +1458,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           onDone: payload => {
             const usage = normalizeProviderUsage(payload.usage)
             const interrupted = payload.interrupted === true
+            const interruptedReason = payload.interrupted_reason === 'pro_limit'
+              ? 'pro_limit'
+              : interrupted
+                ? 'user_stop'
+                : undefined
             const replayed = payload.idempotent_replay === true
             const continuityTurns = Number(payload.continuity_turns || 0)
             const roundId = Number(payload.round_id || 0)
@@ -1470,10 +1475,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 streaming: false,
                 usage: usage || m.usage,
                 interrupted: interrupted || m.interrupted,
+                interruptedReason: interruptedReason || m.interruptedReason,
                 thinkingMs: thinkingDuration(process) || undefined,
                 roundId: roundId || m.roundId,
                 deliveryState: replayed ? 'replayed' : 'saved',
-                deliveryNote: replayed
+                deliveryNote: interruptedReason === 'pro_limit'
+                  ? m.text.trim()
+                    ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
+                    : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
+                  : replayed
                   ? '已从 Haven 幂等重放，没有重复生成或写入。'
                   : continuityTurns > 0
                     ? `已向当前 CC 线路补入其他线路期间 ${continuityTurns} 轮对话；已保存到 Haven`

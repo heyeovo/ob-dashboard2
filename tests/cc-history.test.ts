@@ -122,6 +122,30 @@ describe('ccHistory：旧历史兼容', () => {
     expect(parsed.process).toEqual([])
   })
 
+  it('Pro 额度在输出前耗尽：刷新后保留用户消息并还原失败状态卡', () => {
+    const messages = turnsToMessages([turn({
+      id: 10,
+      user_text: '最后一条不能丢',
+      assistant_text: '',
+      raw_json: JSON.stringify({
+        engine: 'cc',
+        interrupted: true,
+        interrupted_reason: 'pro_limit',
+      }),
+    })])
+
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toMatchObject({ role: 'user', text: '最后一条不能丢' })
+    expect(messages[1]).toMatchObject({
+      role: 'assistant',
+      text: '',
+      interrupted: true,
+      interruptedReason: 'pro_limit',
+      deliveryState: 'saved',
+      deliveryNote: 'Pro 额度不足，未生成回复；用户消息已保存到 Haven',
+    })
+  })
+
   it('把旧 selfhost additional_context 恢复成可查看的召回模块', () => {
     const parsed = parseTurnRaw(JSON.stringify({
       recall: {

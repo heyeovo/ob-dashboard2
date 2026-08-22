@@ -422,7 +422,9 @@ export default function CcMessageRow({
 
         {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
         {message.interrupted && !message.streaming ? (
-          <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">已停止生成</div>
+          <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+            {message.interruptedReason === 'pro_limit' ? 'Pro 额度中断' : '已停止生成'}
+          </div>
         ) : null}
 
         {!message.streaming && (message.engine || shownModel || message.deliveryNote) ? (

@@ -26,6 +26,8 @@ export type CcDeliveryState =
   | 'conflict'
   | 'stopped'
 
+export type CcInterruptedReason = 'user_stop' | 'pro_limit'
+
 export type CcAttachment = {
   id: string
   sessionId: string
@@ -121,6 +123,8 @@ export type CcMessage = {
   streaming?: boolean
   /** 这一轮被用户点了「停止」—— 保留已生成的字，显示「已停止」 */
   interrupted?: boolean
+  /** 手动停止与 Pro 额度中断要显示不同状态；老历史缺失时按手动停止兼容。 */
+  interruptedReason?: CcInterruptedReason
   createdAt: number
   /** 来自 Haven 的历史消息（不可重发/编辑） */
   fromHistory?: boolean

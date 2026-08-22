@@ -7,6 +7,7 @@
 import type {
   CcMessage,
   CcAttachment,
+  CcInterruptedReason,
   CcProcessEvent,
   CcRecallInfo,
   CcRecallModule,
@@ -148,6 +149,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
   recall: CcRecallInfo | null
   usage: CcTurnUsage | null
   interrupted: boolean
+  interruptedReason: CcInterruptedReason | undefined
   engine: 'cc' | 'selfhost' | undefined
   providerId: string
   providerLabel: string
@@ -161,6 +163,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
     recall: null,
     usage: null,
     interrupted: false,
+    interruptedReason: undefined,
     engine: undefined,
     providerId: '',
     providerLabel: '',
@@ -235,6 +238,11 @@ export function parseTurnRaw(rawJson: string | undefined): {
     usage: normalizeProviderUsage(raw.usage),
     // 被中断的半截回复。老消息没有这个字段 —— 一律不算中断。
     interrupted: raw.interrupted === true,
+    interruptedReason: raw.interrupted_reason === 'pro_limit'
+      ? 'pro_limit'
+      : raw.interrupted === true
+        ? 'user_stop'
+        : undefined,
     engine: raw.engine === 'selfhost' ? 'selfhost' : raw.engine ? 'cc' : undefined,
     providerId: typeof raw.provider_id === 'string' ? raw.provider_id : '',
     providerLabel: typeof raw.provider_label === 'string' ? raw.provider_label : '',
@@ -346,8 +354,8 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         fromHistory: true,
       })
     }
-    if (t.assistant_text?.trim()) {
-      const extra = parseTurnRaw(t.raw_json)
+    const extra = parseTurnRaw(t.raw_json)
+    if (t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit') {
       out.push({
         id: `h${t.id}a`,
         role: 'assistant',
@@ -361,6 +369,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         recall: extra.recall,
         usage: extra.usage,
         interrupted: extra.interrupted || undefined,
+        interruptedReason: extra.interruptedReason,
         engine: extra.engine || (t.source === 'selfhost' ? 'selfhost' : t.source === 'cc' ? 'cc' : undefined),
         providerId: extra.providerId || undefined,
         providerLabel: extra.providerLabel || undefined,
@@ -368,6 +377,11 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         context: extra.context,
         roundId: t.round_id,
         deliveryState: 'saved',
+        deliveryNote: extra.interruptedReason === 'pro_limit'
+          ? t.assistant_text?.trim()
+            ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
+            : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
+          : undefined,
       })
     }
   }

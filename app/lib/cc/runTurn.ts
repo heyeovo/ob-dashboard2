@@ -55,6 +55,17 @@ import type { HavenPersona } from '@/app/lib/havenPersonas'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 import type { ResolvedAttachment } from '@/app/lib/havenAttachments'
 
+function isSubscriptionLimitError(
+  msg: SDKMessage & { errors?: string[] },
+  cred: TurnConfig['cred'],
+  rejectedEventSeen: boolean,
+): boolean {
+  if (cred !== 'subscription') return false
+  if (rejectedEventSeen) return true
+  const detail = Array.isArray(msg.errors) ? msg.errors.join('\n') : ''
+  return /(?:rate|usage) limit|limit (?:has been )?reached|reached (?:your )?limit|credits_required/i.test(detail)
+}
+
 /* ── 这个会话的两个召回开关 ── */
 
 // 为什么要一张表：hooks 的闭包只在会话**第一轮**建起来，直接捕获变量的话，
@@ -573,6 +584,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     let thinkingText = ''
     /** 用户点了「停止」：这一轮按中断收尾，保留已生成的字，写库打标记 */
     let interrupted = false
+    let interruptedReason: 'user_stop' | 'pro_limit' | '' = ''
+    let rejectedRateLimitSeen = false
     let resultInfo: Record<string, unknown> | null = null
     let initInfo: Record<string, unknown> | null = null
     /** 这一轮的用量，消息右下角那个面板要显示 */
@@ -605,6 +618,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           provider_id: config.providerId,
           provider_label: config.providerLabel || (config.cred === 'subscription' ? 'Claude 订阅' : ''),
         })
+        continue
+      }
+
+      if (msg.type === 'rate_limit_event') {
+        if (msg.rate_limit_info.status === 'rejected') rejectedRateLimitSeen = true
         continue
       }
 
@@ -706,11 +724,19 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           duration_ms: msg.duration_ms,
           total_cost_usd: msg.total_cost_usd,
           usage: msg.usage,
+          errors: 'errors' in msg ? msg.errors : undefined,
+          terminal_reason: msg.terminal_reason,
         }
         // 用户点了停止：result 可能是 error subtype 或带 aborted 标记，
         // 都不当错误处理 —— 已生成的字照常留，写库时打 interrupted 标记。
         if (consumeTurnInterrupted(sessionId)) {
           interrupted = true
+          interruptedReason = 'user_stop'
+        } else if (isSubscriptionLimitError(msg, config.cred, rejectedRateLimitSeen)) {
+          // Pro 额度耗尽等价于一种可保存的中断终态：保留用户原话和已生成正文。
+          // 即使一个字都没生成，也写一条空 assistant 的轮次，刷新后能还原失败状态。
+          interrupted = true
+          interruptedReason = 'pro_limit'
         } else if (msg.is_error || msg.subtype !== 'success') {
           const failed = msg as SDKMessage & { result?: string }
           throw new Error(
@@ -759,7 +785,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // sessionId 跟 hook 用的是同一个值（同一个变量），不会分组串。
     let storeInfo: Record<string, unknown>
     let personaInfo: Record<string, unknown> = { ok: false, updated: false, skipped: 'conversation_not_stored' }
-    if (assistantText.trim()) {
+    if (assistantText.trim() || interruptedReason === 'pro_limit') {
       const recalledMemoryIds = Array.isArray(bucket.recallInfo?.recalled_ids)
         ? bucket.recallInfo.recalled_ids.map(String)
         : []
@@ -798,6 +824,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           cc_lane_id: config.laneId,
           // 用户点了停止：这一轮是被打断的半截回复。读历史时前端靠它显示「已停止」
           interrupted: interrupted || undefined,
+          interrupted_reason: interruptedReason || undefined,
           // 5.2：这一轮是闲聊还是工作、走的哪个中转站、用量明细。
           // 历史消息读回来时右下角那个 token 面板靠 usage 重建。
           mode: config.mode,
@@ -918,6 +945,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       stats: getSessionStats(sessionId),
       elapsed_ms: Date.now() - startedAt,
       interrupted: interrupted || undefined,
+      interrupted_reason: interruptedReason || undefined,
       request_id: requestId,
       round_id: storedRoundId,
       turn_id: Number(storeInfo.turn_id || 0),

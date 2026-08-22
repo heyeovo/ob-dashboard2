@@ -134,11 +134,13 @@ function toolResult(id: string, content: unknown, isError = false): SDKMessage {
 function resultMsg(
   subtype = 'success',
   isError = false,
+  errors: string[] = [],
 ): SDKMessage {
   return {
     type: 'result',
     subtype,
     is_error: isError,
+    errors,
     num_turns: 1,
     duration_ms: 100,
     total_cost_usd: 0.01,
@@ -719,6 +721,47 @@ describe('runTurn：中止与失败', () => {
     expect(result2.ok).toBe(true)
     expect(result2.phase).toBe('succeeded')
     expect(turns.recordTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it('Pro 中途命中额度：保存用户消息、半截回复和额度中断标记', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      textDelta('已经生成的半截'),
+      {
+        type: 'rate_limit_event',
+        rate_limit_info: { status: 'rejected', rateLimitType: 'five_hour' },
+      } as SDKMessage,
+      resultMsg('error_during_execution', true, ['Usage limit reached']),
+    ], { config: makeConfig({ cred: 'subscription' }) })
+    const result = await handle.promise
+
+    expect(result).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(turns.recordTurn).toHaveBeenCalledTimes(1)
+    expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({
+      userText: '你好',
+      assistantText: '已经生成的半截',
+      raw: { interrupted: true, interrupted_reason: 'pro_limit' },
+    })
+    expect(handle.events.find(event => event.event === 'done')?.data).toMatchObject({
+      interrupted: true,
+      interrupted_reason: 'pro_limit',
+    })
+  })
+
+  it('Pro 在输出前命中额度：仍保存用户消息和空回复状态', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      resultMsg('error_during_execution', true, ["You've reached your usage limit"]),
+    ], { config: makeConfig({ cred: 'subscription' }) })
+    const result = await handle.promise
+
+    expect(result).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(turns.recordTurn).toHaveBeenCalledTimes(1)
+    expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({
+      userText: '你好',
+      assistantText: '',
+      raw: { interrupted: true, interrupted_reason: 'pro_limit' },
+    })
   })
 
   it('生成后发生 409：只发结构化 error，不发 done，并收掉私有 cc 进程', async () => {
