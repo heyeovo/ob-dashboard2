@@ -821,6 +821,7 @@ export default function CcChatPage() {
             conversation={activeHistorical}
             persona={people.active}
             onOpenRail={() => setRailOpen(true)}
+            onForward={block => { setForwardedBlock(block); setActiveHistorical(null) }}
           />
         ) : (
           <>
