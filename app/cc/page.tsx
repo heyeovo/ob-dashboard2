@@ -65,6 +65,7 @@ function CcScrollJumps({
   lastMessageId,
   lastMessageVersion,
   pendingCount,
+  onOpenSearch,
 }: {
   children: ReactNode
   sessionId: string
@@ -72,6 +73,7 @@ function CcScrollJumps({
   lastMessageId: string
   lastMessageVersion: string
   pendingCount: number
+  onOpenSearch?: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null)
@@ -236,8 +238,22 @@ function CcScrollJumps({
           </button>
         </div>
       ) : null}
-      {canGoUp || canGoDown ? (
+      {onOpenSearch || canGoUp || canGoDown ? (
         <div className="pointer-events-none absolute bottom-3 right-4 z-20 flex flex-col gap-1.5">
+          {onOpenSearch ? (
+            <button
+              type="button"
+              aria-label="搜索当前对话"
+              title="搜索当前对话"
+              onClick={onOpenSearch}
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-white/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95 md:hidden"
+            >
+              <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="10.8" cy="10.8" r="6.3" />
+                <path d="m15.5 15.5 4 4" />
+              </svg>
+            </button>
+          ) : null}
           {canGoUp ? (
             <button
               type="button"
@@ -311,6 +327,8 @@ export default function CcChatPage() {
     })
   }
 
+  const [pendingForward, setPendingForward] = useState<{ title: string; lines: string[] } | null>(null)
+
   const forwardSelectedMessages = () => {
     const lines = chat.messages.flatMap(message => {
       if (!selectedMessageIds.has(message.id)) return []
@@ -325,7 +343,16 @@ export default function CcChatPage() {
       return [`[${new Date(message.createdAt).toLocaleString('zh-CN')}] ${speaker}: ${text}`]
     })
     if (lines.length === 0) return
-    setForwardedBlock({ title: chat.sessionTitle || '当前聊天', lines })
+    setPendingForward({ title: chat.sessionTitle || '当前聊天', lines })
+  }
+
+  const confirmForwardTo = (targetSessionId: string) => {
+    if (!pendingForward) return
+    if (targetSessionId !== chat.sessionId) {
+      void chat.switchSession(targetSessionId)
+    }
+    setForwardedBlock(pendingForward)
+    setPendingForward(null)
     stopSelecting()
   }
 
@@ -557,6 +584,24 @@ export default function CcChatPage() {
         </button>
         <button
           type="button"
+          onClick={() => selectMode ? stopSelecting() : startSelecting()}
+          aria-label={selectMode ? '取消选择' : '选择消息'}
+          title={selectMode ? '取消选择' : '选择消息'}
+          className="cc-icon-btn md:hidden"
+        >
+          {selectMode ? (
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          )}
+        </button>
+        <button
+          type="button"
           onClick={() => {
             setSearchSessionId(chat.sessionId)
             setSearchQuery('')
@@ -565,7 +610,7 @@ export default function CcChatPage() {
           }}
           aria-label="搜索当前对话"
           title="搜索当前对话"
-          className="cc-icon-btn"
+          className="cc-icon-btn hidden md:flex"
         >
           <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
             <circle cx="10.8" cy="10.8" r="6.3" />
@@ -634,6 +679,13 @@ export default function CcChatPage() {
       ].join(':')
     : ''
 
+  const openSearchFromFloat = useCallback(() => {
+    setSearchSessionId(chat.sessionId)
+    setSearchQuery('')
+    setActiveSearchMessageId('')
+    setSearchOpen(true)
+  }, [chat.sessionId])
+
   const thread = () => (
     <CcScrollJumps
       sessionId={chat.sessionId}
@@ -641,6 +693,7 @@ export default function CcChatPage() {
       lastMessageId={lastMessageId}
       lastMessageVersion={lastMessageVersion}
       pendingCount={chat.pending.length}
+      onOpenSearch={openSearchFromFloat}
     >
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
         {!chat.historyLoading && chat.messages.length > 0 && chat.hasEarlierHistory ? (
@@ -698,7 +751,6 @@ export default function CcChatPage() {
                 selectMode={selectMode}
                 selected={selectedMessageIds.has(m.id)}
                 onToggleSelect={toggleSelectedMessage}
-                onStartSelect={startSelecting}
               />
             ),
           )
@@ -1067,6 +1119,66 @@ export default function CcChatPage() {
       {/* 召回详情：按模块分段。⚠️ 各模块的正文服务端还没回传（见组件内注释） */}
       {recallDetail ? (
         <CcRecallDialog message={recallDetail} onClose={() => setRecallDetail(null)} />
+      ) : null}
+
+      {/* 转发目标选择 */}
+      {pendingForward ? (
+        <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+          <button
+            type="button"
+            aria-label="取消转发"
+            onClick={() => { setPendingForward(null); stopSelecting() }}
+            className="absolute inset-0"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="选择转发目标"
+            className="cc-modal cc-tool-sheet relative flex max-h-[70vh] w-full max-w-md flex-col"
+          >
+            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-black/10 sm:hidden" />
+            <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-4">
+              <h2 className="text-[15px] font-semibold text-[var(--color-text-heading)]">
+                转发到…
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setPendingForward(null); stopSelecting() }}
+                className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+              >
+                取消
+              </button>
+            </div>
+            <div className="no-scrollbar flex-1 overflow-y-auto px-3 py-3">
+              <div className="space-y-1">
+                {chat.sessions
+                  .filter(s => !s.deleted_at)
+                  .map(s => (
+                    <button
+                      key={s.session_id}
+                      type="button"
+                      onClick={() => confirmForwardTo(s.session_id)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-surface-secondary)] ${s.session_id === chat.sessionId ? 'bg-[var(--color-primary-soft)]' : ''}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
+                          {s.title || '新对话'}
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-[var(--color-text-disabled)]">
+                          {s.turn_count} 轮
+                          {s.session_id === chat.sessionId ? ' · 当前窗口' : ''}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-sm text-[var(--color-text-tertiary)]" aria-hidden="true">›</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <div className="border-t border-[var(--color-border-light)] px-5 py-3 text-center text-[10px] text-[var(--color-text-disabled)]">
+              已选 {pendingForward.lines.length} 条消息
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   )
