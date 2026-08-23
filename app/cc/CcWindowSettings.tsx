@@ -198,20 +198,22 @@ export default function CcWindowSettings({
                 </span>
               </div>
             ) : null}
-            {shownContextTokens > 0 ? (
-              <>
-                <div className={ROW}>
-                  <span className={KEY}>{stats.live ? '当前窗口 Context' : '上次模型调用 Context'}</span>
-                  <span className={VAL}>
+            <div className={ROW}>
+              <span className={KEY}>{shownContextTokens > 0 ? (stats.live ? '当前窗口 Context' : '上次模型调用 Context') : 'Context'}</span>
+              <span className={VAL}>
+                {shownContextTokens > 0 ? (
+                  <>
                     {fmtK(shownContextTokens)}
                     {shownContextMax > 0 ? ` / ${fmtK(shownContextMax)} · ${contextPercent.toFixed(0)}%` : ''}
-                  </span>
-                </div>
+                  </>
+                ) : '待确认'}
+              </span>
+            </div>
+            {shownContextTokens > 0 ? (
                 <div className={`${HINT} text-right`}>
                   {contextStale ? '刚换模型，等待下一次模型调用确认' : contextState}
                   {shownContextMax > 0 ? ` · 约剩 ${fmtK(Math.max(0, shownContextMax - shownContextTokens))}` : ''}
                 </div>
-              </>
             ) : null}
             {stats.lastCompaction ? (
               <div className={ROW}>
@@ -225,9 +227,11 @@ export default function CcWindowSettings({
             <div className={ROW}>
               <span className={KEY}>Prompt cache</span>
               <span className={VAL}>
-                {cacheSystem
+                {stats.cacheRefreshedAt
+                  ? cacheSystem
                   ? `系统约 ${cacheSystem} · ${cacheSession ? `会话约 ${cacheSession}` : '会话已过期'}`
-                  : '尚无活跃缓存'}
+                  : '已过期'
+                  : '待确认'}
               </span>
             </div>
             <div className={ROW}>

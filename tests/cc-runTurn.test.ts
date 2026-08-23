@@ -394,6 +394,10 @@ describe('runTurn：普通回复', () => {
       source: 'stream',
     })
     expect(turns.recordTurn.mock.calls[0][0].raw.context_snapshot).toMatchObject({ totalTokens: 525 })
+    expect(turns.recordTurn.mock.calls[0][0].raw.cache_snapshot).toMatchObject({
+      systemTtlMs: 3_600_000,
+      sessionTtlMs: 300_000,
+    })
     expect(handle.events.find(event => event.event === 'done')?.data.usage).toMatchObject({
       inputTokens: 10,
       cacheReadTokens: 5,

@@ -285,6 +285,12 @@ export default function CcChatPage() {
   const [forwardedBlock, setForwardedBlock] = useState<{ title: string; lines: string[] } | null>(null)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
+  const [cacheClock, setCacheClock] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCacheClock(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const startSelecting = (messageId?: string) => {
     setSelectMode(true)
@@ -375,10 +381,6 @@ export default function CcChatPage() {
     void navigator.clipboard?.writeText(text)
   }
 
-  // 缓存两档分开显示。5 分钟一过不是「缓存没了」—— 系统提示那几万字走 1h 档还在，
-  // 以前一刀切按 5 分钟显示，比真实情况悲观，会催着人赶紧说话。
-  const cacheSession = formatCacheLeft(chat.stats.cacheRemainingMs)
-  const cacheSystem = formatCacheLeft(chat.stats.cacheSystemRemainingMs)
   // 顶部显示实际在跑的那个模型（stats.model 来自服务端）；进程没起来就显示这一窗选的
   const modelCandidates = modelsFor(chat.upstream, chat.pick.kind, chat.pick.providerId)
   const shownModel = modelLabel(
@@ -401,6 +403,29 @@ export default function CcChatPage() {
   const ctxMax = contextSnapshot?.maxTokens
     || latestLaneTurn?.context?.modelContextLimit
     || chat.stats.contextMaxTokens
+  const cacheSnapshot = chat.stats.live
+    ? chat.stats.cacheRefreshedAt
+      ? {
+          refreshedAt: chat.stats.cacheRefreshedAt,
+          systemTtlMs: 60 * 60 * 1000,
+          sessionTtlMs: 5 * 60 * 1000,
+        }
+      : null
+    : latestLaneTurn?.cacheSnapshot || null
+  const cacheAge = cacheSnapshot ? Math.max(0, cacheClock - cacheSnapshot.refreshedAt) : 0
+  const cacheSystemRemainingMs = cacheSnapshot
+    ? Math.max(0, cacheSnapshot.systemTtlMs - cacheAge)
+    : 0
+  const cacheSessionRemainingMs = cacheSnapshot
+    ? Math.max(0, cacheSnapshot.sessionTtlMs - cacheAge)
+    : 0
+  const cacheSystem = formatCacheLeft(cacheSystemRemainingMs)
+  const cacheSession = formatCacheLeft(cacheSessionRemainingMs)
+  const cacheLabel = !cacheSnapshot
+    ? '缓存待确认'
+    : cacheSystem
+      ? `缓存 ${cacheSystem}${cacheSession ? ` / 会话 ${cacheSession}` : ' / 会话已过期'}`
+      : '缓存已过期'
   const laneCompactions = chat.messages.flatMap(message => {
     if (message.laneId !== currentLaneId) return []
     const standalone = message.compaction ? [message.compaction] : []
@@ -418,17 +443,12 @@ export default function CcChatPage() {
     contextSnapshot,
     contextTokens: ctxTokens,
     contextMaxTokens: ctxMax,
+    cacheRefreshedAt: cacheSnapshot?.refreshedAt || 0,
+    cacheRemainingMs: cacheSessionRemainingMs,
+    cacheSystemRemainingMs,
     lastCompaction: latestCompaction,
     compactionCount: Math.max(chat.stats.compactionCount, compactionCount),
   }
-  const contextPercent = ctxMax > 0 ? ctxTokens / ctxMax * 100 : 0
-  const contextTone = chat.stats.compacting
-    ? 'border-amber-300 bg-amber-50 text-amber-800'
-    : contextPercent >= 90
-      ? 'border-rose-300 bg-rose-50 text-rose-700'
-      : contextPercent >= 80
-        ? 'border-amber-300 bg-amber-50 text-amber-800'
-        : 'border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'
   const totalChars = chat.messages.reduce((n, m) => n + m.text.length, 0)
 
   const header = (
@@ -493,6 +513,18 @@ export default function CcChatPage() {
           ) : null}
           <span>·</span>
           <span>{chat.stats.turnCount} 轮</span>
+          {chat.effectiveEngine === 'cc' ? (
+            <>
+              <span>·</span>
+              <span title={contextSnapshot ? '最近一次真实模型请求确认的当前窗口 Context' : '下一次真实模型调用后确认'}>
+                {chat.stats.compacting
+                  ? 'Context 压缩中'
+                  : ctxTokens > 0
+                    ? `${formatTokens(ctxTokens)}${ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}`
+                    : 'Context 待确认'}
+              </span>
+            </>
+          ) : null}
           {/* 花费只在这个进程还活着时显示。读回来的历史算不出钱 ——
               不同中转站、不同模型价格不一样，要一张价格表，见 HANDOFF 待办。
               这时候显示 $0 是在骗人，不如不显示。 */}
@@ -502,14 +534,13 @@ export default function CcChatPage() {
               <span>{formatCost(chat.stats.totalCostUsd)}</span>
             </>
           ) : null}
-          {cacheSystem ? (
+          {chat.effectiveEngine === 'cc' ? (
             <>
               <span>·</span>
               <span
                 title="Anthropic prompt cache 两档：系统提示 + 工具说明进 1 小时档，会话消息进 5 分钟档。5 分钟过了不等于缓存全没，接着聊仍然便宜。"
               >
-                缓存 {cacheSystem}
-                {cacheSession ? ` / 会话 ${cacheSession}` : ' / 会话已过期'}
+                {cacheLabel}
               </span>
             </>
           ) : null}
@@ -560,20 +591,6 @@ export default function CcChatPage() {
             </button>
           ))}
         </div>
-        {chat.effectiveEngine === 'cc' ? (
-          <button
-            type="button"
-            onClick={() => setWinSetOpen(true)}
-            className={`whitespace-nowrap rounded-full border px-2 py-1 text-[10px] tabular-nums ${contextTone}`}
-            title={ctxTokens > 0
-              ? `当前窗口 Context：${ctxTokens.toLocaleString()} / ${ctxMax ? ctxMax.toLocaleString() : '上限未知'}${latestCompaction ? `；上次${latestCompaction.trigger === 'auto' ? '自动' : '手动'}压缩` : ''}`
-              : '当前窗口 Context 会在下一次真实模型调用时出现'}
-          >
-            {chat.stats.compacting
-              ? 'Context 压缩中'
-              : `Context ${ctxTokens > 0 ? formatTokens(ctxTokens) : '—'}${ctxMax > 0 ? `/${formatTokens(ctxMax)}` : ''}`}
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={() => setWinSetOpen(true)}

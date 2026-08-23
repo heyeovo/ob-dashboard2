@@ -64,6 +64,13 @@ export type CcContextSnapshot = {
   source: 'stream' | 'compact'
 }
 
+export type CcCacheSnapshot = {
+  refreshedAt: number
+  systemTtlMs: number
+  sessionTtlMs: number
+  model: string
+}
+
 export type CcCompactionEvent = {
   id: string
   trigger: 'manual' | 'auto'
@@ -171,6 +178,7 @@ export type CcMessage = {
   context?: CcTurnContext | null
   /** 最近一次模型请求的当前窗口快照，不是本轮累计 usage。 */
   contextSnapshot?: CcContextSnapshot | null
+  cacheSnapshot?: CcCacheSnapshot | null
   /** 独立系统分隔消息使用。 */
   compaction?: CcCompactionEvent
   requestId?: string
@@ -299,6 +307,7 @@ export const EMPTY_STATS: CcSessionStats = {
   totalCostUsd: 0,
   cacheRemainingMs: 0,
   cacheSystemRemainingMs: 0,
+  cacheRefreshedAt: 0,
   ccSessionId: '',
   startedAt: null,
   boot: null,
@@ -348,6 +357,7 @@ export type CcSessionStats = {
   cacheRemainingMs: number
   /** 系统提示那档缓存（1h）剩多少毫秒 */
   cacheSystemRemainingMs: number
+  cacheRefreshedAt: number
   ccSessionId: string
   startedAt: number | null
   boot: CcSessionBoot | null

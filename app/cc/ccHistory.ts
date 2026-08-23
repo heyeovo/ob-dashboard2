@@ -7,6 +7,7 @@
 import type {
   CcMessage,
   CcAttachment,
+  CcCacheSnapshot,
   CcCompactionEvent,
   CcContextSnapshot,
   CcInterruptedReason,
@@ -165,6 +166,19 @@ function normalizeContextSnapshot(value: unknown): CcContextSnapshot | null {
   }
 }
 
+function normalizeCacheSnapshot(value: unknown): CcCacheSnapshot | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const refreshedAt = Math.max(0, Number(raw.refreshedAt) || 0)
+  if (!refreshedAt) return null
+  return {
+    refreshedAt,
+    systemTtlMs: Math.max(0, Number(raw.systemTtlMs) || 60 * 60 * 1000),
+    sessionTtlMs: Math.max(0, Number(raw.sessionTtlMs) || 5 * 60 * 1000),
+    model: String(raw.model || ''),
+  }
+}
+
 /** client 列形如 `ob2-chat/<persona_id>`（4.5b 起写）。解不出来就是无主的老消息。 */
 export function personaOfClient(client: string | undefined): string {
   const value = (client || '').trim()
@@ -195,6 +209,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
   model: string
   context: CcMessage['context']
   contextSnapshot: CcContextSnapshot | null
+  cacheSnapshot: CcCacheSnapshot | null
   preCompactions: CcCompactionEvent[]
 } {
   const empty = {
@@ -212,6 +227,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
     model: '',
     context: null,
     contextSnapshot: null,
+    cacheSnapshot: null,
     preCompactions: [] as CcCompactionEvent[],
   }
   if (!rawJson) return empty
@@ -302,6 +318,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
         : '',
     context: normalizeTurnContext(raw.context),
     contextSnapshot: normalizeContextSnapshot(raw.context_snapshot),
+    cacheSnapshot: normalizeCacheSnapshot(raw.cache_snapshot),
     preCompactions: Array.isArray(raw.pre_compactions)
       ? raw.pre_compactions.flatMap(item => {
           const compaction = normalizeCompaction(item)
@@ -444,6 +461,16 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         model: extra.model || undefined,
         context: extra.context,
         contextSnapshot: extra.contextSnapshot,
+        cacheSnapshot: extra.cacheSnapshot || (t.source === 'cc'
+          ? {
+              // 旧轮次还没有 cache_snapshot；Haven 写入时间只比模型 result 晚几秒，
+              // 可作为一次性兼容基线。过期后照常长期显示“已过期”，不再整项消失。
+              refreshedAt: at,
+              systemTtlMs: 60 * 60 * 1000,
+              sessionTtlMs: 5 * 60 * 1000,
+              model: extra.model,
+            }
+          : null),
         roundId: t.round_id,
         deliveryState: 'saved',
         deliveryNote: extra.interruptedReason === 'pro_limit'

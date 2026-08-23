@@ -38,6 +38,11 @@ describe('ccHistory：旧历史兼容', () => {
     expect(firstAssistant.thinking).toBeUndefined()
     expect(firstAssistant.tools).toBeUndefined()
     expect(firstAssistant.process).toBeUndefined()
+    expect(firstAssistant.cacheSnapshot).toMatchObject({
+      refreshedAt: Date.parse('2026-07-01T10:00:00Z'),
+      systemTtlMs: 3_600_000,
+      sessionTtlMs: 300_000,
+    })
     // usage 原代码显式传 null（parseTurnRaw 的空值），界面同样不显示
     expect(firstAssistant.usage).toBeNull()
   })
@@ -105,6 +110,12 @@ describe('ccHistory：旧历史兼容', () => {
           maxTokens: 200_000, remainingTokens: 157_000, percentage: 21.5,
           updatedAt: 1_786_000_001_000, model: 'claude-opus-4-6', source: 'stream',
         },
+        cache_snapshot: {
+          refreshedAt: 1_786_000_001_000,
+          systemTtlMs: 3_600_000,
+          sessionTtlMs: 300_000,
+          model: 'claude-opus-4-6',
+        },
         process: [{
           type: 'compact', id: 'compact-auto-2',
           compaction: { ...compaction, id: 'compact-auto-2', trigger: 'auto' },
@@ -118,6 +129,11 @@ describe('ccHistory：旧历史兼容', () => {
       type: 'compact', compaction: { trigger: 'auto', preTokens: 186_000, postTokens: 42_000 },
     })
     expect(messages[2].contextSnapshot).toMatchObject({ totalTokens: 43_000, maxTokens: 200_000 })
+    expect(messages[2].cacheSnapshot).toMatchObject({
+      refreshedAt: 1_786_000_001_000,
+      systemTtlMs: 3_600_000,
+      sessionTtlMs: 300_000,
+    })
   })
 
   it('modeOfTurns：老会话无 mode 字段一律算工作模式', () => {

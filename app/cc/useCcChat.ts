@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CcAttachment,
+  CcCacheSnapshot,
   CcCompactionEvent,
   CcContextSnapshot,
   CcEngine,
@@ -1540,6 +1541,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           },
           onDone: payload => {
             const usage = normalizeProviderUsage(payload.usage)
+            const doneStats = payload.stats as CcSessionStats | undefined
+            const cacheSnapshot: CcCacheSnapshot | null = doneStats?.cacheRefreshedAt
+              ? {
+                  refreshedAt: doneStats.cacheRefreshedAt,
+                  systemTtlMs: 60 * 60 * 1000,
+                  sessionTtlMs: 5 * 60 * 1000,
+                  model: doneStats.model,
+                }
+              : null
             const interrupted = payload.interrupted === true
             const interruptedReason = payload.interrupted_reason === 'pro_limit'
               ? 'pro_limit'
@@ -1557,6 +1567,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 process,
                 streaming: false,
                 usage: usage || m.usage,
+                cacheSnapshot: cacheSnapshot || m.cacheSnapshot,
                 interrupted: interrupted || m.interrupted,
                 interruptedReason: interruptedReason || m.interruptedReason,
                 thinkingMs: thinkingDuration(process) || undefined,
@@ -1573,7 +1584,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                     : '已保存到 Haven',
               }
             })
-            if (payload.stats) setStats(payload.stats as CcSessionStats)
+            if (doneStats) setStats(doneStats)
           },
           onAfter: payload => {
             // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，

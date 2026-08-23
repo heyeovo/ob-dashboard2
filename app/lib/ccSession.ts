@@ -522,6 +522,8 @@ export type SessionStats = {
   cacheRemainingMs: number
   /** 系统提示那档缓存（1h）还剩多少毫秒 */
   cacheSystemRemainingMs: number
+  /** 最后一次真实模型调用时间；用于 query 回收后从历史继续计算缓存 TTL。 */
+  cacheRefreshedAt: number
   ccSessionId: string
   startedAt: number | null
   /** 启动时定死的那几项。进程不在时是 null */
@@ -546,6 +548,7 @@ export const EMPTY_SESSION_STATS: SessionStats = {
   totalCostUsd: 0,
   cacheRemainingMs: 0,
   cacheSystemRemainingMs: 0,
+  cacheRefreshedAt: 0,
   ccSessionId: '',
   startedAt: null,
   boot: null,
@@ -574,6 +577,7 @@ export function getSessionStats(sessionId: string): SessionStats {
     totalCostUsd: live.totalCostUsd,
     cacheRemainingMs: live.lastModelCallAt ? Math.max(0, CACHE_TTL_SESSION_MS - since) : 0,
     cacheSystemRemainingMs: live.lastModelCallAt ? Math.max(0, CACHE_TTL_SYSTEM_MS - since) : 0,
+    cacheRefreshedAt: live.lastModelCallAt,
     ccSessionId: live.ccSessionId,
     startedAt: live.createdAt,
     boot: live.boot,

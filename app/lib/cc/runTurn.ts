@@ -27,6 +27,8 @@ import {
 } from '@/app/lib/ccChannel'
 import {
   clearTurnInterrupted,
+  CACHE_TTL_SESSION_MS,
+  CACHE_TTL_SYSTEM_MS,
   acknowledgePendingCompactions,
   consumeTurnInterrupted,
   dropSession,
@@ -932,6 +934,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           engine: 'cc',
           pre_compactions: preCompactions.length ? preCompactions : undefined,
           context_snapshot: live.contextSnapshot || undefined,
+          cache_snapshot: live.lastModelCallAt ? {
+            refreshedAt: live.lastModelCallAt,
+            systemTtlMs: CACHE_TTL_SYSTEM_MS,
+            sessionTtlMs: CACHE_TTL_SESSION_MS,
+            model: sdkModelForProvider(live.model, live.boot.credKind),
+          } : undefined,
           last_compaction: live.lastCompaction || undefined,
           compaction_count: live.compactionCount || undefined,
           request_id: requestId,
