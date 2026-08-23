@@ -422,7 +422,7 @@ export async function POST(request: NextRequest) {
   const stamp = (label: string) => {
     const now = Date.now()
     console.log(
-      `[cc-chat ${sessionId.slice(0, 8)}] ${label} +${now - startedAt}ms (上一步用了 ${now - lastStampAt}ms)`,
+      `[cc-chat ${sessionId} request=${requestId}] ${label} +${now - startedAt}ms (上一步用了 ${now - lastStampAt}ms)`,
     )
     lastStampAt = now
   }

@@ -62,6 +62,8 @@ function isSubscriptionLimitError(
 ): boolean {
   if (cred !== 'subscription') return false
   if (rejectedEventSeen) return true
+  const terminalReason = String((msg as SDKMessage & { terminal_reason?: string }).terminal_reason || '')
+  if (terminalReason === 'blocking_limit' || terminalReason === 'rapid_refill_breaker') return true
   const detail = Array.isArray(msg.errors) ? msg.errors.join('\n') : ''
   return /(?:rate|usage) limit|limit (?:has been )?reached|reached (?:your )?limit|credits_required/i.test(detail)
 }
@@ -738,12 +740,46 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           interrupted = true
           interruptedReason = 'pro_limit'
         } else if (msg.is_error || msg.subtype !== 'success') {
-          const failed = msg as SDKMessage & { result?: string }
-          throw new Error(
-            failed.result?.trim() ||
-              assistantText.trim() ||
-              `模型请求失败（${msg.subtype}）`,
+          const failed = msg as SDKMessage & {
+            errors?: string[]
+            terminal_reason?: string
+          }
+          const errors = Array.isArray(failed.errors)
+            ? failed.errors.map(String).map(value => value.trim()).filter(Boolean)
+            : []
+          const terminalReason = String(failed.terminal_reason || '')
+          const failureLabel = [String(msg.subtype || 'error'), terminalReason]
+            .filter(Boolean)
+            .join(' / ')
+          const message = errors[0] || `模型请求失败（${failureLabel}）`
+          const generatedNotSaved = Boolean(
+            assistantText.trim() || thinkingText.trim() || bucket.processEvents.length,
           )
+
+          // SDK 的失败 result 是预期终态，不要再把已生成正文当 Error.message。
+          // 记录结构化元数据，下一次可以凭完整 session/request 精确查到原因；
+          // 不记录用户提示词、thinking、正文或工具输出。
+          console.error(`[cc-chat ${sessionId} request=${requestId}] SDK result failed`, {
+            subtype: msg.subtype,
+            terminal_reason: terminalReason || null,
+            errors,
+            num_turns: msg.num_turns,
+            duration_ms: msg.duration_ms,
+          })
+          dropSession(sessionId)
+          send('error', {
+            code: 'upstream_failed',
+            message,
+            stage: 'upstream',
+            retryable: true,
+            request_id: requestId,
+            subtype: msg.subtype,
+            terminal_reason: terminalReason || undefined,
+            errors,
+            generated_not_saved: generatedNotSaved,
+          })
+          state.markFailed()
+          return { ok: false, error: message, phase: state.current }
         }
         // result 里的 result 字段是这一轮的完整文本，用它兜底。
         // 只有 success 才有这个字段（error subtype 只有 errors 数组）。

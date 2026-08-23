@@ -1319,3 +1319,11 @@ GitHub 只保护已 push 的 commit，不能保护未 commit 修改。
 - 本地二次修复把 Agent SDK 的传输 schema 改为 11 个必填扁平字符串字段，仅保留 `candidate_type` enum；理由与证据 ID 用逐行字符串传输，runner 再确定性还原为 Haven 原本的 `rationale`、`evidence_bucket_ids` 和 `proposal` 嵌套对象。Haven 的候选类型、日期、证据范围、revision/hash 与零自动写入校验均不变。
 - runner 现在把 `error_max_structured_output_retries` 映射为安全的 `pro_structured_output`，仍不保存或输出模型正文。定点测试覆盖 `no_change`、`append_current`、`transition`、缺失 structured output 和 retry exhaustion，共 8 项通过；Dashboard 完整测试为 32 个文件、172 项通过、1 项既有跳过，目标 ESLint 与 production build 通过。
 - 二次修复当前仅在 Dashboard 本地，尚未 commit/push/deploy；Haven 仍无需发布。下一步由用户只提交 Dashboard 并保持 `main + HEAD + Manual deployments only` 手动 Redeploy；随后再次确认游标/范围未变，才进行第三次人工生成。未经人工确认不应用候选，不实现自动 fallback。
+
+### 2026-08-23 CC 长任务异常显示与诊断修复记录
+
+- 真实 CC Pro 工作窗口出现长任务非成功结束：正常正文、thinking 与工具过程被清掉，半截正文被当作全局红色错误显示。事后确认不是持续额度耗尽；旧实现没有记录 SDK `subtype / errors / terminal_reason`，且日志只截 session id 前 8 位，因此该次上游根因已无法还原。
+- Dashboard 本地已修复：SDK 非成功 `result` 改为结构化 `upstream_failed` 终态，不再把 `assistantText` 当异常消息；保留正文、thinking 和工具过程，未完成工具标记失败，消息内显示真实错误且明确未保存。日志使用完整 session id + request id，只记录终止元数据，不记录用户正文、thinking 或工具输出。
+- Pro 限额识别补充 SDK `terminal_reason=blocking_limit / rapid_refill_breaker`；其他上游错误仍不写 Haven，不改变正常成功、人工停止或严格持久化顺序。正式事实已同步到 Dashboard `CLAUDE.md`。
+- 验证通过：`cc-runTurn` + `cc-engine-routing` 共 25 项测试、目标 ESLint、Next.js production build。完整测试为 178 项通过、1 项既有跳过、1 项与本次无关的 `selfhost-runTurn` 旧运行时文本断言失败（当前正文已含 session id，测试仍期待旧格式）；本次未越界修改 selfhost。Haven 无代码或数据结构变更，无需发布。
+- 当前改动尚未 commit/push/deploy。用户提交后只需按 Dashboard 手动发布规则在 Coolify `Ombre Brain → production → ob-dashboard2:main-… → Actions → Redeploy`；发布后用一次可控的失败或后续自然失败验收消息保留、结构化原因及完整 session/request 日志。

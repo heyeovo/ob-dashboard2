@@ -705,13 +705,29 @@ describe('runTurn：中止与失败', () => {
     expect(result2.phase).toBe('succeeded')
   })
 
-  it('provider 503：failed、错误轮不写库、子进程被回收后可立即重试', async () => {
-    const handle = driveTurn([initMsg(), resultMsg('error', true)])
+  it('provider 503：保留结构化原因和半截过程、错误轮不写库、子进程可立即重试', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      textDelta('已经生成的半截'),
+      {
+        ...resultMsg('error_during_execution', true, ['Provider temporarily unavailable']),
+        terminal_reason: 'api_error',
+      } as SDKMessage,
+    ])
     const result = await handle.promise
 
     expect(result.ok).toBe(false)
     expect(result.phase).toBe('failed')
-    expect(eventNames(handle)).toContain('error')
+    expect(handle.events.find(event => event.event === 'error')?.data).toMatchObject({
+      code: 'upstream_failed',
+      message: 'Provider temporarily unavailable',
+      stage: 'upstream',
+      request_id: 'request-test-1',
+      subtype: 'error_during_execution',
+      terminal_reason: 'api_error',
+      errors: ['Provider temporarily unavailable'],
+      generated_not_saved: true,
+    })
     // 错误轮次不写入 Haven
     expect(turns.recordTurn).not.toHaveBeenCalled()
 
@@ -761,6 +777,29 @@ describe('runTurn：中止与失败', () => {
       userText: '你好',
       assistantText: '',
       raw: { interrupted: true, interrupted_reason: 'pro_limit' },
+    })
+  })
+
+  it('Pro 以 blocking_limit 终止：即使没有英文额度文案也按额度中断保存', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      textDelta('已经生成的半截'),
+      {
+        ...resultMsg('error_during_execution', true),
+        terminal_reason: 'blocking_limit',
+      } as SDKMessage,
+    ], { config: makeConfig({ cred: 'subscription' }) })
+    const result = await handle.promise
+
+    expect(result).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(turns.recordTurn).toHaveBeenCalledTimes(1)
+    expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({
+      assistantText: '已经生成的半截',
+      raw: { interrupted: true, interrupted_reason: 'pro_limit' },
+    })
+    expect(handle.events.find(event => event.event === 'done')?.data).toMatchObject({
+      interrupted: true,
+      interrupted_reason: 'pro_limit',
     })
   })
 

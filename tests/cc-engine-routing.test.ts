@@ -58,5 +58,14 @@ describe('10.3 engine routing and strict delivery states', () => {
       .toBe('not_saved')
     expect(deliveryFromError({ code: 'conversation_conflict', http_status: 409, generated_not_saved: true }).state)
       .toBe('conflict')
+    expect(deliveryFromError({
+      code: 'upstream_failed',
+      message: 'Provider temporarily unavailable',
+      generated_not_saved: true,
+    })).toEqual({
+      state: 'not_saved',
+      note: 'Provider temporarily unavailable',
+      keepGenerated: true,
+    })
   })
 })

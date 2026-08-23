@@ -1501,15 +1501,41 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           },
           onError: payload => {
             const delivery = deliveryFromError(payload)
-            setError(delivery.note)
             if (delivery.keepGenerated) {
-              patch(message => ({
-                ...message,
-                streaming: false,
-                deliveryState: delivery.state,
-                deliveryNote: delivery.note,
-              }))
+              // 已经生成的正文、thinking 和工具过程留在原消息位置；错误原因显示在
+              // 消息自己的状态栏，不再把半截正文挪进页面顶部的红色错误框。
+              setError('')
+              patch(message => {
+                const process = closeOpenThinking(message.process)?.map(event => (
+                  event.type === 'tool' && event.tool.status === 'running'
+                    ? {
+                        ...event,
+                        tool: {
+                          ...event.tool,
+                          status: 'error' as const,
+                          error: event.tool.error || '本轮异常结束，工具未完成',
+                        },
+                      }
+                    : event
+                ))
+                return {
+                  ...message,
+                  process,
+                  tools: message.tools?.map(tool => tool.status === 'running'
+                    ? {
+                        ...tool,
+                        status: 'error' as const,
+                        error: tool.error || '本轮异常结束，工具未完成',
+                      }
+                    : tool),
+                  streaming: false,
+                  thinkingMs: thinkingDuration(process) || undefined,
+                  deliveryState: delivery.state,
+                  deliveryNote: delivery.note,
+                }
+              })
             } else {
+              setError(delivery.note)
               setMessages(prev => prev.filter(message => message.id !== assistantId))
             }
           },
