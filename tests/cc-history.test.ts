@@ -89,6 +89,37 @@ describe('ccHistory：旧历史兼容', () => {
     expect(assistant.tools).toHaveLength(1)
   })
 
+  it('压缩分隔线按真实位置恢复，手动压缩标记落在下一轮用户消息之前', () => {
+    const compaction = {
+      id: 'compact-manual-1', trigger: 'manual', preTokens: 186_000,
+      postTokens: 42_000, durationMs: 1200, at: 1_786_000_000_000,
+    }
+    const messages = turnsToMessages([turn({
+      id: 6,
+      raw_json: JSON.stringify({
+        engine: 'cc',
+        cc_lane_id: 'subscription',
+        pre_compactions: [compaction],
+        context_snapshot: {
+          totalTokens: 43_000, inputTokens: 42_500, outputTokens: 500,
+          maxTokens: 200_000, remainingTokens: 157_000, percentage: 21.5,
+          updatedAt: 1_786_000_001_000, model: 'claude-opus-4-6', source: 'stream',
+        },
+        process: [{
+          type: 'compact', id: 'compact-auto-2',
+          compaction: { ...compaction, id: 'compact-auto-2', trigger: 'auto' },
+        }],
+      }),
+    })])
+
+    expect(messages.map(message => message.role)).toEqual(['system', 'user', 'assistant'])
+    expect(messages[0]).toMatchObject({ compaction, laneId: 'subscription' })
+    expect(messages[2].process?.[0]).toMatchObject({
+      type: 'compact', compaction: { trigger: 'auto', preTokens: 186_000, postTokens: 42_000 },
+    })
+    expect(messages[2].contextSnapshot).toMatchObject({ totalTokens: 43_000, maxTokens: 200_000 })
+  })
+
   it('modeOfTurns：老会话无 mode 字段一律算工作模式', () => {
     expect(modeOfTurns([turn({ id: 1 })])).toBe('work')
     expect(

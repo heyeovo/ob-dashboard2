@@ -14,6 +14,9 @@ export type SseEventPayload = Record<string, unknown>
 export type SseHandlers = {
   onStart: (data: SseEventPayload) => void
   onContext: (data: SseEventPayload) => void
+  onContextSnapshot: (data: SseEventPayload) => void
+  onCompact: (data: SseEventPayload) => void
+  onCompactStatus: (data: SseEventPayload) => void
   onInit: (data: SseEventPayload) => void
   onDelta: (data: SseEventPayload) => void
   onThinking: (data: SseEventPayload) => void
@@ -59,6 +62,9 @@ export async function consumeSseStream(
 
       if (event === 'start') handlers.onStart(data)
       else if (event === 'context') handlers.onContext(data)
+      else if (event === 'context_snapshot') handlers.onContextSnapshot(data)
+      else if (event === 'compact') handlers.onCompact(data)
+      else if (event === 'compact_status') handlers.onCompactStatus(data)
       else if (event === 'init') handlers.onInit(data)
       else if (event === 'delta') handlers.onDelta(data)
       else if (event === 'thinking') handlers.onThinking(data)

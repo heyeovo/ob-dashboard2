@@ -11,7 +11,7 @@
 //     —— 那一层直接 emit(event, data)，不经 runTurn，所以这里也一并列出。
 
 import type { CcPermRequest } from '@/app/lib/ccChannel'
-import type { CcRecallInfo, CcToolEvent, CcTurnUsage } from '@/app/cc/types'
+import type { CcCompactionEvent, CcContextSnapshot, CcRecallInfo, CcToolEvent, CcTurnUsage } from '@/app/cc/types'
 import type { SessionStats } from '@/app/lib/ccSession'
 
 /* ── 事件名 ── */
@@ -23,6 +23,9 @@ export const SSE_EVENTS = {
   thinking: 'thinking',
   recall: 'recall',
   context: 'context',
+  contextSnapshot: 'context_snapshot',
+  compact: 'compact',
+  compactStatus: 'compact_status',
   usage: 'usage',
   tool: 'tool',
   toolResult: 'tool_result',
@@ -111,6 +114,9 @@ export type CcSseEventMap = {
   [SSE_EVENTS.thinking]: CcSseThinking
   [SSE_EVENTS.recall]: CcSseRecall
   [SSE_EVENTS.context]: Record<string, unknown>
+  [SSE_EVENTS.contextSnapshot]: CcContextSnapshot
+  [SSE_EVENTS.compact]: CcCompactionEvent
+  [SSE_EVENTS.compactStatus]: { compacting: boolean; result?: 'success' | 'failed'; error?: string }
   [SSE_EVENTS.usage]: Record<string, unknown>
   [SSE_EVENTS.tool]: CcSseTool
   [SSE_EVENTS.toolResult]: CcSseToolResult

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import CcMarkdown, { highlightSearchText } from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
-import type { CcMessage, CcProcessEvent, CcToolEvent } from './types'
+import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent } from './types'
 import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
 
@@ -36,6 +36,24 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function compactTokenLabel(tokens: number | null) {
+  if (tokens == null) return '未知'
+  return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : tokens.toLocaleString()
+}
+
+function CompactionDivider({ compaction }: { compaction: CcCompactionEvent }) {
+  const trigger = compaction.trigger === 'manual' ? '手动压缩已完成' : '自动压缩已完成'
+  return (
+    <div className="my-4 flex w-full items-center gap-3 text-[11px] text-amber-700/80" role="separator">
+      <span className="h-px flex-1 bg-amber-300/60" />
+      <span className="shrink-0 tabular-nums">
+        {trigger} · {compactTokenLabel(compaction.preTokens)} → {compactTokenLabel(compaction.postTokens)}
+      </span>
+      <span className="h-px flex-1 bg-amber-300/60" />
+    </div>
+  )
 }
 
 function shortToolName(name: string) {
@@ -73,6 +91,7 @@ type Props = {
 }
 
 export function ccMessageVisibleText(message: CcMessage): string {
+  if (message.role === 'system') return ''
   if (message.role === 'user') return parseForwardedMessage(message.text)?.userText ?? message.text
   const process = message.process || []
   if (!process.some(event => event.type === 'text')) return message.text
@@ -160,6 +179,10 @@ export default function CcMessageRow({
     },
     [],
   )
+
+  if (message.role === 'system' && message.compaction) {
+    return <CompactionDivider compaction={message.compaction} />
+  }
 
   const clearTimer = () => {
     if (timerRef.current === null) return
@@ -531,6 +554,10 @@ export default function CcMessageRow({
                 )
               }
 
+              if (event.type === 'compact') {
+                return <CompactionDivider key={event.id} compaction={event.compaction} />
+              }
+
               const tool = event.tool
               const status = tool.status || (message.streaming ? 'running' : 'completed')
               return (
@@ -656,9 +683,9 @@ export default function CcMessageRow({
                 type="button"
                 className="ml-auto tabular-nums hover:text-[var(--color-text-secondary)]"
                 onClick={() => setUsageOpen(v => !v)}
-                title="这一轮的 token 用量"
+                title="本轮累计消耗；不是当前窗口 Context"
               >
-                {(usage.inputTokens + usage.cacheReadTokens + usage.outputTokens).toLocaleString()} tok
+                {(usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens + usage.outputTokens).toLocaleString()} tok
               </button>
             ) : null}
           </div>
@@ -667,6 +694,7 @@ export default function CcMessageRow({
         {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
         {usage && usageOpen ? (
           <div className="mt-1 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-2">
+            <div className="mb-1.5 text-[11px] font-medium text-[var(--color-text-secondary)]">本轮累计消耗</div>
             <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-2.5 gap-y-1 text-[11px] text-[var(--color-text-tertiary)]">
               <span>↑ 输入</span>
               <b className={USAGE_NUM}>{usage.inputTokens.toLocaleString()}</b>

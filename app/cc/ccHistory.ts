@@ -7,6 +7,8 @@
 import type {
   CcMessage,
   CcAttachment,
+  CcCompactionEvent,
+  CcContextSnapshot,
   CcInterruptedReason,
   CcProcessEvent,
   CcRecallInfo,
@@ -127,6 +129,42 @@ function normalizeRecall(value: unknown): CcRecallInfo | null {
   }
 }
 
+function normalizeCompaction(value: unknown): CcCompactionEvent | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  if (raw.trigger !== 'manual' && raw.trigger !== 'auto') return null
+  return {
+    id: String(raw.id || `compact-${Number(raw.at || 0)}`),
+    trigger: raw.trigger,
+    preTokens: Math.max(0, Number(raw.preTokens ?? raw.pre_tokens) || 0),
+    postTokens: raw.postTokens == null && raw.post_tokens == null
+      ? null
+      : Math.max(0, Number(raw.postTokens ?? raw.post_tokens) || 0),
+    durationMs: raw.durationMs == null && raw.duration_ms == null
+      ? null
+      : Math.max(0, Number(raw.durationMs ?? raw.duration_ms) || 0),
+    at: Number(raw.at || 0) || Date.now(),
+  }
+}
+
+function normalizeContextSnapshot(value: unknown): CcContextSnapshot | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const totalTokens = Math.max(0, Number(raw.totalTokens) || 0)
+  const maxTokens = Math.max(0, Number(raw.maxTokens) || 0)
+  return {
+    totalTokens,
+    inputTokens: Math.max(0, Number(raw.inputTokens) || 0),
+    outputTokens: Math.max(0, Number(raw.outputTokens) || 0),
+    maxTokens,
+    remainingTokens: Math.max(0, Number(raw.remainingTokens) || (maxTokens ? maxTokens - totalTokens : 0)),
+    percentage: Math.max(0, Number(raw.percentage) || (maxTokens ? totalTokens / maxTokens * 100 : 0)),
+    updatedAt: Number(raw.updatedAt) || 0,
+    model: String(raw.model || ''),
+    source: raw.source === 'compact' ? 'compact' : 'stream',
+  }
+}
+
 /** client 列形如 `ob2-chat/<persona_id>`（4.5b 起写）。解不出来就是无主的老消息。 */
 export function personaOfClient(client: string | undefined): string {
   const value = (client || '').trim()
@@ -153,8 +191,11 @@ export function parseTurnRaw(rawJson: string | undefined): {
   engine: 'cc' | 'selfhost' | undefined
   providerId: string
   providerLabel: string
+  laneId: string
   model: string
   context: CcMessage['context']
+  contextSnapshot: CcContextSnapshot | null
+  preCompactions: CcCompactionEvent[]
 } {
   const empty = {
     thinking: '',
@@ -167,8 +208,11 @@ export function parseTurnRaw(rawJson: string | undefined): {
     engine: undefined,
     providerId: '',
     providerLabel: '',
+    laneId: '',
     model: '',
     context: null,
+    contextSnapshot: null,
+    preCompactions: [] as CcCompactionEvent[],
   }
   if (!rawJson) return empty
   let raw: Record<string, unknown>
@@ -227,6 +271,10 @@ export function parseTurnRaw(rawJson: string | undefined): {
         tool: toolsById.get(parsed.id) || parsed,
       }]
     }
+    if (item.type === 'compact') {
+      const compaction = normalizeCompaction(item.compaction)
+      return compaction ? [{ type: 'compact', id: String(item.id || compaction.id), compaction }] : []
+    }
     return []
   })
   return {
@@ -246,12 +294,20 @@ export function parseTurnRaw(rawJson: string | undefined): {
     engine: raw.engine === 'selfhost' ? 'selfhost' : raw.engine ? 'cc' : undefined,
     providerId: typeof raw.provider_id === 'string' ? raw.provider_id : '',
     providerLabel: typeof raw.provider_label === 'string' ? raw.provider_label : '',
+    laneId: typeof raw.cc_lane_id === 'string' ? raw.cc_lane_id : '',
     model: typeof raw.model === 'string'
       ? raw.model
       : raw.settings && typeof raw.settings === 'object'
         ? String((raw.settings as Record<string, unknown>).model || '')
         : '',
     context: normalizeTurnContext(raw.context),
+    contextSnapshot: normalizeContextSnapshot(raw.context_snapshot),
+    preCompactions: Array.isArray(raw.pre_compactions)
+      ? raw.pre_compactions.flatMap(item => {
+          const compaction = normalizeCompaction(item)
+          return compaction ? [compaction] : []
+        })
+      : [],
   }
 }
 
@@ -328,6 +384,18 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   const out: CcMessage[] = []
   for (const t of turns) {
     const at = Date.parse(t.created_at) || Date.now()
+    const extra = parseTurnRaw(t.raw_json)
+    for (const compaction of extra.preCompactions) {
+      out.push({
+        id: `h${t.id}c-${compaction.id}`,
+        role: 'system',
+        text: '',
+        compaction,
+        laneId: extra.laneId || undefined,
+        createdAt: compaction.at || at,
+        fromHistory: true,
+      })
+    }
     const attachments: CcAttachment[] = (t.attachments || []).map(item => {
       const kind = item.kind === 'file' ? 'file' : 'image'
       return {
@@ -354,7 +422,6 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         fromHistory: true,
       })
     }
-    const extra = parseTurnRaw(t.raw_json)
     if (t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit') {
       out.push({
         id: `h${t.id}a`,
@@ -373,8 +440,10 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         engine: extra.engine || (t.source === 'selfhost' ? 'selfhost' : t.source === 'cc' ? 'cc' : undefined),
         providerId: extra.providerId || undefined,
         providerLabel: extra.providerLabel || undefined,
+        laneId: extra.laneId || undefined,
         model: extra.model || undefined,
         context: extra.context,
+        contextSnapshot: extra.contextSnapshot,
         roundId: t.round_id,
         deliveryState: 'saved',
         deliveryNote: extra.interruptedReason === 'pro_limit'

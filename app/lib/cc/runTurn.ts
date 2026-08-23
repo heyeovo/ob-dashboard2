@@ -27,16 +27,20 @@ import {
 } from '@/app/lib/ccChannel'
 import {
   clearTurnInterrupted,
+  acknowledgePendingCompactions,
   consumeTurnInterrupted,
   dropSession,
   ensureSession,
   flushPendingMcpServers,
   getSessionStats,
-  noteContextUsage,
+  getPendingCompactions,
+  noteCompaction,
+  noteContextSnapshot,
   peekSession,
   recordTurnCost,
   rememberResumePoint,
   type TurnUsage,
+  type CcCompactionEvent,
 } from '@/app/lib/ccSession'
 import { buildCcOptions, isWebTool, sdkModelForProvider, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
@@ -315,6 +319,36 @@ function usageFromResult(
   }
 }
 
+type StreamContextUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
+function streamContextUsage(
+  raw: unknown,
+  previous: StreamContextUsage | null,
+): StreamContextUsage | null {
+  const usage = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null
+  if (!usage) return previous
+  const iterations = Array.isArray(usage.iterations) ? usage.iterations : []
+  const latest = iterations.at(-1)
+  const source = latest && typeof latest === 'object'
+    ? latest as Record<string, unknown>
+    : usage
+  const value = (key: string, fallback: number) => {
+    const rawValue = source[key]
+    return rawValue == null ? fallback : Math.max(0, Number(rawValue) || 0)
+  }
+  return {
+    inputTokens: value('input_tokens', previous?.inputTokens || 0),
+    outputTokens: value('output_tokens', previous?.outputTokens || 0),
+    cacheReadTokens: value('cache_read_input_tokens', previous?.cacheReadTokens || 0),
+    cacheWriteTokens: value('cache_creation_input_tokens', previous?.cacheWriteTokens || 0),
+  }
+}
+
 /** 写库最多等这么久，超了就放弃这一轮的存档，不拖着对话 */
 const STORE_TIMEOUT_MS = 8000
 
@@ -379,6 +413,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   attachSend(sessionId, send)
 
   let live: ReturnType<typeof ensureSession> | null = null
+  let preCompactions: CcCompactionEvent[] = []
   /** 锁是不是已经在正常路径上摘过了（收尾前就摘，让人能马上发下一句） */
   let busyReleased = false
 
@@ -404,6 +439,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       thinking: config.thinking,
       systemPromptKey: config.systemPromptKey,
     })
+    preCompactions = getPendingCompactions(sessionId)
 
     if (live.busy) {
       send('error', { message: '这个会话上一轮还没跑完' })
@@ -592,6 +628,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     let initInfo: Record<string, unknown> | null = null
     /** 这一轮的用量，消息右下角那个面板要显示 */
     let turnUsage: TurnUsage | null = null
+    let currentRequestUsage: StreamContextUsage | null = null
 
     for (;;) {
       const step = await nextSdkMessage(live.iterator, signal)
@@ -623,6 +660,38 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         continue
       }
 
+      if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
+        closeThinkingProcess(bucket, Date.now())
+        const compaction: CcCompactionEvent = {
+          id: msg.uuid || `compact-${Date.now()}-${bucket.processEvents.length}`,
+          trigger: msg.compact_metadata.trigger,
+          preTokens: Number(msg.compact_metadata.pre_tokens) || 0,
+          postTokens: msg.compact_metadata.post_tokens == null
+            ? null
+            : Number(msg.compact_metadata.post_tokens) || 0,
+          durationMs: msg.compact_metadata.duration_ms == null
+            ? null
+            : Number(msg.compact_metadata.duration_ms) || 0,
+          at: Date.now(),
+        }
+        bucket.processEvents.push({ type: 'compact', id: compaction.id, compaction })
+        noteCompaction(sessionId, compaction)
+        send('compact', compaction)
+        continue
+      }
+
+      if (msg.type === 'system' && msg.subtype === 'status') {
+        if (msg.status === 'compacting' || live.compacting) {
+          live.compacting = msg.status === 'compacting'
+          send('compact_status', {
+            compacting: live.compacting,
+            result: msg.compact_result,
+            error: msg.compact_error,
+          })
+        }
+        continue
+      }
+
       if (msg.type === 'rate_limit_event') {
         if (msg.rate_limit_info.status === 'rejected') rejectedRateLimitSeen = true
         continue
@@ -633,6 +702,27 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         const ev = msg.event as {
           type?: string
           delta?: { type?: string; text?: string; thinking?: string }
+          message?: { usage?: unknown }
+          usage?: unknown
+        }
+        if (ev.type === 'message_start') {
+          currentRequestUsage = streamContextUsage(ev.message?.usage, null)
+        } else if (ev.type === 'message_delta') {
+          currentRequestUsage = streamContextUsage(ev.usage, currentRequestUsage)
+        }
+        if ((ev.type === 'message_start' || ev.type === 'message_delta') && currentRequestUsage) {
+          const snapshot = noteContextSnapshot(
+            sessionId,
+            {
+              inputTokens:
+                currentRequestUsage.inputTokens +
+                currentRequestUsage.cacheReadTokens +
+                currentRequestUsage.cacheWriteTokens,
+              outputTokens: currentRequestUsage.outputTokens,
+            },
+            sdkModelForProvider(live.model, live.boot.credKind),
+          )
+          if (snapshot) send('context_snapshot', snapshot)
         }
         if (ev.type === 'content_block_delta' && ev.delta) {
           if (ev.delta.type === 'text_delta' && ev.delta.text) {
@@ -789,14 +879,9 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         live.totalCostUsd += Number(msg.total_cost_usd || 0)
         live.turnCount += 1
         live.lastModelCallAt = Date.now()
+        live.compacting = false
         recordTurnCost(sessionId, Number(msg.total_cost_usd || 0))
         turnUsage = usageFromResult(msg.usage, msg.duration_ms, msg.total_cost_usd)
-        // 顶部上下文胶囊：就用这一轮的输入总量，不再去问子进程（见 noteContextUsage 的注释）
-        noteContextUsage(
-          sessionId,
-          turnUsage.inputTokens + turnUsage.cacheReadTokens + turnUsage.cacheWriteTokens,
-          sdkModelForProvider(live.model, live.boot.credKind),
-        )
         break
       }
     }
@@ -845,6 +930,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         raw: {
           version: 1,
           engine: 'cc',
+          pre_compactions: preCompactions.length ? preCompactions : undefined,
+          context_snapshot: live.contextSnapshot || undefined,
+          last_compaction: live.lastCompaction || undefined,
+          compaction_count: live.compactionCount || undefined,
           request_id: requestId,
           attachments: attachments.map(item => ({
             id: item.id,
@@ -944,6 +1033,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         state.markFailed()
         return { ok: false, error: rec?.error || '对话保存失败', phase: state.current }
       }
+      acknowledgePendingCompactions(sessionId, preCompactions.map(item => item.id))
       // 中断的轮不喂 persona 学习 —— 半截回复拿去更新协作者记忆，可能学到没说完的想法
       if (rec?.ok && rec.stored && !interrupted) {
         const personaResult = await updatePersonaFromExchange({
@@ -989,12 +1079,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       continuity_turns: missingRouteTurns.length,
     })
 
-    // 上下文用量：这一轮答完了才拉（getContextUsage 要走一次控制请求，
-    // 这一轮还占着 iterator 的时候拿不到）。顶部那个「x / 1M」胶囊用它。
-    // ⚠️ 带 force —— busy 还没摘（要挡住下一个请求挤进来），但 iterator 已经空了。
-    // 超时就用上一次的值：这只是个显示用的数字，不值得让人多等。
-    // 不带 force —— 锁上面已经摘了，这时候 busy 还是 true 就说明用户又发了一句，
-    // 那正在占着 iterator，这个数字下一轮再拿。
     send('after', {
       store: storeInfo,
       persona: personaInfo,

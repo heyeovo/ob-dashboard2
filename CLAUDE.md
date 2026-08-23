@@ -110,6 +110,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `cc-attachments/route.ts` + `[id]/route.ts` | `/cc` 图片/文件上传、私有读取与分类清除：图片先压缩，PDF/DOCX/MD/TXT/CSV 在浏览器提取受限正文后与原文件一起转存 Haven；浏览器不接触网关密钥或永久公开 URL |
 | `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态：所有来源严格按协作者归属过滤，读取/保存本地引擎首选与提示词模块覆盖、列出软删除窗口、严格永久删除 |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
+| `cc-compact/route.ts` | 仅复用当前在线、空闲的 CC 工作会话发送原生 `/compact`；不唤醒已回收 query，返回真实 `compact_boundary` 前后 token 与压缩结果 |
 | `cc-personas/route.ts` | 协作者（persona 列表/保存/删除，含可自定义基础提示词、可排序提示词模块及默认启停） |
 | `cc-upstream/route.ts` | 上游模型配置 |
 | `cc-mcp/route.ts` | cc MCP 工具配置；production 只使用 Haven 持久配置，拒绝 loopback，缺失时安全禁用 |

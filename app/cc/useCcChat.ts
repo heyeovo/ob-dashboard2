@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CcAttachment,
+  CcCompactionEvent,
+  CcContextSnapshot,
   CcEngine,
   CcMessage,
   CcPermDecided,
@@ -1120,6 +1122,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         const data = await res.json()
         if (!res.ok || !data.ok) throw new Error(String(data.error || '保存失败'))
         if (data.stats) setStats(data.stats as CcSessionStats)
+        else if (switchedUpstream) setStats(EMPTY_STATS)
         setSettingsNote(
           switchedUpstream
             ? '线路已切换；下一句话会恢复目标线路，并补入中间对话'
@@ -1206,6 +1209,55 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }).catch(() => undefined)
   }, [effectiveEngine, sessionId])
 
+  const compactNow = useCallback(async (): Promise<{ ok: boolean; compacted: boolean; error: string }> => {
+    if (effectiveEngine !== 'cc' || mode !== 'work') {
+      return { ok: false, compacted: false, error: '手动压缩只在 CC 工作模式提供' }
+    }
+    if (sending || stats.busy || stats.compacting) {
+      return { ok: false, compacted: false, error: '当前还有一轮未结束，请稍后再压缩' }
+    }
+    setStats(current => ({ ...current, busy: true, compacting: true }))
+    try {
+      const response = await fetch('/api/cc-compact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+      const data = await response.json() as {
+        ok?: boolean
+        compacted?: boolean
+        error?: string
+        message?: string
+        compaction?: CcCompactionEvent | null
+        stats?: CcSessionStats
+      }
+      if (data.stats) setStats(data.stats)
+      if (!response.ok || !data.ok) {
+        return { ok: false, compacted: false, error: String(data.error || '手动压缩失败') }
+      }
+      const compaction = data.compaction
+      if (compaction) {
+        setMessages(previous => [...previous, {
+          id: `compact-${compaction.id}`,
+          role: 'system',
+          text: '',
+          compaction,
+          laneId: laneIdForPick(pick),
+          createdAt: compaction.at,
+        }])
+      }
+      return {
+        ok: true,
+        compacted: Boolean(data.compacted),
+        error: data.compacted ? '' : String(data.message || '当前历史还不足以压缩'),
+      }
+    } catch (reason) {
+      return { ok: false, compacted: false, error: (reason as Error).message || '手动压缩失败' }
+    } finally {
+      setStats(current => ({ ...current, busy: false, compacting: false }))
+    }
+  }, [effectiveEngine, mode, pick, sending, sessionId, stats.busy, stats.compacting])
+
   const send = useCallback(
     async (rawText: string, retry?: RetryTurn, selectedAttachments: CcAttachment[] = []) => {
       const text = rawText.trim()
@@ -1233,6 +1285,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         tools: [],
         process: [],
         engine: turnEngine,
+        laneId: turnEngine === 'cc' ? laneIdForPick(turnPick) : undefined,
         requestId,
         deliveryState: 'generating',
         retryText: text,
@@ -1326,6 +1379,36 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           },
           onContext: payload => {
             patch(message => ({ ...message, context: normalizeTurnContext(payload) }))
+          },
+          onContextSnapshot: payload => {
+            const snapshot = payload as unknown as CcContextSnapshot
+            patch(message => ({ ...message, contextSnapshot: snapshot }))
+            setStats(current => ({
+              ...current,
+              contextSnapshot: snapshot,
+              contextTokens: snapshot.totalTokens,
+              contextMaxTokens: snapshot.maxTokens,
+            }))
+          },
+          onCompact: payload => {
+            const compaction = payload as unknown as CcCompactionEvent
+            patch(message => ({
+              ...message,
+              process: [
+                ...closeOpenThinking(message.process),
+                { type: 'compact', id: compaction.id, compaction },
+              ],
+            }))
+            setStats(current => ({
+              ...current,
+              lastCompaction: compaction,
+              compactionCount: current.lastCompaction?.id === compaction.id
+                ? current.compactionCount
+                : current.compactionCount + 1,
+            }))
+          },
+          onCompactStatus: payload => {
+            setStats(current => ({ ...current, compacting: payload.compacting === true }))
           },
           onInit: payload => {
             patch(message => ({
@@ -1672,6 +1755,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setError,
     send,
     stop,
+    compactNow,
     switchSession,
     startNewSession,
     renameSession,

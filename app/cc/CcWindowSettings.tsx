@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import { useState } from 'react'
 import type { CcEngine, CcProUsage, CcSessionStats } from './types'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
@@ -56,6 +57,7 @@ type Props = {
   providerLocked: boolean
   webLocked: boolean
   note: string
+  onCompact: () => Promise<{ ok: boolean; compacted: boolean; error: string }>
   onHandoff: () => void
   onClose: () => void
 }
@@ -113,9 +115,11 @@ export default function CcWindowSettings({
   providerLocked,
   webLocked,
   note,
+  onCompact,
   onHandoff,
   onClose,
 }: Props) {
+  const [compactNote, setCompactNote] = useState('')
   const models = modelsFor(upstream, pick.kind, pick.providerId)
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
@@ -129,6 +133,25 @@ export default function CcWindowSettings({
     ['5 小时', proUsage?.fiveHour],
     ['本周', proUsage?.sevenDay],
   ] as const
+  const snapshot = stats.contextSnapshot
+  const shownContextTokens = snapshot?.totalTokens || contextTokens
+  const shownContextMax = snapshot?.maxTokens || contextMaxTokens
+  const contextPercent = shownContextMax > 0 ? shownContextTokens / shownContextMax * 100 : 0
+  const contextState = contextPercent >= 90
+    ? '建议本轮结束后换窗'
+    : contextPercent >= 80
+      ? '请准备换窗'
+      : '正常'
+  const contextStale = Boolean(
+    snapshot?.model && shownActiveModel && modelLabel(snapshot.model, models, pick.kind) !== shownActiveModel,
+  )
+
+  const requestCompact = async () => {
+    if (!window.confirm('手动压缩会调用模型生成摘要并消耗一次用量。压缩后原对话仍保存在 Haven，但 CC 当前窗口会改用摘要继续。确定现在压缩吗？')) return
+    setCompactNote('正在压缩…')
+    const result = await onCompact()
+    setCompactNote(result.ok && result.compacted ? '压缩完成' : result.error || '没有发生压缩')
+  }
 
   return (
     <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -175,12 +198,27 @@ export default function CcWindowSettings({
                 </span>
               </div>
             ) : null}
-            {contextTokens > 0 ? (
+            {shownContextTokens > 0 ? (
+              <>
+                <div className={ROW}>
+                  <span className={KEY}>{stats.live ? '当前窗口 Context' : '上次模型调用 Context'}</span>
+                  <span className={VAL}>
+                    {fmtK(shownContextTokens)}
+                    {shownContextMax > 0 ? ` / ${fmtK(shownContextMax)} · ${contextPercent.toFixed(0)}%` : ''}
+                  </span>
+                </div>
+                <div className={`${HINT} text-right`}>
+                  {contextStale ? '刚换模型，等待下一次模型调用确认' : contextState}
+                  {shownContextMax > 0 ? ` · 约剩 ${fmtK(Math.max(0, shownContextMax - shownContextTokens))}` : ''}
+                </div>
+              </>
+            ) : null}
+            {stats.lastCompaction ? (
               <div className={ROW}>
-                <span className={KEY}>上下文</span>
+                <span className={KEY}>压缩状态</span>
                 <span className={VAL}>
-                  {fmtK(contextTokens)}
-                  {contextMaxTokens > 0 ? ` / ${fmtK(contextMaxTokens)}` : ''}
+                  {stats.lastCompaction.trigger === 'manual' ? '上次手动' : '上次自动'} · {fmtK(stats.lastCompaction.preTokens)} → {stats.lastCompaction.postTokens == null ? '未知' : fmtK(stats.lastCompaction.postTokens)}
+                  {stats.compactionCount > 1 ? ` · 共 ${stats.compactionCount} 次` : ''}
                 </span>
               </div>
             ) : null}
@@ -192,7 +230,6 @@ export default function CcWindowSettings({
                   : '尚无活跃缓存'}
               </span>
             </div>
-            <div className={`${HINT} text-right`}>按最后一次模型调用估算；单条回复 usage 才是实际读写记录</div>
             <div className={ROW}>
               <span className={KEY}>本轮花费</span>
               <span className={VAL}>
@@ -226,6 +263,26 @@ export default function CcWindowSettings({
                 {modeLocked ? '这个窗口已用过 cc；如需换模式，请新建窗口。' : MODE_HINT[mode]}
               </div>
             </>
+          ) : null}
+
+          {engine === 'cc' && mode === 'work' ? (
+            <div className="mb-3 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50/60 p-2.5">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <span className={KEY}>手动压缩 Context</span>
+                <button
+                  type="button"
+                  disabled={!stats.live || stats.busy || stats.compacting}
+                  onClick={() => void requestCompact()}
+                  className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[10.5px] text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {stats.compacting ? '压缩中…' : '立即压缩'}
+                </button>
+              </div>
+              <div className="text-[10px] leading-relaxed text-amber-800/70">
+                仅复用当前在线且空闲的 CC 工作会话；不会唤醒已回收会话。会额外调用一次模型生成摘要。
+              </div>
+              {compactNote ? <div className="mt-1 text-[10px] text-amber-800">{compactNote}</div> : null}
+            </div>
           ) : null}
 
           {/* ── 供应商：左订阅 / 右 api 中转站 ── */}

@@ -1,7 +1,7 @@
 // /cc 聊天页的前端类型。故意跟 Haven 的 HavenTurn 分开：
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
 
-export type CcRole = 'user' | 'assistant'
+export type CcRole = 'user' | 'assistant' | 'system'
 export type CcEngine = 'cc' | 'selfhost'
 
 export type CcProUsage = {
@@ -52,6 +52,27 @@ export type CcTurnContext = {
   omittedHistoryRounds: number
 }
 
+export type CcContextSnapshot = {
+  totalTokens: number
+  inputTokens: number
+  outputTokens: number
+  maxTokens: number
+  remainingTokens: number
+  percentage: number
+  updatedAt: number
+  model: string
+  source: 'stream' | 'compact'
+}
+
+export type CcCompactionEvent = {
+  id: string
+  trigger: 'manual' | 'auto'
+  preTokens: number
+  postTokens: number | null
+  durationMs: number | null
+  at: number
+}
+
 export type CcToolEvent = {
   name: string
   id: string
@@ -86,6 +107,11 @@ export type CcProcessEvent =
       type: 'tool'
       id: string
       tool: CcToolEvent
+    }
+  | {
+      type: 'compact'
+      id: string
+      compaction: CcCompactionEvent
     }
 
 /** 一轮的 token 用量。每条助手消息右下角那个小面板要的就是这些。 */
@@ -139,8 +165,14 @@ export type CcMessage = {
   engine?: CcEngine
   providerId?: string
   providerLabel?: string
+  /** CC 的凭据线路；Pro/API Context 不可混用。 */
+  laneId?: string
   model?: string
   context?: CcTurnContext | null
+  /** 最近一次模型请求的当前窗口快照，不是本轮累计 usage。 */
+  contextSnapshot?: CcContextSnapshot | null
+  /** 独立系统分隔消息使用。 */
+  compaction?: CcCompactionEvent
   requestId?: string
   roundId?: number
   deliveryState?: CcDeliveryState
@@ -276,6 +308,11 @@ export const EMPTY_STATS: CcSessionStats = {
   recentCostUsd: [],
   contextTokens: 0,
   contextMaxTokens: 0,
+  contextSnapshot: null,
+  lastCompaction: null,
+  compactionCount: 0,
+  compacting: false,
+  busy: false,
 }
 
 export const EMPTY_WORKBENCH: CcWorkbench = {
@@ -321,6 +358,11 @@ export type CcSessionStats = {
   recentCostUsd: number[]
   contextTokens: number
   contextMaxTokens: number
+  contextSnapshot: CcContextSnapshot | null
+  lastCompaction: CcCompactionEvent | null
+  compactionCount: number
+  compacting: boolean
+  busy: boolean
 }
 
 /** 会话列表项。来自 /api/cc-turns（Haven 的 conversation_turns）。 */

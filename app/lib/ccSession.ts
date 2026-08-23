@@ -13,6 +13,7 @@
 // 实现方式：streaming input（prompt 传 AsyncIterable<SDKUserMessage>）。一个 query()
 // 从会话第一句活到闲置回收，中间每句话往那个 iterable 里 push 一条 user 消息。
 
+import { randomUUID } from 'node:crypto'
 import {
   query,
   type Query,
@@ -70,6 +71,28 @@ export const EMPTY_TURN_USAGE: TurnUsage = {
   costUsd: 0,
 }
 
+/** 最近一次真实模型请求所占的当前窗口；不是本轮累计 usage。 */
+export type CcContextSnapshot = {
+  totalTokens: number
+  inputTokens: number
+  outputTokens: number
+  maxTokens: number
+  remainingTokens: number
+  percentage: number
+  updatedAt: number
+  model: string
+  source: 'stream' | 'compact'
+}
+
+export type CcCompactionEvent = {
+  id: string
+  trigger: 'manual' | 'auto'
+  preTokens: number
+  postTokens: number | null
+  durationMs: number | null
+  at: number
+}
+
 /**
  * 这个会话启动时定死的那些参数。
  *
@@ -122,9 +145,14 @@ type LiveSession = {
   thinking: boolean
   /** 近 10 轮的花费，「本窗口设置」里显示。进程被回收就没了（内存态） */
   recentCostUsd: number[]
-  /** 上下文用量，getContextUsage() 拉回来缓存一份 */
+  /** 当前窗口快照的兼容数字；不发 getContextUsage() 控制请求。 */
   contextTokens: number
   contextMaxTokens: number
+  contextSnapshot: CcContextSnapshot | null
+  lastCompaction: CcCompactionEvent | null
+  compactionCount: number
+  compacting: boolean
+  pendingCompactions: CcCompactionEvent[]
   /** 正在跑一轮吗 —— 同一个会话不允许并发发言（一个 iterator 只能一个消费者） */
   busy: boolean
   /** 保存 MCP 时若这轮还在生成，结果边界一到回收 query，下一句话用新前缀 resume。 */
@@ -420,6 +448,11 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     recentCostUsd: [],
     contextTokens: 0,
     contextMaxTokens: 0,
+    contextSnapshot: null,
+    lastCompaction: null,
+    compactionCount: 0,
+    compacting: false,
+    pendingCompactions: [],
     busy: false,
     pendingMcpRestart: false,
     idleTimer: null,
@@ -500,6 +533,11 @@ export type SessionStats = {
   recentCostUsd: number[]
   contextTokens: number
   contextMaxTokens: number
+  contextSnapshot: CcContextSnapshot | null
+  lastCompaction: CcCompactionEvent | null
+  compactionCount: number
+  compacting: boolean
+  busy: boolean
 }
 
 export const EMPTY_SESSION_STATS: SessionStats = {
@@ -517,6 +555,11 @@ export const EMPTY_SESSION_STATS: SessionStats = {
   recentCostUsd: [],
   contextTokens: 0,
   contextMaxTokens: 0,
+  contextSnapshot: null,
+  lastCompaction: null,
+  compactionCount: 0,
+  compacting: false,
+  busy: false,
 }
 
 export function getSessionStats(sessionId: string): SessionStats {
@@ -540,6 +583,11 @@ export function getSessionStats(sessionId: string): SessionStats {
     recentCostUsd: live.recentCostUsd,
     contextTokens: live.contextTokens,
     contextMaxTokens: live.contextMaxTokens,
+    contextSnapshot: live.contextSnapshot,
+    lastCompaction: live.lastCompaction,
+    compactionCount: live.compactionCount,
+    compacting: live.compacting,
+    busy: live.busy,
   }
 }
 
@@ -601,11 +649,178 @@ export async function applyRuntimeSettings(
  * （按 opus 计费），而且两次分段计时都等满 3s 超时不回 —— 顶部数字一直是旧值。
  * 详见 HANDOFF「一条消息 5 个请求」那节（2026-07-26 已定论）。
  */
-export function noteContextUsage(sessionId: string, inputTotal: number, model: string) {
+export function noteContextSnapshot(
+  sessionId: string,
+  usage: { inputTokens: number; outputTokens: number },
+  model: string,
+  source: CcContextSnapshot['source'] = 'stream',
+): CcContextSnapshot | null {
+  const live = registry.get(sessionId)
+  if (!live) return null
+  const inputTokens = Math.max(0, Number(usage.inputTokens) || 0)
+  const outputTokens = Math.max(0, Number(usage.outputTokens) || 0)
+  const totalTokens = inputTokens + outputTokens
+  const maxTokens = contextLimitFor(model)
+  const snapshot: CcContextSnapshot = {
+    totalTokens,
+    inputTokens,
+    outputTokens,
+    maxTokens,
+    remainingTokens: maxTokens ? Math.max(0, maxTokens - totalTokens) : 0,
+    percentage: maxTokens ? Math.min(100, (totalTokens / maxTokens) * 100) : 0,
+    updatedAt: Date.now(),
+    model,
+    source,
+  }
+  live.contextSnapshot = snapshot
+  live.contextTokens = totalTokens
+  live.contextMaxTokens = maxTokens
+  return snapshot
+}
+
+export function noteCompaction(
+  sessionId: string,
+  event: CcCompactionEvent,
+  options: { pending?: boolean } = {},
+): void {
   const live = registry.get(sessionId)
   if (!live) return
-  live.contextTokens = Number(inputTotal) || 0
-  live.contextMaxTokens = contextLimitFor(model)
+  if (live.lastCompaction?.id !== event.id) live.compactionCount += 1
+  live.lastCompaction = event
+  if (options.pending && !live.pendingCompactions.some(item => item.id === event.id)) {
+    live.pendingCompactions.push(event)
+  }
+  if (event.postTokens != null) {
+    const contextModel = live.boot.credKind === 'api' && /(?:^|[-_.])opus[-_.]?4[-_.]?6(?:$|[-_.])/i.test(live.model)
+      ? 'opus[1m]'
+      : live.model
+    noteContextSnapshot(
+      sessionId,
+      { inputTokens: event.postTokens, outputTokens: 0 },
+      contextModel,
+      'compact',
+    )
+  }
+}
+
+export function getPendingCompactions(sessionId: string): CcCompactionEvent[] {
+  return [...(registry.get(sessionId)?.pendingCompactions || [])]
+}
+
+export function acknowledgePendingCompactions(sessionId: string, ids: string[]): void {
+  const live = registry.get(sessionId)
+  if (!live || ids.length === 0) return
+  const acknowledged = new Set(ids)
+  live.pendingCompactions = live.pendingCompactions.filter(item => !acknowledged.has(item.id))
+}
+
+export type CompactSessionResult = {
+  ok: boolean
+  compacted: boolean
+  error: string
+  message: string
+  compaction: CcCompactionEvent | null
+  stats: SessionStats
+}
+
+/** 用户主动触发 Claude Code 原生 `/compact`；只复用现有空闲工作会话。 */
+export async function compactSession(sessionId: string): Promise<CompactSessionResult> {
+  const live = registry.get(sessionId)
+  const fail = (error: string): CompactSessionResult => ({
+    ok: false,
+    compacted: false,
+    error,
+    message: '',
+    compaction: null,
+    stats: getSessionStats(sessionId),
+  })
+  if (!live) return fail('这个 CC 会话当前不在线，先正常发一条消息再压缩')
+  if (live.boot.mode !== 'work') return fail('手动压缩只在 CC 工作模式提供')
+  if (live.busy) return fail('当前还有一轮未结束，请等回复完成后再压缩')
+  if (!live.ccSessionId) return fail('这个会话还没有可压缩的 CC 上下文')
+
+  live.busy = true
+  live.compacting = true
+  live.lastActiveAt = Date.now()
+  armIdleTimer(live)
+  const commandId = randomUUID()
+  live.push({
+    type: 'user',
+    message: { role: 'user', content: '/compact' },
+    parent_tool_use_id: null,
+    uuid: commandId,
+  })
+
+  let boundary: CcCompactionEvent | null = null
+  let resultMessage = ''
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const deadline = Date.now() + 120_000
+    for (;;) {
+      const remaining = Math.max(1, deadline - Date.now())
+      const step = await Promise.race([
+        live.iterator.next(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('手动压缩等待超过 120 秒')), remaining)
+        }),
+      ])
+      if (timer) clearTimeout(timer)
+      timer = undefined
+      if (step.done) throw new Error('CC 在压缩完成前结束了连接')
+      const msg = step.value as SDKMessage
+      if (msg.type === 'system' && msg.subtype === 'init') {
+        live.ccSessionId = msg.session_id
+        rememberResumePoint(live.resumeKey, msg.session_id)
+        continue
+      }
+      if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
+        boundary = {
+          id: msg.uuid || `compact-${Date.now()}`,
+          trigger: msg.compact_metadata.trigger,
+          preTokens: Number(msg.compact_metadata.pre_tokens) || 0,
+          postTokens: msg.compact_metadata.post_tokens == null
+            ? null
+            : Number(msg.compact_metadata.post_tokens) || 0,
+          durationMs: msg.compact_metadata.duration_ms == null
+            ? null
+            : Number(msg.compact_metadata.duration_ms) || 0,
+          at: Date.now(),
+        }
+        noteCompaction(sessionId, boundary, { pending: true })
+        continue
+      }
+      if (msg.type !== 'result') continue
+      resultMessage = msg.subtype === 'success' ? String(msg.result || '') : ''
+      if (msg.is_error || msg.subtype !== 'success') {
+        const errors = 'errors' in msg && Array.isArray(msg.errors) ? msg.errors.join('；') : ''
+        throw new Error(errors || 'CC 手动压缩失败')
+      }
+      live.totalCostUsd += Number(msg.total_cost_usd || 0)
+      live.lastModelCallAt = Date.now()
+      break
+    }
+    live.busy = false
+    live.compacting = false
+    return {
+      ok: true,
+      compacted: Boolean(boundary),
+      error: '',
+      message: resultMessage,
+      compaction: boundary,
+      stats: getSessionStats(sessionId),
+    }
+  } catch (error) {
+    dropSession(sessionId)
+    return fail((error as Error).message || '手动压缩失败')
+  } finally {
+    if (timer) clearTimeout(timer)
+    const current = registry.get(sessionId)
+    if (current === live) {
+      live.busy = false
+      live.compacting = false
+      armIdleTimer(live)
+    }
+  }
 }
 
 /**

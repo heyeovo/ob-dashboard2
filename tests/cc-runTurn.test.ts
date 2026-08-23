@@ -114,6 +114,38 @@ function thinkingDelta(text: string): SDKMessage {
   } as SDKMessage
 }
 
+function messageStart(usage: Record<string, unknown>): SDKMessage {
+  return {
+    type: 'stream_event',
+    event: { type: 'message_start', message: { usage } },
+  } as SDKMessage
+}
+
+function messageDelta(usage: Record<string, unknown>): SDKMessage {
+  return {
+    type: 'stream_event',
+    event: { type: 'message_delta', usage },
+  } as SDKMessage
+}
+
+function compactBoundary(
+  trigger: 'manual' | 'auto',
+  preTokens: number,
+  postTokens: number | null,
+): SDKMessage {
+  return {
+    type: 'system',
+    subtype: 'compact_boundary',
+    uuid: `compact-${trigger}`,
+    compact_metadata: {
+      trigger,
+      pre_tokens: preTokens,
+      post_tokens: postTokens,
+      duration_ms: 1200,
+    },
+  } as SDKMessage
+}
+
 function toolUse(id: string, name: string, input: unknown = {}): SDKMessage {
   return {
     type: 'assistant',
@@ -332,6 +364,75 @@ describe('runTurn：普通回复', () => {
     const done = handle.events.find(e => e.event === 'done')!
     expect(done.data.usage).toMatchObject({ inputTokens: 10, outputTokens: 20 })
     expect(done.data.interrupted).toBeUndefined()
+  })
+
+  it('当前窗口只取最后一次模型请求，不拿 result 的本轮累计 usage 覆盖', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      messageStart({ input_tokens: 100, cache_read_input_tokens: 20, cache_creation_input_tokens: 30 }),
+      messageDelta({ output_tokens: 10 }),
+      toolUse('t-context', 'Read', { file_path: 'a.ts' }),
+      toolResult('t-context', '内容'),
+      messageStart({ input_tokens: 400, cache_read_input_tokens: 80, cache_creation_input_tokens: 20 }),
+      messageDelta({
+        output_tokens: 5,
+        iterations: [
+          { input_tokens: 300, cache_read_input_tokens: 50, cache_creation_input_tokens: 10, output_tokens: 2 },
+          { input_tokens: 400, cache_read_input_tokens: 80, cache_creation_input_tokens: 20, output_tokens: 25 },
+        ],
+      }),
+      textDelta('完成'),
+      resultMsg(),
+    ])
+    await handle.promise
+
+    const snapshots = handle.events.filter(event => event.event === 'context_snapshot')
+    expect(snapshots.at(-1)?.data).toMatchObject({
+      inputTokens: 500,
+      outputTokens: 25,
+      totalTokens: 525,
+      source: 'stream',
+    })
+    expect(turns.recordTurn.mock.calls[0][0].raw.context_snapshot).toMatchObject({ totalTokens: 525 })
+    expect(handle.events.find(event => event.event === 'done')?.data.usage).toMatchObject({
+      inputTokens: 10,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 30,
+    })
+  })
+
+  it('compact_boundary 原位进入过程、SSE 和历史 raw，并更新压缩后 Context', async () => {
+    const compactSessionId = 'ob2-compact-test-session'
+    const handle = driveTurn([
+      initMsg(),
+      messageStart({ input_tokens: 185_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }),
+      thinkingDelta('准备继续'),
+      { type: 'system', subtype: 'status', status: 'compacting' } as SDKMessage,
+      compactBoundary('auto', 186_000, 42_000),
+      { type: 'system', subtype: 'status', status: null, compact_result: 'success' } as SDKMessage,
+      messageStart({ input_tokens: 42_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }),
+      textDelta('压缩后继续'),
+      resultMsg(),
+    ], {
+      sessionId: compactSessionId,
+      config: makeConfig({
+        sessionId: compactSessionId,
+        cred: 'subscription', laneId: 'subscription',
+        model: 'claude-opus-4-6', sdkModel: 'claude-opus-4-6',
+      }),
+    })
+    await handle.promise
+
+    const compact = handle.events.find(event => event.event === 'compact')
+    expect(compact?.data).toMatchObject({ trigger: 'auto', preTokens: 186_000, postTokens: 42_000 })
+    expect(handle.events.filter(event => event.event === 'compact_status').map(event => event.data.compacting)).toEqual([true, false])
+    const raw = turns.recordTurn.mock.calls[0][0].raw
+    expect(raw.process.map((event: { type: string }) => event.type)).toEqual([
+      'thinking', 'compact', 'text',
+    ])
+    expect(raw.last_compaction).toMatchObject({ trigger: 'auto', preTokens: 186_000, postTokens: 42_000 })
+    expect(raw.context_snapshot).toMatchObject({ totalTokens: 42_000, maxTokens: 200_000 })
+    dropSession(compactSessionId)
   })
 
   it('把当前 CC 线路游标后的其他线路原文一次性补入 SDK 消息，并记录补齐元数据', async () => {

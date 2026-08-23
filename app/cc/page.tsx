@@ -388,8 +388,47 @@ export default function CcChatPage() {
   const shownProvider = chat.latestTurn?.providerLabel
     || chat.stats.boot?.providerLabel
     || (chat.effectiveEngine === 'cc' && chat.pick.kind === 'subscription' ? 'Claude 订阅' : '')
-  const ctxTokens = chat.latestTurn?.context?.inputTokensEstimated || chat.stats.contextTokens
-  const ctxMax = chat.latestTurn?.context?.modelContextLimit || chat.stats.contextMaxTokens
+  const currentLaneId = chat.pick.kind === 'subscription'
+    ? 'subscription'
+    : `api:${chat.pick.providerId || 'default'}`
+  const latestLaneTurn = [...chat.messages].reverse().find(message =>
+    message.role === 'assistant' && message.engine !== 'selfhost' && message.laneId === currentLaneId,
+  )
+  const contextSnapshot = chat.stats.contextSnapshot || latestLaneTurn?.contextSnapshot || null
+  const ctxTokens = contextSnapshot?.totalTokens
+    || latestLaneTurn?.context?.inputTokensEstimated
+    || chat.stats.contextTokens
+  const ctxMax = contextSnapshot?.maxTokens
+    || latestLaneTurn?.context?.modelContextLimit
+    || chat.stats.contextMaxTokens
+  const laneCompactions = chat.messages.flatMap(message => {
+    if (message.laneId !== currentLaneId) return []
+    const standalone = message.compaction ? [message.compaction] : []
+    const inline = (message.process || []).flatMap(event => event.type === 'compact' ? [event.compaction] : [])
+    return [...standalone, ...inline]
+  })
+  const allCompactions = [
+    ...laneCompactions,
+    ...(chat.stats.lastCompaction ? [chat.stats.lastCompaction] : []),
+  ]
+  const latestCompaction = allCompactions.sort((a, b) => a.at - b.at).at(-1) || null
+  const compactionCount = new Set(allCompactions.map(item => item.id)).size
+  const displayStats = {
+    ...chat.stats,
+    contextSnapshot,
+    contextTokens: ctxTokens,
+    contextMaxTokens: ctxMax,
+    lastCompaction: latestCompaction,
+    compactionCount: Math.max(chat.stats.compactionCount, compactionCount),
+  }
+  const contextPercent = ctxMax > 0 ? ctxTokens / ctxMax * 100 : 0
+  const contextTone = chat.stats.compacting
+    ? 'border-amber-300 bg-amber-50 text-amber-800'
+    : contextPercent >= 90
+      ? 'border-rose-300 bg-rose-50 text-rose-700'
+      : contextPercent >= 80
+        ? 'border-amber-300 bg-amber-50 text-amber-800'
+        : 'border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'
   const totalChars = chat.messages.reduce((n, m) => n + m.text.length, 0)
 
   const header = (
@@ -454,16 +493,6 @@ export default function CcChatPage() {
           ) : null}
           <span>·</span>
           <span>{chat.stats.turnCount} 轮</span>
-          {/* 上下文用量。上限拿不到（进程还没起）就不显示分母，别编一个 */}
-          {ctxTokens > 0 ? (
-            <>
-              <span>·</span>
-              <span title="这个对话现在占了多少上下文">
-                {formatTokens(ctxTokens)}
-                {ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}
-              </span>
-            </>
-          ) : null}
           {/* 花费只在这个进程还活着时显示。读回来的历史算不出钱 ——
               不同中转站、不同模型价格不一样，要一张价格表，见 HANDOFF 待办。
               这时候显示 $0 是在骗人，不如不显示。 */}
@@ -531,6 +560,20 @@ export default function CcChatPage() {
             </button>
           ))}
         </div>
+        {chat.effectiveEngine === 'cc' ? (
+          <button
+            type="button"
+            onClick={() => setWinSetOpen(true)}
+            className={`whitespace-nowrap rounded-full border px-2 py-1 text-[10px] tabular-nums ${contextTone}`}
+            title={ctxTokens > 0
+              ? `当前窗口 Context：${ctxTokens.toLocaleString()} / ${ctxMax ? ctxMax.toLocaleString() : '上限未知'}${latestCompaction ? `；上次${latestCompaction.trigger === 'auto' ? '自动' : '手动'}压缩` : ''}`
+              : '当前窗口 Context 会在下一次真实模型调用时出现'}
+          >
+            {chat.stats.compacting
+              ? 'Context 压缩中'
+              : `Context ${ctxTokens > 0 ? formatTokens(ctxTokens) : '—'}${ctxMax > 0 ? `/${formatTokens(ctxMax)}` : ''}`}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setWinSetOpen(true)}
@@ -566,7 +609,7 @@ export default function CcChatPage() {
         lastMessage.text.length,
         lastMessage.thinking?.length || 0,
         lastMessage.process?.reduce(
-          (length, event) => length + (event.type === 'tool' ? 0 : event.text.length),
+          (length, event) => length + (event.type === 'thinking' || event.type === 'text' ? event.text.length : 0),
           0,
         ) || 0,
         lastMessage.tools?.length || 0,
@@ -957,7 +1000,7 @@ export default function CcChatPage() {
       {winSetOpen ? (
         <CcWindowSettings
           sessionId={chat.sessionId}
-          stats={chat.stats}
+          stats={displayStats}
           totalChars={totalChars}
           activeProvider={shownProvider}
           activeModel={shownModel}
@@ -979,6 +1022,7 @@ export default function CcChatPage() {
           providerLocked={chat.providerLocked}
           webLocked={chat.modeLocked}
           note={chat.settingsNote}
+          onCompact={chat.compactNow}
           onHandoff={() => {
             setWinSetOpen(false)
             setHandoffOpen({ fromSessionId: chat.sessionId })

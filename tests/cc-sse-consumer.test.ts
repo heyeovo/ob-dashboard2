@@ -15,7 +15,9 @@ function stream(events: Array<[string, Record<string, unknown>]>) {
 
 function handlers(): SseHandlers {
   return {
-    onStart: vi.fn(), onContext: vi.fn(), onInit: vi.fn(), onDelta: vi.fn(),
+    onStart: vi.fn(), onContext: vi.fn(), onContextSnapshot: vi.fn(), onCompact: vi.fn(),
+    onCompactStatus: vi.fn(),
+    onInit: vi.fn(), onDelta: vi.fn(),
     onThinking: vi.fn(), onUsage: vi.fn(), onRecall: vi.fn(), onTool: vi.fn(),
     onToolResult: vi.fn(), onPermission: vi.fn(), onPermissionResolved: vi.fn(),
     onDone: vi.fn(), onAfter: vi.fn(), onError: vi.fn(),
@@ -29,6 +31,9 @@ describe('10.3 unified cc/selfhost SSE consumer', () => {
       ['start', { request_id: 'r1' }],
       ['recall', { ok: true }],
       ['context', { input_tokens_estimated: 100 }],
+      ['context_snapshot', { totalTokens: 120 }],
+      ['compact', { id: 'c1', trigger: 'auto' }],
+      ['compact_status', { compacting: true }],
       ['init', { model: 'm1' }],
       ['thinking', { text: '想' }],
       ['delta', { text: '答' }],
@@ -39,6 +44,9 @@ describe('10.3 unified cc/selfhost SSE consumer', () => {
     expect(target.onStart).toHaveBeenCalledOnce()
     expect(target.onRecall).toHaveBeenCalledOnce()
     expect(target.onContext).toHaveBeenCalledOnce()
+    expect(target.onContextSnapshot).toHaveBeenCalledOnce()
+    expect(target.onCompact).toHaveBeenCalledOnce()
+    expect(target.onCompactStatus).toHaveBeenCalledOnce()
     expect(target.onInit).toHaveBeenCalledOnce()
     expect(target.onThinking).toHaveBeenCalledOnce()
     expect(target.onDelta).toHaveBeenCalledOnce()
