@@ -13,7 +13,7 @@ import path from 'node:path'
 // 风险文件那道硬规则对读和写都生效。
 
 /** VPS production 允许挂进 Claude Code 的全部 workspace；不是 Persona 默认授权。 */
-export const VPS_WORKSPACE_ROOTS = ['/workspace/dashboard', '/workspace/haven'] as const
+export const VPS_WORKSPACE_ROOTS = ['/workspace/dashboard', '/workspace/haven', '/home/cc/.claude'] as const
 
 type ResolveDirOptions = {
   cwd?: string
