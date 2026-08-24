@@ -10,6 +10,7 @@ type HavenConfig = {
     api_key_masked?: string
     max_tokens?: number
     temperature?: number
+    thinking_mode?: string
   }
   embedding?: {
     enabled?: boolean
@@ -37,6 +38,7 @@ type FormState = {
   dehydrationApiKey: string
   dehydrationMaxTokens: string
   dehydrationTemperature: string
+  dehydrationThinkingMode: '' | 'enabled'
   embeddingEnabled: boolean
   embeddingModel: string
   embeddingBaseUrl: string
@@ -64,6 +66,7 @@ const EMPTY_FORM: FormState = {
   dehydrationApiKey: '',
   dehydrationMaxTokens: '1024',
   dehydrationTemperature: '0.1',
+  dehydrationThinkingMode: '',
   embeddingEnabled: false,
   embeddingModel: '',
   embeddingBaseUrl: '',
@@ -94,6 +97,7 @@ function formFromConfig(config: HavenConfig): FormState {
     dehydrationApiKey: '',
     dehydrationMaxTokens: String(dehydration.max_tokens ?? 1024),
     dehydrationTemperature: String(dehydration.temperature ?? 0.1),
+    dehydrationThinkingMode: dehydration.thinking_mode === 'enabled' ? 'enabled' : '',
     embeddingEnabled: Boolean(embedding.enabled),
     embeddingModel: embedding.model || '',
     embeddingBaseUrl: embedding.base_url || '',
@@ -213,6 +217,7 @@ export default function MemoryProcessingSettingsPage() {
             true,
           ),
           temperature: validateNumber(form.dehydrationTemperature, 'Temperature', 0, 2),
+          thinking_mode: form.dehydrationThinkingMode,
         },
         embedding: {
           enabled: form.embeddingEnabled,
@@ -368,7 +373,7 @@ export default function MemoryProcessingSettingsPage() {
                   keyStatus.dehydration,
                   '留空表示不修改现有密钥。',
                 )}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div>
                     <label className={labelClass}>Max Tokens</label>
                     <input
@@ -391,6 +396,20 @@ export default function MemoryProcessingSettingsPage() {
                       value={form.dehydrationTemperature}
                       onChange={event => patch('dehydrationTemperature', event.target.value)}
                     />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Thinking</label>
+                    <select
+                      className={inputClass}
+                      value={form.dehydrationThinkingMode}
+                      onChange={event => patch(
+                        'dehydrationThinkingMode',
+                        event.target.value === 'enabled' ? 'enabled' : '',
+                      )}
+                    >
+                      <option value="">关闭</option>
+                      <option value="enabled">开启</option>
+                    </select>
                   </div>
                 </div>
               </div>

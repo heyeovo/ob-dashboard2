@@ -18,18 +18,6 @@ type PromptItem = {
   server_validations: string[]
 }
 
-type AnalyzeRuntimeForm = {
-  maxTokens: string
-  temperature: string
-  thinkingMode: '' | 'enabled'
-}
-
-const DEFAULT_ANALYZE_RUNTIME: AnalyzeRuntimeForm = {
-  maxTokens: '256',
-  temperature: '0.1',
-  thinkingMode: '',
-}
-
 const PROMPT_META: Record<string, { label: string; description: string }> = {
   analyze: { label: '自动打标', description: '调整标签、标题、分类和情绪判断的关注重点' },
   merge: { label: '记忆合并', description: '调整新旧记忆合并时的文风、篇幅和保留重点' },
@@ -124,29 +112,15 @@ export default function PromptsPage() {
   const [message, setMessage] = useState<Record<string, { type: 'ok' | 'error'; text: string }>>({})
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [testName, setTestName] = useState<string | null>(null)
-  const [analyzeRuntime, setAnalyzeRuntime] = useState<AnalyzeRuntimeForm>(DEFAULT_ANALYZE_RUNTIME)
-  const [savedAnalyzeRuntime, setSavedAnalyzeRuntime] = useState<AnalyzeRuntimeForm>(DEFAULT_ANALYZE_RUNTIME)
 
   const load = async () => {
     setLoading(true); setLoadError('')
     try {
-      const [res, configRes] = await Promise.all([
-        fetch('/api/prompts', { cache: 'no-store' }),
-        fetch('/api/config', { cache: 'no-store' }),
-      ])
-      const [data, configData] = await Promise.all([res.json(), configRes.json()])
+      const res = await fetch('/api/prompts', { cache: 'no-store' })
+      const data = await res.json()
       if (!res.ok || !data.prompts) throw new Error(data.error || 'Prompt 配置加载失败')
-      if (!configRes.ok) throw new Error(configData.error || '自动打标运行参数加载失败')
-      const dehydration = configData.dehydration || {}
-      const runtime: AnalyzeRuntimeForm = {
-        maxTokens: String(dehydration.analyze_max_tokens ?? 256),
-        temperature: String(dehydration.analyze_temperature ?? 0.1),
-        thinkingMode: dehydration.analyze_thinking_mode === 'enabled' ? 'enabled' : '',
-      }
       setPrompts(data.prompts)
       setEditing(Object.fromEntries(Object.entries(data.prompts as Record<string, PromptItem>).map(([name, item]) => [name, item.content])))
-      setAnalyzeRuntime(runtime)
-      setSavedAnalyzeRuntime(runtime)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -180,50 +154,6 @@ export default function PromptsPage() {
     } catch (e) {
       setMessage(prev => ({ ...prev, [name]: { type: 'error', text: e instanceof Error ? e.message : String(e) } }))
     } finally { setBusy(null) }
-  }
-
-  const saveAnalyzeRuntime = async () => {
-    const maxTokens = Number(analyzeRuntime.maxTokens)
-    const temperature = Number(analyzeRuntime.temperature)
-    if (!Number.isInteger(maxTokens) || maxTokens < 64 || maxTokens > 8192) {
-      setMessage(prev => ({ ...prev, analyze: { type: 'error', text: 'Max Tokens 须为 64–8192 的整数' } }))
-      return
-    }
-    if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
-      setMessage(prev => ({ ...prev, analyze: { type: 'error', text: 'Temperature 须为 0–2' } }))
-      return
-    }
-
-    setBusy('analyze-runtime')
-    setMessage(prev => ({ ...prev, analyze: { type: 'ok', text: '' } }))
-    try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          persist: true,
-          dehydration: {
-            analyze_max_tokens: maxTokens,
-            analyze_temperature: temperature,
-            analyze_thinking_mode: analyzeRuntime.thinkingMode,
-          },
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.ok === false) throw new Error(data.error || '自动打标运行参数保存失败')
-      const normalized: AnalyzeRuntimeForm = {
-        maxTokens: String(maxTokens),
-        temperature: String(temperature),
-        thinkingMode: analyzeRuntime.thinkingMode,
-      }
-      setAnalyzeRuntime(normalized)
-      setSavedAnalyzeRuntime(normalized)
-      setMessage(prev => ({ ...prev, analyze: { type: 'ok', text: '自动打标运行参数已保存并立即生效' } }))
-    } catch (e) {
-      setMessage(prev => ({ ...prev, analyze: { type: 'error', text: e instanceof Error ? e.message : String(e) } }))
-    } finally {
-      setBusy(null)
-    }
   }
 
   const restoreDefault = async (name: string) => {
@@ -261,11 +191,6 @@ export default function PromptsPage() {
             if (!item) return null
             const dirty = editing[name] !== item.content
             const note = message[name]
-            const analyzeRuntimeDirty = name === 'analyze' && (
-              analyzeRuntime.maxTokens !== savedAnalyzeRuntime.maxTokens ||
-              analyzeRuntime.temperature !== savedAnalyzeRuntime.temperature ||
-              analyzeRuntime.thinkingMode !== savedAnalyzeRuntime.thinkingMode
-            )
             return <Card key={name} variant="outline" padding="none" className="overflow-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-4">
                 <button className="text-left flex-1" onClick={() => setCollapsed(prev => ({ ...prev, [name]: !prev[name] }))}>
@@ -290,61 +215,6 @@ export default function PromptsPage() {
               </div>
               {note?.text && <div className={`px-4 sm:px-6 pb-3 text-xs ${note.type === 'error' ? 'text-red-500' : 'text-[var(--color-digested)]'}`}>{note.text}</div>}
               {!collapsed[name] && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
-                {name === 'analyze' && <div className="mt-4 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-3.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-[var(--color-text-primary)]">模型运行参数</span>
-                        {analyzeRuntimeDirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
-                      </div>
-                      <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">正式打标和安全测试共用；不会影响记忆合并</div>
-                    </div>
-                    <button
-                      onClick={() => void saveAnalyzeRuntime()}
-                      disabled={!analyzeRuntimeDirty || busy === 'analyze-runtime'}
-                      className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40"
-                    >
-                      {busy === 'analyze-runtime' ? '保存中…' : '保存运行参数'}
-                    </button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <label className="text-[11px] text-[var(--color-text-tertiary)]">
-                      <span className="block mb-1">Max Tokens</span>
-                      <input
-                        type="number"
-                        min="64"
-                        max="8192"
-                        step="1"
-                        value={analyzeRuntime.maxTokens}
-                        onChange={e => setAnalyzeRuntime(prev => ({ ...prev, maxTokens: e.target.value }))}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]"
-                      />
-                    </label>
-                    <label className="text-[11px] text-[var(--color-text-tertiary)]">
-                      <span className="block mb-1">Temperature</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="2"
-                        step="0.05"
-                        value={analyzeRuntime.temperature}
-                        onChange={e => setAnalyzeRuntime(prev => ({ ...prev, temperature: e.target.value }))}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]"
-                      />
-                    </label>
-                    <label className="text-[11px] text-[var(--color-text-tertiary)]">
-                      <span className="block mb-1">Thinking</span>
-                      <select
-                        value={analyzeRuntime.thinkingMode}
-                        onChange={e => setAnalyzeRuntime(prev => ({ ...prev, thinkingMode: e.target.value === 'enabled' ? 'enabled' : '' }))}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]"
-                      >
-                        <option value="">关闭（不发送参数）</option>
-                        <option value="enabled">开启</option>
-                      </select>
-                    </label>
-                  </div>
-                </div>}
                 <div className="mt-4 mb-2 flex items-center justify-between gap-3">
                   <div>
                     <div className="text-xs font-medium text-[var(--color-text-primary)]">可编辑的产品提示词</div>
