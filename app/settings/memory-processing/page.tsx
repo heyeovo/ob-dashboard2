@@ -38,7 +38,7 @@ type FormState = {
   dehydrationApiKey: string
   dehydrationMaxTokens: string
   dehydrationTemperature: string
-  dehydrationThinkingMode: '' | 'enabled'
+  dehydrationThinkingMode: '' | 'disabled' | 'enabled'
   embeddingEnabled: boolean
   embeddingModel: string
   embeddingBaseUrl: string
@@ -97,7 +97,10 @@ function formFromConfig(config: HavenConfig): FormState {
     dehydrationApiKey: '',
     dehydrationMaxTokens: String(dehydration.max_tokens ?? 1024),
     dehydrationTemperature: String(dehydration.temperature ?? 0.1),
-    dehydrationThinkingMode: dehydration.thinking_mode === 'enabled' ? 'enabled' : '',
+    dehydrationThinkingMode:
+      dehydration.thinking_mode === 'enabled' || dehydration.thinking_mode === 'disabled'
+        ? dehydration.thinking_mode
+        : '',
     embeddingEnabled: Boolean(embedding.enabled),
     embeddingModel: embedding.model || '',
     embeddingBaseUrl: embedding.base_url || '',
@@ -404,10 +407,13 @@ export default function MemoryProcessingSettingsPage() {
                       value={form.dehydrationThinkingMode}
                       onChange={event => patch(
                         'dehydrationThinkingMode',
-                        event.target.value === 'enabled' ? 'enabled' : '',
+                        event.target.value === 'enabled' || event.target.value === 'disabled'
+                          ? event.target.value
+                          : '',
                       )}
                     >
-                      <option value="">关闭</option>
+                      <option value="">跟随模型默认</option>
+                      <option value="disabled">强制关闭</option>
                       <option value="enabled">开启</option>
                     </select>
                   </div>

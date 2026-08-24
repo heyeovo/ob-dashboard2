@@ -6,7 +6,7 @@
 - Dashboard「设置 → 记忆处理 → 脱水 / 打标 API」的现有 Max Tokens、Temperature 现在会用于自动打标，并新增 Thinking 开关。
 - Haven 继续以 dehydration 的 `max_tokens`、`temperature`、`thinking_mode` 持久化；保存后 Brain 与 Gateway 热更新，重启后继续从 runtime overlay 读取。
 - 正式自动打标和「测试」按钮与记忆合并共用这组模型运行参数。
-- Thinking 关闭时不发送 `thinking` 字段。
+- Thinking 提供三档：跟随模型默认时不发送字段，强制关闭发送 `thinking.type=disabled`，开启发送 `thinking.type=enabled`。
 
 ## 已确认的产品决定
 
@@ -24,7 +24,7 @@
 
 1. 「记忆处理 → 脱水 / 打标 API」修改 Max Tokens、Temperature、Thinking 并保存，刷新页面后值仍保留。
 2. 在「测试」弹窗输入正文，确认 GLM 返回结构化打标结果。
-3. 分别切换 Thinking 开关，确认关闭时请求不含 `thinking`、开启时为 `thinking.type=enabled`。
+3. 分别切换 Thinking 三档，确认跟随默认时不含 `thinking`、强制关闭时为 `thinking.type=disabled`、开启时为 `thinking.type=enabled`。
 4. 确认记忆合并继续共用同一组 Max Tokens、Temperature 和 Thinking 配置。
 
 ## 已完成验证
