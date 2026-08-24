@@ -63,7 +63,7 @@ export default function HomeToolDrawer({
         className="home-nav-drawer absolute inset-y-0 left-0 flex w-[82vw] max-w-[360px] flex-col overflow-hidden border-r border-white/60 bg-[var(--color-bg)] shadow-2xl"
       >
         <header className="flex h-16 shrink-0 items-center border-b border-[var(--color-border)] bg-white/55 px-5 backdrop-blur-md">
-          <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
+          <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
           <div className="ml-2.5">
             <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">小言&小羊的家</h2>
             <p className="text-[10px] text-[var(--color-text-tertiary)]">功能导航</p>

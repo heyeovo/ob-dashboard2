@@ -332,7 +332,7 @@ export default function BucketDetailDrawer({
             {/* 标签 */}
             <div className="flex flex-wrap gap-1.5 mb-4">
               {(selected.metadata.domain ?? []).map(d => (
-                <span key={d} className="text-xs bg-[#EFECE6] px-2.5 py-1 rounded-md text-[var(--color-text-secondary)]">{d}</span>
+                <span key={d} className="text-xs bg-[var(--color-surface-tertiary)] px-2.5 py-1 rounded-md text-[var(--color-text-secondary)]">{d}</span>
               ))}
               {(selected.metadata.tags ?? []).map(t => (
                 <span key={t} className="text-xs border border-[var(--color-border)] px-2.5 py-1 rounded-md text-[var(--color-text-secondary)]">{t}</span>
@@ -691,7 +691,7 @@ export default function BucketDetailDrawer({
                   </div>
                 </div>
                 {/* Merged */}
-                <div className="border border-[var(--color-primary)]/30 rounded-xl overflow-hidden bg-[#FDF9F7]">
+                <div className="border border-[var(--color-primary)]/30 rounded-xl overflow-hidden bg-[var(--color-primary-muted)]">
                   <div className="px-3 py-2 border-b border-[var(--color-border-light)] flex items-center justify-between">
                     <span className="text-xs font-medium text-[var(--color-primary)]">合并后</span>
                     <span className="text-xs text-[var(--color-primary)]">{mergePreview.merged_chars ?? 0} 字</span>

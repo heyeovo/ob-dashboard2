@@ -411,7 +411,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
           {statusMap[cur.id] && (
             <div className="mb-3">
               <span className={`text-xs px-2.5 py-0.5 rounded-full ${
-                statusMap[cur.id] === '已精修' ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[#FDF3E4] text-[#C97E2C]'
+                statusMap[cur.id] === '已精修' ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
               }`}>
                 {statusMap[cur.id]}
               </span>
@@ -462,18 +462,18 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
         {cur && (
           <div className="grid grid-cols-4 gap-2 mb-2">
             <button onClick={() => updateStatus(cur.id, '已精修')} disabled={savingStatus}
-              className="py-2.5 rounded-xl bg-[var(--color-digested-bg)] border border-[#C5E0C3] text-[var(--color-digested)] hover:bg-[#D4EAD2] text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 rounded-xl bg-[var(--color-digested-bg)] border border-[var(--color-digested-border)] text-[var(--color-digested)] hover:bg-[var(--color-digested-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
             >✓ 已阅</button>
             <button onClick={() => updateStatus(cur.id, '存疑')} disabled={savingStatus}
-              className="py-2.5 rounded-xl bg-[#FDF3E4] border border-[#F2D9B6] text-[#C97E2C] hover:bg-[#FBE9D0] text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 rounded-xl bg-[var(--color-pending-bg)] border border-[var(--color-pending-border)] text-[var(--color-pending)] hover:bg-[var(--color-pending-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
             >? 存疑</button>
             <button onClick={handleDelete} disabled={savingStatus}
-              className="py-2.5 rounded-xl bg-[#FCE8E7] border border-[#F0C0BF] text-[var(--color-danger)] hover:bg-[#FADAD9] text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 rounded-xl bg-[var(--color-danger-bg)] border border-[var(--color-danger-border)] text-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
             >🗑 删除</button>
             {editing ? (
               <>
                 <button onClick={cancelEdit}
-                  className="py-2.5 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[#E8E4DC] text-xs sm:text-sm font-semibold"
+                  className="py-2.5 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] text-xs sm:text-sm font-semibold"
                 >取消</button>
                 <button onClick={saveEdit} disabled={savingEdit}
                   className="py-2.5 rounded-xl bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
@@ -481,7 +481,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
               </>
             ) : (
               <button onClick={startEdit}
-                className="py-2.5 rounded-xl bg-[var(--color-resolved-bg)] border border-[#C8DAF0] text-[var(--color-resolved)] hover:bg-[#E0ECF8] text-xs sm:text-sm font-semibold"
+                className="py-2.5 rounded-xl bg-[var(--color-resolved-bg)] border border-[var(--color-resolved-border)] text-[var(--color-resolved)] hover:bg-[var(--color-resolved-hover)] text-xs sm:text-sm font-semibold"
               >✎ 编辑</button>
             )}
           </div>
@@ -881,7 +881,7 @@ function HomeClient() {
         {b.todo && !b.todo_done && <span title={`待办：${b.todo}`} className="text-xs text-[var(--color-primary)] flex-shrink-0">☐</span>}
       </div>
       <div className="absolute top-3 right-3 sm:static flex flex-col items-end gap-1.5 flex-shrink-0">
-        <div className="min-w-[48px] sm:min-w-[56px] bg-[#FFF5F2] rounded-full px-2 sm:px-2.5 py-0.5 flex items-center justify-center">
+        <div className="min-w-[48px] sm:min-w-[56px] bg-[var(--color-primary-light)] rounded-full px-2 sm:px-2.5 py-0.5 flex items-center justify-center">
           <span className="text-xs text-[var(--color-primary)] font-medium leading-tight">
             score {b.score != null ? b.score.toFixed(1) : '—'}
           </span>
@@ -988,7 +988,7 @@ function HomeClient() {
           底部 Tab 里原来那个「审阅」格 4.6 之后没了，入口收进这里 */}
       <header className="md:hidden sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)] px-3 h-12 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
+          <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">记忆库</span>
         </div>
         <MemoryViewSwitch size="sm" />
@@ -1067,7 +1067,7 @@ function HomeClient() {
                         // 统一了选中与未选中的边框颜色及 hover 效果
                         activeCategory === '' 
                           ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white' 
-                          : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[#C4C1BC] hover:bg-[var(--color-surface-secondary)]'
+                          : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-secondary)]'
                       }`}>
                       全部
                     </button>
@@ -1080,7 +1080,7 @@ function HomeClient() {
                           // 统一了选中与未选中的边框颜色及 hover 效果
                           activeCategory === c 
                             ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white' 
-                            : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[#C4C1BC] hover:bg-[var(--color-surface-secondary)]'
+                            : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-secondary)]'
                         }`}>{c}</button>
                     ))}
                   </div>

@@ -200,9 +200,9 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
 
   if (error && !item) {
     return (
-      <div className="rounded-2xl border border-[#F0C0BF] bg-[#FCE8E7] p-5 text-sm text-[var(--color-danger)]">
+      <div className="rounded-2xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-5 text-sm text-[var(--color-danger)]">
         <p>{error}</p>
-        <button onClick={() => loadItems()} className="mt-3 rounded-lg border border-[#F0C0BF] bg-white px-3 py-1.5 font-medium">重试</button>
+        <button onClick={() => loadItems()} className="mt-3 rounded-lg border border-[var(--color-danger-border)] bg-white px-3 py-1.5 font-medium">重试</button>
       </div>
     )
   }
@@ -224,8 +224,8 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
         <span>{current + 1}/{items.length}</span>
       </div>
 
-      {success && <div className="mb-3 rounded-xl border border-[#C5E0C3] bg-[var(--color-digested-bg)] px-4 py-2 text-sm text-[var(--color-digested)]">{success}</div>}
-      {error && <div className="mb-3 rounded-xl border border-[#F0C0BF] bg-[#FCE8E7] px-4 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+      {success && <div className="mb-3 rounded-xl border border-[var(--color-digested-border)] bg-[var(--color-digested-bg)] px-4 py-2 text-sm text-[var(--color-digested)]">{success}</div>}
+      {error && <div className="mb-3 rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
 
       <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm sm:p-6">
         {editing ? (
@@ -274,7 +274,7 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
               <h2 className="text-lg font-semibold text-[var(--color-text-heading)] sm:text-xl">{candidate.title || '未命名候选'}</h2>
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2.5 py-1 text-[var(--color-text-secondary)]">{KIND_LABELS[candidate.kind ?? ''] || candidate.kind || '类型未知'}</span>
-                <span className="rounded-full bg-[#FDF3E4] px-2.5 py-1 text-[#C97E2C]">重要度 {candidate.importance ?? '—'}</span>
+                <span className="rounded-full bg-[var(--color-pending-bg)] px-2.5 py-1 text-[var(--color-pending)]">重要度 {candidate.importance ?? '—'}</span>
                 <span className="rounded-full bg-[var(--color-resolved-bg)] px-2.5 py-1 text-[var(--color-resolved)]">置信度 {(candidate.confidence ?? 0).toFixed(2)}</span>
               </div>
             </div>
@@ -293,14 +293,14 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
           {operating === 'confirm' ? '写入中…' : '写入长期记忆'}
         </button>
         <button onClick={() => completeAction('reject')} disabled={operating !== null}
-          className="rounded-xl bg-[#FCE8E7] py-2.5 text-sm font-semibold text-[var(--color-danger)] disabled:opacity-50">
+          className="rounded-xl bg-[var(--color-danger-bg)] py-2.5 text-sm font-semibold text-[var(--color-danger)] disabled:opacity-50">
           {operating === 'reject' ? '拒绝中…' : '拒绝'}
         </button>
         <button onClick={() => {
           if (editing) setDraft(toDraft(candidate))
           setEditing(value => !value)
         }} disabled={operating !== null}
-          className="rounded-xl border border-[#C8DAF0] bg-[var(--color-resolved-bg)] py-2.5 text-sm font-semibold text-[var(--color-resolved)] disabled:opacity-50">
+          className="rounded-xl border border-[var(--color-resolved-border)] bg-[var(--color-resolved-bg)] py-2.5 text-sm font-semibold text-[var(--color-resolved)] disabled:opacity-50">
           {editing ? '取消编辑' : '编辑候选'}
         </button>
       </div>

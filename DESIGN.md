@@ -12,6 +12,9 @@
 | `--color-primary-hover` | `#C86645` | 悬停态 |
 | `--color-primary-soft` | `#FDF0ED` | 淡色背景（badge、标签底色） |
 | `--color-primary-muted` | `#FDF9F7` | 极淡背景 |
+| `--color-primary-gradient` | `#E8A58F` | 渐变终点（logo/头像） |
+| `--color-primary-hover-soft` | `#FBE5DE` | 淡色按钮 hover |
+| `--color-primary-light` | `#FFF5F2` | 极淡主色背景 |
 
 ### 表面层级
 
@@ -22,6 +25,7 @@
 | `--color-surface-elevated` | `#FDFCFB` | 高亮卡片 |
 | `--color-surface-secondary` | `#F9F8F6` | 次级背景 |
 | `--color-surface-tertiary` | `#F4F2EC` | 三级背景（chip/标签底） |
+| `--color-surface-hover` | `#E8E4DC` | 三级背景 hover |
 
 ### 边框
 
@@ -30,6 +34,7 @@
 | `--color-border` | `#E8E6E1` | 默认边框 |
 | `--color-border-light` | `#F0EFEB` | 淡边框 |
 | `--color-border-subtle` | `#EEEAE4` | 极淡边框（滑条轨道） |
+| `--color-border-hover` | `#C4C1BC` | 边框 hover 加深 |
 
 ### 文字层级
 
@@ -53,7 +58,21 @@
 | 悬念 (wish) | `--color-wish` (#B8860B) | `--color-wish-bg` (#FDF3E7) |
 | 已归档 (archived) | `--color-archived` (#8A8681) | `--color-archived-bg` (#F4F2EC) |
 | 噪声 (noise) | `--color-noise` (#8A8681) | `--color-noise-bg` (#F4F2EC) |
-| 危险操作 | `--color-danger` (#C64B45) | — |
+| 待处理 (pending) | `--color-pending` (#C97E2C) | `--color-pending-bg` (#FDF3E4) |
+| 危险操作 | `--color-danger` (#C64B45) | `--color-danger-bg` (#FCEEED) |
+
+### 状态扩展（边框/hover）
+
+| Token | 值 | 用途 |
+|-------|-----|------|
+| `--color-pending-border` | `#F2D9B6` | 待处理边框 |
+| `--color-pending-hover` | `#FBE9D0` | 待处理 hover |
+| `--color-danger-border` | `#F0C0BF` | 错误边框 |
+| `--color-danger-hover` | `#FADAD9` | 错误 hover |
+| `--color-digested-border` | `#C5E0C3` | 已消化边框 |
+| `--color-digested-hover` | `#D4EAD2` | 已消化 hover |
+| `--color-resolved-border` | `#C8DAF0` | 已解决边框 |
+| `--color-resolved-hover` | `#E0ECF8` | 已解决 hover |
 
 ### 即时模拟/语义通道
 

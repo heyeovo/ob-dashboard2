@@ -5,11 +5,12 @@
 
 ## 已确认的方向
 
-### 第一步：清理硬编码（纯基建，不改视觉效果）
-- 全站约 60 处硬编码 hex 值需要替换为 CSS 变量
-- 主要集中在：记忆库/审阅页操作按钮、图谱页节点颜色、Prompt 页、日记页、错误提示
-- 缺少的语义变量需先补上（pending 黄 `#FDF3E4/#C97E2C`、error 红 `#FCEEED/#F0C0BF` 等）
-- 完成后所有颜色/圆角/阴影/字体都走 `globals.css` 的 CSS 变量
+### 第一步：清理硬编码（纯基建，不改视觉效果）✅ 已完成
+- `globals.css` 新增 15 个语义变量：pending 四色、danger 扩展三色、digested/resolved 边框+hover 各两色、primary 扩展三色（gradient/hover-soft/light）、surface-hover、border-hover
+- 13 个 tsx 文件的高频硬编码已替换为变量引用（review、memory、AutoMemoryQueue、journal、cc 系列、NavBar、BottomTabBar、SideRail、HomeToolDrawer、FilterBar、BucketDetailDrawer、page.tsx）
+- globals.css 内部的 `.cc-persona-error` 硬编码也已替换
+- `DESIGN.md` 已同步更新
+- **剩余低频硬编码**（约 30 处，暂不动）：graph 节点类型色（三套前景/背景/文字）、breath-sim 柱状色、prompts 页配色（`#FEF3EE`/`#C86B45`/`#C0BBB5`/`#FAFAF8`/`#F7F7F5`）、journal 滚动条/hint 文字、impressions 事件圆点（`#8AA4A0`）、persona 渐变端点、import 边框（`#F5D5CB`）、BucketDetailDrawer mono 提示色、settings 成功文字色。这些语义独立且出现少，强行归并会丢掉意图，后续按需收编
 
 ### 第二步：定主题规范（需要小羊输入）
 - 配色方案、字体层级、质感（磨砂/玻璃/阴影深度）、动效风格
@@ -36,9 +37,9 @@
 - 考虑引入 Framer Motion
 
 ## 现有基础
-- `globals.css` 已有完整 CSS 变量体系（颜色、圆角、阴影、间距、字体、动效）
-- `DESIGN.md` 文档齐全
-- 核心组件（Card/StatusBadge/TagPill）用变量规范，页面级代码有散落硬编码
+- `globals.css` 已有完整 CSS 变量体系（颜色、圆角、阴影、间距、字体、动效），第一步清理后高频颜色全部走变量
+- `DESIGN.md` 文档齐全，包含所有新增变量
+- 核心组件（Card/StatusBadge/TagPill）和页面级操作按钮均使用变量规范
 
 ## 已加入 CLAUDE.md 的规则
 - 所有颜色/圆角/阴影必须引用 CSS 变量，禁止硬编码 hex/rgba

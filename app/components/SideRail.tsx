@@ -81,7 +81,7 @@ export default function SideRail() {
   return (
     <nav className="fixed left-0 top-0 z-30 hidden h-screen w-[68px] flex-col items-center border-r border-[var(--color-border)] bg-white/70 py-3 backdrop-blur-md md:flex">
       <Link href="/" title="Ombre Brain" className="mb-3 flex h-9 w-9 items-center justify-center">
-        <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
+        <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
       </Link>
 
       <div className="flex flex-col items-center gap-1">{PRIMARY.map(i => cell(i))}</div>

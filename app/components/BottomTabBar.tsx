@@ -60,8 +60,8 @@ export default function BottomTabBar() {
                 <div
                   className={`-mt-4 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 ${
                     isActive
-                      ? 'bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]'
-                      : 'bg-gradient-to-br from-[var(--color-primary)]/85 to-[#E8A58F]/85'
+                      ? 'bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]'
+                      : 'bg-gradient-to-br from-[var(--color-primary)]/85 to-[var(--color-primary-gradient)]/85'
                   }`}
                 >
                   <svg className="h-6 w-6" viewBox="0 0 20 20" fill="none" stroke="white" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">

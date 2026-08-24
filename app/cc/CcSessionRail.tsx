@@ -124,7 +124,7 @@ export default function CcSessionRail({
           <button
             type="button"
             onClick={onNew}
-            className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[#FBE5DE]"
+            className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-hover-soft)]"
           >
             新对话
           </button>

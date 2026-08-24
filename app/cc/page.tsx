@@ -773,7 +773,7 @@ export default function CcChatPage() {
           </div>
         ) : null}
         {chat.error ? (
-          <div className="rounded-[var(--radius-lg)] bg-[#FCEEED] px-3.5 py-2.5 text-xs text-[var(--color-danger)]">
+          <div className="rounded-[var(--radius-lg)] bg-[var(--color-danger-bg)] px-3.5 py-2.5 text-xs text-[var(--color-danger)]">
             {chat.error}
           </div>
         ) : null}

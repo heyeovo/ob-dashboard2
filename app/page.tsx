@@ -49,7 +49,7 @@ export default function HomePage() {
         >
           ☰
         </button>
-        <div className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
+        <div className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
         <span className="text-sm font-semibold">小言&小羊的家</span>
       </header>
 

@@ -323,7 +323,7 @@ export default function JournalPage() {
 
         {/* ===== 错误提示 ===== */}
         {error && (
-          <div className="mb-5 text-sm text-[var(--color-danger)] bg-[#FDEDEC] border border-[#F3C9C6] rounded-lg px-4 py-2.5 flex items-center justify-between">
+          <div className="mb-5 text-sm text-[var(--color-danger)] bg-[var(--color-danger-bg)] border border-[var(--color-danger-border)] rounded-lg px-4 py-2.5 flex items-center justify-between">
             <span>{error}</span>
             <button onClick={() => setError('')} className="text-[var(--color-danger)] opacity-60 hover:opacity-100 ml-3">✕</button>
           </div>
@@ -506,7 +506,7 @@ export default function JournalPage() {
                           </button>
                           <button onClick={saveEdit} disabled={saving}
                             className="text-xs text-white px-4 py-1.5 rounded-full disabled:opacity-50 transition-all"
-                            style={{ background: 'linear-gradient(135deg, #E8A58F, var(--color-primary))' }}>
+                            style={{ background: 'linear-gradient(135deg, var(--color-primary-gradient), var(--color-primary))' }}>
                             {saving ? '保存中…' : '保存更改'}
                           </button>
                         </>
@@ -579,7 +579,7 @@ export default function JournalPage() {
               </button>
               <button onClick={submitNew} disabled={submitting || !newContent.trim()}
                 className="text-sm text-white px-5 py-2 rounded-full disabled:opacity-50 transition-all hover:shadow-md"
-                style={{ background: 'linear-gradient(135deg, #E8A58F, var(--color-primary))' }}>
+                style={{ background: 'linear-gradient(135deg, var(--color-primary-gradient), var(--color-primary))' }}>
                 {submitting ? '保存中…' : '保存日记'}
               </button>
             </div>

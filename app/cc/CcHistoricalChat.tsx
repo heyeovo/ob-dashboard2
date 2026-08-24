@@ -240,7 +240,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
           {loading ? (
             <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史聊天</div>
           ) : error && uiMessages.length === 0 ? (
-            <div className="rounded-[var(--radius-lg)] bg-[#FCEEED] px-3.5 py-2.5 text-xs text-[var(--color-danger)]">
+            <div className="rounded-[var(--radius-lg)] bg-[var(--color-danger-bg)] px-3.5 py-2.5 text-xs text-[var(--color-danger)]">
               {error}
             </div>
           ) : uiMessages.length === 0 ? (
@@ -283,7 +283,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
             ))
           )}
           {error && uiMessages.length > 0 ? (
-            <div className="rounded-[var(--radius-lg)] bg-[#FCEEED] px-3.5 py-2.5 text-center text-xs text-[var(--color-danger)]">
+            <div className="rounded-[var(--radius-lg)] bg-[var(--color-danger-bg)] px-3.5 py-2.5 text-center text-xs text-[var(--color-danger)]">
               <div>{error}</div>
               <button type="button" onClick={loadMore} className="mt-1.5 underline">重新加载</button>
             </div>

@@ -32,7 +32,7 @@ export default function NavBar({ activeSlug, onTabClick }: NavBarProps) {
           href="/"
           className="text-[var(--color-text-primary)] font-semibold flex items-center gap-1.5 sm:gap-2 mr-1 sm:mr-4"
         >
-          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#E8A58F]" />
+          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
           <span className="text-xs sm:text-sm">Ombre Brain</span>
         </Link>
 

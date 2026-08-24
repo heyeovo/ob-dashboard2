@@ -169,7 +169,7 @@ export default function ReviewPage() {
                   <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     statusMap[cur.id] === '已精修' 
                       ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' 
-                      : 'bg-[#FDF3E4] text-[#C97E2C]'
+                      : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
                   }`}>
                     {statusMap[cur.id]}
                   </span>
@@ -223,22 +223,22 @@ export default function ReviewPage() {
         {cur && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5 sm:mb-6">
             <button onClick={() => updateStatus(cur.id, '已精修')} disabled={saving}
-              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-digested-bg)] border border-[#C5E0C3] text-[var(--color-digested)] hover:bg-[#D4EAD2] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-digested-bg)] border border-[var(--color-digested-border)] text-[var(--color-digested)] hover:bg-[var(--color-digested-hover)] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               ✓ 已阅
             </button>
             <button onClick={() => updateStatus(cur.id, '存疑')} disabled={saving}
-              className="py-2.5 sm:py-3 rounded-xl bg-[#FDF3E4] border border-[#F2D9B6] text-[#C97E2C] hover:bg-[#FBE9D0] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-pending-bg)] border border-[var(--color-pending-border)] text-[var(--color-pending)] hover:bg-[var(--color-pending-hover)] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               ? 存疑
             </button>
             <button onClick={() => updateStatus(cur.id, null)} disabled={saving}
-              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[#E8E4DC] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors text-xs sm:text-sm font-semibold disabled:opacity-50"
             >
               ↺ 重置
             </button>
             <a href={`/bucket/${cur.id}`}
-              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-resolved-bg)] border border-[#C8DAF0] text-[var(--color-resolved)] hover:bg-[#E0ECF8] transition-colors text-xs sm:text-sm font-semibold text-center"
+              className="py-2.5 sm:py-3 rounded-xl bg-[var(--color-resolved-bg)] border border-[var(--color-resolved-border)] text-[var(--color-resolved)] hover:bg-[var(--color-resolved-hover)] transition-colors text-xs sm:text-sm font-semibold text-center"
             >
               ✎ 编辑
             </a>

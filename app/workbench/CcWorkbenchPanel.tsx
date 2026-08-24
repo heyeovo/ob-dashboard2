@@ -154,7 +154,7 @@ export default function CcWorkbenchPanel() {
       </div>
 
       {error ? (
-        <div className="rounded-[var(--radius-md)] bg-[#FCEEED] px-3 py-2 text-[11px] text-[var(--color-danger)]">
+        <div className="rounded-[var(--radius-md)] bg-[var(--color-danger-bg)] px-3 py-2 text-[11px] text-[var(--color-danger)]">
           {error}
         </div>
       ) : null}

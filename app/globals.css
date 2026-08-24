@@ -16,6 +16,9 @@ html {
   --color-primary-hover:    #C86645;
   --color-primary-soft:     #FDF0ED;
   --color-primary-muted:    #FDF9F7;
+  --color-primary-gradient: #E8A58F;
+  --color-primary-hover-soft:#FBE5DE;
+  --color-primary-light:    #FFF5F2;
 
   /* ---- Color: surface / 表面层级 ---- */
   --color-bg:               #FCFAF8;
@@ -28,6 +31,10 @@ html {
   --color-border:           #E8E6E1;
   --color-border-light:     #F0EFEB;
   --color-border-subtle:    #EEEAE4;
+  --color-border-hover:     #C4C1BC;
+
+  /* ---- Color: surface 扩展 ---- */
+  --color-surface-hover:    #E8E4DC;
 
   /* ---- Color: text / 文字层级 ---- */
   --color-text-primary:     #3A3836;
@@ -53,7 +60,22 @@ html {
   --color-noise:            #8A8681;
   --color-noise-bg:         #F4F2EC;
   --color-danger:           #C64B45;
+  --color-danger-bg:        #FCEEED;
+  --color-danger-border:    #F0C0BF;
+  --color-danger-hover:     #FADAD9;
   --color-vector:           #478B4A;
+
+  /* ---- Color: pending / 待处理黄 ---- */
+  --color-pending:          #C97E2C;
+  --color-pending-bg:       #FDF3E4;
+  --color-pending-border:   #F2D9B6;
+  --color-pending-hover:    #FBE9D0;
+
+  /* ---- Color: status 扩展 / 边框·hover ---- */
+  --color-digested-border:  #C5E0C3;
+  --color-digested-hover:   #D4EAD2;
+  --color-resolved-border:  #C8DAF0;
+  --color-resolved-hover:   #E0ECF8;
 
   /* ---- Color: semantic channel / 即时模拟双栏 ---- */
   --color-keyword:          #D97757;
@@ -730,7 +752,7 @@ body {
   transform: translateX(-50%);
   max-width: 88vw;
   border-radius: var(--radius-lg);
-  background: #FCEEED;
+  background: var(--color-danger-bg);
   padding: 8px 14px;
   font-size: 11.5px;
   color: var(--color-danger);
