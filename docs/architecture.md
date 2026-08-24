@@ -165,7 +165,7 @@ cc 生态客户端库：`ccMcp*`、`ccModes.ts`、`ccChannel.ts`、`ccSession.ts
 
 ## Prompt 配置
 
-Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionStorage` 或浏览器持久化。每项携带 `source/customized/revision/updated_at`，以及只读的 `runtime_layers/model_hard_constraints/server_validations`；页面把可编辑产品层、运行时自动叠加、实际模型固定约束和模型返回后程序校验分区展示，后三区不能编辑。保存和恢复默认都带 expected revision，冲突时要求刷新，不静默覆盖。只有自动打标和记忆合并提供草稿试跑，日回顾和 weekly journey 不创建测试记录或候选。
+Prompt 页面以 Haven `/api/prompts` 为产品 Prompt 事实源，不使用 `sessionStorage` 或浏览器持久化。每项携带 `source/customized/revision/updated_at`，以及只读的 `runtime_layers/model_hard_constraints/server_validations`；页面把可编辑产品层、运行时自动叠加、实际模型固定约束和模型返回后程序校验分区展示，后三类说明不能编辑。自动打标卡片另从 Haven `/api/config` 读取并持久化专属 Max Tokens、Temperature、Thinking 参数，正式打标与草稿测试共用且不影响记忆合并。Prompt 保存和恢复默认都带 expected revision，冲突时要求刷新，不静默覆盖。只有自动打标和记忆合并提供草稿试跑，日回顾和 weekly journey 不创建测试记录或候选。
 
 ## cc 聊天架构
 
