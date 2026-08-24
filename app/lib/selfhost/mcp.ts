@@ -9,6 +9,7 @@ import type { AnthropicToolDefinition } from '@/app/lib/selfhost/anthropicMessag
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 8_000
 const DEFAULT_TOOL_TIMEOUT_MS = 30_000
+const HOLD_TOOL_TIMEOUT_MS = 90_000
 const MCP_RESULT_LIMIT = 20_000
 
 export type SelfhostMcpTool = AnthropicToolDefinition & {
@@ -76,6 +77,11 @@ export function selfhostMcpToolDescription(tool: {
   return tool.description?.trim() || tool.title?.trim() || `MCP tool ${tool.name}`
 }
 
+export function selfhostMcpToolTimeout(serverTimeout: number | undefined, remoteName: string): number {
+  const timeout = serverTimeout || DEFAULT_TOOL_TIMEOUT_MS
+  return remoteName === 'hold' ? Math.max(timeout, HOLD_TOOL_TIMEOUT_MS) : timeout
+}
+
 export async function createSelfhostMcpRuntime(signal?: AbortSignal): Promise<SelfhostMcpRuntime> {
   const connected = new Map<string, ConnectedServer>()
   const tools: SelfhostMcpTool[] = []
@@ -134,7 +140,7 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal): Promise<Se
       if (!tool) return { text: `工具 ${call.name} 不可用或未获自动允许`, isError: true }
       const connection = connected.get(tool.serverName)
       if (!connection) return { text: `MCP ${tool.serverName} 当前未连接`, isError: true }
-      const timeout = connection.server.timeout || DEFAULT_TOOL_TIMEOUT_MS
+      const timeout = selfhostMcpToolTimeout(connection.server.timeout, tool.remoteName)
       try {
         const result = await connection.client.callTool(
           { name: tool.remoteName, arguments: call.input },

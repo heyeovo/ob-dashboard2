@@ -3,6 +3,7 @@ import {
   isSelfhostMcpServer,
   isSelfhostMcpToolAllowed,
   selfhostMcpToolDescription,
+  selfhostMcpToolTimeout,
 } from '@/app/lib/selfhost/mcp'
 import type { CcMcpServer } from '@/app/lib/ccMcpTypes'
 
@@ -46,5 +47,12 @@ describe('selfhost MCP permission boundary', () => {
     expect(isSelfhostMcpToolAllowed(server({
       tools: [{ name: 'mcp__remote__read', enabled: false }],
     }), 'mcp__remote__read')).toBe(false)
+  })
+
+  it('gives hold a longer timeout without changing other MCP tools', () => {
+    expect(selfhostMcpToolTimeout(undefined, 'hold')).toBe(90_000)
+    expect(selfhostMcpToolTimeout(120_000, 'hold')).toBe(120_000)
+    expect(selfhostMcpToolTimeout(undefined, 'breath')).toBe(30_000)
+    expect(selfhostMcpToolTimeout(45_000, 'breath')).toBe(45_000)
   })
 })
