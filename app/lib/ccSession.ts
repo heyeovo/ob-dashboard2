@@ -500,6 +500,27 @@ export async function flushPendingMcpServers(sessionId: string): Promise<void> {
   dropSession(sessionId)
 }
 
+/**
+ * 会话回收时冻结 personaAppend，resume 时复用，保证系统提示前缀不变、缓存命中。
+ * 不冻结 → resume 时重建 personaAppend（handoff 缺失/日回顾变化）→ 前缀变了 → 1h 缓存 miss。
+ */
+const FROZEN_APPEND_KEY = '__ob2_cc_frozen_append__'
+const frozenAppends: Map<string, string> =
+  (globalThis as unknown as Record<string, Map<string, string>>)[FROZEN_APPEND_KEY] ||
+  ((globalThis as unknown as Record<string, Map<string, string>>)[FROZEN_APPEND_KEY] = new Map())
+
+export function getFrozenAppend(sessionId: string): string | undefined {
+  return frozenAppends.get(sessionId)
+}
+
+export function setFrozenAppend(sessionId: string, append: string) {
+  frozenAppends.set(sessionId, append)
+}
+
+export function clearFrozenAppend(sessionId: string) {
+  frozenAppends.delete(sessionId)
+}
+
 /** 会话被回收后，记住 claude code 的 session id，下次好 resume 接上。 */
 const RESUME_KEY = '__ob2_cc_resume__'
 const resumeHints: Map<string, string> =

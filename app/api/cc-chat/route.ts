@@ -8,7 +8,7 @@ import {
   permissionRuleStrings,
 } from '@/app/lib/havenPermissions'
 import { loadMcpConfig, toSdkMcpServers, disabledMcpTools } from '@/app/lib/ccMcp'
-import { getSessionStats, dropSession } from '@/app/lib/ccSession'
+import { getSessionStats, dropSession, peekSession, getFrozenAppend, setFrozenAppend, clearFrozenAppend } from '@/app/lib/ccSession'
 import { resetChannel } from '@/app/lib/ccChannel'
 import { isCcMode, type CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings } from '@/app/cc/webSettings'
@@ -280,6 +280,16 @@ async function loadTurnInputs(body: ChatBody) {
     ? dailyReviewSystemBlock(sessionSnapshot.session.daily_review_snapshot)
     : ''
   personaAppend = [personaAppend, dailyReviewBlock].filter(Boolean).join('\n\n')
+
+  // 缓存稳定性：同一个 session 生命周期内 personaAppend 不能变，否则 resume 后
+  // 系统提示前缀跟原来对不上 → 1h 缓存 miss → 全量重写。
+  // 首次建会话时冻结，后续轮次（含进程回收后 resume）复用冻结版本。
+  const frozen = getFrozenAppend(body.session_id || '')
+  if (frozen !== undefined) {
+    personaAppend = frozen
+  } else {
+    setFrozenAppend(body.session_id || '', personaAppend)
+  }
   const systemPromptKey = personaAppend
 
   // 能读哪些目录：本机没配退回仓库根；production 没配只进 dashboard workspace。
@@ -472,6 +482,7 @@ export async function DELETE(request: NextRequest) {
   clearRecallPrefs(sessionId)
   clearWriteDirs(sessionId)
   clearTurnBucket(sessionId)
+  clearFrozenAppend(sessionId)
   // 工作台那四格跟着清 —— 回退点已经随子进程失效了，留着只会骗人
   resetChannel(sessionId, '会话被手动收掉了，这个操作取消。')
   return Response.json({ ok: true })
