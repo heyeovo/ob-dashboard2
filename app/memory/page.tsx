@@ -749,8 +749,17 @@ function HomeClient() {
         body: JSON.stringify({ id, ...args })
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload?.result?.bucket) {
+      if (!response.ok) {
         throw new Error(payload?.error || `更新失败（HTTP ${response.status}）`)
+      }
+      if (args.delete) {
+        detailCache.current.delete(id)
+        setSelected(null)
+        void fetchBuckets()
+        return
+      }
+      if (!payload?.result?.bucket) {
+        throw new Error(`更新失败（HTTP ${response.status}）`)
       }
       const detail = payload.result.bucket
       detailCache.current.set(id, detail)

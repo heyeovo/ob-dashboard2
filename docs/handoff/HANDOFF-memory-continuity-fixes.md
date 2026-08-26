@@ -4,6 +4,7 @@
 
 - 2026-08-27 首轮 Dashboard 与 Haven 修改已由用户 push 并发布；Haven 发布版本为 `b02600eea33fef3a5906819a47e4ef54f7a5a5d3`。
 - 首轮发布后发现取消钉选回归：`frontmatter.Post` 没有 `.pop()`，导致 Haven PATCH 返回 500；现已在本地改为存在时 `del`。Dashboard 的 `edit-bucket` 代理也已在本地补上非 JSON 上游错误容错。这两处回归修复尚待用户 commit、push 和重新部署。
+- 随后确认桶删除本身已返回 HTTP 200，但记忆页仍错误要求删除响应携带 bucket，因而误报“更新失败（HTTP 200）”并留下陈旧详情缓存；本地已为 `delete: true` 增加独立成功分支，清理缓存并刷新列表，待随 Dashboard 一起 push 和发布。
 - 日回顾连续性保持原有“前两个日历日”，本轮没有修改。
 - Dashboard production build 已通过；Haven 相关 `unittest` 65 项通过、2 项因本地轻量 Python 缺少 Haven 运行依赖而跳过，Python 语法检查通过。
 
