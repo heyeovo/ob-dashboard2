@@ -15,7 +15,7 @@ import CcWorkbenchPanel from './CcWorkbenchPanel'
 
 const TUNE_ENTRIES: Entry[] = [
   { key: 'breath', label: '模拟 Breath', desc: 'Pipeline / 即时模拟 / 评分旋钮 / 命中统计 / 检索追溯', href: '/breath-sim' },
-  { key: 'inject', label: 'gateway 注入监测', desc: '每条回复上的召回按钮已可用；正文要等 Haven 补一列', todo: true },
+  { key: 'inject', label: '召回透镜', desc: '逐轮查看召回、拒绝、规则解释与系统降级', href: '/recall-lens' },
 ]
 
 export default function WorkbenchPage() {
