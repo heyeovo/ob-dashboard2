@@ -317,6 +317,7 @@ export default function AutomationSettingsPage() {
     try {
       const payload: Record<string, unknown> = {
         persist: true,
+        persist_env: true,
         persona: {
           enabled: form.personaEnabled,
           event_recording_enabled: form.personaEventRecording,

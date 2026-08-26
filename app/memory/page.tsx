@@ -719,6 +719,7 @@ function HomeClient() {
   }, [searchParams])
 
   const traceOp = async (id: string, args: Record<string, unknown>) => {
+    const previousSelected = selected
     // Optimistic update — instant UI feedback for metadata changes
     // 元数据乐观更新 — 立即反馈
     if (selected && selected.id === id) {
@@ -741,18 +742,27 @@ function HomeClient() {
     }
 
     setOperating(true)
-    await fetch('/api/edit-bucket', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...args })
-    })
-    // Fetch detail first to update drawer immediately, refresh list in background
-    const detail = await fetch(`/api/bucket/${id}`).then(r => r.json())
-    detailCache.current.set(id, detail)
-    setSelected(detail)
-    setOperating(false)
-    // Background: refresh full list (may be slow with many buckets, don't block UI)
-    fetchBuckets()
+    try {
+      const response = await fetch('/api/edit-bucket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...args })
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.result?.bucket) {
+        throw new Error(payload?.error || `更新失败（HTTP ${response.status}）`)
+      }
+      const detail = payload.result.bucket
+      detailCache.current.set(id, detail)
+      setSelected(detail)
+      // Background: refresh full list (may be slow with many buckets, don't block UI)
+      void fetchBuckets()
+    } catch (error) {
+      if (previousSelected?.id === id) setSelected(previousSelected)
+      window.alert(error instanceof Error ? error.message : '更新失败，请重试')
+    } finally {
+      setOperating(false)
+    }
   }
 
   const saveEdit = async () => {

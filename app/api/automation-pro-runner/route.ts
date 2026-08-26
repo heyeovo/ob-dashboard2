@@ -12,7 +12,7 @@ const WEEKLY_JOURNEY_FLAT_FIELDS = [
   'candidate_type',
   'rationale_text',
   'evidence_bucket_ids_text',
-  'append_content',
+  'revised_content',
   'summary',
   'close_stage_end',
   'close_summary',
@@ -31,7 +31,7 @@ const WEEKLY_JOURNEY_OUTPUT_FORMAT: NonNullable<Options['outputFormat']> = {
       candidate_type: { type: 'string', enum: ['no_change', 'append_current', 'transition'] },
       rationale_text: { type: 'string' },
       evidence_bucket_ids_text: { type: 'string' },
-      append_content: { type: 'string' },
+      revised_content: { type: 'string' },
       summary: { type: 'string' },
       close_stage_end: { type: 'string' },
       close_summary: { type: 'string' },
@@ -45,7 +45,7 @@ const WEEKLY_JOURNEY_OUTPUT_FORMAT: NonNullable<Options['outputFormat']> = {
 const WEEKLY_JOURNEY_TRANSPORT_INSTRUCTION = `
 为绕开当前 Agent SDK 对嵌套 structured output 的已知限制，最终传输格式是扁平对象。
 rationale_text 每条理由单独一行；evidence_bucket_ids_text 每个 materials 证据 ID 单独一行。
-append_current 使用 append_content、summary；transition 使用 close_stage_end、close_summary、create_name、create_stage_start、create_summary、create_content。
+append_current 使用 revised_content、summary；revised_content 必须是整合、去重后的完整阶段正文，不是追加片段。transition 使用 close_stage_end、close_summary、create_name、create_stage_start、create_summary、create_content。
 当前 candidate_type 不使用的字符串字段必须输出空字符串。runner 会确定性还原为产品要求的 proposal 对象，再由 Haven 做最终严格校验。`.trim()
 
 type RunnerGlobal = typeof globalThis & { [LOCK_KEY]?: boolean }
@@ -66,7 +66,7 @@ function restoreWeeklyJourneyCandidate(value: unknown) {
   let proposal: Record<string, unknown> = {}
   if (candidateType === 'append_current') {
     proposal = {
-      append_content: String(flat.append_content || '').trim(),
+      revised_content: String(flat.revised_content || '').trim(),
       summary: String(flat.summary || '').trim(),
       evidence_bucket_ids: evidenceIds,
     }

@@ -1321,6 +1321,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           attachment_ids: attachmentIds,
           mode,
           include_daily_review: dailyReviewEnabledRef.current,
+          ...(handoffRef.current ? {
+            handoff_bucket_ids: handoffRef.current.bucketIds,
+          } : {}),
         }
         const res = await fetch(endpoint, {
           method: 'POST',

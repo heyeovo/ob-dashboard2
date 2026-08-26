@@ -142,7 +142,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
     if (!detail) return {}
     if (detail.candidate.candidate_type === 'append_current') {
       return {
-        append_content: String(draft.append_content || ''),
+        revised_content: String(draft.revised_content || draft.append_content || ''),
         summary: String(draft.summary || ''),
         evidence_bucket_ids: selectedEvidenceIds,
       }
@@ -351,7 +351,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
                 </>
               ) : current.candidate_type === 'append_current' ? (
                 <div className="space-y-4">
-                  <label className="block"><span className="mb-1 block text-xs text-[var(--color-text-tertiary)]">追加正文</span><textarea rows={10} value={String(draft.append_content || '')} onChange={event => setDraft(value => ({ ...value, append_content: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm leading-6" /></label>
+                  <label className="block"><span className="mb-1 block text-xs text-[var(--color-text-tertiary)]">整合后的完整阶段正文</span><textarea rows={14} value={String(draft.revised_content || draft.append_content || '')} onChange={event => setDraft(value => ({ ...value, revised_content: event.target.value, append_content: undefined }))} className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm leading-6" /></label>
                   <label className="block"><span className="mb-1 block text-xs text-[var(--color-text-tertiary)]">更新后阶段摘要</span><textarea rows={4} value={String(draft.summary || '')} onChange={event => setDraft(value => ({ ...value, summary: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm leading-6" /></label>
                 </div>
               ) : current.candidate_type === 'transition' ? (

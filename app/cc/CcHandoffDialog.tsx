@@ -14,6 +14,9 @@ type BucketItem = {
   id: string
   title: string
   pinned: boolean
+  type: string
+  tags: string[]
+  created: string
 }
 
 type Props = {
@@ -29,16 +32,19 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
   // 钉选桶固定带（默认勾上），另加最近 10 个非钉选桶。两组分开显示。
   const [pinnedBuckets, setPinnedBuckets] = useState<BucketItem[]>([])
   const [recentBuckets, setRecentBuckets] = useState<BucketItem[]>([])
+  const [feelBuckets, setFeelBuckets] = useState<BucketItem[]>([])
   const [bucketsLoading, setBucketsLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [turns, setTurns] = useState(20)
   const [includeDailyReview, setIncludeDailyReview] = useState(true)
+  const [includeFeels, setIncludeFeels] = useState(true)
+  const [feelLimit, setFeelLimit] = useState(10)
 
   useEffect(() => {
     let cancelled = false
     setBucketsLoading(true)
-    // 拉多一点：钉选桶可能排在时间序 10 名之外，limit=10 会漏掉
-    fetch('/api/buckets?limit=40')
+    // 必须取全量：老钉选桶可能远在最近 40 条之外。
+    fetch('/api/buckets')
       .then(r => r.json())
       .then(data => {
         if (cancelled) return
@@ -46,12 +52,21 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
           id: b.id,
           title: b.name || b.title || b.id,
           pinned: !!b.pinned,
+          type: String(b.type || 'dynamic'),
+          tags: Array.isArray(b.tags) ? b.tags.map(String) : [],
+          created: String(b.created || b.event_time || ''),
         }))
         const pinned = all.filter(b => b.pinned)
         // 非钉选取时间倒序前 10（后端已按时间倒序返回）
-        const recent = all.filter(b => !b.pinned).slice(0, 10)
+        const recent = all.filter(b => !b.pinned && !['feel', 'archived'].includes(b.type)).slice(0, 10)
+        const feels = all
+          .filter(b => b.type === 'feel' && !b.tags.some(tag => [
+            'whisper', 'daily_impression', 'weekly_impression', 'relationship_weather',
+          ].includes(tag)))
+          .sort((a, b) => b.created.localeCompare(a.created))
         setPinnedBuckets(pinned)
         setRecentBuckets(recent)
+        setFeelBuckets(feels)
         // 钉选桶默认勾选 —— 「固定会带」
         setSelected(new Set(pinned.map(b => b.id)))
       })
@@ -81,10 +96,13 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
   }
 
   const handleConfirm = () => {
+    const selectedFeelIds = includeFeels
+      ? feelBuckets.slice(0, feelLimit).map(bucket => bucket.id)
+      : []
     onConfirm({
       mode,
       includeDailyReview,
-      bucketIds: [...selected],
+      bucketIds: [...new Set([...selected, ...selectedFeelIds])],
       turns: fromSessionId ? turns : 0,
       fromSessionId,
     })
@@ -156,6 +174,36 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm,
               </span>
             </span>
           </label>
+
+          <div className="mb-4 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2.5">
+            <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={includeFeels}
+                onChange={event => setIncludeFeels(event.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[11.5px] text-[var(--color-text-secondary)]">注入最近 feel</span>
+                <span className="mt-0.5 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+                  作为新窗口的稳定情绪背景
+                </span>
+              </span>
+            </label>
+            <span className="flex shrink-0 items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
+              最近
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={feelLimit}
+                disabled={!includeFeels}
+                onChange={event => setFeelLimit(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
+                className="h-6 w-12 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)] disabled:opacity-50"
+              />
+              条
+            </span>
+          </div>
 
           {/* ── 记忆桶 ── */}
           <div className="mb-1.5 flex items-center justify-between">

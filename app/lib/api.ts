@@ -82,6 +82,7 @@ export async function getBucket(id: string) {
     const cookie = await getSessionCookie();
     const res = await fetch(`${getHavenBaseUrl()}/api/bucket/${id}`, {
         headers: { 'Cookie': cookie },
+        cache: 'no-store',
     });
     if (!res.ok) throw new Error('Failed to fetch bucket');
     return res.json();

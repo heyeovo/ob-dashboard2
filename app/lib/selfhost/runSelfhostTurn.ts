@@ -13,6 +13,7 @@ import {
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 import { resolveAttachments, type ResolvedAttachment } from '@/app/lib/havenAttachments'
+import { getBucket } from '@/app/lib/api'
 import {
   DEFAULT_REPLY_RESERVE_TOKENS,
   resolveSelfhostSettings,
@@ -43,6 +44,7 @@ export type SelfhostRequest = {
   attachmentIds?: string[]
   mode: 'chat' | 'work'
   includeDailyReview: boolean
+  handoffBucketIds?: string[]
 }
 
 type Provider = { providerId: string; baseUrl: string; authToken: string; label: string }
@@ -57,6 +59,7 @@ export type PreparedSelfhostTurn = {
   settings: SelfhostSettings
   provider: Provider
   currentAttachments: ResolvedAttachment[]
+  handoffContext: string
 }
 
 export type ReplaySelfhostTurn = {
@@ -189,6 +192,29 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     return preflightError(request.requestId, 400, 'attachment_read_failed', error instanceof Error ? error.message : '附件读取失败')
   }
 
+  const handoffParts: string[] = []
+  if (historyResult.turns.length === 0) {
+    for (const id of (request.handoffBucketIds || []).slice(0, 200)) {
+      try {
+        const bucket = await getBucket(id)
+        const title = String(bucket?.metadata?.name || bucket?.name || bucket?.title || id)
+        const content = String(bucket?.content || '').trim()
+        if (content) handoffParts.push(`【${title}】\n${content}`)
+      } catch {
+        // One missing bucket must not block the new conversation.
+      }
+    }
+  }
+  const handoffContext = handoffParts.length > 0
+    ? [
+        '<换窗记忆>',
+        '以下是用户为这个新窗口选择的稳定背景，其中可能包含钉选记忆、最近记忆与 feel。',
+        '',
+        handoffParts.join('\n\n'),
+        '</换窗记忆>',
+      ].join('\n')
+    : ''
+
   return {
     kind: 'ready',
     request,
@@ -199,6 +225,7 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     settings,
     provider,
     currentAttachments,
+    handoffContext,
   }
 }
 
@@ -218,10 +245,12 @@ export function assembleSystem(
   recalledContext: string,
   promptModuleOverrides: Record<string, boolean> = {},
   dailyReviewSnapshot: HavenConversationSession['daily_review_snapshot'] = [],
+  handoffContext = '',
 ): string {
   return [
     buildPersonaAppend(persona, promptModuleOverrides),
     dailyReviewSystemBlock(dailyReviewSnapshot),
+    handoffContext,
     recallSystemBlock(recalledContext),
   ].filter(Boolean).join('\n\n')
 }
@@ -554,6 +583,7 @@ export function createSelfhostStream(
           recall.ok ? recall.additionalContext : '',
           prepared.session?.prompt_module_overrides,
           prepared.session?.daily_review_enabled ? prepared.session.daily_review_snapshot : [],
+          prepared.handoffContext,
         )
         try {
           mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal)

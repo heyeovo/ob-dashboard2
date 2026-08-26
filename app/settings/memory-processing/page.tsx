@@ -209,6 +209,7 @@ export default function MemoryProcessingSettingsPage() {
     try {
       const payload: Record<string, unknown> = {
         persist: true,
+        persist_env: true,
         dehydration: {
           model: form.dehydrationModel,
           base_url: form.dehydrationBaseUrl,

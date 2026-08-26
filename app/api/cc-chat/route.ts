@@ -282,7 +282,7 @@ async function loadTurnInputs(body: ChatBody) {
   const handoffBucketIds = Array.isArray(body.handoff_bucket_ids) ? body.handoff_bucket_ids : []
   if (handoffBucketIds.length > 0 && !peekSession(body.session_id || '')) {
     const parts: string[] = []
-    for (const id of handoffBucketIds.slice(0, 10)) {
+    for (const id of handoffBucketIds.slice(0, 200)) {
       try {
         const b = await getBucket(String(id))
         const title = String(b?.name || b?.title || id)
