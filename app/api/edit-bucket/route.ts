@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getHavenBaseUrl, getSessionCookie } from '../../lib/api'
 
+async function readUpstreamJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text()
+  if (!text) return {}
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    return { error: text }
+  }
+}
+
 // 编辑/删除桶——原来走 MCP trace 工具，现在改用 REST：
 // 普通字段更新 → PATCH /api/bucket/{id}，硬删除 → DELETE /api/bucket/{id}
 export async function POST(req: NextRequest) {
@@ -17,7 +27,7 @@ export async function POST(req: NextRequest) {
         method: 'DELETE',
         headers: { Cookie: cookie },
       })
-      const data = await res.json()
+      const data = await readUpstreamJson(res)
       if (!res.ok) return NextResponse.json({ error: data.error ?? '删除失败' }, { status: res.status })
       return NextResponse.json({ ok: true, result: data })
     }
@@ -27,7 +37,7 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify(fields),
     })
-    const data = await res.json()
+    const data = await readUpstreamJson(res)
     if (!res.ok) return NextResponse.json({ error: data.error ?? '更新失败' }, { status: res.status })
     return NextResponse.json({ ok: true, result: data })
   } catch (e) {

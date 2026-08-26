@@ -40,7 +40,7 @@ production 必须配置以下五项：
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
-| `app/api/` | API 路由（大部分透传 Haven） |
+| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码，并把非 JSON 错误转为可读错误 |
 | `app/lib/` | 客户端库与工具函数 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
