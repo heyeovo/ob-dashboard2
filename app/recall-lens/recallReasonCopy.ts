@@ -7,6 +7,66 @@ export interface RecallRuleCopy {
 }
 
 const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
+  no_recall_need: {
+    title: '本轮不需要翻旧记忆',
+    description: '当前消息可以独立回答，没有明确回忆请求或必须依赖长期记忆的指代。',
+    effect: 'info',
+  },
+  recall_meta_discussion: {
+    title: '正在讨论召回机制',
+    description: '用户是在评价召回规则或误召问题，不是在要求系统寻找一段旧记忆。',
+    effect: 'info',
+  },
+  explicit_recall_request: {
+    title: '用户明确要求回忆',
+    description: '本轮明确出现了记得、上次、之前等回忆意图，shadow 会积极执行直接检索。',
+    effect: 'allow',
+  },
+  explicit_memory_search: {
+    title: '用户明确要求搜索记忆',
+    description: '本轮明确要求寻找或单独搜索某件事，不能被错误的模糊或主题轴判断整轮拦截。',
+    effect: 'allow',
+  },
+  explicit_target_present: {
+    title: '回忆目标可以定位',
+    description: '消息中包含名称、事件、时间或其他可用于直接检索的目标。',
+    effect: 'score',
+  },
+  explicit_target_missing: {
+    title: '明确想回忆，但没有说明目标',
+    description: '系统知道用户想回忆，但没有足够信息定位具体记忆，因此不会扩大搜索乱猜。',
+    effect: 'reject',
+  },
+  contextual_reference: {
+    title: '当前消息依赖前文指代',
+    description: '消息没有直接提出搜索，但“后来呢、那件事”等表达需要结合最近上下文理解。',
+    effect: 'info',
+  },
+  recent_context_available: {
+    title: '存在可用的最近上下文',
+    description: '系统找到了上一条有效用户消息，可用于确认当前指代是否需要长期记忆。',
+    effect: 'score',
+  },
+  contextual_reference_without_context: {
+    title: '有指代表达，但缺少上下文',
+    description: '当前表达像是在接续前文，但系统没有可用的最近上下文，因此不会扩大召回。',
+    effect: 'reject',
+  },
+  shadow_explicit_soft_gate: {
+    title: 'Shadow 软化了查询形状误杀',
+    description: '候选原本被模糊、主题轴或锚点规则拒绝；明确回忆请求下，shadow 将该规则降为软证据后重新比较。',
+    effect: 'score',
+  },
+  shadow_direct_candidate: {
+    title: 'Shadow 直接检索候选',
+    description: '正式路径提前结束后，shadow 只使用现有直接检索通道生成候选，不影响正式注入。',
+    effect: 'score',
+  },
+  shadow_insufficient_positive_evidence: {
+    title: '软化误杀后仍缺少正向证据',
+    description: '即使不让模糊或主题轴一票否决，这个候选仍没有足够可靠的直接证据，因此 shadow 也不选择。',
+    effect: 'reject',
+  },
   non_explicit_query: {
     title: '非明确回忆请求仍被放行',
     description: '用户没有明确要求回忆，但系统仍认为这个候选可以注入。这是当前较宽松的放行通道。',

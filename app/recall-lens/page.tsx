@@ -19,16 +19,41 @@ type Candidate = {
   keyword_score?: number
   evidence_labels?: string[]
   hard_evidence_labels?: string[]
+  formal_admission_reason?: string
+  shadow_admission_reason?: string
+  shadow_softened_reasons?: string[]
   content_preview?: string
   recall_why?: {
     primary_source?: string
   }
 }
 
+type RecallNecessityDebug = {
+  necessity?: 'none' | 'explicit' | 'contextual'
+  targetable?: boolean
+  reason_codes?: string[]
+  context_available?: boolean
+  affects_recall?: boolean
+}
+
+type RecallShadowDebug = {
+  enabled?: boolean
+  affects_recall?: boolean
+  planner_status?: 'normal' | 'degraded' | 'not_triggered' | 'disabled' | 'not_run'
+  fallback_strategy?: string
+  formal_bucket_ids?: string[]
+  shadow_bucket_ids?: string[]
+  added_bucket_ids?: string[]
+  removed_bucket_ids?: string[]
+  selected_candidates?: Candidate[]
+}
+
 type DebugPayload = {
   query_preview?: string
   recalled_bucket_debug?: Candidate[]
   suppressed_bucket_candidates?: Candidate[]
+  recall_necessity_debug?: RecallNecessityDebug
+  recall_shadow_debug?: RecallShadowDebug
   hook_recall_debug?: {
     search_query?: string
     candidate_count?: number
@@ -248,6 +273,9 @@ function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selec
   const recalled = round.payload.recalled_bucket_debug?.length || 0
   const suppressed = round.payload.suppressed_bucket_candidates?.length || 0
   const degraded = round.payload.query_planner_debug?.errors?.length || 0
+  const necessity = round.payload.recall_necessity_debug?.necessity
+  const shadowAdded = round.payload.recall_shadow_debug?.added_bucket_ids?.length || 0
+  const shadowRemoved = round.payload.recall_shadow_debug?.removed_bucket_ids?.length || 0
 
   return (
     <button type="button" onClick={onSelect} className="block w-full text-left">
@@ -267,6 +295,10 @@ function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selec
           {recalled > 0 && <MiniStatus effect="allow">注入 {recalled}</MiniStatus>}
           {suppressed > 0 && <MiniStatus effect="reject">拒绝 {suppressed}</MiniStatus>}
           {degraded > 0 && <MiniStatus effect="degraded">系统降级</MiniStatus>}
+          {necessity && <MiniStatus effect="info">{necessityLabel(necessity)}</MiniStatus>}
+          {(shadowAdded > 0 || shadowRemoved > 0) && (
+            <MiniStatus effect="score">Shadow +{shadowAdded} / -{shadowRemoved}</MiniStatus>
+          )}
           {recalled === 0 && suppressed === 0 && <MiniStatus effect="info">未进入召回</MiniStatus>}
         </div>
       </Card>
@@ -282,6 +314,9 @@ function RoundDetail({ round }: { round: DebugRound }) {
   const axisTerms = payload.query_planner_debug?.recall_query_plan?.activated_axis_terms || []
   const anchorTerms = payload.query_planner_debug?.dynamic_anchor?.required_terms || []
   const residueTerms = payload.memory_sentinel_debug?.searchable_residue_terms || []
+  const necessity = payload.recall_necessity_debug
+  const shadow = payload.recall_shadow_debug
+  const shadowCandidates = shadow?.selected_candidates || []
 
   return (
     <div className="space-y-4">
@@ -296,6 +331,35 @@ function RoundDetail({ round }: { round: DebugRound }) {
         <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-text-primary)]">
           {payload.query_preview || '没有 query preview'}
         </p>
+      </Card>
+
+      <Card padding="lg">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">新规则 Shadow 对比</h2>
+          {necessity?.necessity && (
+            <MiniStatus effect="info">{necessityLabel(necessity.necessity)}</MiniStatus>
+          )}
+          {shadow?.planner_status === 'degraded' && <MiniStatus effect="degraded">Planner 降级</MiniStatus>}
+          {shadow && <MiniStatus effect="score">不影响正式召回</MiniStatus>}
+        </div>
+        {!shadow ? (
+          <p className="text-sm text-[var(--color-text-tertiary)]">这条旧记录还没有 Phase 1 shadow 数据。</p>
+        ) : (
+          <>
+            <InfoRow label="本轮是否需要召回" value={necessityLabel(necessity?.necessity)} />
+            <InfoRow label="是否有明确目标" value={necessity?.targetable ? '有' : '没有'} />
+            <InfoRow label="Planner 状态" value={plannerStatusLabel(shadow.planner_status)} />
+            <InfoRow label="正式结果" value={formatBucketIds(shadow.formal_bucket_ids)} />
+            <InfoRow label="Shadow 结果" value={formatBucketIds(shadow.shadow_bucket_ids)} />
+            <InfoRow label="Shadow 新增" value={formatBucketIds(shadow.added_bucket_ids)} />
+            <InfoRow label="Shadow 移除" value={formatBucketIds(shadow.removed_bucket_ids)} />
+            {(necessity?.reason_codes?.length || 0) > 0 && (
+              <div className="mt-3 space-y-2 border-t border-[var(--color-border-light)] pt-3">
+                {necessity?.reason_codes?.map((code) => <RuleExplanation key={code} code={code} compact />)}
+              </div>
+            )}
+          </>
+        )}
       </Card>
 
       <Card padding="lg" className="bg-[var(--color-primary-muted)]">
@@ -318,6 +382,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
       </Card>
 
       <CandidateSection title={`最终注入 · ${recalled.length}`} candidates={recalled} recalled />
+      {shadow && <CandidateSection title={`Shadow 会选 · ${shadowCandidates.length}`} candidates={shadowCandidates} recalled />}
       <CandidateSection title={`被拒候选 · ${suppressed.length}`} candidates={suppressed} />
     </div>
   )
@@ -367,6 +432,7 @@ function CandidateSection({ title, candidates, recalled = false }: { title: stri
 }
 
 function CandidateCard({ candidate, recalled }: { candidate: Candidate; recalled: boolean }) {
+  const shadowSelected = Boolean(candidate.shadow_admission_reason)
   const evidence = Array.from(new Set([
     ...(candidate.evidence_labels || []),
     ...(candidate.hard_evidence_labels || []),
@@ -384,7 +450,9 @@ function CandidateCard({ candidate, recalled }: { candidate: Candidate; recalled
             <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
               {candidate.bucket_name || '未命名桶'}
             </h3>
-            <MiniStatus effect={recalled ? 'allow' : 'reject'}>{recalled ? '已注入' : '已拒绝'}</MiniStatus>
+            <MiniStatus effect={shadowSelected ? 'score' : recalled ? 'allow' : 'reject'}>
+              {shadowSelected ? 'Shadow 会选' : recalled ? '已注入' : '已拒绝'}
+            </MiniStatus>
           </div>
           {candidate.bucket_id && (
             <p className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{candidate.bucket_id}</p>
@@ -483,6 +551,26 @@ function effectSurface(effect: RecallRuleEffect) {
 
 function formatTerms(terms: string[]) {
   return terms.length ? terms.join(' · ') : '未提取'
+}
+
+function formatBucketIds(ids?: string[]) {
+  return ids?.length ? ids.join(' · ') : '无'
+}
+
+function necessityLabel(necessity?: RecallNecessityDebug['necessity']) {
+  if (necessity === 'explicit') return '明确要求回忆'
+  if (necessity === 'contextual') return '上下文需要回忆'
+  if (necessity === 'none') return '本轮不需要回忆'
+  return '尚未判断'
+}
+
+function plannerStatusLabel(status?: RecallShadowDebug['planner_status']) {
+  if (status === 'normal') return '正常'
+  if (status === 'degraded') return '已降级'
+  if (status === 'not_triggered') return '无需调用'
+  if (status === 'disabled') return '已关闭'
+  if (status === 'not_run') return '正式路径提前结束，未调用'
+  return '未知'
 }
 
 function formatScore(score?: number) {
