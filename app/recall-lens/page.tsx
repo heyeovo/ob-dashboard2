@@ -5,23 +5,57 @@ import Card from '../components/Card'
 import DataBadge from '../components/DataBadge'
 import FilterBar, { FilterPill } from '../components/FilterBar'
 import {
+  getFallbackStrategyCopy,
+  getPlannerStatusCopy,
   getRecallRuleCopy,
+  getSemanticStatusCopy,
   RECALL_EFFECT_LABEL,
+  type RecallRuleCopy,
   type RecallRuleEffect,
 } from './recallReasonCopy'
+
+type ShadowRelevanceDebug = {
+  semantic_status?: string
+  semantic_score?: number | null
+  keyword_score?: number
+  formal_keyword_score?: number
+  shadow_keyword_score?: number
+  topic_terms?: string[]
+  raw_topic_terms?: string[]
+  ignored_address_terms?: string[]
+  ignored_identity_terms?: string[]
+  ignored_configured_address_terms?: string[]
+  ignored_topic_terms?: string[]
+  matched_topic_terms?: string[]
+  rare_name_terms?: string[]
+  rare_name_direct?: boolean
+  identity_name_direct?: boolean
+  source_record_match_reason?: string
+  source_record_direct?: boolean
+  explicit_bucket_id?: boolean
+  unique_direct?: boolean
+  exact_direct?: boolean
+  formal_candidate?: boolean
+  query_semantic_unavailable?: boolean
+  query_unavailable_keyword_min?: number
+  query_unavailable_keyword_fallback?: boolean
+}
 
 type Candidate = {
   bucket_id?: string
   bucket_name?: string
   admission_reason?: string
   score?: number
-  semantic_score?: number
+  semantic_score?: number | null
+  semantic_status?: string
   keyword_score?: number
   evidence_labels?: string[]
   hard_evidence_labels?: string[]
   formal_admission_reason?: string
   shadow_admission_reason?: string
   shadow_softened_reasons?: string[]
+  shadow_relevance_debug?: ShadowRelevanceDebug
+  was_formal_candidate?: boolean
   content_preview?: string
   recall_why?: {
     primary_source?: string
@@ -46,6 +80,12 @@ type RecallShadowDebug = {
   added_bucket_ids?: string[]
   removed_bucket_ids?: string[]
   selected_candidates?: Candidate[]
+  rejected_candidates?: Candidate[]
+}
+
+type ShadowCandidateDecision = {
+  candidate: Candidate
+  selected: boolean
 }
 
 type DebugPayload = {
@@ -317,6 +357,18 @@ function RoundDetail({ round }: { round: DebugRound }) {
   const necessity = payload.recall_necessity_debug
   const shadow = payload.recall_shadow_debug
   const shadowCandidates = shadow?.selected_candidates || []
+  const shadowRejectedCandidates = shadow?.rejected_candidates || []
+  const formalBucketIds = new Set(shadow?.formal_bucket_ids || recalled.map((candidate) => candidate.bucket_id || ''))
+  const shadowBucketIds = new Set(shadow?.shadow_bucket_ids || shadowCandidates.map((candidate) => candidate.bucket_id || ''))
+  const shadowDecisions = new Map<string, ShadowCandidateDecision>()
+  shadowRejectedCandidates.forEach((candidate) => {
+    if (candidate.bucket_id) shadowDecisions.set(candidate.bucket_id, { candidate, selected: false })
+  })
+  shadowCandidates.forEach((candidate) => {
+    if (candidate.bucket_id) shadowDecisions.set(candidate.bucket_id, { candidate, selected: true })
+  })
+  const plannerCopy = getPlannerStatusCopy(shadow?.planner_status)
+  const fallbackCopy = getFallbackStrategyCopy(shadow?.fallback_strategy)
 
   return (
     <div className="space-y-4">
@@ -347,8 +399,10 @@ function RoundDetail({ round }: { round: DebugRound }) {
         ) : (
           <>
             <InfoRow label="本轮是否需要召回" value={necessityLabel(necessity?.necessity)} />
-            <InfoRow label="是否有明确目标" value={necessity?.targetable ? '有' : '没有'} />
-            <InfoRow label="Planner 状态" value={plannerStatusLabel(shadow.planner_status)} />
+            <InfoRow label="是否有明确目标" value={formatOptionalBoolean(necessity?.targetable, '有', '没有')} />
+            <InfoRow label="前文是否可用" value={formatOptionalBoolean(necessity?.context_available, '可用', '不可用')} />
+            <InfoRow label="Planner 状态" value={formatCopyWithCode(plannerCopy, shadow.planner_status)} />
+            <InfoRow label="Fallback strategy" value={formatCopyWithCode(fallbackCopy, shadow.fallback_strategy)} />
             <InfoRow label="正式结果" value={formatBucketIds(shadow.formal_bucket_ids)} />
             <InfoRow label="Shadow 结果" value={formatBucketIds(shadow.shadow_bucket_ids)} />
             <InfoRow label="Shadow 新增" value={formatBucketIds(shadow.added_bucket_ids)} />
@@ -381,16 +435,59 @@ function RoundDetail({ round }: { round: DebugRound }) {
         )}
       </Card>
 
-      <CandidateSection title={`最终注入 · ${recalled.length}`} candidates={recalled} recalled />
-      {shadow && <CandidateSection title={`Shadow 会选 · ${shadowCandidates.length}`} candidates={shadowCandidates} recalled />}
-      <CandidateSection title={`被拒候选 · ${suppressed.length}`} candidates={suppressed} />
+      <CandidateSection
+        title={`最终注入 · ${recalled.length}`}
+        candidates={recalled}
+        kind="formal-selected"
+        shadow={shadow}
+        shadowDecisions={shadowDecisions}
+        formalBucketIds={formalBucketIds}
+        shadowBucketIds={shadowBucketIds}
+      />
+      {shadow && (
+        <CandidateSection
+          title={`Shadow 会选 · ${shadowCandidates.length}`}
+          candidates={shadowCandidates}
+          kind="shadow-selected"
+          shadow={shadow}
+          shadowDecisions={shadowDecisions}
+          formalBucketIds={formalBucketIds}
+          shadowBucketIds={shadowBucketIds}
+        />
+      )}
+      <CandidateSection
+        title={`被拒候选 · ${suppressed.length}`}
+        candidates={suppressed}
+        kind="formal-rejected"
+        shadow={shadow}
+        shadowDecisions={shadowDecisions}
+        formalBucketIds={formalBucketIds}
+        shadowBucketIds={shadowBucketIds}
+      />
     </div>
   )
 }
 
-function CandidateSection({ title, candidates, recalled = false }: { title: string; candidates: Candidate[]; recalled?: boolean }) {
-  const [expanded, setExpanded] = useState(recalled)
-  const visibleCandidates = recalled || expanded ? candidates : candidates.slice(0, 3)
+function CandidateSection({
+  title,
+  candidates,
+  kind,
+  shadow,
+  shadowDecisions,
+  formalBucketIds,
+  shadowBucketIds,
+}: {
+  title: string
+  candidates: Candidate[]
+  kind: 'formal-selected' | 'shadow-selected' | 'formal-rejected'
+  shadow?: RecallShadowDebug
+  shadowDecisions: Map<string, ShadowCandidateDecision>
+  formalBucketIds: Set<string>
+  shadowBucketIds: Set<string>
+}) {
+  const startsExpanded = kind !== 'formal-rejected'
+  const [expanded, setExpanded] = useState(startsExpanded)
+  const visibleCandidates = startsExpanded || expanded ? candidates : candidates.slice(0, 3)
 
   return (
     <Card padding="lg">
@@ -409,7 +506,11 @@ function CandidateSection({ title, candidates, recalled = false }: { title: stri
 
       {candidates.length === 0 ? (
         <p className="mt-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] px-3 py-4 text-center text-sm text-[var(--color-text-tertiary)]">
-          {recalled ? '本轮没有注入长期记忆' : '本轮没有被拒候选'}
+          {kind === 'formal-selected'
+            ? '本轮没有注入长期记忆'
+            : kind === 'shadow-selected'
+              ? 'Shadow 本轮没有选择长期记忆'
+              : '本轮没有被拒候选'}
         </p>
       ) : (
         <div className="mt-3 space-y-3">
@@ -417,10 +518,13 @@ function CandidateSection({ title, candidates, recalled = false }: { title: stri
             <CandidateCard
               key={`${candidate.bucket_id || candidate.bucket_name || 'candidate'}-${index}`}
               candidate={candidate}
-              recalled={recalled}
+              formalSelected={Boolean(candidate.bucket_id && formalBucketIds.has(candidate.bucket_id))}
+              shadowSelected={Boolean(candidate.bucket_id && shadowBucketIds.has(candidate.bucket_id))}
+              shadowDecision={candidate.bucket_id ? shadowDecisions.get(candidate.bucket_id) : undefined}
+              shadow={shadow}
             />
           ))}
-          {!recalled && !expanded && candidates.length > 3 && (
+          {!startsExpanded && !expanded && candidates.length > 3 && (
             <p className="text-center text-xs text-[var(--color-text-tertiary)]">
               另有 {candidates.length - 3} 个候选已折叠
             </p>
@@ -431,8 +535,31 @@ function CandidateSection({ title, candidates, recalled = false }: { title: stri
   )
 }
 
-function CandidateCard({ candidate, recalled }: { candidate: Candidate; recalled: boolean }) {
-  const shadowSelected = Boolean(candidate.shadow_admission_reason)
+function CandidateCard({
+  candidate,
+  formalSelected,
+  shadowSelected,
+  shadowDecision,
+  shadow,
+}: {
+  candidate: Candidate
+  formalSelected: boolean
+  shadowSelected: boolean
+  shadowDecision?: ShadowCandidateDecision
+  shadow?: RecallShadowDebug
+}) {
+  const shadowCandidate = shadowDecision?.candidate
+  const formalReason = shadowCandidate?.formal_admission_reason
+    || candidate.formal_admission_reason
+    || (candidate.admission_reason?.startsWith('shadow_') ? '' : candidate.admission_reason)
+    || (formalSelected ? 'admitted_bucket' : 'suppressed')
+  const shadowReason = shadowCandidate?.shadow_admission_reason
+    || candidate.shadow_admission_reason
+    || (candidate.admission_reason?.startsWith('shadow_') ? candidate.admission_reason : '')
+    || (shadowSelected ? 'shadow_selected' : 'shadow_not_selected_without_candidate_debug')
+  const relevance = shadowCandidate?.shadow_relevance_debug || candidate.shadow_relevance_debug
+  const semanticStatus = relevance?.semantic_status || candidate.semantic_status
+  const semanticCopy = semanticStatus ? getSemanticStatusCopy(semanticStatus) : undefined
   const evidence = Array.from(new Set([
     ...(candidate.evidence_labels || []),
     ...(candidate.hard_evidence_labels || []),
@@ -440,7 +567,7 @@ function CandidateCard({ candidate, recalled }: { candidate: Candidate; recalled
 
   return (
     <div className={`rounded-[var(--radius-lg)] border p-3 ${
-      recalled
+      formalSelected
         ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
         : 'border-[var(--color-border)] bg-[var(--color-surface)]'
     }`}>
@@ -450,9 +577,14 @@ function CandidateCard({ candidate, recalled }: { candidate: Candidate; recalled
             <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
               {candidate.bucket_name || '未命名桶'}
             </h3>
-            <MiniStatus effect={shadowSelected ? 'score' : recalled ? 'allow' : 'reject'}>
-              {shadowSelected ? 'Shadow 会选' : recalled ? '已注入' : '已拒绝'}
+            <MiniStatus effect={formalSelected ? 'allow' : 'reject'}>
+              {formalSelected ? '正式已选' : '正式拒绝'}
             </MiniStatus>
+            {shadow && (
+              <MiniStatus effect={shadowSelected ? 'allow' : 'reject'}>
+                {shadowSelected ? 'Shadow 选择' : 'Shadow 拒绝'}
+              </MiniStatus>
+            )}
           </div>
           {candidate.bucket_id && (
             <p className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{candidate.bucket_id}</p>
@@ -471,10 +603,60 @@ function CandidateCard({ candidate, recalled }: { candidate: Candidate; recalled
         </p>
       )}
 
-      {candidate.admission_reason && (
-        <div className="mt-3">
-          <RuleExplanation code={candidate.admission_reason} />
+      {semanticStatus && semanticCopy && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+          <span>语义状态</span>
+          <MiniStatus effect={semanticCopy.effect}>{semanticCopy.title}</MiniStatus>
+          <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{semanticStatus}</span>
         </div>
+      )}
+
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        <div>
+          <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">正式判断</p>
+          <RuleExplanation code={formalReason} />
+        </div>
+        {shadow && (
+          <div>
+            <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">Shadow 判断</p>
+            <RuleExplanation code={shadowReason} />
+          </div>
+        )}
+      </div>
+
+      {shadow && !shadowDecision && !shadowSelected && shadow.fallback_strategy && (
+        <p className="mt-2 text-xs leading-5 text-[var(--color-text-tertiary)]">
+          本轮策略：{formatCopyWithCode(getFallbackStrategyCopy(shadow.fallback_strategy), shadow.fallback_strategy)}
+        </p>
+      )}
+
+      {relevance && (
+        <details className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-secondary)]">
+            查看 Shadow 主题、直接证据与降级信息
+          </summary>
+          <div className="mt-2">
+            <InfoRow label="原始主题 raw_topic_terms" value={formatTerms(relevance.raw_topic_terms || [])} />
+            <InfoRow label="清理后主题 topic_terms" value={formatTerms(relevance.topic_terms || [])} />
+            <InfoRow label="桶命中主题 matched_topic_terms" value={formatTerms(relevance.matched_topic_terms || [])} />
+            <InfoRow label="忽略称呼 ignored_address_terms" value={formatTerms(relevance.ignored_address_terms || [])} />
+            <InfoRow label="身份称呼 ignored_identity_terms" value={formatTerms(relevance.ignored_identity_terms || [])} />
+            <InfoRow label="额外称呼 ignored_configured_address_terms" value={formatTerms(relevance.ignored_configured_address_terms || [])} />
+            <InfoRow label="其他清理词 ignored_topic_terms" value={formatTerms(relevance.ignored_topic_terms || [])} />
+            <InfoRow label="语义状态 semantic_status" value={formatCopyWithCode(getSemanticStatusCopy(relevance.semantic_status), relevance.semantic_status)} />
+            <InfoRow label="正式关键词分 formal_keyword_score" value={formatScore(relevance.formal_keyword_score)} />
+            <InfoRow label="Shadow 关键词分 shadow_keyword_score" value={formatScore(relevance.shadow_keyword_score)} />
+            <InfoRow label="明确桶 ID explicit_bucket_id" value={formatBoolean(relevance.explicit_bucket_id)} />
+            <InfoRow label="稀有名称 rare_name_direct" value={formatBoolean(relevance.rare_name_direct, relevance.rare_name_terms)} />
+            <InfoRow label="身份名称 identity_name_direct" value={formatBoolean(relevance.identity_name_direct)} />
+            <InfoRow label="来源记录 source_record_direct" value={formatBoolean(relevance.source_record_direct, relevance.source_record_match_reason ? [relevance.source_record_match_reason] : [])} />
+            <InfoRow label="唯一直接证据 unique_direct" value={formatBoolean(relevance.unique_direct)} />
+            <InfoRow label="精确主题 exact_direct" value={formatBoolean(relevance.exact_direct)} />
+            <InfoRow label="Query 语义不可用 query_semantic_unavailable" value={formatBoolean(relevance.query_semantic_unavailable)} />
+            <InfoRow label="关键词故障降级 query_unavailable_keyword_fallback" value={formatBoolean(relevance.query_unavailable_keyword_fallback)} />
+            <InfoRow label="故障降级门槛 query_unavailable_keyword_min" value={formatScore(relevance.query_unavailable_keyword_min)} />
+          </div>
+        </details>
       )}
 
       {evidence.length > 0 && (
@@ -564,16 +746,22 @@ function necessityLabel(necessity?: RecallNecessityDebug['necessity']) {
   return '尚未判断'
 }
 
-function plannerStatusLabel(status?: RecallShadowDebug['planner_status']) {
-  if (status === 'normal') return '正常'
-  if (status === 'degraded') return '已降级'
-  if (status === 'not_triggered') return '无需调用'
-  if (status === 'disabled') return '已关闭'
-  if (status === 'not_run') return '正式路径提前结束，未调用'
-  return '未知'
+function formatCopyWithCode(copy: RecallRuleCopy, code?: string) {
+  return code ? `${copy.title}（${code}）` : copy.title
 }
 
-function formatScore(score?: number) {
+function formatOptionalBoolean(value: boolean | undefined, yes: string, no: string) {
+  if (typeof value !== 'boolean') return '未记录'
+  return value ? yes : no
+}
+
+function formatBoolean(value?: boolean, details: string[] = []) {
+  if (typeof value !== 'boolean') return '未记录'
+  const label = value ? '是' : '否'
+  return details.length ? `${label} · ${details.join(' · ')}` : label
+}
+
+function formatScore(score?: number | null) {
   return typeof score === 'number' ? score.toFixed(3) : '—'
 }
 
