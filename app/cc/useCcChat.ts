@@ -232,7 +232,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const resumeHintRef = useRef('')
   const resumeHintLaneIdRef = useRef('')
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
-  const handoffRef = useRef<{ bucketIds: string[]; turns: number; fromSessionId: string | null } | null>(null)
+  const handoffRef = useRef<{ snapshot: HandoffPayload['snapshot'] } | null>(null)
   const dailyReviewEnabledRef = useRef(true)
 
   // 上游配置：进页面拉一次。拉不到就用空配置（引擎层会退回 .env.local）
@@ -988,44 +988,23 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       selfhostPickRef.current = defaultPick
       setPick(defaultPick)
       setMode(payload.mode)
-      dailyReviewEnabledRef.current = payload.includeDailyReview
+      // 日回顾现在与其他 handoff 条目一样逐项选择并进入同一份固定快照，
+      // 不再额外初始化「默认最近三天」以免重复注入。
+      dailyReviewEnabledRef.current = false
 
       // 存 handoff 数据，首条 send 时带走
-      handoffRef.current = {
-        bucketIds: payload.bucketIds,
-        turns: payload.turns,
-        fromSessionId: payload.fromSessionId,
-      }
+      handoffRef.current = { snapshot: payload.snapshot }
 
       // 要带对话原文：拉回来转成「淡色历史消息」铺在消息流最前面。
       // 走 messages 数组（不再用独立状态）—— 跟真消息同一条渲染路径，发消息后不会消失，
       // 顺序天然正序（旧在上、最新贴着第一句）。标 handoff+fromHistory：淡色显示、不可重发。
-      if (payload.turns > 0 && payload.fromSessionId) {
-        try {
-          const res = await fetch(
-            `/api/cc-turns?session_id=${encodeURIComponent(payload.fromSessionId)}&limit=${payload.turns}`,
-            { cache: 'no-store' },
-          )
-          const data = await res.json()
-          if (data.ok && Array.isArray(data.turns)) {
-            const msgs: CcMessage[] = []
-            // cc-turns 返回就是时间正序（旧→新），直接铺，最新那条在最下面贴着第一句
-            for (const t of data.turns) {
-              const at = Date.parse(t.created_at) || Date.now()
-              if (t.user_text?.trim()) {
-                msgs.push({ id: `ho${t.id}u`, role: 'user', text: t.user_text, createdAt: at, fromHistory: true, handoff: true })
-              }
-              if (t.assistant_text?.trim()) {
-                msgs.push({ id: `ho${t.id}a`, role: 'assistant', text: t.assistant_text, createdAt: at, fromHistory: true, handoff: true })
-              }
-            }
-            // 只在还没发第一句时铺（用户可能已抢先发言，不覆盖真消息）
-            setMessages(prev => (prev.length === 0 ? msgs : prev))
-          }
-        } catch {
-          // 拉不到不影响新对话
-        }
+      const msgs: CcMessage[] = []
+      for (const turn of payload.chatTurns) {
+        const at = Date.parse(turn.created_at) || Date.now()
+        if (turn.user_text?.trim()) msgs.push({ id: `ho${turn.id}u`, role: 'user', text: turn.user_text, createdAt: at, fromHistory: true, handoff: true })
+        if (turn.assistant_text?.trim()) msgs.push({ id: `ho${turn.id}a`, role: 'assistant', text: turn.assistant_text, createdAt: at, fromHistory: true, handoff: true })
       }
+      setMessages(previous => (previous.length === 0 ? msgs : previous))
     },
     [sessionId, draft, upstream, webDefaults],
   )
@@ -1322,7 +1301,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           mode,
           include_daily_review: dailyReviewEnabledRef.current,
           ...(handoffRef.current ? {
-            handoff_bucket_ids: handoffRef.current.bucketIds,
+            handoff_snapshot: handoffRef.current.snapshot,
           } : {}),
         }
         const res = await fetch(endpoint, {
@@ -1354,9 +1333,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             ...(resumeHintLaneIdRef.current ? { resume_hint_lane_id: resumeHintLaneIdRef.current } : {}),
             // 5.5 换窗 handoff：首条消息带桶 id 和源会话 id，服务端拉内容注入
             ...(handoffRef.current ? {
-              handoff_bucket_ids: handoffRef.current.bucketIds,
-              handoff_turns: handoffRef.current.turns,
-              handoff_from_session: handoffRef.current.fromSessionId,
+              handoff_snapshot: handoffRef.current.snapshot,
             } : {}),
           }),
           signal: ac.signal,

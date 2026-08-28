@@ -51,7 +51,6 @@ import { recallForPrompt } from '@/app/lib/havenRecall'
 import {
   getConversationSession,
   listAllTurns,
-  listTurns,
   recordTurnStrict,
   updatePersonaFromExchange,
   type HavenTurn,
@@ -112,8 +111,6 @@ export type RunTurnInput = {
   config: TurnConfig
   /** route 为组装 system 预读的同一份 Haven 窗口状态，避免本轮重复请求。 */
   sessionSnapshot?: Awaited<ReturnType<typeof getConversationSession>>
-  /** 5.5 换窗 handoff。只随新会话首条带一次，之后几轮传空 */
-  handoff: { bucketIds: string[]; turns: number; fromSession: string }
   /** 第 5 条 resume：前端从历史最后一轮读出的 claude code session id。
    *  只在服务端进程已丢（重启 / 回收）时用来接回上下文；已有活进程则忽略。 */
   resumeHint?: string
@@ -396,7 +393,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     attachments: inputAttachments,
     persona,
     config,
-    handoff,
     signal,
     send,
     close,
@@ -535,36 +531,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     if (continuationRecall || continuation) {
       content = [continuationRecall, continuation, content].filter(Boolean).join('\n\n')
       stamp?.('跨引擎续聊记录补进来了')
-    }
-
-    /* ── 5.5 换窗 handoff：上个窗口最近 N 轮原文，拼进首条 user 正文最前面 ──
-     * 只在会话第一轮带（live.turnCount===0），之后几轮前端也不再送。
-     * 跟召回同一条路：拼进正文而不走 additionalContext hook，避免被包成
-     * role:"system" 被中转站丢掉。放在召回块前面 —— 它是「上文」，比这一轮召回更靠前。
-     * 拉不到不影响这一轮：listTurns 自己不抛异常。 */
-    const handoffTurnCount = Number(handoff.turns) || 0
-    const handoffFrom = String(handoff.fromSession || '').trim()
-    if (live.turnCount === 0 && handoffTurnCount > 0 && handoffFrom) {
-      const r = await listTurns(handoffFrom, { limit: handoffTurnCount, signal })
-      if (r.ok && r.turns.length > 0) {
-        // listTurns 返回时间正序（旧→新），正文直接顺着拼。
-        // 说话人用真名：用户 = 协作者配置里的 user_name（小羊），助手 = 协作者自己的名字。
-        const userName = String(persona?.user_name || '小羊')
-        const assistantName = String(persona?.name || '助手')
-        const lines: string[] = []
-        for (const t of r.turns) {
-          if (t.user_text?.trim()) lines.push(`${userName}：${t.user_text.trim()}`)
-          if (t.assistant_text?.trim()) lines.push(`${assistantName}：${t.assistant_text.trim()}`)
-        }
-        if (lines.length > 0) {
-          content =
-            '【上次聊到这里】\n\n' +
-            lines.join('\n\n') +
-            '\n\n---\n\n' +
-            content
-        }
-      }
-      stamp?.('换窗原文拉回来了')
     }
 
     // 当前时间只放在本轮 user 消息的动态尾部：前端气泡和 Haven user_text 仍保存用户原话；

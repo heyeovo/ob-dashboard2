@@ -246,7 +246,6 @@ function driveTurn(
     text: options.text || '你好',
     persona: options.persona ?? null,
     config: options.config || makeConfig({ sessionId }),
-    handoff: options.handoff || { bucketIds: [], turns: 0, fromSession: '' },
     signal: ac.signal,
     // 跟真实 route 的 send 一样：调用时就序列化（模拟 SSE 编码时机）。
     // 不能存对象引用 —— 服务端后续会原地改 tool.status 等字段，

@@ -13,7 +13,7 @@ import {
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 import { resolveAttachments, type ResolvedAttachment } from '@/app/lib/havenAttachments'
-import { getBucket } from '@/app/lib/api'
+import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
 import {
   DEFAULT_REPLY_RESERVE_TOKENS,
   resolveSelfhostSettings,
@@ -44,7 +44,7 @@ export type SelfhostRequest = {
   attachmentIds?: string[]
   mode: 'chat' | 'work'
   includeDailyReview: boolean
-  handoffBucketIds?: string[]
+  handoffSnapshot?: HandoffSnapshot
 }
 
 type Provider = { providerId: string; baseUrl: string; authToken: string; label: string }
@@ -137,6 +137,7 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     mode: request.mode,
     dailyReviewEnabled: request.includeDailyReview,
     initializeDailyReviewSnapshot: true,
+    handoffSnapshot: request.handoffSnapshot,
   })
   if (!initialized.ok) {
     return preflightError(request.requestId, 502, 'haven_session_failed', `初始化窗口配置失败：${initialized.error}`)
@@ -192,28 +193,9 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     return preflightError(request.requestId, 400, 'attachment_read_failed', error instanceof Error ? error.message : '附件读取失败')
   }
 
-  const handoffParts: string[] = []
-  if (historyResult.turns.length === 0) {
-    for (const id of (request.handoffBucketIds || []).slice(0, 200)) {
-      try {
-        const bucket = await getBucket(id)
-        const title = String(bucket?.metadata?.name || bucket?.name || bucket?.title || id)
-        const content = String(bucket?.content || '').trim()
-        if (content) handoffParts.push(`【${title}】\n${content}`)
-      } catch {
-        // One missing bucket must not block the new conversation.
-      }
-    }
-  }
-  const handoffContext = handoffParts.length > 0
-    ? [
-        '<换窗记忆>',
-        '以下是用户为这个新窗口选择的稳定背景，其中可能包含钉选记忆、最近记忆与 feel。',
-        '',
-        handoffParts.join('\n\n'),
-        '</换窗记忆>',
-      ].join('\n')
-    : ''
+  // selfhost 无状态，每轮都从 Haven 读取同一份固定快照；CC 启动每条原生
+  // 线路时也读取这个字段，因此两种引擎不会各自重新筛选内容。
+  const handoffContext = handoffSnapshotContent(session?.handoff_snapshot)
 
   return {
     kind: 'ready',

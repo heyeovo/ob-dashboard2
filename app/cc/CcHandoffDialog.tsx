@@ -1,302 +1,297 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useEffect, useMemo, useState } from 'react'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
+import {
+  buildHandoffSnapshot,
+  estimateHandoffTokens,
+  type HandoffItemKind,
+  type HandoffSnapshot,
+  type HandoffSourceItem,
+} from '@/app/lib/cc/handoffSnapshot'
+
+export type HandoffTurnPreview = {
+  id: number
+  round_id: number
+  created_at: string
+  user_text: string
+  assistant_text: string
+}
 
 export type HandoffPayload = {
   mode: CcMode
-  includeDailyReview: boolean
-  bucketIds: string[]
-  turns: number
+  snapshot: HandoffSnapshot
+  chatTurns: HandoffTurnPreview[]
   fromSessionId: string | null
 }
 
-type BucketItem = {
+type Candidate = {
   id: string
   title: string
-  pinned: boolean
-  type: string
-  tags: string[]
+  content: string
   created: string
+  note?: string
 }
 
 type Props = {
-  /** null = 从 "+" 新建进来（不带对话原文）；有值 = 从换窗按钮进来 */
   fromSessionId: string | null
   currentMode: CcMode
+  personaId: string
   onConfirm: (payload: HandoffPayload) => void
   onClose: () => void
 }
 
-export default function CcHandoffDialog({ fromSessionId, currentMode, onConfirm, onClose }: Props) {
+type SectionProps = {
+  id: string
+  title: string
+  hint: string
+  items: Candidate[]
+  selected: Set<string>
+  open: boolean
+  loading: boolean
+  onOpen: () => void
+  onToggle: (id: string) => void
+  onAll: () => void
+  onNone: () => void
+  control?: React.ReactNode
+}
+
+function countStats(items: Candidate[], selected: Set<string>) {
+  const text = items.filter(item => selected.has(item.id)).map(item => item.content).join('\n\n')
+  return { chars: text.length, tokens: estimateHandoffTokens(text) }
+}
+
+function SelectionSection({ id, title, hint, items, selected, open, loading, onOpen, onToggle, onAll, onNone, control }: SectionProps) {
+  const selectedCount = items.filter(item => selected.has(item.id)).length
+  const stats = countStats(items, selected)
+  return (
+    <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <button type="button" aria-expanded={open} aria-controls={`handoff-${id}`} onClick={onOpen} className="flex w-full items-center gap-3 px-3.5 py-3 text-left">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12px] font-medium text-[var(--color-text-heading)]">{title}</span>
+          <span className="mt-0.5 block text-[10px] text-[var(--color-text-disabled)]">
+            {hint} · 已选 {selectedCount}/{items.length} · {stats.chars.toLocaleString()} 字 · 约 {stats.tokens.toLocaleString()} token
+          </span>
+        </span>
+        <span className="text-[11px] text-[var(--color-text-disabled)]">{open ? '收起' : '展开'}</span>
+      </button>
+      {open ? (
+        <div id={`handoff-${id}`} className="border-t border-[var(--color-border-light)] px-3.5 pb-3 pt-2.5">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>{control}</div>
+            {items.length > 0 ? (
+              <div className="flex items-center gap-2 text-[10.5px]">
+                <button type="button" onClick={onAll} className="text-[var(--color-primary)] hover:underline">全选</button>
+                <span className="text-[var(--color-border)]">|</span>
+                <button type="button" onClick={onNone} className="text-[var(--color-primary)] hover:underline">全不选</button>
+              </div>
+            ) : null}
+          </div>
+          {loading ? (
+            <div className="py-3 text-center text-[11px] text-[var(--color-text-disabled)]">加载中</div>
+          ) : items.length === 0 ? (
+            <div className="py-3 text-center text-[11px] text-[var(--color-text-disabled)]">暂无可选内容</div>
+          ) : (
+            <div className="max-h-64 space-y-1 overflow-y-auto pr-0.5">
+              {items.map(item => (
+                <label key={item.id} className={`flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 transition-colors ${selected.has(item.id) ? 'border-[var(--color-primary)]/50 bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'}`}>
+                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggle(item.id)} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[11.5px] text-[var(--color-text-secondary)]">{item.title}</span>
+                    <span className="mt-0.5 block text-[9.5px] text-[var(--color-text-disabled)]">
+                      {item.note ? `${item.note} · ` : ''}{item.content.length.toLocaleString()} 字 · 约 {estimateHandoffTokens(item.content).toLocaleString()} token
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function LimitControl({ value, unit, onChange }: { value: number; unit: string; onChange: (value: number) => void }) {
+  return (
+    <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
+      展示最近
+      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)]" />
+      {unit}
+    </label>
+  )
+}
+
+function toggleSet(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
+  setter(previous => {
+    const next = new Set(previous)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}
+
+export default function CcHandoffDialog({ fromSessionId, currentMode, personaId, onConfirm, onClose }: Props) {
   const [mode, setMode] = useState<CcMode>(currentMode)
-  // 钉选桶固定带（默认勾上），另加最近 10 个非钉选桶。两组分开显示。
-  const [pinnedBuckets, setPinnedBuckets] = useState<BucketItem[]>([])
-  const [recentBuckets, setRecentBuckets] = useState<BucketItem[]>([])
-  const [feelBuckets, setFeelBuckets] = useState<BucketItem[]>([])
-  const [bucketsLoading, setBucketsLoading] = useState(true)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [turns, setTurns] = useState(20)
-  const [includeDailyReview, setIncludeDailyReview] = useState(true)
-  const [includeFeels, setIncludeFeels] = useState(true)
+  const [pinned, setPinned] = useState<Candidate[]>([])
+  const [recent, setRecent] = useState<Candidate[]>([])
+  const [feels, setFeels] = useState<Candidate[]>([])
+  const [journals, setJournals] = useState<Candidate[]>([])
+  const [dailyReviews, setDailyReviews] = useState<Candidate[]>([])
+  const [turns, setTurns] = useState<HandoffTurnPreview[]>([])
+  const [selectedPinned, setSelectedPinned] = useState<Set<string>>(new Set())
+  const [selectedRecent, setSelectedRecent] = useState<Set<string>>(new Set())
+  const [selectedFeels, setSelectedFeels] = useState<Set<string>>(new Set())
+  const [selectedJournals, setSelectedJournals] = useState<Set<string>>(new Set())
+  const [selectedDailyReviews, setSelectedDailyReviews] = useState<Set<string>>(new Set())
+  const [selectedTurns, setSelectedTurns] = useState<Set<string>>(new Set())
+  const [recentLimit, setRecentLimit] = useState(10)
   const [feelLimit, setFeelLimit] = useState(10)
+  const [journalLimit, setJournalLimit] = useState(10)
+  const [turnLimit, setTurnLimit] = useState(20)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    let cancelled = false
-    setBucketsLoading(true)
-    // 必须取全量：老钉选桶可能远在最近 40 条之外。
-    fetch('/api/buckets')
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return
-        const all: BucketItem[] = (data.buckets || data || []).map((b: any) => ({
-          id: b.id,
-          title: b.name || b.title || b.id,
-          pinned: !!b.pinned,
-          type: String(b.type || 'dynamic'),
-          tags: Array.isArray(b.tags) ? b.tags.map(String) : [],
-          created: String(b.created || b.event_time || ''),
-        }))
-        const pinned = all.filter(b => b.pinned)
-        // 非钉选取时间倒序前 10（后端已按时间倒序返回）
-        const recent = all.filter(b => !b.pinned && !['feel', 'archived'].includes(b.type)).slice(0, 10)
-        const feels = all
-          .filter(b => b.type === 'feel' && !b.tags.some(tag => [
-            'whisper', 'daily_impression', 'weekly_impression', 'relationship_weather',
-          ].includes(tag)))
-          .sort((a, b) => b.created.localeCompare(a.created))
-        setPinnedBuckets(pinned)
-        setRecentBuckets(recent)
-        setFeelBuckets(feels)
-        // 钉选桶默认勾选 —— 「固定会带」
-        setSelected(new Set(pinned.map(b => b.id)))
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setBucketsLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+    const controller = new AbortController()
+    setLoading(true)
+    setError('')
+    ;(async () => {
+      try {
+        const requests: Promise<Response>[] = [
+          fetch('/api/buckets?full=1', { cache: 'no-store', signal: controller.signal }),
+          fetch('/api/journal', { cache: 'no-store', signal: controller.signal }),
+          fetch(`/api/daily-reviews?persona_id=${encodeURIComponent(personaId)}&limit=3`, { cache: 'no-store', signal: controller.signal }),
+        ]
+        if (fromSessionId) requests.push(fetch(`/api/cc-turns?session_id=${encodeURIComponent(fromSessionId)}&all=1`, { cache: 'no-store', signal: controller.signal }))
+        const responses = await Promise.all(requests)
+        const payloads = await Promise.all(responses.map(response => response.json().catch(() => ({}))))
+        const failed = responses.findIndex(response => !response.ok)
+        if (failed >= 0) throw new Error(String(payloads[failed]?.error || `读取换窗资料失败（${responses[failed].status}）`))
 
-  const allBuckets = [...pinnedBuckets, ...recentBuckets]
-  const bucketGroups = [
-    { label: '已钉选（固定带上）', items: pinnedBuckets },
-    { label: '最近记忆', items: recentBuckets },
+        const rawBuckets = Array.isArray(payloads[0]) ? payloads[0] : (payloads[0]?.buckets || [])
+        const bucketItems = rawBuckets.map((raw: any): Candidate & { pinned: boolean; type: string; tags: string[] } => {
+          const metadata = raw?.metadata || {}
+          return {
+            id: String(raw?.id || ''),
+            title: String(raw?.name || raw?.title || metadata?.name || raw?.id || ''),
+            content: String(raw?.content || ''),
+            created: String(raw?.event_time || raw?.created || metadata?.event_time || metadata?.created || ''),
+            pinned: Boolean(raw?.pinned ?? metadata?.pinned),
+            type: String(raw?.type || metadata?.type || 'dynamic'),
+            tags: Array.isArray(raw?.tags || metadata?.tags) ? (raw?.tags || metadata?.tags).map(String) : [],
+          }
+        }).filter((item: Candidate) => item.id && item.content.trim())
+        const pinnedItems = bucketItems.filter((item: any) => item.pinned)
+        const feelItems = bucketItems.filter((item: any) => !item.pinned && item.type === 'feel' && !item.tags.some((tag: string) => ['whisper', 'daily_impression', 'weekly_impression', 'relationship_weather'].includes(tag))).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        const recentItems = bucketItems.filter((item: any) => !item.pinned && !['feel', 'archived', 'journal'].includes(item.type)).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        setPinned(pinnedItems)
+        setRecent(recentItems)
+        setFeels(feelItems)
+        setSelectedPinned(new Set(pinnedItems.map((item: Candidate) => item.id)))
+
+        const journalItems = (Array.isArray(payloads[1]) ? payloads[1] : (payloads[1]?.items || []))
+          .filter((item: any) => !item?.locked && String(item?.content || '').trim())
+          .map((item: any): Candidate => ({ id: String(item.id), title: String(item.name || item.id), content: String(item.content || ''), created: String(item.event_time || item.created || ''), note: String(item.author || '') }))
+          .sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        setJournals(journalItems)
+
+        const reviewItems = (Array.isArray(payloads[2]?.items) ? payloads[2].items : [])
+          .filter((item: any) => String(item?.content || '').trim())
+          .map((item: any): Candidate => ({ id: String(item.review_date), title: String(item.review_date), content: String(item.content || ''), created: String(item.review_date || '') }))
+          .sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        setDailyReviews(reviewItems)
+
+        if (fromSessionId) setTurns(Array.isArray(payloads[3]?.turns) ? payloads[3].turns : [])
+      } catch (reason) {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : '读取换窗资料失败')
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [fromSessionId, personaId])
+
+  const recentVisible = recent.slice(0, recentLimit)
+  const feelVisible = feels.slice(0, feelLimit)
+  const journalVisible = journals.slice(0, journalLimit)
+  const turnVisible = turnLimit > 0 ? turns.slice(-turnLimit) : []
+  const turnCandidates = turnVisible.map(turn => ({
+    id: String(turn.id),
+    title: `第 ${turn.round_id} 轮`,
+    content: [turn.user_text?.trim() ? `用户：${turn.user_text.trim()}` : '', turn.assistant_text?.trim() ? `助手：${turn.assistant_text.trim()}` : ''].filter(Boolean).join('\n\n'),
+    created: turn.created_at,
+  }))
+
+  const sourceItems = useMemo(() => {
+    const groups: Array<{ kind: HandoffItemKind; items: Candidate[]; selected: Set<string> }> = [
+      { kind: 'daily_review', items: dailyReviews, selected: selectedDailyReviews },
+      { kind: 'pinned', items: pinned, selected: selectedPinned },
+      { kind: 'recent', items: recentVisible, selected: selectedRecent },
+      { kind: 'feel', items: feelVisible, selected: selectedFeels },
+      { kind: 'journal', items: journalVisible, selected: selectedJournals },
+      { kind: 'chat', items: turnCandidates, selected: selectedTurns },
+    ]
+    return groups.flatMap(group => group.items.filter(item => group.selected.has(item.id)).map((item): HandoffSourceItem => ({ kind: group.kind, id: item.id, title: item.title, content: item.content })))
+  }, [dailyReviews, feelVisible, journalVisible, pinned, recentVisible, selectedDailyReviews, selectedFeels, selectedJournals, selectedPinned, selectedRecent, selectedTurns, turnCandidates])
+  const snapshot = useMemo(() => buildHandoffSnapshot(sourceItems), [sourceItems])
+  const effectiveChatIds = new Set(snapshot.items.filter(item => item.kind === 'chat').map(item => item.id))
+  const effectiveTurns = turnVisible.filter(turn => effectiveChatIds.has(String(turn.id)))
+
+  const toggleOpen = (id: string) => setOpenSections(previous => {
+    const next = new Set(previous)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const replaceVisible = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, items: Candidate[], checked: boolean) => setter(previous => {
+    const next = new Set(previous)
+    for (const item of items) checked ? next.add(item.id) : next.delete(item.id)
+    return next
+  })
+
+  const sections: Array<SectionProps> = [
+    { id: 'daily', title: '日回顾', hint: '最近三个完整日', items: dailyReviews, selected: selectedDailyReviews, open: openSections.has('daily'), loading, onOpen: () => toggleOpen('daily'), onToggle: id => toggleSet(setSelectedDailyReviews, id), onAll: () => replaceVisible(setSelectedDailyReviews, dailyReviews, true), onNone: () => replaceVisible(setSelectedDailyReviews, dailyReviews, false) },
+    { id: 'pinned', title: '钉选桶', hint: '唯一默认全选', items: pinned, selected: selectedPinned, open: openSections.has('pinned'), loading, onOpen: () => toggleOpen('pinned'), onToggle: id => toggleSet(setSelectedPinned, id), onAll: () => replaceVisible(setSelectedPinned, pinned, true), onNone: () => replaceVisible(setSelectedPinned, pinned, false) },
+    { id: 'recent', title: '最近记忆', hint: `最近 ${recentVisible.length} 个桶`, items: recentVisible, selected: selectedRecent, open: openSections.has('recent'), loading, onOpen: () => toggleOpen('recent'), onToggle: id => toggleSet(setSelectedRecent, id), onAll: () => replaceVisible(setSelectedRecent, recentVisible, true), onNone: () => replaceVisible(setSelectedRecent, recentVisible, false), control: <LimitControl value={recentLimit} unit="个桶" onChange={setRecentLimit} /> },
+    { id: 'feel', title: 'feel', hint: `最近 ${feelVisible.length} 条`, items: feelVisible, selected: selectedFeels, open: openSections.has('feel'), loading, onOpen: () => toggleOpen('feel'), onToggle: id => toggleSet(setSelectedFeels, id), onAll: () => replaceVisible(setSelectedFeels, feelVisible, true), onNone: () => replaceVisible(setSelectedFeels, feelVisible, false), control: <LimitControl value={feelLimit} unit="条" onChange={setFeelLimit} /> },
+    { id: 'journal', title: 'journal', hint: `最近 ${journalVisible.length} 篇未锁定日记`, items: journalVisible, selected: selectedJournals, open: openSections.has('journal'), loading, onOpen: () => toggleOpen('journal'), onToggle: id => toggleSet(setSelectedJournals, id), onAll: () => replaceVisible(setSelectedJournals, journalVisible, true), onNone: () => replaceVisible(setSelectedJournals, journalVisible, false), control: <LimitControl value={journalLimit} unit="篇" onChange={setJournalLimit} /> },
   ]
-
-  const toggle = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const selectAll = () => {
-    if (selected.size === allBuckets.length) setSelected(new Set())
-    else setSelected(new Set(allBuckets.map(b => b.id)))
-  }
-
-  const handleConfirm = () => {
-    const selectedFeelIds = includeFeels
-      ? feelBuckets.slice(0, feelLimit).map(bucket => bucket.id)
-      : []
-    onConfirm({
-      mode,
-      includeDailyReview,
-      bucketIds: [...new Set([...selected, ...selectedFeelIds])],
-      turns: fromSessionId ? turns : 0,
-      fromSessionId,
-    })
-  }
+  if (fromSessionId) sections.push({ id: 'chat', title: '旧窗口聊天正文', hint: `最近 ${turnCandidates.length} 轮可逐项选择`, items: turnCandidates, selected: selectedTurns, open: openSections.has('chat'), loading, onOpen: () => toggleOpen('chat'), onToggle: id => toggleSet(setSelectedTurns, id), onAll: () => replaceVisible(setSelectedTurns, turnCandidates, true), onNone: () => replaceVisible(setSelectedTurns, turnCandidates, false), control: <LimitControl value={turnLimit} unit="轮" onChange={setTurnLimit} /> })
 
   return (
     <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
-      <div
-        className="cc-modal relative flex max-h-[86vh] w-full max-w-sm flex-col"
-        role="dialog"
-        aria-label="新对话"
-      >
-        {/* 头 */}
+      <div className="cc-modal relative flex max-h-[90vh] w-full max-w-lg flex-col" role="dialog" aria-label="新对话">
         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-3.5">
           <div>
-            <div className="text-[13px] font-medium text-[var(--color-text-heading)]">
-              {fromSessionId ? '换窗' : '新对话'}
-            </div>
-            <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">
-              {fromSessionId ? '带上下文开新窗口' : '选模式，可选带记忆'}
-            </div>
+            <div className="text-[13px] font-medium text-[var(--color-text-heading)]">{fromSessionId ? '换窗' : '新对话'}</div>
+            <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">选择并冻结这个窗口要带入的背景</div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
-          >
-            取消
-          </button>
+          <button type="button" onClick={onClose} className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">取消</button>
         </div>
-
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {/* ── 模式选择 ── */}
           <div className="mb-1.5 text-[11px] text-[var(--color-text-disabled)]">模式</div>
           <div className="mb-4 flex gap-2.5">
-            {(['chat', 'work'] as const).map(m => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-2.5 text-left transition-colors ${
-                  mode === m
-                    ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
-                    : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'
-                }`}
-              >
-                <span className="block text-[12px] font-medium text-[var(--color-text-heading)]">
-                  {MODE_LABEL[m]}
-                </span>
-                <span className="mt-0.5 block text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">
-                  {MODE_HINT[m]}
-                </span>
+            {(['chat', 'work'] as const).map(itemMode => (
+              <button key={itemMode} type="button" onClick={() => setMode(itemMode)} className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-2.5 text-left transition-colors ${mode === itemMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'}`}>
+                <span className="block text-[12px] font-medium text-[var(--color-text-heading)]">{MODE_LABEL[itemMode]}</span>
+                <span className="mt-0.5 block text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">{MODE_HINT[itemMode]}</span>
               </button>
             ))}
           </div>
-
-          <label className="mb-4 flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2.5">
-            <input
-              type="checkbox"
-              checked={includeDailyReview}
-              onChange={event => setIncludeDailyReview(event.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]"
-            />
-            <span>
-              <span className="block text-[11.5px] text-[var(--color-text-secondary)]">注入最近三天日回顾</span>
-              <span className="mt-0.5 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
-                创建窗口时冻结为快照，之后不会随日期变化
-              </span>
-            </span>
-          </label>
-
-          <div className="mb-4 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2.5">
-            <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
-              <input
-                type="checkbox"
-                checked={includeFeels}
-                onChange={event => setIncludeFeels(event.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[11.5px] text-[var(--color-text-secondary)]">注入最近 feel</span>
-                <span className="mt-0.5 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
-                  作为新窗口的稳定情绪背景
-                </span>
-              </span>
-            </label>
-            <span className="flex shrink-0 items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
-              最近
-              <input
-                type="number"
-                min={1}
-                max={50}
-                value={feelLimit}
-                disabled={!includeFeels}
-                onChange={event => setFeelLimit(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
-                className="h-6 w-12 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)] disabled:opacity-50"
-              />
-              条
-            </span>
-          </div>
-
-          {/* ── 记忆桶 ── */}
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] text-[var(--color-text-disabled)]">带记忆桶</span>
-            {allBuckets.length > 0 && (
-              <button
-                type="button"
-                onClick={selectAll}
-                className="text-[10.5px] text-[var(--color-primary)] hover:underline"
-              >
-                {selected.size === allBuckets.length ? '全不选' : '全选'}
-              </button>
-            )}
-          </div>
-          {bucketsLoading ? (
-            <div className="py-4 text-center text-[11px] text-[var(--color-text-disabled)]">加载中</div>
-          ) : allBuckets.length === 0 ? (
-            <div className="py-4 text-center text-[11px] text-[var(--color-text-disabled)]">暂无记忆桶</div>
-          ) : (
-            <div className="mb-4 space-y-3">
-              {bucketGroups.map(g =>
-                g.items.length === 0 ? null : (
-                  <div key={g.label}>
-                    <div className="mb-1 px-0.5 text-[10px] font-medium text-[var(--color-text-disabled)]">
-                      {g.label}
-                    </div>
-                    <div className="space-y-1">
-                      {g.items.map(b => (
-                        <label
-                          key={b.id}
-                          className={`flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 transition-colors ${
-                            selected.has(b.id)
-                              ? 'border-[var(--color-primary)]/50 bg-[var(--color-primary-muted)]'
-                              : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selected.has(b.id)}
-                            onChange={() => toggle(b.id)}
-                            className="h-3.5 w-3.5 accent-[var(--color-primary)]"
-                          />
-                          <span className="min-w-0 flex-1 truncate text-[11.5px] text-[var(--color-text-secondary)]">
-                            {b.title}
-                          </span>
-                          {b.pinned && (
-                            <span className="shrink-0 text-[9.5px] text-[var(--color-pinned)]">已钉选</span>
-                          )}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-          )}
-
-          {/* ── 对话原文轮次（只有换窗模式显示） ── */}
-          {fromSessionId && (
-            <>
-              <div className="mb-1.5 text-[11px] text-[var(--color-text-disabled)]">
-                带上个窗口最近对话
-              </div>
-              <div className="mb-1 flex items-center gap-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={50}
-                  step={5}
-                  value={turns}
-                  onChange={e => setTurns(Number(e.target.value))}
-                  className="h-1 flex-1 accent-[var(--color-primary)]"
-                />
-                <span className="w-12 text-right text-[12px] tabular-nums text-[var(--color-text-secondary)]">
-                  {turns} 轮
-                </span>
-              </div>
-              <div className="mb-4 text-[10.5px] text-[var(--color-text-disabled)]">
-                {turns === 0 ? '不带对话原文' : '会以淡色背景显示在新窗口顶部'}
-              </div>
-            </>
-          )}
+          {error ? <div className="mb-3 rounded-[var(--radius-md)] border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</div> : null}
+          <div className="space-y-2">{sections.map(section => <SelectionSection key={section.id} {...section} />)}</div>
         </div>
-
-        {/* 底部确认 */}
         <div className="border-t border-[var(--color-border-light)] px-5 py-3.5">
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90"
-          >
-            {fromSessionId ? '换窗开始' : '开始新对话'}
-          </button>
+          <div className={`mb-2.5 rounded-[var(--radius-md)] border px-3 py-2 ${snapshot.stats.over_budget ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'}`}>
+            <div className="text-[11px] font-medium">本次选择：{snapshot.stats.selected_chars.toLocaleString()} 字 · 约 {snapshot.stats.selected_estimated_tokens.toLocaleString()} token</div>
+            <div className="mt-0.5 text-[10px] opacity-80">
+              统一预算 {snapshot.stats.budget_tokens.toLocaleString()} token{snapshot.stats.over_budget ? `；超出部分会按相同规则裁剪，实际约 ${snapshot.stats.effective_estimated_tokens.toLocaleString()} token，省略 ${snapshot.stats.dropped_item_count} 项` : '；CC 与 selfhost 将使用同一份固定快照'}
+            </div>
+          </div>
+          <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
         </div>
       </div>
     </div>

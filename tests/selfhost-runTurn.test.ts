@@ -85,6 +85,12 @@ describe('runSelfhostTurn stream contract', () => {
     expect(system).toContain('<haven_recall_reference>')
   })
 
+  it('injects the persisted handoff snapshot as stable system context', () => {
+    const snapshot = '<window_handoff_snapshot>\n固定换窗背景\n</window_handoff_snapshot>'
+    const system = assembleSystem(prepared().persona, '', {}, [], snapshot)
+    expect(system).toContain(snapshot)
+  })
+
   afterEach(() => vi.restoreAllMocks())
 
   it('emits usage, strictly persists, then emits done', async () => {
@@ -127,12 +133,12 @@ describe('runSelfhostTurn stream contract', () => {
     }))
     expect(deps.streamUpstream).toHaveBeenCalledWith(expect.objectContaining({
       messages: [
-        { role: 'user', content: expect.stringContaining('上一轮召回背景\n</haven_recall_reference>\n\n之前') },
+        { role: 'user', content: expect.stringContaining('上一轮召回背景') },
         { role: 'assistant', content: '回答' },
         {
           role: 'user',
           content: expect.stringMatching(
-            /^现在的问题\n\n<运行时信息>\n当前北京时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}（星期[一二三四五六日]，UTC\+08:00，Asia\/Shanghai）。这是系统提供的隐藏时间，不是用户消息。\n<\/运行时信息>$/,
+            /^现在的问题\n\n<运行时信息>\n当前北京时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}（星期[一二三四五六日]，UTC\+08:00，Asia\/Shanghai）。这是系统提供的隐藏时间，不是用户消息。\n当前会话 session_id：session-1\n<\/运行时信息>$/,
           ),
         },
       ],

@@ -173,7 +173,7 @@ Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionSto
 
 协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和"新窗口默认开启"状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖。窗口覆盖缺省时跟随协作者默认。
 
-新对话与换窗共用的弹窗默认勾选"注入最近三天日回顾"。首次发送时把 `mode` 和该选择写入 Haven，并复制最近三个已结束日历日的日回顾正文成为窗口固定快照；之后日期推进或日回顾被微调都不会改变已创建窗口。记忆选择会读取全量桶后单列所有钉选桶，不再只从最近 40 条中筛选；独立 feel 另有默认开启的注入开关，默认取最近 10 条、可在 1–50 条间调整，并排除 whisper、日印象、周印象和关系天气。选中的普通桶、全量钉选桶与 feel 在 Claude Code 和 selfhost 两条链路都只作为新窗口稳定背景注入。
+新对话与换窗共用折叠选择弹窗，分为日回顾、全量钉选桶、最近记忆、feel、journal 和旧窗口聊天原文；每组可逐项勾选并有独立的全选/全不选。只有钉选桶默认全选，其余默认全不选；最近记忆、feel、未锁定且有正文的 journal、旧聊天候选数量均可输入任意非负整数，不设 50 轮上限，旧聊天由 Dashboard 经 Haven 500 条一页完整分页后展示。弹窗显示每组及总计的字数与统一预估 token；handoff 预算为 100,000 预估 token，超出时明确警告，逐项选择的非聊天资料优先保留，聊天从最新轮次向前装入，最终恢复时间正序。确认后把裁剪完成的统一正文和统计作为窗口固定快照首次写入 Haven `conversation_sessions`，后续不得覆盖；CC 每条原生线路启动时与无状态 selfhost 每轮都读取同一份快照，因此切引擎、重启或换设备不会丢失或重新筛选。
 
 订阅、API 中转站和 selfhost 共用同一份协作者基础提示词；默认值是原 cc 闲聊模式提示词。cc 工作模式仍保留 Claude Code preset，再追加同一份协作者配置。最终都按"协作者基础 system + 定位 + 当前有效提示词模块 + 记忆"组装，每个模块以 `【模块名称】` 开头。selfhost 每轮重组；cc 对协作者配置组合计算启动指纹，内容变化时回收空闲 SDK query，并用原 Claude session resume。换窗 handoff 不计入该指纹。每轮隐藏运行时信息直接提供北京时间和中文星期。
 
@@ -189,7 +189,7 @@ CC Pro (`subscription`) 与每个 CC API provider (`api:<provider_id>`) 分别�
 
 ### 前端消费
 
-`useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`。CC Pro、CC API 和 selfhost 各自保留供应商/模型选择，空闲时可在同一窗口人工往返。
+`useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 与窗口固定 `handoff_snapshot` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`。CC Pro、CC API 和 selfhost 各自保留供应商/模型选择，空闲时可在同一窗口人工往返。
 
 Pro 订阅线路收到 SDK `rate_limit_event: rejected` 或额度耗尽时，按可保存的中断终态处理：用户原话与已有半截回复原子写入 Haven，`raw_json.interrupted_reason=pro_limit`。普通 provider、断流和其他上游错误不保存，但 SDK 非成功 `result` 会原样保留已生成正文和工具过程。CC thinking 开启时，对 Opus/Sonnet 4.6+ 显式使用 `adaptive + summarized`；关闭时显式 `disabled`。中途切换 thinking 会保留线路原生 session、回收空闲 query。
 

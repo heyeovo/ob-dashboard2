@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { getBucket } from '@/app/lib/api'
 import { resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import type { CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
@@ -9,7 +8,7 @@ import {
   permissionRuleStrings,
 } from '@/app/lib/havenPermissions'
 import { loadMcpConfig, toSdkMcpServers, disabledMcpTools } from '@/app/lib/ccMcp'
-import { getSessionStats, dropSession, peekSession } from '@/app/lib/ccSession'
+import { getSessionStats, dropSession } from '@/app/lib/ccSession'
 import { resetChannel } from '@/app/lib/ccChannel'
 import { isCcMode, type CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings } from '@/app/cc/webSettings'
@@ -31,6 +30,7 @@ import {
   type HavenTurn,
 } from '@/app/lib/havenTurns'
 import { resolveAttachments } from '@/app/lib/havenAttachments'
+import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
 //
@@ -70,7 +70,7 @@ type ChatBody = {
   persona_id?: string
   /** 5.2：chat = 闲聊（零工具），work = 工作。只在会话第一轮生效 */
   mode?: string
-  /** 新窗口是否冻结并注入最近三天日回顾；默认开启。 */
+  /** 兼容旧窗口：新弹窗的日回顾已进入 handoff_snapshot。 */
   include_daily_review?: boolean
   /** API 线路的中转站；切换时进入该 provider 独立的 Claude session。 */
   provider_id?: string
@@ -93,14 +93,8 @@ type ChatBody = {
   resume_hint?: string
   /** 旧会话过渡用：只有 hint 所属线路与本轮实际线路一致时才允许 resume。 */
   resume_hint_lane_id?: string
-  /**
-   * 5.5 换窗 handoff：只随新会话首条带一次，之后几轮不带。
-   *   handoff_bucket_ids   勾选的记忆桶 id → 服务端拉正文，拼进 systemPrompt（全程稳定、可缓存）
-   *   handoff_from_session 源会话 id + handoff_turns 轮数 → 服务端拉原文，拼进首条 user 正文
-   */
-  handoff_bucket_ids?: string[]
-  handoff_turns?: number
-  handoff_from_session?: string
+  /** 新窗口首条提交的统一固定快照；Haven 首次保存后冻结。 */
+  handoff_snapshot?: HandoffSnapshot
 }
 
 function rawRecord(rawJson: string | undefined): Record<string, unknown> {
@@ -209,13 +203,17 @@ async function loadTurnInputs(body: ChatBody) {
 
   // 5.2 闲聊 / 工作。默认工作 —— 4.5b 之前的老会话和不带这个字段的调用都按老行为走。
   const mode: CcMode = isCcMode(body.mode) ? body.mode : 'work'
-  await patchConversationSessionState({
+  const initializedSession = await patchConversationSessionState({
     sessionId: String(body.session_id || ''),
     personaId: String(body.persona_id || ''),
     mode,
     dailyReviewEnabled: body.include_daily_review !== false,
     initializeDailyReviewSnapshot: true,
+    handoffSnapshot: body.handoff_snapshot,
   })
+  if (!initializedSession.ok) {
+    throw new Error(`初始化窗口固定背景失败：${initializedSession.error || 'Haven 写入失败'}`)
+  }
   const webSettings = normalizeWebSettings({
     search_enabled: body.web_search_enabled,
     fetch_enabled: body.web_fetch_enabled,
@@ -274,33 +272,10 @@ async function loadTurnInputs(body: ChatBody) {
     sessionSnapshot.session?.prompt_module_overrides,
   )
 
-  // 5.5 换窗 handoff：勾选的记忆桶拼进 systemPrompt.append。
-  // 为什么进系统提示而不是 user 正文：这批桶是「带过来的稳定背景」，希望它全程都在、
-  //   而且属于可缓存前缀（1h 档），不像召回是每轮变的。只有新会话首条才带 —— 已有进程
-  //   的 systemPrompt 是启动时定死的，中途送来也改不了，所以这里只在没活进程时才拉。
-  // 任何失败都不拦发话：拉不到就当没带这批桶。
-  const handoffBucketIds = Array.isArray(body.handoff_bucket_ids) ? body.handoff_bucket_ids : []
-  if (handoffBucketIds.length > 0 && !peekSession(body.session_id || '')) {
-    const parts: string[] = []
-    for (const id of handoffBucketIds.slice(0, 200)) {
-      try {
-        const b = await getBucket(String(id))
-        const title = String(b?.name || b?.title || id)
-        const content = String(b?.content || '').trim()
-        if (content) parts.push(`【${title}】\n${content}`)
-      } catch {
-        // 单个桶拉不到就跳过，不影响其余
-      }
-    }
-    if (parts.length > 0) {
-      const block =
-        '<换窗记忆>\n' +
-        '以下是用户从上一个窗口带过来的记忆，作为本次对话的稳定背景。\n\n' +
-        parts.join('\n\n') +
-        '\n</换窗记忆>'
-      personaAppend = [personaAppend, block].filter(Boolean).join('\n\n')
-    }
-  }
+  // CC 的每条原生线路在启动时读取 Haven 同一份冻结快照；活跃 query 的
+  // systemPromptKey 不变，不会逐轮重复追加。selfhost 也读取这个字段。
+  const handoffBlock = handoffSnapshotContent(sessionSnapshot.session?.handoff_snapshot)
+  personaAppend = [personaAppend, handoffBlock].filter(Boolean).join('\n\n')
   const dailyReviewBlock = sessionSnapshot.session?.daily_review_enabled
     ? dailyReviewSystemBlock(sessionSnapshot.session.daily_review_snapshot)
     : ''
@@ -349,11 +324,6 @@ async function loadTurnInputs(body: ChatBody) {
     config,
     sessionSnapshot,
     resumeHint: persistedResumeHint || legacyResumeHint,
-    handoff: {
-      bucketIds: handoffBucketIds,
-      turns: Number(body.handoff_turns) || 0,
-      fromSession: String(body.handoff_from_session || '').trim(),
-    },
   }
 }
 
@@ -405,7 +375,16 @@ export async function POST(request: NextRequest) {
     return replayCcTurn(existing.turn, body)
   }
 
-  const { persona, config, handoff, sessionSnapshot, resumeHint } = await loadTurnInputs(body)
+  let inputs: Awaited<ReturnType<typeof loadTurnInputs>>
+  try {
+    inputs = await loadTurnInputs(body)
+  } catch (error) {
+    return Response.json({
+      ok: false,
+      error: error instanceof Error ? error.message : '初始化窗口失败',
+    }, { status: 502 })
+  }
+  const { persona, config, sessionSnapshot, resumeHint } = inputs
   let attachments
   try {
     attachments = await resolveAttachments(attachmentIds, sessionId)
@@ -459,7 +438,6 @@ export async function POST(request: NextRequest) {
         persona,
         config,
         sessionSnapshot,
-        handoff,
         signal: request.signal,
         send,
         close,

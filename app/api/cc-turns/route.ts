@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import {
   listSessions,
+  listAllTurns,
   listTurns,
   getConversationSession,
   patchConversationSessionState,
@@ -48,11 +49,13 @@ export async function GET(request: NextRequest) {
 
   if (sessionId) {
     const [res, state] = await Promise.all([
-      listTurns(sessionId, {
-        limit: Number(sp.get('limit') || 200),
-        beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
-        includeRaw: sp.get('raw') === '1',
-      }),
+      sp.get('all') === '1'
+        ? listAllTurns(sessionId, { includeRaw: sp.get('raw') === '1' })
+        : listTurns(sessionId, {
+            limit: Number(sp.get('limit') || 200),
+            beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
+            includeRaw: sp.get('raw') === '1',
+          }),
       getConversationSession(sessionId),
     ])
     if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })

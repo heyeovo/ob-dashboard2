@@ -1108,6 +1108,7 @@ export default function CcChatPage() {
         <CcHandoffDialog
           fromSessionId={handoffOpen.fromSessionId}
           currentMode={chat.mode}
+          personaId={people.active.id}
           onConfirm={payload => {
             setHandoffOpen(null)
             chat.startWithHandoff(payload)

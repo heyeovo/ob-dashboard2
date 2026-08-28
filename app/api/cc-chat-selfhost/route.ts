@@ -42,9 +42,9 @@ export async function POST(request: NextRequest) {
     expectedLastRoundId: Number(body.expected_last_round_id),
     mode: body.mode === 'work' ? 'work' : 'chat',
     includeDailyReview: body.include_daily_review !== false,
-    handoffBucketIds: Array.isArray(body.handoff_bucket_ids)
-      ? [...new Set(body.handoff_bucket_ids.map(String).map(value => value.trim()).filter(Boolean))].slice(0, 200)
-      : [],
+    handoffSnapshot: body.handoff_snapshot && typeof body.handoff_snapshot === 'object'
+      ? body.handoff_snapshot as SelfhostRequest['handoffSnapshot']
+      : undefined,
   }
   if (!parsed.sessionId) return invalid('session_id 不能为空', parsed.requestId)
   if (!parsed.requestId) return invalid('request_id 不能为空')

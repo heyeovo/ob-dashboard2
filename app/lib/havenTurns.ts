@@ -16,6 +16,7 @@
 import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
 import type { HavenAttachment } from './havenAttachments'
 import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
+import type { HandoffSnapshot } from './cc/handoffSnapshot'
 
 /** 来源标记。第一版只有 cc（新前端）和 gateway（Haven 自己那条链写的）。
  *  polaris 留给第 6 步迁历史用。 */
@@ -62,6 +63,7 @@ export type HavenConversationSession = {
   daily_review_enabled: boolean
   daily_review_snapshot: Array<{ review_date: string; content: string; updated_at?: string }>
   daily_review_snapshot_initialized: boolean
+  handoff_snapshot: HandoffSnapshot | Record<string, never>
   cc_seen_round_id: number
   state_version: number
   deleted_at: string | null
@@ -518,6 +520,7 @@ export async function patchConversationSessionState(input: {
   mode?: 'chat' | 'work'
   dailyReviewEnabled?: boolean
   initializeDailyReviewSnapshot?: boolean
+  handoffSnapshot?: HandoffSnapshot
   expectedStateVersion?: number
 }): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
   const sessionId = input.sessionId.trim()
@@ -526,7 +529,8 @@ export async function patchConversationSessionState(input: {
     return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
   }
   if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.ccOverrides === undefined && input.promptModuleOverrides === undefined
-    && input.mode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot) {
+    && input.mode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot
+    && input.handoffSnapshot === undefined) {
     return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
   const body: Record<string, unknown> = { session_id: sessionId, persona_id: personaId }
@@ -537,6 +541,7 @@ export async function patchConversationSessionState(input: {
   if (input.mode !== undefined) body.mode = input.mode
   if (input.dailyReviewEnabled !== undefined) body.daily_review_enabled = input.dailyReviewEnabled
   if (input.initializeDailyReviewSnapshot) body.initialize_daily_review_snapshot = true
+  if (input.handoffSnapshot !== undefined) body.handoff_snapshot = input.handoffSnapshot
   if (input.expectedStateVersion != null) body.expected_state_version = input.expectedStateVersion
   const res = await havenFetch({
     method: 'PATCH',

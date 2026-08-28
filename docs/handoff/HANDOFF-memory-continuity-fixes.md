@@ -2,6 +2,7 @@
 
 ## 当前状态
 
+- 2026-08-29 换窗 handoff 第二轮已在本地完成：Dashboard 新增六组折叠逐项选择、全选/全不选、无 50 轮上限的完整分页、分组/总计字数与统一 token 估算、100,000 token 超预算提醒与一致裁剪；Haven 新增按 profile 隔离、首次写入后冻结的 `handoff_snapshot_json`。CC 与 selfhost 已统一读取同一快照。本轮尚待用户 commit、push 与 Coolify 发布。
 - 2026-08-27 首轮 Dashboard 与 Haven 修改已由用户 push 并发布；Haven 发布版本为 `b02600eea33fef3a5906819a47e4ef54f7a5a5d3`。
 - 首轮发布后发现取消钉选回归：`frontmatter.Post` 没有 `.pop()`，导致 Haven PATCH 返回 500；现已在本地改为存在时 `del`。Dashboard 的 `edit-bucket` 代理也已在本地补上非 JSON 上游错误容错。这两处回归修复尚待用户 commit、push 和重新部署。
 - 随后确认桶删除本身已返回 HTTP 200，但记忆页仍错误要求删除响应携带 bucket，因而误报“更新失败（HTTP 200）”并留下陈旧详情缓存；本地已为 `delete: true` 增加独立成功分支，清理缓存并刷新列表，待随 Dashboard 一起 push 和发布。
@@ -11,7 +12,8 @@
 ## 已确认并实现的产品决定
 
 - 桶抽屉更新必须使用 Haven 返回的真实 bucket，不再吞掉失败；取消普通钉选后恢复钉选前的 dynamic/type 与 importance，因此权重不再是 999。protected 或原本就是 permanent 的桶仍按自身语义保持 999。
-- 换窗弹窗读取全量桶并显示所有钉选桶；新增独立 feel 注入，默认开启、默认最近 10 条，可调 1–50，排除 whisper 与日/周印象、关系天气。
+- 换窗弹窗读取全量资料并按日回顾、钉选桶、最近记忆、feel、journal、旧聊天原文折叠展示；每组可逐项勾选及全选/全不选，只有钉选桶默认全选，其余默认全不选。候选数量不设 50 上限；journal 排除锁定或无正文条目，feel 排除 whisper 与日/周印象、关系天气。
+- 弹窗显示聊天正文及全部已选内容的字数、统一预估 token；100,000 token 超预算时提醒并使用同一裁剪结果。确认后的正文快照由 Haven 持久化且不可被后续轮次覆盖，CC/selfhost、重启与跨设备读取同一内容。
 - 配置页的非秘密配置继续写 `/state/config.runtime.yaml`；脱水、Embedding、Reranker、Persona、Dream 等 API key 写 `/state/.env`，容器启动时读取，Coolify 直接环境变量优先。
 - weekly journey 的 `append_current` 改为 `revised_content`：模型输出去重整合后的完整开放阶段正文，默认最多 5000 字符，批准后替换正文，不再末尾追加。旧 pending 候选仍可兼容读取。
 - 新增 `breath(domain="pinned")`，一次读取钉选桶全集，仍受 `max_tokens` 总预算约束。
@@ -26,4 +28,4 @@
 
 1. 用户分别在 Dashboard 与 Haven 仓库 commit + push 当前回归修复。
 2. Dashboard 重新部署；Haven 在 Coolify `Ombre Brain → production → haven-test-stack → Environment Variables` 更新 `HAVEN_RELEASE_SHA` 为 Haven 完整 commit SHA，再普通 Restart/Deploy。
-3. 验收：取消一个普通钉选桶后按钮变为“钉选”且权重不为 999；换窗看到全部钉选桶并可调整 feel 数量；保存脱水 Key 后重启容器仍显示已配置且自动打标成功；下一次 weekly journey 候选显示“整合后的完整阶段正文”；调用 `breath(domain="pinned")` 能列出全部钉选桶。
+3. 验收：取消一个普通钉选桶后按钮变为“钉选”且权重不为 999；换窗六组均可展开、逐项选择和全选/全不选，只有钉选桶初始全选；旧聊天输入超过 50 轮仍可完整选择，弹窗显示聊天与总计 token，超 100,000 时出现裁剪提醒；用 selfhost 连续聊两轮、切到 CC 再聊，均能使用同一份已选日回顾/桶/feel/journal/旧聊天背景；保存脱水 Key 后重启容器仍显示已配置且自动打标成功；下一次 weekly journey 候选显示“整合后的完整阶段正文”；调用 `breath(domain="pinned")` 能列出全部钉选桶。
