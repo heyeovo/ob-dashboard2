@@ -13,7 +13,7 @@
 ## 已确认并实现的产品决定
 
 - 桶抽屉更新必须使用 Haven 返回的真实 bucket，不再吞掉失败；取消普通钉选后恢复钉选前的 dynamic/type 与 importance，因此权重不再是 999。protected 或原本就是 permanent 的桶仍按自身语义保持 999。
-- 换窗弹窗读取全量资料并按日回顾、钉选桶、最近记忆、feel、journal、旧聊天原文折叠展示；每组可逐项勾选及全选/全不选，只有钉选桶默认全选，其余默认全不选。候选数量不设 50 上限；journal 排除锁定或无正文条目，feel 排除 whisper 与日/周印象、关系天气。
+- 换窗弹窗读取全量资料并按日回顾、钉选桶、最近记忆、feel、journal、旧聊天原文折叠展示；每组可逐项勾选及全选/全不选，只有钉选桶默认全选，其余默认全不选。日回顾默认展示最近 5 天、可调 0–366 天；其他候选数量不设 50 上限。journal 排除锁定或无正文条目，feel 排除 whisper 与日/周印象、关系天气。
 - 弹窗显示聊天正文及全部已选内容的字数、统一预估 token；100,000 token 超预算时提醒并使用同一裁剪结果。最近 N 轮按时间戳与“小羊/言之”名称写入快照；确认后的正文快照由 Haven 持久化且不可被后续轮次覆盖，CC/selfhost、重启与跨设备读取同一内容。Dashboard 将其中的旧聊天正文作为消息流顶部独立区块显示，不随发言、切窗或刷新消失。
 - 配置页的非秘密配置继续写 `/state/config.runtime.yaml`；脱水、Embedding、Reranker、Persona、Dream 等 API key 写 `/state/.env`，容器启动时读取，Coolify 直接环境变量优先。
 - weekly journey 的 `append_current` 改为 `revised_content`：模型输出去重整合后的完整开放阶段正文，默认最多 5000 字符，批准后替换正文，不再末尾追加。旧 pending 候选仍可兼容读取。

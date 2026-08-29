@@ -122,11 +122,11 @@ function SelectionSection({ id, title, hint, items, selected, open, loading, onO
   )
 }
 
-function LimitControl({ value, unit, onChange }: { value: number; unit: string; onChange: (value: number) => void }) {
+function LimitControl({ value, unit, max, onChange }: { value: number; unit: string; max?: number; onChange: (value: number) => void }) {
   return (
     <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
       展示最近
-      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)]" />
+      <input type="number" min={0} max={max} value={value} onChange={event => onChange(Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(Number(event.target.value) || 0))))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)]" />
       {unit}
     </label>
   )
@@ -158,6 +158,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   const [recentLimit, setRecentLimit] = useState(10)
   const [feelLimit, setFeelLimit] = useState(10)
   const [journalLimit, setJournalLimit] = useState(10)
+  const [dailyReviewLimit, setDailyReviewLimit] = useState(5)
   const [turnLimit, setTurnLimit] = useState(20)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -172,7 +173,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
         const requests: Promise<Response>[] = [
           fetch('/api/buckets?full=1', { cache: 'no-store', signal: controller.signal }),
           fetch('/api/journal', { cache: 'no-store', signal: controller.signal }),
-          fetch(`/api/daily-reviews?persona_id=${encodeURIComponent(personaId)}&limit=3`, { cache: 'no-store', signal: controller.signal }),
+          fetch(`/api/daily-reviews?persona_id=${encodeURIComponent(personaId)}&limit=366`, { cache: 'no-store', signal: controller.signal }),
         ]
         if (fromSessionId) requests.push(fetch(`/api/cc-turns?session_id=${encodeURIComponent(fromSessionId)}&all=1`, { cache: 'no-store', signal: controller.signal }))
         const responses = await Promise.all(requests)
@@ -226,6 +227,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   const recentVisible = recent.slice(0, recentLimit)
   const feelVisible = feels.slice(0, feelLimit)
   const journalVisible = journals.slice(0, journalLimit)
+  const dailyReviewVisible = dailyReviews.slice(0, dailyReviewLimit)
   const turnVisible = turnLimit > 0 ? turns.slice(-turnLimit) : []
   const turnCandidates = turnVisible.map(turn => ({
     id: String(turn.id),
@@ -239,7 +241,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
 
   const sourceItems = useMemo(() => {
     const groups: Array<{ kind: HandoffItemKind; items: Candidate[]; selected: Set<string> }> = [
-      { kind: 'daily_review', items: dailyReviews, selected: selectedDailyReviews },
+      { kind: 'daily_review', items: dailyReviewVisible, selected: selectedDailyReviews },
       { kind: 'pinned', items: pinned, selected: selectedPinned },
       { kind: 'recent', items: recentVisible, selected: selectedRecent },
       { kind: 'feel', items: feelVisible, selected: selectedFeels },
@@ -247,7 +249,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
       { kind: 'chat', items: turnCandidates, selected: selectedTurns },
     ]
     return groups.flatMap(group => group.items.filter(item => group.selected.has(item.id)).map((item): HandoffSourceItem => ({ kind: group.kind, id: item.id, title: item.title, content: item.content })))
-  }, [dailyReviews, feelVisible, journalVisible, pinned, recentVisible, selectedDailyReviews, selectedFeels, selectedJournals, selectedPinned, selectedRecent, selectedTurns, turnCandidates])
+  }, [dailyReviewVisible, feelVisible, journalVisible, pinned, recentVisible, selectedDailyReviews, selectedFeels, selectedJournals, selectedPinned, selectedRecent, selectedTurns, turnCandidates])
   const snapshot = useMemo(() => buildHandoffSnapshot(sourceItems), [sourceItems])
   const effectiveChatIds = new Set(snapshot.items.filter(item => item.kind === 'chat').map(item => item.id))
   const effectiveTurns = turnVisible.filter(turn => effectiveChatIds.has(String(turn.id)))
@@ -265,7 +267,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   })
 
   const sections: Array<SectionProps> = [
-    { id: 'daily', title: '日回顾', hint: '最近三个完整日', items: dailyReviews, selected: selectedDailyReviews, open: openSections.has('daily'), loading, onOpen: () => toggleOpen('daily'), onToggle: id => toggleSet(setSelectedDailyReviews, id), onAll: () => replaceVisible(setSelectedDailyReviews, dailyReviews, true), onNone: () => replaceVisible(setSelectedDailyReviews, dailyReviews, false) },
+    { id: 'daily', title: '日回顾', hint: `最近 ${dailyReviewVisible.length} 天`, items: dailyReviewVisible, selected: selectedDailyReviews, open: openSections.has('daily'), loading, onOpen: () => toggleOpen('daily'), onToggle: id => toggleSet(setSelectedDailyReviews, id), onAll: () => replaceVisible(setSelectedDailyReviews, dailyReviewVisible, true), onNone: () => replaceVisible(setSelectedDailyReviews, dailyReviewVisible, false), control: <LimitControl value={dailyReviewLimit} unit="天" max={366} onChange={setDailyReviewLimit} /> },
     { id: 'pinned', title: '钉选桶', hint: '唯一默认全选', items: pinned, selected: selectedPinned, open: openSections.has('pinned'), loading, onOpen: () => toggleOpen('pinned'), onToggle: id => toggleSet(setSelectedPinned, id), onAll: () => replaceVisible(setSelectedPinned, pinned, true), onNone: () => replaceVisible(setSelectedPinned, pinned, false) },
     { id: 'recent', title: '最近记忆', hint: `最近 ${recentVisible.length} 个桶`, items: recentVisible, selected: selectedRecent, open: openSections.has('recent'), loading, onOpen: () => toggleOpen('recent'), onToggle: id => toggleSet(setSelectedRecent, id), onAll: () => replaceVisible(setSelectedRecent, recentVisible, true), onNone: () => replaceVisible(setSelectedRecent, recentVisible, false), control: <LimitControl value={recentLimit} unit="个桶" onChange={setRecentLimit} /> },
     { id: 'feel', title: 'feel', hint: `最近 ${feelVisible.length} 条`, items: feelVisible, selected: selectedFeels, open: openSections.has('feel'), loading, onOpen: () => toggleOpen('feel'), onToggle: id => toggleSet(setSelectedFeels, id), onAll: () => replaceVisible(setSelectedFeels, feelVisible, true), onNone: () => replaceVisible(setSelectedFeels, feelVisible, false), control: <LimitControl value={feelLimit} unit="条" onChange={setFeelLimit} /> },
