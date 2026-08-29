@@ -12,6 +12,8 @@ import {
 } from 'react'
 import CcComposer from './CcComposer'
 import CcMessageRow, { ccMessageVisibleText } from './CcMessageRow'
+import CcXhsCard, { extractXhsUrl } from './CcXhsCard'
+import { useXhsCard } from './useXhsCard'
 import { CcPermCard } from './CcPermCard'
 import CcPersonaDialog from './CcPersonaDialog'
 import CcPersonaRail from './CcPersonaRail'
@@ -299,6 +301,7 @@ export default function CcChatPage() {
   const [activeSearchMessageId, setActiveSearchMessageId] = useState('')
   const [activeHistorical, setActiveHistorical] = useState<HistoricalConversation | null>(null)
   const [forwardedBlock, setForwardedBlock] = useState<{ title: string; lines: string[] } | null>(null)
+  const xhs = useXhsCard()
   const [selectMode, setSelectMode] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
   const [cacheClock, setCacheClock] = useState(() => Date.now())
@@ -733,25 +736,34 @@ export default function CcChatPage() {
                 </div>
               </div>
             ) : (
-              <CcMessageRow
-                key={`${m.id}:${m.id === latestAssistantId ? 'current' : 'history'}`}
-                message={m}
-                isCurrentTurn={m.id === latestAssistantId}
-                // 按那一轮记下的人画头像名字；老消息没记就用当前选中的
-                persona={
-                  (m.personaId && people.personas.find(p => p.id === m.personaId)) || people.active
-                }
-                onCopy={copy}
-                onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
-                onOpenRecall={setRecallDetail}
-                onRetryPersistence={chat.retryPersistence}
-                onClearAttachment={chat.clearAttachment}
-                searchQuery={normalizedSearchQuery}
-                searchActive={m.id === shownActiveSearchMessageId}
-                selectMode={selectMode}
-                selected={selectedMessageIds.has(m.id)}
-                onToggleSelect={toggleSelectedMessage}
-              />
+              <div key={`${m.id}:${m.id === latestAssistantId ? 'current' : 'history'}`}>
+                <CcMessageRow
+                  message={m}
+                  isCurrentTurn={m.id === latestAssistantId}
+                  persona={
+                    (m.personaId && people.personas.find(p => p.id === m.personaId)) || people.active
+                  }
+                  onCopy={copy}
+                  onEditAndResend={m.fromHistory ? undefined : text => chat.setDraft(text)}
+                  onOpenRecall={setRecallDetail}
+                  onRetryPersistence={chat.retryPersistence}
+                  onClearAttachment={chat.clearAttachment}
+                  searchQuery={normalizedSearchQuery}
+                  searchActive={m.id === shownActiveSearchMessageId}
+                  selectMode={selectMode}
+                  selected={selectedMessageIds.has(m.id)}
+                  onToggleSelect={toggleSelectedMessage}
+                />
+                {m.role === 'user' && (() => {
+                  const url = extractXhsUrl(m.text)
+                  const card = url ? xhs.cardsByUrl.get(url) : undefined
+                  return card ? (
+                    <div className="mt-2 flex justify-end pr-1">
+                      <CcXhsCard state={card} />
+                    </div>
+                  ) : null
+                })()}
+              </div>
             ),
           )
         )}
@@ -889,7 +901,27 @@ export default function CcChatPage() {
               const prefix = forwardedBlock
                 ? `<转发的消息 来源="${forwardedBlock.title}">\n${forwardedBlock.lines.join('\n---\n')}\n</转发的消息>\n\n`
                 : ''
-              chat.send(prefix + chat.draft, undefined, attachments)
+              const fullText = prefix + chat.draft
+              const xhsUrl = extractXhsUrl(fullText)
+              if (xhsUrl) {
+                const savedDraft = chat.draft
+                chat.setDraft('')
+                setForwardedBlock(null)
+                void (async () => {
+                  const result = await xhs.loadXhsCard(xhsUrl, chat.sessionId, fullText)
+                  if (result) {
+                    const xhsAttachments = result.attachmentIds.map(id => ({
+                      id, sessionId: chat.sessionId, filename: `xhs-image.jpg`,
+                      kind: 'image' as const, mimeType: 'image/jpeg', byteSize: 0, sha256: '',
+                    }))
+                    chat.send(result.augmentedText, undefined, [...attachments, ...xhsAttachments])
+                  } else {
+                    chat.send(fullText, undefined, attachments)
+                  }
+                })()
+                return
+              }
+              chat.send(fullText, undefined, attachments)
               setForwardedBlock(null)
             }}
             onStop={chat.stop}
@@ -901,7 +933,9 @@ export default function CcChatPage() {
             promptModulesSaving={chat.promptModulesSaving}
             onPromptModuleToggle={chat.setPromptModuleEnabled}
             onError={chat.setError}
-            sending={chat.sending}
+            sending={chat.sending || xhs.loading}
+            disabled={xhs.loading}
+            placeholder={xhs.loading ? '📕 正在读取小红书笔记…' : undefined}
             forwardedBlock={forwardedBlock}
             onClearForward={() => setForwardedBlock(null)}
           />

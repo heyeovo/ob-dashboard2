@@ -8,7 +8,7 @@ import type { CcPromptModule } from './persona'
 const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024
 const MAX_STORED_BYTES = 2 * 1024 * 1024
 const TARGET_BYTES = 900 * 1024
-const MAX_EDGE = 2000
+const MAX_EDGE = 1200
 const MAX_ATTACHMENTS = 4
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const DOCUMENT_ACCEPT = '.pdf,.docx,.md,.markdown,.txt,.csv'

@@ -197,7 +197,8 @@ export default function CcMessageRow({
 
   const canSelect = Boolean(ccMessageVisibleText(message).trim()) && !message.streaming
   const forwardedMessage = isUser ? parseForwardedMessage(message.text) : null
-  const userText = forwardedMessage?.userText ?? message.text
+  const rawUserText = forwardedMessage?.userText ?? message.text
+  const userText = isUser ? rawUserText.replace(/\n\n<xhs_note[\s\S]*<\/xhs_note>$/m, '').trim() : rawUserText
 
   const beginLongPress = (pointerType: string) => {
     if (pointerType === 'mouse' || !canSelect) return
