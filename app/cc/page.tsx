@@ -661,12 +661,13 @@ export default function CcChatPage() {
     </div>
   )
 
-  const latestAssistantId = [...chat.messages]
+  const conversationMessages = chat.messages.filter(message => !message.handoff)
+  const latestAssistantId = [...conversationMessages]
     .reverse()
-    .find(message => message.role === 'assistant' && !message.handoff)?.id
+    .find(message => message.role === 'assistant')?.id
 
-  const firstMessageId = chat.messages[0]?.id || ''
-  const lastMessage = chat.messages.at(-1)
+  const firstMessageId = conversationMessages[0]?.id || ''
+  const lastMessage = conversationMessages.at(-1)
   const lastMessageId = lastMessage?.id || ''
   const lastMessageVersion = lastMessage
     ? [
@@ -699,6 +700,16 @@ export default function CcChatPage() {
       onOpenSearch={openSearchFromFloat}
     >
       <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
+        {chat.handoffTranscript ? (
+          <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-3.5">
+            <div className="mb-2 text-[10.5px] font-medium text-[var(--color-text-disabled)]">
+              换窗带入 · 最近对话
+            </div>
+            <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--color-text-secondary)]">
+              {chat.handoffTranscript}
+            </div>
+          </section>
+        ) : null}
         {!chat.historyLoading && chat.messages.length > 0 && chat.hasEarlierHistory ? (
           <div className="text-center">
             <button
@@ -713,7 +724,7 @@ export default function CcChatPage() {
         ) : null}
         {chat.historyLoading ? (
           <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史</div>
-        ) : chat.messages.length === 0 ? (
+        ) : conversationMessages.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-[13.5px] font-medium text-[var(--color-text-heading)]">开始一段对话</div>
             <div className="mt-1.5 text-[11.5px] text-[var(--color-text-disabled)]">
@@ -724,18 +735,7 @@ export default function CcChatPage() {
             </div>
           </div>
         ) : (
-          chat.messages.map(m =>
-            m.handoff ? (
-              // 换窗带过来的上一窗原文：淡色、只作衔接语境，不走消息气泡
-              <div key={m.id} className="opacity-55">
-                <div className="mb-0.5 text-[10.5px] font-mono text-[var(--color-text-disabled)]">
-                  role: {m.role}
-                </div>
-                <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--color-text-secondary)]">
-                  {m.text}
-                </div>
-              </div>
-            ) : (
+          conversationMessages.map(m => (
               <div key={`${m.id}:${m.id === latestAssistantId ? 'current' : 'history'}`}>
                 <CcMessageRow
                   message={m}

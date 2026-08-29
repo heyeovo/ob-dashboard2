@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildHandoffSnapshot,
   estimateHandoffTokens,
+  handoffChatTranscript,
   handoffSnapshotContent,
 } from '@/app/lib/cc/handoffSnapshot'
 
@@ -16,7 +17,14 @@ describe('handoff snapshot', () => {
     expect(snapshot.content).toContain('【日记｜今天】')
     expect(snapshot.content).toContain('【旧窗口对话｜第 1 轮】')
     expect(handoffSnapshotContent(snapshot)).toBe(snapshot.content)
+    expect(handoffChatTranscript(snapshot)).toBe('小羊：你好\nOmbre：你好')
     expect(snapshot.stats.selected_estimated_tokens).toBeGreaterThan(0)
+  })
+
+  it('restores chat text from legacy persisted snapshots', () => {
+    expect(handoffChatTranscript({
+      content: '<window_handoff_snapshot>\n【旧窗口对话｜第 1 轮】\n用户：你好\n\n助手：你好\n</window_handoff_snapshot>',
+    })).toBe('小羊：你好\n\n言之：你好')
   })
 
   it('keeps explicit items and newest chat turns when over budget', () => {

@@ -12,6 +12,7 @@ export type HandoffSourceItem = {
 export type HandoffSnapshot = {
   version: 1
   content: string
+  chat_transcript?: string
   items: Array<{
     kind: HandoffItemKind
     id: string
@@ -114,6 +115,11 @@ export function buildHandoffSnapshot(
   return {
     version: 1,
     content,
+    chat_transcript: effectiveItems
+      .filter(item => item.kind === 'chat')
+      .map(item => item.content.trim())
+      .filter(Boolean)
+      .join('\n\n'),
     items: effectiveItems.map(item => ({
       kind: item.kind,
       id: item.id,
@@ -139,4 +145,22 @@ export function handoffSnapshotContent(snapshot: unknown): string {
   if (!snapshot || typeof snapshot !== 'object') return ''
   const content = (snapshot as { content?: unknown }).content
   return typeof content === 'string' ? content.trim() : ''
+}
+
+export function handoffChatTranscript(snapshot: unknown): string {
+  if (!snapshot || typeof snapshot !== 'object') return ''
+  const direct = (snapshot as { chat_transcript?: unknown }).chat_transcript
+  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+
+  const content = handoffSnapshotContent(snapshot)
+  if (!content) return ''
+  const blocks: string[] = []
+  const pattern = /【旧窗口对话｜[^\n]*】\n([\s\S]*?)(?=\n\n【|\n<\/window_handoff_snapshot>|$)/g
+  for (const match of content.matchAll(pattern)) {
+    const block = String(match[1] || '').trim()
+    if (block) blocks.push(block)
+  }
+  return blocks.join('\n\n')
+    .replace(/^用户：/gm, '小羊：')
+    .replace(/^助手：/gm, '言之：')
 }

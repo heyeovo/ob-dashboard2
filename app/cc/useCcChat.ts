@@ -25,6 +25,7 @@ import {
   upstreamFromHaven,
 } from './upstream'
 import type { HandoffPayload } from './CcHandoffDialog'
+import { handoffChatTranscript } from '@/app/lib/cc/handoffSnapshot'
 import {
   DEFAULT_WEB_SETTINGS,
   normalizeWebSettings,
@@ -75,6 +76,7 @@ type RetryTurn = {
 type SessionHistorySnapshot = {
   cachedAt: number
   messages: CcMessage[]
+  handoffTranscript: string
   historyBeforeId: number | null
   hasEarlierHistory: boolean
   historyTurnCount: number
@@ -141,6 +143,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [deletedSessions, setDeletedSessions] = useState<CcSessionListItem[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [messages, setMessages] = useState<CcMessage[]>([])
+  const [handoffTranscript, setHandoffTranscript] = useState('')
   const [historyLoading, setHistoryLoading] = useState(false)
   const [earlierHistoryLoading, setEarlierHistoryLoading] = useState(false)
   const [historyBeforeId, setHistoryBeforeId] = useState<number | null>(null)
@@ -490,6 +493,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         rememberSessionHistory(historyCacheRef.current, sessionId, {
           cachedAt: historyLoadedAtRef.current,
           messages,
+          handoffTranscript,
           historyBeforeId,
           hasEarlierHistory,
           historyTurnCount,
@@ -527,6 +531,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const cached = historyCacheRef.current.get(nextId)
       if (cached) {
         setMessages(cached.messages)
+        setHandoffTranscript(cached.handoffTranscript || '')
         setHistoryTurnCount(cached.historyTurnCount)
         setHistoryBeforeId(cached.historyBeforeId)
         setHasEarlierHistory(cached.hasEarlierHistory)
@@ -548,6 +553,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         historyLoadedAtRef.current = cached.cachedAt
       } else {
         setMessages([])
+        setHandoffTranscript('')
         setHistoryTurnCount(0)
         setHistoryBeforeId(null)
         setHasEarlierHistory(false)
@@ -606,7 +612,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             prompt_module_overrides?: Record<string, boolean>
             mode?: string
             daily_review_enabled?: boolean
+            handoff_snapshot?: unknown
           } | null
+          const restoredHandoffTranscript = handoffChatTranscript(sessionState?.handoff_snapshot)
           const restoredEngine = sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc'
           const selfhostProviderId = String(sessionState?.selfhost_overrides?.provider_id || '').trim()
           const selfhostModel = String(sessionState?.selfhost_overrides?.model || '').trim()
@@ -701,6 +709,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           const restoredAt = Date.now()
 
           setMessages(restoredMessages)
+          setHandoffTranscript(restoredHandoffTranscript)
           setHistoryBeforeId(restoredHistoryBeforeId)
           setHasEarlierHistory(restoredHasEarlierHistory)
           setHistoryTurnCount(restoredHistoryTurnCount)
@@ -729,6 +738,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           rememberSessionHistory(historyCacheRef.current, nextId, {
             cachedAt: restoredAt,
             messages: restoredMessages,
+            handoffTranscript: restoredHandoffTranscript,
             historyBeforeId: restoredHistoryBeforeId,
             hasEarlierHistory: restoredHasEarlierHistory,
             historyTurnCount: restoredHistoryTurnCount,
@@ -763,6 +773,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       draft,
       sending,
       messages,
+      handoffTranscript,
       historyBeforeId,
       hasEarlierHistory,
       historyTurnCount,
@@ -807,6 +818,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setSending(false)
     setSessionId(newSessionId())
     setMessages([])
+    setHandoffTranscript('')
     setDraft('')
     setError('')
     setStats(EMPTY_STATS)
@@ -965,6 +977,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const nextId = newSessionId()
       setSessionId(nextId)
       setMessages([])
+      setHandoffTranscript(handoffChatTranscript(payload.snapshot))
       setDraft('')
       setError('')
       setStats(EMPTY_STATS)
@@ -995,16 +1008,6 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       // 存 handoff 数据，首条 send 时带走
       handoffRef.current = { snapshot: payload.snapshot }
 
-      // 要带对话原文：拉回来转成「淡色历史消息」铺在消息流最前面。
-      // 走 messages 数组（不再用独立状态）—— 跟真消息同一条渲染路径，发消息后不会消失，
-      // 顺序天然正序（旧在上、最新贴着第一句）。标 handoff+fromHistory：淡色显示、不可重发。
-      const msgs: CcMessage[] = []
-      for (const turn of payload.chatTurns) {
-        const at = Date.parse(turn.created_at) || Date.now()
-        if (turn.user_text?.trim()) msgs.push({ id: `ho${turn.id}u`, role: 'user', text: turn.user_text, createdAt: at, fromHistory: true, handoff: true })
-        if (turn.assistant_text?.trim()) msgs.push({ id: `ho${turn.id}a`, role: 'assistant', text: turn.assistant_text, createdAt: at, fromHistory: true, handoff: true })
-      }
-      setMessages(previous => (previous.length === 0 ? msgs : previous))
     },
     [sessionId, draft, upstream, webDefaults],
   )
@@ -1732,6 +1735,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     sessionTitle,
     activeSessionSource,
     messages,
+    handoffTranscript,
     historyLoading,
     earlierHistoryLoading,
     hasEarlierHistory,

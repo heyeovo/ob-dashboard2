@@ -33,6 +33,16 @@ type Candidate = {
   note?: string
 }
 
+function formatMessageTime(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${month}-${day} ${hour}:${minute}`
+}
+
 type Props = {
   fromSessionId: string | null
   currentMode: CcMode
@@ -220,7 +230,10 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   const turnCandidates = turnVisible.map(turn => ({
     id: String(turn.id),
     title: `第 ${turn.round_id} 轮`,
-    content: [turn.user_text?.trim() ? `用户：${turn.user_text.trim()}` : '', turn.assistant_text?.trim() ? `助手：${turn.assistant_text.trim()}` : ''].filter(Boolean).join('\n\n'),
+    content: [
+      turn.user_text?.trim() ? `[${formatMessageTime(turn.created_at)}] 小羊：${turn.user_text.trim()}` : '',
+      turn.assistant_text?.trim() ? `[${formatMessageTime(turn.created_at)}] 言之：${turn.assistant_text.trim()}` : '',
+    ].filter(Boolean).join('\n\n'),
     created: turn.created_at,
   }))
 
