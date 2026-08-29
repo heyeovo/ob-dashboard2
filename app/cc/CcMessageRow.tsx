@@ -239,7 +239,7 @@ export default function CcMessageRow({
     return (
       <>
       <div
-        className={`cc-row flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
+        className={`cc-row min-w-0 max-w-full flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
         data-role="user"
         data-message-id={message.id}
         onClick={handleSelectClick}
@@ -252,7 +252,7 @@ export default function CcMessageRow({
         {selectionCheckbox}
         <div ref={frameRef} className="min-w-0 flex-1 flex flex-col items-end">
           <div
-            className="flex max-w-full flex-col items-end gap-2"
+            className="flex min-w-0 max-w-full flex-col items-end gap-2"
             onContextMenu={e => {
               if (message.fromHistory) return
               e.preventDefault()
@@ -478,7 +478,7 @@ export default function CcMessageRow({
 
   return (
     <div
-      className={`cc-row flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
+      className={`cc-row min-w-0 max-w-full flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
       data-role="assistant"
       data-message-id={message.id}
       onClick={handleSelectClick}

@@ -203,11 +203,11 @@ function CcScrollJumps({
   }
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden">
       <div
         ref={scrollRef}
         onScroll={update}
-        className="no-scrollbar h-full overflow-y-auto px-4 py-6"
+        className="no-scrollbar h-full max-w-full overflow-x-hidden overflow-y-auto px-4 py-6"
       >
         {children}
       </div>
@@ -699,7 +699,7 @@ export default function CcChatPage() {
       pendingCount={chat.pending.length}
       onOpenSearch={openSearchFromFloat}
     >
-      <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
+      <div className="mx-auto flex min-w-0 max-w-[var(--chat-assistant-width)] flex-col gap-7">
         {chat.handoffTranscript ? (
           <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-3.5">
             <div className="mb-2 text-[10.5px] font-medium text-[var(--color-text-disabled)]">
