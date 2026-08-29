@@ -52,31 +52,39 @@ function extractNoteData(html: string, finalUrl: string): NoteData | null {
     }
   }
 
-  const noteState = state.note as Record<string, unknown> | undefined
-  if (!noteState) return null
-
+  // 两种页面结构：
+  // 1. state.noteData.data.noteData (手机版 discovery/item)
+  // 2. state.note.noteDetailMap[id].note (旧版 explore)
   let note: Record<string, unknown> | undefined
-  const noteDetailMap = noteState.noteDetailMap as Record<string, unknown> | undefined
-  if (noteDetailMap) {
-    const firstKey = Object.keys(noteDetailMap)[0]
-    if (firstKey) {
-      const entry = noteDetailMap[firstKey] as Record<string, unknown> | undefined
-      note = entry?.note as Record<string, unknown> | undefined
-    }
+  let commentSource: Record<string, unknown> | undefined
+
+  const noteDataRoot = state.noteData as Record<string, unknown> | undefined
+  if (noteDataRoot) {
+    const data = noteDataRoot.data as Record<string, unknown> | undefined
+    note = data?.noteData as Record<string, unknown> | undefined
+    commentSource = data?.commentData as Record<string, unknown> | undefined
   }
+
   if (!note) {
-    const firstNoteId = noteState.firstNoteId as string | undefined
-    if (firstNoteId && noteDetailMap) {
-      const entry = noteDetailMap[firstNoteId] as Record<string, unknown> | undefined
-      note = entry?.note as Record<string, unknown> | undefined
+    const noteState = state.note as Record<string, unknown> | undefined
+    if (noteState) {
+      const noteDetailMap = noteState.noteDetailMap as Record<string, unknown> | undefined
+      if (noteDetailMap) {
+        const firstKey = Object.keys(noteDetailMap)[0]
+        if (firstKey) {
+          const entry = noteDetailMap[firstKey] as Record<string, unknown> | undefined
+          note = entry?.note as Record<string, unknown> | undefined
+        }
+      }
     }
   }
+
   if (!note) return null
 
   const title = String(note.title || '')
   const desc = String(note.desc || '')
   const user = note.user as Record<string, unknown> | undefined
-  const author = String(user?.nickname || user?.nick_name || '')
+  const author = String(user?.nickName || user?.nickname || user?.nick_name || '')
 
   const imageList = (note.imageList || note.images || []) as Array<Record<string, unknown>>
   const images = imageList
@@ -91,16 +99,17 @@ function extractNoteData(html: string, finalUrl: string): NoteData | null {
   const commentCount = String(interactInfo?.commentCount || interactInfo?.comment_count || '0')
   const collectedCount = String(interactInfo?.collectedCount || interactInfo?.collected_count || '0')
 
-  const commentsState = noteState.noteComment as Record<string, unknown> | undefined
-    || state.comment as Record<string, unknown> | undefined
   let comments: Array<{ user: string; content: string; ipLocation: string }> = []
-  if (commentsState) {
-    const commentList = (commentsState.comments || commentsState.list || []) as Array<Record<string, unknown>>
-    comments = commentList.slice(0, 10).map(c => ({
-      user: String((c.userInfo as Record<string, unknown>)?.nickname || c.user_nickname || ''),
-      content: String(c.content || ''),
-      ipLocation: String(c.ipLocation || c.ip_location || ''),
-    }))
+  if (commentSource) {
+    const commentList = (commentSource.comments || []) as Array<Record<string, unknown>>
+    comments = commentList.slice(0, 10).map(c => {
+      const cUser = c.user as Record<string, unknown> | undefined
+      return {
+        user: String(cUser?.nickname || cUser?.nickName || ''),
+        content: String(c.content || ''),
+        ipLocation: String(c.ipLocation || c.ip_location || ''),
+      }
+    })
   }
 
   return {
