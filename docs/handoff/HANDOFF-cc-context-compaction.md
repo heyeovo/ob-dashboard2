@@ -50,7 +50,7 @@
 - 未接 Agent/subagent。
 - 未扩散到召回、Persona、自动化、provider 设置或其他页面。
 - 未保存或展示压缩摘要正文。
-- 未改 Pro 额度实验接口的持久化策略。
+- 未改 Pro 额度实验接口的持久化策略（仅指本节原压缩任务；后续修复见第 9 节）。
 - 用户原有未跟踪 `.claude/` 未修改、删除或加入提交。
 
 ## 6. 验证
@@ -78,3 +78,13 @@
 ## 8. 部署
 
 只改 Dashboard，需要重新构建/部署 Dashboard；Haven 不需要部署。按项目惯例由用户 commit + push，再观察 Coolify 自动部署；若未触发或失败，再在 Coolify 对 Dashboard 服务执行 Redeploy。
+
+## 9. 2026-08-30 Dashboard 重部署缓存与 Pro 额度持久化修复
+
+- 当前完成状态：Dashboard 与 Haven 跨仓库代码、兼容迁移、契约测试和正式文档均已完成；尚待用户 commit、push 与 Coolify 发布。
+- 已确认决定：CC 最终 `personaAppend` 按窗口首次写入 Haven 后冻结，进程内 Map 只作加速；Dashboard 重部署不再重新计算该前缀。Anthropic 上游 TTL、模型或工具集合变化仍可能正常重写缓存。
+- 已确认决定：Pro 额度属于 profile 的订阅账号，Haven 只保留一条最近快照，新值覆盖旧值；所有窗口共用，重部署后显示为带读取时间的上次值，下一次在线实时读取再覆盖。
+- 边界：未改 selfhost、召回、聊天正文、API provider 统计或 Prompt Cache 的 1h/5m 策略；用户原有未跟踪 `.claude/` 未修改。
+- 验证：Haven `tests.test_gateway_state_contracts` 22 项通过并完成 Python 语法检查；Dashboard 定点 24 项通过，production build 通过。完整前端测试 199 通过、1 跳过、1 个既有 `automation-pro-runner append_current` 断言失败，本次未改该模块。
+- 发布顺序：先由用户提交 Haven，并在 Coolify `Ombre Brain → production → haven-test-stack → Environment Variables` 把 `HAVEN_RELEASE_SHA` 更新为完整 commit SHA，再普通 Restart/Deploy，确认 Brain/Gateway healthy；随后提交并 Redeploy Dashboard。
+- 验收：在同一 CC Pro 窗口发言并记录 1h/5m 缓存写入和 Pro 额度时间，重部署 Dashboard 后立即再发一句；1h 系统前缀应继续命中（仍受上游有效期约束），Pro 额度应先显示同一份上次值，在线查询成功后刷新时间。打开其他窗口应看到同一额度快照。

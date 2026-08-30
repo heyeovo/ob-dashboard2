@@ -86,7 +86,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `cc-mcp/route.ts` | MCP 工具配置 |
 | `cc-permission/route.ts` | 写权限批准 |
 | `cc-session-settings/route.ts` | 本窗会话配置 |
-| `cc-pro-usage/route.ts` | Pro 用量读取 |
+| `cc-pro-usage/route.ts` | Pro 用量读取；实时成功后覆盖 Haven 全局快照，重部署后回显上次值 |
 | `automation-pro-runner/route.ts` | 日回顾/每周轨迹 Claude Pro 单次执行入口 |
 | `cc-web-settings/route.ts` | web 工具开关 |
 | `cc-workbench/route.ts` | 工作台数据 |
@@ -171,6 +171,8 @@ Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionSto
 
 "本窗口设置"同时显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时估算，并以宏观堆叠条展示提示词、换窗资料、MCP、Web、本窗对话及 CC/SDK 其他开销。SDK 总 Context 是实际值；模块使用统一的中日韩宽字符保守 token 估算，无法归属的实际差额留在“CC/SDK 其他”，不伪装成精确账单。
 
+CC 首次启动窗口时把最终 `personaAppend` 作为不可覆盖的冻结前缀写入 Haven `conversation_sessions`；后续轮次、Dashboard 重部署与换设备均读取同一正文，进程内 Map 只作热路径缓存。这样部署本身不会改变 1 小时系统 Prompt Cache 的前缀；上游 TTL、模型或工具集合变化仍可导致正常重写。
+
 MCP `tools/list` 同步时持久化每个工具的名称、说明和 `inputSchema`。工具页按实际会送给模型的 tool definition 形状预估每个工具和服务的 token，并以全部已启用 MCP token 为占比分母；服务/工具开关会立即刷新“下轮预估”，实际 CC query 在下一句话重载。旧目录没有 schema 时页面提示先刷新工具清单。
 
 协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和"新窗口默认开启"状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖。窗口覆盖缺省时跟随协作者默认。
@@ -194,6 +196,8 @@ CC Pro (`subscription`) 与每个 CC API provider (`api:<provider_id>`) 分别�
 `useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 与窗口固定 `handoff_snapshot` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`。CC Pro、CC API 和 selfhost 各自保留供应商/模型选择，空闲时可在同一窗口人工往返。
 
 Pro 订阅线路收到 SDK `rate_limit_event: rejected` 或额度耗尽时，按可保存的中断终态处理：用户原话与已有半截回复原子写入 Haven，`raw_json.interrupted_reason=pro_limit`。普通 provider、断流和其他上游错误不保存，但 SDK 非成功 `result` 会原样保留已生成正文和工具过程。CC thinking 开启时，对 Opus/Sonnet 4.6+ 显式使用 `adaptive + summarized`；关闭时显式 `disabled`。中途切换 thinking 会保留线路原生 session、回收空闲 query。
+
+Pro 额度属于当前 profile 的订阅账号，不属于单个窗口。任一在线 Pro 窗口成功读取 SDK 实验性额度后覆盖 Haven 单条全局快照；其他窗口和 Dashboard 重部署后显示同一份快照并标注上次读取时间，下一次实时读取再覆盖旧值。
 
 selfhost thinking：中转站若把 `<thinking>` / `<think>` 放进 `text_delta`，流式解析器会跨 chunk 剔除该区段。
 

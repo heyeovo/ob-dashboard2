@@ -482,7 +482,11 @@ export default function CcWindowSettings({
                 <div className={HINT}>{proUsage?.note || '使用 Pro 线路完成一轮后可读取额度'}</div>
               )}
               <div className="mt-1 text-[9.5px] text-[var(--color-text-disabled)]">
-                {proUsage?.stale ? '上次读取值 · ' : ''}Agent SDK 实验性数据，接口变化时会自动显示不可用
+                {proUsage?.stale ? '上次读取值 · ' : ''}
+                {proUsage?.updatedAt
+                  ? `${new Date(proUsage.updatedAt).toLocaleString('zh-HK', { hour12: false })} · `
+                  : ''}
+                Agent SDK 实验性数据，接口变化时会自动显示不可用
               </div>
             </div>
           ) : null}

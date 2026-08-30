@@ -8,7 +8,7 @@ import {
   permissionRuleStrings,
 } from '@/app/lib/havenPermissions'
 import { loadMcpConfig, toSdkMcpServers, disabledMcpTools } from '@/app/lib/ccMcp'
-import { getSessionStats, dropSession, peekSession, getFrozenAppend, setFrozenAppend, clearFrozenAppend } from '@/app/lib/ccSession'
+import { getSessionStats, dropSession, getFrozenAppend, setFrozenAppend, clearFrozenAppend } from '@/app/lib/ccSession'
 import { resetChannel } from '@/app/lib/ccChannel'
 import { isCcMode, type CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings } from '@/app/cc/webSettings'
@@ -258,9 +258,12 @@ async function loadTurnInputs(body: ChatBody) {
     ? permissionRuleStrings(permanentPermissions.rules)
     : []
 
-  const sessionSnapshot = await getConversationSession(body.session_id || '', {
+  let sessionSnapshot = await getConversationSession(body.session_id || '', {
     includeBucketExclusions: true,
   })
+  if (!sessionSnapshot.ok || !sessionSnapshot.session) {
+    throw new Error(`读取窗口固定背景失败：${sessionSnapshot.error || 'Haven 返回空窗口'}`)
+  }
   const laneId = ccLaneId(cred, providerId)
   const laneState = sessionSnapshot.session?.cc_lanes?.[laneId]
   const persistedResumeHint = String(laneState?.cc_session_id || '').trim()
@@ -283,13 +286,34 @@ async function loadTurnInputs(body: ChatBody) {
 
   // 缓存稳定性：同一个 session 生命周期内 personaAppend 不能变，否则 resume 后
   // 系统提示前缀跟原来对不上 → 1h 缓存 miss → 全量重写。
-  // 首次建会话时冻结，后续轮次（含进程回收后 resume）复用冻结版本。
-  const frozen = getFrozenAppend(body.session_id || '')
-  if (frozen !== undefined) {
-    personaAppend = frozen
+  // 首次建会话时写入 Haven 并冻结，后续轮次、Dashboard 重部署和换设备都复用。
+  // 进程内 Map 只做热路径缓存，不再是唯一事实源。
+  if (sessionSnapshot.session.frozen_persona_append_initialized) {
+    personaAppend = sessionSnapshot.session.frozen_persona_append
   } else {
-    setFrozenAppend(body.session_id || '', personaAppend)
+    const candidate = getFrozenAppend(body.session_id || '') ?? personaAppend
+    const saved = await patchConversationSessionState({
+      sessionId: String(body.session_id || ''),
+      personaId: String(body.persona_id || ''),
+      frozenPersonaAppend: candidate,
+      expectedStateVersion: sessionSnapshot.session.state_version,
+    })
+    if (saved.ok && saved.session?.frozen_persona_append_initialized) {
+      sessionSnapshot = { ...sessionSnapshot, session: saved.session }
+      personaAppend = saved.session.frozen_persona_append
+    } else {
+      // 两个请求同时首次启动时，另一个可能先写入并让 CAS 冲突；重读已冻结值即可。
+      const reread = await getConversationSession(body.session_id || '', {
+        includeBucketExclusions: true,
+      })
+      if (!reread.ok || !reread.session?.frozen_persona_append_initialized) {
+        throw new Error(`保存窗口缓存前缀失败：${saved.error || reread.error || 'Haven 写入失败'}`)
+      }
+      sessionSnapshot = reread
+      personaAppend = reread.session.frozen_persona_append
+    }
   }
+  setFrozenAppend(body.session_id || '', personaAppend)
   const systemPromptKey = personaAppend
 
   // 能读哪些目录：本机没配退回仓库根；production 没配只进 dashboard workspace。

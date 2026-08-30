@@ -64,6 +64,8 @@ export type HavenConversationSession = {
   daily_review_snapshot: Array<{ review_date: string; content: string; updated_at?: string }>
   daily_review_snapshot_initialized: boolean
   handoff_snapshot: HandoffSnapshot | Record<string, never>
+  frozen_persona_append: string
+  frozen_persona_append_initialized: boolean
   cc_seen_round_id: number
   state_version: number
   deleted_at: string | null
@@ -521,6 +523,7 @@ export async function patchConversationSessionState(input: {
   dailyReviewEnabled?: boolean
   initializeDailyReviewSnapshot?: boolean
   handoffSnapshot?: HandoffSnapshot
+  frozenPersonaAppend?: string
   expectedStateVersion?: number
 }): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
   const sessionId = input.sessionId.trim()
@@ -530,7 +533,7 @@ export async function patchConversationSessionState(input: {
   }
   if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.ccOverrides === undefined && input.promptModuleOverrides === undefined
     && input.mode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot
-    && input.handoffSnapshot === undefined) {
+    && input.handoffSnapshot === undefined && input.frozenPersonaAppend === undefined) {
     return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
   const body: Record<string, unknown> = { session_id: sessionId, persona_id: personaId }
@@ -542,6 +545,7 @@ export async function patchConversationSessionState(input: {
   if (input.dailyReviewEnabled !== undefined) body.daily_review_enabled = input.dailyReviewEnabled
   if (input.initializeDailyReviewSnapshot) body.initialize_daily_review_snapshot = true
   if (input.handoffSnapshot !== undefined) body.handoff_snapshot = input.handoffSnapshot
+  if (input.frozenPersonaAppend !== undefined) body.frozen_persona_append = input.frozenPersonaAppend
   if (input.expectedStateVersion != null) body.expected_state_version = input.expectedStateVersion
   const res = await havenFetch({
     method: 'PATCH',
