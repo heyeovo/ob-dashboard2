@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CcMcpConfig } from '@/app/lib/ccMcpTypes'
 import type { HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
 import type { CcContextAnalysisResult, CcExactContextAnalysis } from '@/app/lib/cc/contextAnalysis'
+import Card from '@/app/components/Card'
 import {
   estimateContextTokens,
   estimateMcpConfigTokens,
@@ -71,7 +72,7 @@ function TokenCard({
 }) {
   const safeBase = Math.max(base, 1)
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3">
+    <Card variant="outline" padding="sm">
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-[11px] font-medium text-[var(--color-text-heading)]">{title}</span>
         <span className="text-right text-[9.5px] text-[var(--color-text-disabled)]">{hint}</span>
@@ -96,7 +97,7 @@ function TokenCard({
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -215,7 +216,7 @@ export default function CcContextAnalysis(props: Props) {
 
   return (
     <div className="space-y-3">
-      <section className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-3">
+      <Card variant="outline" padding="sm">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-[11px] font-medium text-[var(--color-text-heading)]">SDK 官方精确分析</div>
@@ -275,7 +276,7 @@ export default function CcContextAnalysis(props: Props) {
             ) : null}
           </div>
         ) : null}
-      </section>
+      </Card>
 
       <TokenCard
         title="产品模块预估"
