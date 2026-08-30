@@ -10,7 +10,7 @@ type JsonObject = Record<string, unknown>
 export type ContextGcCandidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch'
   label: string
   detail: string
   estimatedTokens: number
@@ -99,8 +99,8 @@ function cardTitle(card: string): string {
   return /^title:\s*(.+)$/m.exec(card)?.[1]?.trim().slice(0, 120) || 'OB 记忆召回'
 }
 
-function recallReference(bucketId: string): string {
-  return `[memory_ref bucket_id=${bucketId}]\n原召回内容已在窗口减负中清理；需要时调用 read_bucket(bucket_id=${bucketId})。\n[/memory_ref]`
+function recallReference(bucketId: string, title: string): string {
+  return `[memory_ref bucket_id=${bucketId}]\ntitle: ${title}\n原召回内容已在窗口减负中清理；需要时调用 read_bucket(bucket_id=${bucketId})。\n[/memory_ref]`
 }
 
 function searchReference(query: string): string {
@@ -113,6 +113,78 @@ function toolName(block: JsonObject): string {
 
 function isSearchChat(name: string): boolean {
   return name === 'search_chat' || name.endsWith('__search_chat')
+}
+
+type RecoverableToolKind = Exclude<ContextGcCandidate['kind'], 'ob_recall'>
+type RecoverableCall = {
+  kind: RecoverableToolKind
+  index: number
+  fingerprint: string
+  label: string
+  replacement: string
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  const raw = object(value)
+  if (raw) return `{${Object.keys(raw).sort().map(key => `${JSON.stringify(key)}:${stableJson(raw[key])}`).join(',')}}`
+  return JSON.stringify(value) ?? 'null'
+}
+
+function short(value: unknown, max = 120): string {
+  const text = String(value || '').trim().replace(/\s+/g, ' ')
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind, number>): RecoverableCall | null {
+  if (block.type !== 'tool_use') return null
+  const name = toolName(block)
+  const bareName = name.split('__').at(-1)?.toLowerCase() || name.toLowerCase()
+  const input = object(block.input) || {}
+  let kind: RecoverableToolKind
+  let label = ''
+  let replacement = ''
+  if (isSearchChat(name)) {
+    const query = String(input.query || input.q || '').trim()
+    if (!query) return null
+    kind = 'search_chat'
+    label = `曾搜索「${short(query, 100)}」`
+    replacement = searchReference(query)
+  } else if (bareName === 'breath') {
+    kind = 'breath'
+    const query = short(input.query, 100)
+    const scope = [short(input.domain, 40), short(input.date, 30)].filter(Boolean).join(' · ')
+    label = query ? `breath「${query}」` : scope ? `breath · ${scope}` : 'breath 记忆读取'
+    replacement = `旧的 breath 结果已在窗口减负中清理。曾调用 ${label}。如有需要，请使用原工具调用中的参数重新调用 breath。`
+  } else if (bareName === 'websearch' || bareName === 'web_search') {
+    const query = String(input.query || input.q || '').trim()
+    if (!query) return null
+    kind = 'web_search'
+    label = `WebSearch「${short(query, 100)}」`
+    replacement = `旧的 WebSearch 结果已在窗口减负中清理。曾搜索「${query}」。如有需要，请使用原工具调用中的参数重新搜索。`
+  } else if (bareName === 'webfetch' || bareName === 'web_fetch') {
+    const url = String(input.url || '').trim()
+    if (!url) return null
+    const prompt = short(input.prompt, 160)
+    kind = 'web_fetch'
+    label = `WebFetch · ${short(url, 100)}`
+    replacement = `旧的 WebFetch 结果已在窗口减负中清理。曾读取 ${url}${prompt ? `；原任务「${prompt}」` : ''}。如有需要，请使用原工具调用中的参数重新读取。`
+  } else {
+    return null
+  }
+  indexes[kind] += 1
+  const fingerprint = kind === 'search_chat'
+    ? String(input.query || input.q || '').trim()
+    : stableJson({ name: bareName, input })
+  return { kind, index: indexes[kind], fingerprint, label, replacement }
+}
+
+function candidateIdentity(call: RecoverableCall): { id: string; protectKey: string } {
+  const prefix = call.kind === 'search_chat' ? 'search' : call.kind
+  return {
+    id: `${prefix}:${call.index}:${hash(call.fingerprint)}`,
+    protectKey: `${prefix}:${hash(call.fingerprint)}`,
+  }
 }
 
 function resultText(block: JsonObject): string | null {
@@ -136,14 +208,16 @@ function setResultText(block: JsonObject, value: string): void {
     block.content = [{ type: 'text', text: value }]
     return
   }
-  throw new Error('search_chat 返回结构不是纯文字，已停止减负')
+  throw new Error('工具返回结构不是纯文字，已停止减负')
 }
 
 function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandidate[] {
   const candidates: ContextGcCandidate[] = []
   let recallIndex = 0
-  let searchIndex = 0
-  const searchCalls = new Map<string, { query: string; index: number }>()
+  const indexes: Record<RecoverableToolKind, number> = {
+    search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
+  }
+  const recoverableCalls = new Map<string, RecoverableCall>()
 
   for (const row of rows) {
     for (const slot of userTextSlots(row)) {
@@ -153,14 +227,15 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
         if (!bucketId) continue
         recallIndex += 1
         const full = match[0]
+        const title = cardTitle(full)
         const protectKey = `ob:${bucketId}`
         candidates.push({
           id: `ob:${recallIndex}:${hash(bucketId)}`,
           protectKey,
           kind: 'ob_recall',
-          label: cardTitle(full),
+          label: title,
           detail: `bucket_id: ${bucketId}`,
-          estimatedTokens: Math.max(0, estimateContextTokens(full) - estimateContextTokens(recallReference(bucketId))),
+          estimatedTokens: Math.max(0, estimateContextTokens(full) - estimateContextTokens(recallReference(bucketId, title))),
           protected: protectedKeys.has(protectKey),
         })
       }
@@ -168,25 +243,24 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
     for (const rawBlock of contentBlocks(row)) {
       const block = object(rawBlock)
       if (!block) continue
-      if (block.type === 'tool_use' && isSearchChat(toolName(block))) {
-        const input = object(block.input)
-        const query = String(input?.query || input?.q || '').trim()
+      if (block.type === 'tool_use') {
+        const call = recoverableCall(block, indexes)
         const id = String(block.id || '').trim()
-        if (id && query) searchCalls.set(id, { query, index: ++searchIndex })
+        if (id && call) recoverableCalls.set(id, call)
       }
       if (block.type === 'tool_result') {
-        const call = searchCalls.get(String(block.tool_use_id || '').trim())
+        const call = recoverableCalls.get(String(block.tool_use_id || '').trim())
         const text = call ? resultText(block) : null
         if (!call || text == null) continue
-        const protectKey = `search:${hash(call.query)}`
+        const identity = candidateIdentity(call)
         candidates.push({
-          id: `search:${call.index}:${hash(call.query)}`,
-          protectKey,
-          kind: 'search_chat',
-          label: `曾搜索「${call.query.slice(0, 100)}」`,
+          id: identity.id,
+          protectKey: identity.protectKey,
+          kind: call.kind,
+          label: call.label,
           detail: `${text.length.toLocaleString()} 字原始结果`,
-          estimatedTokens: Math.max(0, estimateContextTokens(text) - estimateContextTokens(searchReference(call.query))),
-          protected: protectedKeys.has(protectKey),
+          estimatedTokens: Math.max(0, estimateContextTokens(text) - estimateContextTokens(call.replacement)),
+          protected: protectedKeys.has(identity.protectKey),
         })
       }
     }
@@ -210,11 +284,15 @@ export async function scanContextGc(
 
 function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGcApplyResult, 'nextCcSessionId'> {
   let recallIndex = 0
-  let searchIndex = 0
   let releasedTokens = 0
   let candidateCount = 0
-  const counts: Record<string, number> = { ob_recall: 0, search_chat: 0 }
-  const searchCalls = new Map<string, { query: string; index: number }>()
+  const counts: Record<string, number> = {
+    ob_recall: 0, search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
+  }
+  const indexes: Record<RecoverableToolKind, number> = {
+    search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
+  }
+  const recoverableCalls = new Map<string, RecoverableCall>()
 
   for (const row of rows) {
     for (const slot of userTextSlots(row)) {
@@ -226,7 +304,7 @@ function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGc
         recallIndex += 1
         const candidateId = `ob:${recallIndex}:${hash(bucketId)}`
         if (!selectedIds.has(candidateId)) return full
-        const replacement = recallReference(bucketId)
+        const replacement = recallReference(bucketId, cardTitle(full))
         releasedTokens += Math.max(0, estimateContextTokens(full) - estimateContextTokens(replacement))
         candidateCount += 1
         counts.ob_recall += 1
@@ -237,24 +315,22 @@ function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGc
     for (const rawBlock of contentBlocks(row)) {
       const block = object(rawBlock)
       if (!block) continue
-      if (block.type === 'tool_use' && isSearchChat(toolName(block))) {
-        const input = object(block.input)
-        const query = String(input?.query || input?.q || '').trim()
+      if (block.type === 'tool_use') {
+        const call = recoverableCall(block, indexes)
         const id = String(block.id || '').trim()
-        if (id && query) searchCalls.set(id, { query, index: ++searchIndex })
+        if (id && call) recoverableCalls.set(id, call)
       }
       if (block.type === 'tool_result') {
-        const call = searchCalls.get(String(block.tool_use_id || '').trim())
+        const call = recoverableCalls.get(String(block.tool_use_id || '').trim())
         if (!call) continue
-        const candidateId = `search:${call.index}:${hash(call.query)}`
-        if (!selectedIds.has(candidateId)) continue
+        const identity = candidateIdentity(call)
+        if (!selectedIds.has(identity.id)) continue
         const before = resultText(block)
-        if (before == null) throw new Error('search_chat 返回结构无法安全瘦身')
-        const replacement = searchReference(call.query)
-        setResultText(block, replacement)
-        releasedTokens += Math.max(0, estimateContextTokens(before) - estimateContextTokens(replacement))
+        if (before == null) throw new Error(`${call.label} 返回结构无法安全瘦身`)
+        setResultText(block, call.replacement)
+        releasedTokens += Math.max(0, estimateContextTokens(before) - estimateContextTokens(call.replacement))
         candidateCount += 1
-        counts.search_chat += 1
+        counts[call.kind] += 1
       }
     }
   }

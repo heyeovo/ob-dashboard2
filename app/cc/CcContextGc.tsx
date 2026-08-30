@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 type Candidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch'
   label: string
   detail: string
   estimatedTokens: number
@@ -138,7 +138,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
   return (
     <div className="text-[11px] text-[var(--color-text-secondary)]">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
-        只清理可重新获取的 OB 桶召回和 search_chat 大结果。用户与助手正文、日期召回都不会改。实际执行时会复制 Claude 会话，旧副本暂时保留。
+        只清理可重新获取的 OB 桶召回、breath、search_chat、WebSearch 和 WebFetch 结果。用户与助手正文、日期召回都不会改。实际执行时会复制 Claude 会话，旧副本暂时保留。
       </div>
 
       <div className="my-3 flex items-center justify-between gap-2">

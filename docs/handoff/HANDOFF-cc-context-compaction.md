@@ -99,7 +99,7 @@
 
 - 当前完成状态：Dashboard 与 Haven 实现完成，定向转换测试、Haven 23 项状态契约测试和 Dashboard production build 通过；尚未在用户真实长会话执行减负，自动开关默认关闭。
 - 产品决定：入口为“本窗口设置”的第三个 Tab“窗口减负”。默认不勾选任何候选；可逐项清理、暂时不选或按稳定 key“始终保留”。
-- 清理边界：只识别 `ombre:<bucket_id>#...` 的 OB 动态卡片和纯文字 `search_chat` tool result。OB 卡片替换为 `read_bucket(bucket_id)` 最小引用；search 只留“曾搜索「query」”。用户/助手正文、`date_recall`、普通 breath 结果和结构未知的工具结果不动，不调用额外 LLM 摘要。
+- 清理边界：识别 `ombre:<bucket_id>#...` 的 OB 动态卡片，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字 tool result。OB 卡片替换为保留 `bucket_id + title` 的 `read_bucket(bucket_id)` 最小引用；search 只留搜索词，breath/WebFetch 保留必要说明，而完整重取参数继续存在于原 tool_use block。用户/助手正文、`date_recall`、报错/非文字结果和名单外工具不动，不调用额外 LLM 摘要。
 - 会话边界：Agent SDK `forkSession` 先复制原 Claude transcript，只原子改写副本；Haven 同时校验 `state_version` 与旧 `cc_session_id` 后才更新对应 lane。Dashboard `ob2-*` session 不变，`conversation_turns` 不复制、不新增，因此不会重复聊天消息。旧 Claude transcript 暂时保留，供回退。
 - 持久化：Haven `conversation_sessions.context_gc_json` 保存默认关闭的自动开关、固定 05:30、保护 key、最近 20 次 GC 记录和释放 token 估算；`cc_lanes_json` 只替换对应 lane 的 Claude 内部 session 指针。
 - 自动边界：Dashboard Node 启动时注册香港时区分钟调度，05:30–05:59 内重试；默认关闭。启用后处理窗口各 CC lane 的未保护安全候选；Haven 日回顾/周轨迹任一最新 run/execution 仍为 running、本地 Pro runner 忙、窗口回复中或有工具待批准时跳过并等待下一分钟；状态接口不可读时 fail closed。Dashboard 进程未运行则当日不会补跑。

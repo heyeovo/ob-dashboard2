@@ -91,7 +91,7 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 - CC 最终系统提示词追加前缀按窗口首次写入 Haven 后冻结；进程内 Map 只作加速，Dashboard 重部署后继续读取同一前缀
 - Claude Pro 最近额度按 profile 在 Haven 保存全局单条快照，各窗口共用并显示上次读取时间，新值覆盖旧值
 - cc 换窗的折叠逐项选择、统一 token 预算、Haven 固定快照及 CC/selfhost 一致注入契约见 `docs/architecture.md`
-- 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回与 `search_chat` 文字结果；用户/助手正文和 `date_recall` 不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭，Dashboard Node 进程在线时才调度，并在 Haven 日回顾/周轨迹仍运行、窗口忙或工具待批时延后重试。
+- 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 最小引用必须保留 `bucket_id + title`，工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭，Dashboard Node 进程在线时才调度，并在 Haven 日回顾/周轨迹仍运行、窗口忙或工具待批时延后重试。
 
 ## 文档与部署
 

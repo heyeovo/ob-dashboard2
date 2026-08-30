@@ -28,18 +28,47 @@ describe('Context GC transcript slimming', () => {
         },
       },
       { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '助手正文必须保留' }] } },
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'tool-2', name: 'mcp__ombre__breath', input: { query: '人格表现', domain: 'identity' } },
+            { type: 'tool_use', id: 'tool-3', name: 'WebSearch', input: { query: 'Claude context editing', allowed_domains: ['docs.anthropic.com'] } },
+            { type: 'tool_use', id: 'tool-4', name: 'WebFetch', input: { url: 'https://example.com/page', prompt: '提取实现限制' } },
+            { type: 'tool_use', id: 'tool-5', name: 'Bash', input: { command: 'echo must-stay' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'tool-2', content: 'breath 原始结果'.repeat(300) },
+            { type: 'tool_result', tool_use_id: 'tool-3', content: 'WebSearch 原始结果'.repeat(300) },
+            { type: 'tool_result', tool_use_id: 'tool-4', content: 'WebFetch 原始结果'.repeat(300) },
+            { type: 'tool_result', tool_use_id: 'tool-5', content: 'Bash 结果必须保留' },
+          ],
+        },
+      },
     ]
     const candidates = contextGcTest.collect(rows, new Set())
-    expect(candidates.map(item => item.kind)).toEqual(['ob_recall', 'search_chat'])
+    expect(candidates.map(item => item.kind)).toEqual(['ob_recall', 'search_chat', 'breath', 'web_search', 'web_fetch'])
     const result = contextGcTest.transform(rows, new Set(candidates.map(item => item.id)))
     const serialized = JSON.stringify(rows)
-    expect(result.candidateCount).toBe(2)
+    expect(result.candidateCount).toBe(5)
     expect(result.releasedTokens).toBeGreaterThan(0)
     expect(serialized).toContain('用户正文')
     expect(serialized).toContain('日期原文必须保留')
     expect(serialized).toContain('助手正文必须保留')
     expect(serialized).toContain('read_bucket(bucket_id=bucket-1)')
+    expect(serialized).toContain('title: 一张卡')
     expect(serialized).toContain('曾搜索「那次旅行」')
+    expect(serialized).toContain('曾调用 breath「人格表现」')
+    expect(serialized).toContain('曾搜索「Claude context editing」')
+    expect(serialized).toContain('曾读取 https://example.com/page')
+    expect(serialized).toContain('Bash 结果必须保留')
     expect(serialized).not.toContain('搜索原始结果搜索原始结果')
   })
 
