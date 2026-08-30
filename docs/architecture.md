@@ -39,6 +39,8 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 |------|------|
 | `DetailPanel.tsx` | 统一弹窗壳：`mode="drawer"` / `mode="modal"` |
 | `BucketDetailDrawer.tsx` | 桶详情内容区（噪声标记、moments、关联、年轮、相似记忆、合并预览） |
+| `cc/CcWindowSettings.tsx` | CC 本窗口设置弹窗；顶层分为“会话信息 / Context 分析”两个 Tab |
+| `cc/CcContextAnalysis.tsx` | Context 分析页；并列展示产品模块预估与用户手动触发的 SDK 官方精确分类/消息明细 |
 
 ### UI 原子组件
 | 文件 | 说明 |
@@ -81,6 +83,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `cc-turns/route.ts` | 会话轮次 + Haven 窗口状态 |
 | `cc-stop/route.ts` | 停止生成（保留已生成部分） |
 | `cc-compact/route.ts` | 复用在线空闲 CC 会话发送 `/compact` |
+| `cc-context-analysis/route.ts` | 手动读取当前在线、空闲且线路匹配的 Agent SDK Context 精确分析；结果仅在 live session 内缓存，每次模型调用后失效，不参与正常轮次或自动轮询 |
 | `cc-personas/route.ts` | 协作者配置 |
 | `cc-upstream/route.ts` | 上游模型配置 |
 | `cc-mcp/route.ts` | MCP 工具配置 |
@@ -169,7 +172,7 @@ Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionSto
 
 ## cc 聊天架构
 
-"本窗口设置"同时显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时估算，并以宏观堆叠条展示提示词、换窗资料、MCP、Web、本窗对话及 CC/SDK 其他开销。SDK 总 Context 是实际值；模块使用统一的中日韩宽字符保守 token 估算，无法归属的实际差额留在“CC/SDK 其他”，不伪装成精确账单。
+“本窗口设置”顶层分为“会话信息 / Context 分析”两个 Tab。会话信息继续显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时；Context 分析把提示词、换窗资料、MCP、Web、本窗对话及“未归因差额”的产品估算与 SDK 官方精确数据分开显示。官方分析只允许用户在当前原生 lane 在线且空闲时手动读取，明确提示可能产生额外 Pro/API 请求；结果仅缓存于当前 live session，每次模型调用完成后失效，不自动轮询。官方页展示 SDK categories、前缀聚合与 message breakdown，但 MCP 服务/工具级占比仍只在 MCP 配置页展示。
 
 CC 首次启动窗口时把最终 `personaAppend` 作为不可覆盖的冻结前缀写入 Haven `conversation_sessions`；后续轮次、Dashboard 重部署与换设备均读取同一正文，进程内 Map 只作热路径缓存。这样部署本身不会改变 1 小时系统 Prompt Cache 的前缀；上游 TTL、模型或工具集合变化仍可导致正常重写。
 

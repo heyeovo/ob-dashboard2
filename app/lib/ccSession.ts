@@ -20,10 +20,12 @@ import {
   type SDKMessage,
   type SDKUserMessage,
   type Options,
+  type SDKControlGetContextUsageResponse,
 } from '@anthropic-ai/claude-agent-sdk'
 import { cancelAllPending, hasPending } from './ccChannel'
 import type { CcMcpApplySummary } from './ccMcpTypes'
 import type { CredMode } from './ccEnv'
+import type { CcContextAnalysisResult, CcExactContextAnalysis } from './cc/contextAnalysis'
 
 /** 闲置多久回收子进程。跟 prompt cache 的 5 分钟没关系，纯粹是别让子进程无限堆着。 */
 const IDLE_TTL_MS = 10 * 60 * 1000
@@ -149,6 +151,9 @@ type LiveSession = {
   contextTokens: number
   contextMaxTokens: number
   contextSnapshot: CcContextSnapshot | null
+  /** 用户手动读取的 SDK 官方 Context 分析；每次模型调用结束后失效。 */
+  contextAnalysis: CcExactContextAnalysis | null
+  contextAnalysisPending: Promise<CcExactContextAnalysis> | null
   lastCompaction: CcCompactionEvent | null
   compactionCount: number
   compacting: boolean
@@ -449,6 +454,8 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     contextTokens: 0,
     contextMaxTokens: 0,
     contextSnapshot: null,
+    contextAnalysis: null,
+    contextAnalysisPending: null,
     lastCompaction: null,
     compactionCount: 0,
     compacting: false,
@@ -471,6 +478,99 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
  */
 export function peekSession(sessionId: string): LiveSession | null {
   return registry.get(sessionId) || null
+}
+
+function safeToken(value: unknown): number {
+  return Math.max(0, Number(value) || 0)
+}
+
+/** SDK 返回值会随版本扩字段；这里只保留前端真正展示的稳定数据。 */
+export function sanitizeContextAnalysis(raw: SDKControlGetContextUsageResponse): CcExactContextAnalysis {
+  const items = (value: Array<{ name: string; tokens: number }> | undefined) =>
+    (value || []).map(item => ({ name: String(item.name || ''), tokens: safeToken(item.tokens) }))
+  const breakdown = raw.messageBreakdown
+  return {
+    updatedAt: Date.now(),
+    model: String(raw.model || ''),
+    totalTokens: safeToken(raw.totalTokens),
+    maxTokens: safeToken(raw.maxTokens),
+    rawMaxTokens: safeToken(raw.rawMaxTokens),
+    percentage: Math.max(0, Number(raw.percentage) || 0),
+    categories: (raw.categories || []).map(item => ({
+      name: String(item.name || ''), tokens: safeToken(item.tokens), isDeferred: Boolean(item.isDeferred),
+    })),
+    memoryFiles: (raw.memoryFiles || []).map(item => ({
+      name: String(item.path || ''), path: String(item.path || ''), type: String(item.type || ''), tokens: safeToken(item.tokens),
+    })),
+    mcpTools: (raw.mcpTools || []).map(item => ({
+      name: String(item.name || ''), serverName: String(item.serverName || ''), tokens: safeToken(item.tokens), isLoaded: Boolean(item.isLoaded),
+    })),
+    deferredBuiltinTools: (raw.deferredBuiltinTools || []).map(item => ({
+      name: String(item.name || ''), tokens: safeToken(item.tokens), isLoaded: Boolean(item.isLoaded),
+    })),
+    systemTools: items(raw.systemTools),
+    systemPromptSections: items(raw.systemPromptSections),
+    agents: (raw.agents || []).map(item => ({
+      name: String(item.agentType || ''), source: String(item.source || ''), tokens: safeToken(item.tokens),
+    })),
+    slashCommands: raw.slashCommands ? {
+      totalCommands: safeToken(raw.slashCommands.totalCommands),
+      includedCommands: safeToken(raw.slashCommands.includedCommands),
+      tokens: safeToken(raw.slashCommands.tokens),
+    } : null,
+    skills: raw.skills ? {
+      totalSkills: safeToken(raw.skills.totalSkills),
+      includedSkills: safeToken(raw.skills.includedSkills),
+      tokens: safeToken(raw.skills.tokens),
+    } : null,
+    messageBreakdown: breakdown ? {
+      toolCallTokens: safeToken(breakdown.toolCallTokens),
+      toolResultTokens: safeToken(breakdown.toolResultTokens),
+      attachmentTokens: safeToken(breakdown.attachmentTokens),
+      assistantMessageTokens: safeToken(breakdown.assistantMessageTokens),
+      userMessageTokens: safeToken(breakdown.userMessageTokens),
+      redirectedContextTokens: safeToken(breakdown.redirectedContextTokens),
+      unattributedTokens: safeToken(breakdown.unattributedTokens),
+    } : null,
+  }
+}
+
+/**
+ * 只供用户在 Context 分析页手动触发。
+ * ⚠️ 实测这条 SDK 控制请求可能额外打出多次上游请求，所以禁止放进正常轮次或轮询。
+ */
+export async function getExactContextAnalysis(input: {
+  sessionId: string
+  laneId: string
+  force?: boolean
+}): Promise<CcContextAnalysisResult> {
+  const live = registry.get(input.sessionId)
+  if (!live) return { ok: false, analysis: null, cached: false, error: '当前 CC 会话不在线，请先在这个窗口发一条消息' }
+  if (live.resumeKey !== `${input.sessionId}::${input.laneId}`) {
+    return { ok: false, analysis: null, cached: false, error: '当前线路不在线，请切到这条线路发一条消息后再读取' }
+  }
+  if (live.busy) return { ok: false, analysis: null, cached: false, error: '正在回复，等本轮结束后再读取' }
+  if (live.contextAnalysis && !input.force) {
+    return { ok: true, analysis: live.contextAnalysis, cached: true, error: '' }
+  }
+
+  try {
+    if (!live.contextAnalysisPending) {
+      live.contextAnalysisPending = live.q.getContextUsage()
+        .then(sanitizeContextAnalysis)
+        .finally(() => { live.contextAnalysisPending = null })
+    }
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('SDK Context 分析读取超时，请稍后重试')), 20_000)
+    })
+    const analysis = await Promise.race([live.contextAnalysisPending, timeout])
+      .finally(() => { if (timeoutId) clearTimeout(timeoutId) })
+    live.contextAnalysis = analysis
+    return { ok: true, analysis, cached: false, error: '' }
+  } catch (error) {
+    return { ok: false, analysis: null, cached: false, error: (error as Error).message || 'SDK Context 分析读取失败' }
+  }
 }
 
 /**
@@ -698,6 +798,7 @@ export function noteContextSnapshot(
     source,
   }
   live.contextSnapshot = snapshot
+  live.contextAnalysis = null
   live.contextTokens = totalTokens
   live.contextMaxTokens = maxTokens
   return snapshot
