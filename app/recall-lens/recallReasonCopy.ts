@@ -142,6 +142,36 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     description: '后端记录该候选已进入 Shadow 结果，但没有返回更具体的选择原因。',
     effect: 'allow',
   },
+  shadow_utility_rejected: {
+    title: '召回价值明确不足',
+    description: '候选已经通过相关性审核，但 Utility 判断认为它对当前回复没有增量价值，因此不进入 Shadow 最终结果。',
+    effect: 'reject',
+  },
+  utility_explicit_recall_expectation: {
+    title: '用户明确期待回忆',
+    description: '用户明确要求回忆或搜索过去；候选已经通过相关性审核，因此具有明确的当前召回价值。',
+    effect: 'allow',
+  },
+  utility_resolves_contextual_reference: {
+    title: '帮助解决当前指代',
+    description: '当前消息正在接续前文，系统也取得了可用的上一轮用户上下文；这段相关记忆能帮助理解“那次、后来”等指代。',
+    effect: 'allow',
+  },
+  utility_relevant_value_uncertain: {
+    title: '相关，但增量价值暂不确定',
+    description: '候选与当前自然话题相关，但本地规则无法可靠判断它会让回复更好还是显得突兀。它保持 neutral，仍有召回资格，不会默认沉默。',
+    effect: 'info',
+  },
+  utility_exact_repetition_without_increment: {
+    title: '只重复当前原句',
+    description: '候选正文与用户当前原句完全相同，没有提供新的事件、背景或关系连续性，因此 Utility 拒绝。',
+    effect: 'reject',
+  },
+  utility_invalid_candidate: {
+    title: 'Utility 无法读取候选',
+    description: '候选缺少可识别的记忆桶数据，无法继续判断召回价值，因此拒绝。',
+    effect: 'reject',
+  },
   shadow_not_selected_without_candidate_debug: {
     title: 'Shadow 未选择，逐候选原因未记录',
     description: '该桶不在 Shadow 结果中，但本条 Debug 没有对应的逐候选判断记录。页面保留真实结果，不推测具体拒绝规则。',
@@ -444,6 +474,24 @@ const FALLBACK_STRATEGY_COPY: Record<string, RecallRuleCopy> = {
   explicit_strict_relevance_with_planner_fallback: { title: '明确回忆使用严格相关性与 Planner 降级', description: '明确回忆即使 Planner 不可用也可继续审核，但候选仍必须具有严格的直接或主题相关证据。', effect: 'info' },
 }
 
+const UTILITY_STATUS_COPY: Record<string, RecallRuleCopy> = {
+  promote: {
+    title: '优先召回',
+    description: '系统找到了明确的当前价值；排序时优先从 promote 候选中选择。',
+    effect: 'allow',
+  },
+  neutral: {
+    title: '保留召回资格',
+    description: '候选确实相关，但增量价值暂不确定。neutral 仍可被 Shadow 选择，不等于拒绝。',
+    effect: 'info',
+  },
+  reject: {
+    title: '不值得本轮召回',
+    description: '系统能明确判断候选对当前回复没有增量价值，因此不进入 Shadow 最终选择。',
+    effect: 'reject',
+  },
+}
+
 export const RECALL_EFFECT_LABEL: Record<RecallRuleEffect, string> = {
   allow: '放行',
   reject: '拒绝',
@@ -463,7 +511,9 @@ export function getRecallRuleCopy(code: string): RecallRuleCopy {
   if (code.startsWith('query_planner_call_failed:')) {
     return { title: '查询规划器调用失败', description: 'Planner 调用发生异常，冒号后的内容是异常类型；本轮会进入降级路径。', effect: 'degraded' }
   }
-  const category = code.startsWith('shadow_')
+  const category = code.startsWith('utility_')
+    ? 'Utility 判断'
+    : code.startsWith('shadow_')
     ? 'Shadow 判断'
     : code.startsWith('query_planner_')
       ? '查询规划器状态'
@@ -498,4 +548,8 @@ export function getPlannerStatusCopy(code?: string): RecallRuleCopy {
 
 export function getFallbackStrategyCopy(code?: string): RecallRuleCopy {
   return getStatusCopy(code, FALLBACK_STRATEGY_COPY, 'Shadow 降级策略')
+}
+
+export function getUtilityStatusCopy(code?: string): RecallRuleCopy {
+  return getStatusCopy(code, UTILITY_STATUS_COPY, 'Utility 状态')
 }

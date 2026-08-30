@@ -9,6 +9,7 @@ import {
   getPlannerStatusCopy,
   getRecallRuleCopy,
   getSemanticStatusCopy,
+  getUtilityStatusCopy,
   RECALL_EFFECT_LABEL,
   type RecallRuleCopy,
   type RecallRuleEffect,
@@ -55,11 +56,25 @@ type Candidate = {
   shadow_admission_reason?: string
   shadow_softened_reasons?: string[]
   shadow_relevance_debug?: ShadowRelevanceDebug
+  shadow_relevance_reason?: string
+  shadow_utility?: ShadowUtilityDebug
   was_formal_candidate?: boolean
   content_preview?: string
   recall_why?: {
     primary_source?: string
   }
+}
+
+type ShadowUtilityStatus = 'promote' | 'neutral' | 'reject'
+
+type ShadowUtilityDebug = {
+  bucket_id?: string
+  status?: ShadowUtilityStatus
+  reason_codes?: string[]
+  context_available?: boolean
+  necessity_reason_codes?: string[]
+  matched_topic_terms?: string[]
+  contract?: string
 }
 
 type RecallNecessityDebug = {
@@ -81,6 +96,9 @@ type RecallShadowDebug = {
   removed_bucket_ids?: string[]
   selected_candidates?: Candidate[]
   rejected_candidates?: Candidate[]
+  utility_candidates?: ShadowUtilityDebug[]
+  utility_contract?: string
+  shadow_max_cards?: number
 }
 
 type ShadowCandidateDecision = {
@@ -367,6 +385,17 @@ function RoundDetail({ round }: { round: DebugRound }) {
   shadowCandidates.forEach((candidate) => {
     if (candidate.bucket_id) shadowDecisions.set(candidate.bucket_id, { candidate, selected: true })
   })
+  const utilityCandidates = shadow?.utility_candidates || []
+  const utilityDecisions = new Map<string, ShadowUtilityDebug>()
+  utilityCandidates.forEach((candidate) => {
+    if (candidate.bucket_id) utilityDecisions.set(candidate.bucket_id, candidate)
+  })
+  const candidateNames = new Map<string, string>()
+  ;[...recalled, ...suppressed, ...shadowCandidates, ...shadowRejectedCandidates].forEach((candidate) => {
+    if (candidate.bucket_id && candidate.bucket_name) {
+      candidateNames.set(candidate.bucket_id, candidate.bucket_name)
+    }
+  })
   const plannerCopy = getPlannerStatusCopy(shadow?.planner_status)
   const fallbackCopy = getFallbackStrategyCopy(shadow?.fallback_strategy)
 
@@ -407,11 +436,37 @@ function RoundDetail({ round }: { round: DebugRound }) {
             <InfoRow label="Shadow 结果" value={formatBucketIds(shadow.shadow_bucket_ids)} />
             <InfoRow label="Shadow 新增" value={formatBucketIds(shadow.added_bucket_ids)} />
             <InfoRow label="Shadow 移除" value={formatBucketIds(shadow.removed_bucket_ids)} />
+            <InfoRow label="Utility 契约" value={shadow.utility_contract || '旧记录未保存'} />
+            <InfoRow
+              label="Shadow 卡片上限"
+              value={typeof shadow.shadow_max_cards === 'number' ? `${shadow.shadow_max_cards} 张` : '旧记录未保存'}
+            />
             {(necessity?.reason_codes?.length || 0) > 0 && (
               <div className="mt-3 space-y-2 border-t border-[var(--color-border-light)] pt-3">
                 {necessity?.reason_codes?.map((code) => <RuleExplanation key={code} code={code} compact />)}
               </div>
             )}
+            <div className="mt-3 border-t border-[var(--color-border-light)] pt-3">
+              <p className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">
+                主动召回价值 Utility · {utilityCandidates.length}
+              </p>
+              {utilityCandidates.length === 0 ? (
+                <p className="text-xs leading-5 text-[var(--color-text-tertiary)]">
+                  本轮没有候选进入 Utility。通常表示无需召回、没有相关候选，或这是尚未记录 Utility 的旧数据。
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {utilityCandidates.map((utility, index) => (
+                    <UtilityDecisionBlock
+                      key={`${utility.bucket_id || 'utility'}-${index}`}
+                      utility={utility}
+                      bucketName={utility.bucket_id ? candidateNames.get(utility.bucket_id) : undefined}
+                      compact
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
       </Card>
@@ -441,6 +496,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
         kind="formal-selected"
         shadow={shadow}
         shadowDecisions={shadowDecisions}
+        utilityDecisions={utilityDecisions}
         formalBucketIds={formalBucketIds}
         shadowBucketIds={shadowBucketIds}
       />
@@ -451,6 +507,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
           kind="shadow-selected"
           shadow={shadow}
           shadowDecisions={shadowDecisions}
+          utilityDecisions={utilityDecisions}
           formalBucketIds={formalBucketIds}
           shadowBucketIds={shadowBucketIds}
         />
@@ -461,6 +518,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
         kind="formal-rejected"
         shadow={shadow}
         shadowDecisions={shadowDecisions}
+        utilityDecisions={utilityDecisions}
         formalBucketIds={formalBucketIds}
         shadowBucketIds={shadowBucketIds}
       />
@@ -474,6 +532,7 @@ function CandidateSection({
   kind,
   shadow,
   shadowDecisions,
+  utilityDecisions,
   formalBucketIds,
   shadowBucketIds,
 }: {
@@ -482,6 +541,7 @@ function CandidateSection({
   kind: 'formal-selected' | 'shadow-selected' | 'formal-rejected'
   shadow?: RecallShadowDebug
   shadowDecisions: Map<string, ShadowCandidateDecision>
+  utilityDecisions: Map<string, ShadowUtilityDebug>
   formalBucketIds: Set<string>
   shadowBucketIds: Set<string>
 }) {
@@ -521,6 +581,7 @@ function CandidateSection({
               formalSelected={Boolean(candidate.bucket_id && formalBucketIds.has(candidate.bucket_id))}
               shadowSelected={Boolean(candidate.bucket_id && shadowBucketIds.has(candidate.bucket_id))}
               shadowDecision={candidate.bucket_id ? shadowDecisions.get(candidate.bucket_id) : undefined}
+              utilityDecision={candidate.bucket_id ? utilityDecisions.get(candidate.bucket_id) : undefined}
               shadow={shadow}
             />
           ))}
@@ -540,12 +601,14 @@ function CandidateCard({
   formalSelected,
   shadowSelected,
   shadowDecision,
+  utilityDecision,
   shadow,
 }: {
   candidate: Candidate
   formalSelected: boolean
   shadowSelected: boolean
   shadowDecision?: ShadowCandidateDecision
+  utilityDecision?: ShadowUtilityDebug
   shadow?: RecallShadowDebug
 }) {
   const shadowCandidate = shadowDecision?.candidate
@@ -558,6 +621,7 @@ function CandidateCard({
     || (candidate.admission_reason?.startsWith('shadow_') ? candidate.admission_reason : '')
     || (shadowSelected ? 'shadow_selected' : 'shadow_not_selected_without_candidate_debug')
   const relevance = shadowCandidate?.shadow_relevance_debug || candidate.shadow_relevance_debug
+  const utility = shadowCandidate?.shadow_utility || candidate.shadow_utility || utilityDecision
   const semanticStatus = relevance?.semantic_status || candidate.semantic_status
   const semanticCopy = semanticStatus ? getSemanticStatusCopy(semanticStatus) : undefined
   const evidence = Array.from(new Set([
@@ -624,6 +688,28 @@ function CandidateCard({
         )}
       </div>
 
+      {shadow && (
+        <div className="mt-2">
+          <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">
+            召回价值 Utility
+          </p>
+          {utility ? (
+            <UtilityDecisionBlock utility={utility} compact />
+          ) : (
+            <div className="rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] px-3 py-2">
+              <p className="text-xs font-medium text-[var(--color-text-primary)]">
+                {shadow.utility_contract ? '未进入 Utility' : '旧记录没有 Utility 数据'}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">
+                {shadow.utility_contract
+                  ? '这个候选没有通过 Shadow relevance，或没有进入本轮 Utility 候选池，因此不会进行召回价值判断。'
+                  : '这条 Debug 产生于 Utility 上线前，不能从缺少字段推断为 neutral 或 reject。'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {shadow && !shadowDecision && !shadowSelected && shadow.fallback_strategy && (
         <p className="mt-2 text-xs leading-5 text-[var(--color-text-tertiary)]">
           本轮策略：{formatCopyWithCode(getFallbackStrategyCopy(shadow.fallback_strategy), shadow.fallback_strategy)}
@@ -676,6 +762,49 @@ function CandidateCard({
           <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--color-text-secondary)]">
             {candidate.content_preview}
           </p>
+        </details>
+      )}
+    </div>
+  )
+}
+
+function UtilityDecisionBlock({
+  utility,
+  bucketName,
+  compact = false,
+}: {
+  utility: ShadowUtilityDebug
+  bucketName?: string
+  compact?: boolean
+}) {
+  const copy = getUtilityStatusCopy(utility.status)
+  const reasons = utility.reason_codes || []
+  const identity = bucketName || utility.bucket_id
+
+  return (
+    <div className={`rounded-[var(--radius-md)] ${effectSurface(copy.effect)} ${compact ? 'px-2.5 py-2' : 'px-3 py-2.5'}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <MiniStatus effect={copy.effect}>{copy.title}</MiniStatus>
+        {identity && <span className="text-xs font-medium text-[var(--color-text-primary)]">{identity}</span>}
+        {utility.status && (
+          <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{utility.status}</span>
+        )}
+      </div>
+      <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">{copy.description}</p>
+      {(reasons.length > 0 || utility.context_available !== undefined || utility.contract) && (
+        <details className="mt-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)]/60 px-2.5 py-1.5">
+          <summary className="cursor-pointer text-[11px] font-medium text-[var(--color-text-secondary)]">
+            查看 Utility 原因与上下文
+          </summary>
+          <div className="mt-2 space-y-2">
+            {reasons.map((code) => <RuleExplanation key={code} code={code} compact />)}
+            <InfoRow
+              label="前文可用"
+              value={formatOptionalBoolean(utility.context_available, '可用', '不可用')}
+            />
+            <InfoRow label="命中主题" value={formatTerms(utility.matched_topic_terms || [])} />
+            <InfoRow label="判断器" value={utility.contract || '未记录'} />
+          </div>
         </details>
       )}
     </div>

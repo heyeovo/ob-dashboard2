@@ -35,7 +35,7 @@ production 必须配置以下五项：
 | `app/memory/` | 记忆库（三格切换） |
 | `app/cc/` | 聊天主页（cc / selfhost） |
 | `app/workbench/` | 工作台 |
-| `app/recall-lens/` | 召回透镜（按 session 查看 Gateway 召回轨迹、候选与中文规则解释） |
+| `app/recall-lens/` | 召回透镜（按 session 查看 necessity、relevance、utility 三档、正式/Shadow 单卡结果、候选证据与中文规则解释） |
 | `app/settings/` | 设置聚合页及子页 |
 | `app/impressions/` | 日回顾月历 |
 | `app/journal/` | 日记页 |

@@ -4,6 +4,7 @@ import {
   getPlannerStatusCopy,
   getRecallRuleCopy,
   getSemanticStatusCopy,
+  getUtilityStatusCopy,
 } from '@/app/recall-lens/recallReasonCopy'
 
 const necessityReasons = [
@@ -69,6 +70,15 @@ const shadowAdmissionReasons = [
   'shadow_query_topic_missing',
   'shadow_insufficient_relevance',
   'shadow_selected',
+  'shadow_utility_rejected',
+]
+
+const utilityReasons = [
+  'utility_explicit_recall_expectation',
+  'utility_resolves_contextual_reference',
+  'utility_relevant_value_uncertain',
+  'utility_exact_repetition_without_increment',
+  'utility_invalid_candidate',
 ]
 
 const evidenceLabels = [
@@ -99,6 +109,7 @@ describe('recall lens Chinese explanations', () => {
       ...necessityReasons,
       ...formalAdmissionReasons,
       ...shadowAdmissionReasons,
+      ...utilityReasons,
       ...evidenceLabels,
     ]) {
       expect(getRecallRuleCopy(code).title, code).not.toContain('未识别')
@@ -148,6 +159,16 @@ describe('recall lens Chinese explanations', () => {
     ]) {
       expect(getFallbackStrategyCopy(code).title, code).not.toContain('未识别')
     }
+  })
+
+  it('explains every utility status and keeps neutral eligible in product language', () => {
+    for (const status of ['promote', 'neutral', 'reject']) {
+      expect(getUtilityStatusCopy(status).title, status).not.toContain('未识别')
+    }
+    expect(getUtilityStatusCopy('promote').title).toBe('优先召回')
+    expect(getUtilityStatusCopy('neutral').title).toBe('保留召回资格')
+    expect(getUtilityStatusCopy('neutral').description).toContain('仍可被 Shadow 选择')
+    expect(getUtilityStatusCopy('reject').effect).toBe('reject')
   })
 
   it('handles dynamic planner errors and keeps unknown internal codes visible', () => {
