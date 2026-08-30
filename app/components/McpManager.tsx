@@ -9,6 +9,11 @@ import type {
   CcMcpServerStatus,
   CcMcpTransport,
 } from '@/app/lib/ccMcpTypes'
+import {
+  estimateMcpConfigTokens,
+  estimateMcpServerTokens,
+  estimateMcpToolTokens,
+} from '@/app/lib/contextTokenEstimate'
 
 type ApiPayload = {
   ok?: boolean
@@ -165,6 +170,14 @@ export default function McpManager() {
     () => new Map(statuses.map(status => [status.name, status])),
     [statuses],
   )
+  const totalMcpTokens = useMemo(() => estimateMcpConfigTokens(config), [config])
+  const missingSchemaCount = useMemo(
+    () => config.servers.reduce(
+      (count, server) => count + (server.tools || []).filter(tool => !tool.inputSchema).length,
+      0,
+    ),
+    [config],
+  )
 
   const persist = useCallback(async (
     servers: CcMcpServer[],
@@ -248,13 +261,15 @@ export default function McpManager() {
   }
 
   const toggleServer = async (name: string, enabled: boolean) => {
+    const previous = config.servers
     const next = config.servers.map(server =>
       server.name === name ? { ...server, enabled } : server,
     )
+    setConfig({ version: 1, servers: next })
     try {
       await persist(next, enabled ? 'MCP 已启用。' : 'MCP 已停用。')
     } catch {
-      /* 界面已显示错误 */
+      setConfig({ version: 1, servers: previous })
     }
   }
 
@@ -316,6 +331,7 @@ export default function McpManager() {
     toolName: string,
     enabled: boolean,
   ) => {
+    const previous = config.servers
     const next = config.servers.map(server =>
       server.name === serverName
         ? {
@@ -326,6 +342,7 @@ export default function McpManager() {
           }
         : server,
     )
+    setConfig({ version: 1, servers: next })
     try {
       await persist(
         next,
@@ -334,7 +351,7 @@ export default function McpManager() {
           : '工具已关闭，说明与参数会从下一句话开始移出上下文。',
       )
     } catch {
-      /* 界面已显示错误 */
+      setConfig({ version: 1, servers: previous })
     }
   }
 
@@ -564,6 +581,24 @@ export default function McpManager() {
         </div>
       </div>
 
+      <div className="mb-4 rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-4 py-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-disabled)]">
+              下轮 MCP Context 预估
+            </div>
+            <div className="mt-1 text-xl font-semibold tabular-nums text-[var(--color-text-heading)]">
+              {totalMcpTokens.toLocaleString()}{' '}
+              <span className="text-xs font-normal text-[var(--color-text-tertiary)]">token</span>
+            </div>
+          </div>
+          <div className="max-w-[15rem] text-right text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+            按已开启工具的名称、说明和参数结构估算；开关后立即变化，下一句话生效。
+            {missingSchemaCount ? ` 还有 ${missingSchemaCount} 个工具缺参数结构，请刷新工具清单。` : ''}
+          </div>
+        </div>
+      </div>
+
       {note && (
         <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-700">
           {note}
@@ -587,6 +622,8 @@ export default function McpManager() {
           const status = statusByName.get(server.name)
           const tools = server.tools || []
           const enabledCount = tools.filter(tool => tool.enabled).length
+          const serverTokens = estimateMcpServerTokens(server)
+          const serverShare = totalMcpTokens > 0 ? serverTokens / totalMcpTokens * 100 : 0
           return (
             <article
               key={server.name}
@@ -636,6 +673,7 @@ export default function McpManager() {
                   <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
                     {server.saveResults ? '保留 MCP 返回结果' : '不保存返回结果'}
                     {tools.length ? ` · 已开启 ${enabledCount}/${tools.length} 个工具` : ''}
+                    {` · 预估 ${serverTokens.toLocaleString()} token · MCP ${serverShare.toFixed(0)}%`}
                     {server.lastSyncedAt
                       ? ` · 最近同步 ${new Date(server.lastSyncedAt).toLocaleString('zh-CN')}`
                       : ''}
@@ -677,7 +715,12 @@ export default function McpManager() {
                     </span>
                   </summary>
                   <div className="mt-2 space-y-2">
-                    {tools.map(tool => (
+                    {tools.map(tool => {
+                      const toolTokens = estimateMcpToolTokens(tool)
+                      const toolShare = totalMcpTokens > 0 && server.enabled && tool.enabled
+                        ? toolTokens / totalMcpTokens * 100
+                        : 0
+                      return (
                       <div
                         key={tool.name}
                         className={`rounded-xl px-3 py-2.5 transition ${
@@ -715,6 +758,11 @@ export default function McpManager() {
                               {tool.openWorld && (
                                 <span className="text-[9px] text-amber-700">访问外部</span>
                               )}
+                              <span className="text-[9px] tabular-nums text-[var(--color-text-disabled)]">
+                                {server.enabled && tool.enabled
+                                  ? `预估 ${toolTokens.toLocaleString()} token · MCP ${toolShare.toFixed(1)}%`
+                                  : `开启后约 ${toolTokens.toLocaleString()} token`}
+                              </span>
                             </div>
                             <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
                               {toolDisplayDescription(tool)}
@@ -739,7 +787,8 @@ export default function McpManager() {
                           </select>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </details>
               ) : (

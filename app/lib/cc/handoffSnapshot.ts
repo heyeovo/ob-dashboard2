@@ -1,3 +1,5 @@
+import { estimateContextTokens } from '../contextTokenEstimate'
+
 export const HANDOFF_TOKEN_BUDGET = 100_000
 
 export type HandoffItemKind = 'daily_review' | 'pinned' | 'recent' | 'feel' | 'journal' | 'chat'
@@ -33,17 +35,12 @@ export type HandoffSnapshot = {
   }
 }
 
-const CJK_OR_WIDE = /[\u2e80-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g
-
 /**
  * Claude 与各 selfhost 模型没有一个共同 tokenizer。这里使用统一的保守估算：
  * 中日韩宽字符约 1.3 token，其余字符约 0.25 token。UI 必须标成「预估」。
  */
 export function estimateHandoffTokens(value: string): number {
-  const text = String(value || '')
-  if (!text) return 0
-  const wide = text.match(CJK_OR_WIDE)?.length || 0
-  return Math.ceil(wide * 1.3 + (text.length - wide) / 4)
+  return estimateContextTokens(value)
 }
 
 function itemBlock(item: HandoffSourceItem): string {

@@ -480,6 +480,20 @@ export default function CcChatPage() {
     compactionCount: Math.max(chat.stats.compactionCount, compactionCount),
   }
   const totalChars = chat.messages.reduce((n, m) => n + m.text.length, 0)
+  const conversationText = chat.messages.map(message => message.text).join('\n\n')
+  const enabledPromptModules = people.active.promptModules.filter(module =>
+    chat.promptModuleOverrides[module.id] ?? module.enabledByDefault,
+  )
+  const systemPromptText = [
+    people.active.basePrompt.trim(),
+    people.active.purpose.trim() ? `你的定位：\n${people.active.purpose.trim()}` : '',
+    enabledPromptModules.length
+      ? enabledPromptModules.map(module => `【${module.name}】\n${module.content.trim()}`).join('\n\n')
+      : '',
+    people.active.memoryEntries.length
+      ? `以下是关于对方的固定事实，始终成立：\n${people.active.memoryEntries.map(item => `- ${item.trim()}`).join('\n')}`
+      : '',
+  ].filter(Boolean).join('\n\n')
 
   const header = (
     <div className="cc-topbar flex items-center gap-2 px-3 py-2.5 md:gap-3 md:px-4">
@@ -1105,6 +1119,8 @@ export default function CcChatPage() {
           sessionId={chat.sessionId}
           stats={displayStats}
           totalChars={totalChars}
+          conversationText={conversationText}
+          systemPromptText={systemPromptText}
           activeProvider={shownProvider}
           activeModel={shownModel}
           contextTokens={ctxTokens}

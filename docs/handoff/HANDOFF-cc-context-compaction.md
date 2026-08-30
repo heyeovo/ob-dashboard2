@@ -1,7 +1,7 @@
 # HANDOFF — CC 当前 Context 与自动压缩状态展示
 
 > 建立时间：2026-08-23  
-> 完成时间：2026-08-23  
+> 完成时间：2026-08-23；2026-08-30 补充模块占比
 > 仓库：`ob-dashboard2`  
 > 状态：代码完成，目标测试、ESLint、production build 均通过；等待用户本机实际 CC 会话验收
 
@@ -15,6 +15,8 @@
 - 桌面端沿用原有标题下运行信息行显示 Context 与缓存；未新增入口按钮，“本窗”按钮保持原位。手机顶栏不加状态行，只在“本窗”弹窗查看。
 - “本窗口设置”始终显示当前/上次模型调用 Context、百分比、约剩 token、模型切换待确认、最近压缩及次数。Prompt cache 继续使用原有两档 TTL，字段与展示均独立。
 - 每轮把最后真实模型调用时间写入 `cache_snapshot`；live query 闲置回收、页面刷新或服务重启后，前端仍按该时间计算 1h 系统缓存和 5m 会话缓存。到期显示“已过期”，无记录显示“待确认”，不再整项消失。
+- 2026-08-30：本窗口设置新增宏观 Context 占比，只展示提示词、换窗资料、MCP、Web、本窗对话和 CC/SDK 其他；总量沿用 SDK 实际值，各模块明确标为预估，差额不强行归因。
+- 2026-08-30：MCP 配置页按服务与工具显示下轮 token 预估及占全部 MCP 的比例。`tools/list` 的 `inputSchema` 随目录持久化，服务/工具开关即时重算，保存失败回滚；旧目录需点一次“刷新工具清单”补齐 schema。
 - 新字段上线前的旧 CC 轮次以 Haven `created_at` 作为兼容缓存基线；它只比模型 result 晚数秒，旧缓存到期后会稳定显示“已过期”。
 - 手动压缩按钮只出现在 CC 工作模式，只允许当前在线、空闲会话。按钮发送 Claude Code 原生 `/compact`，先确认并明确提示会消耗一次摘要模型调用；不会唤醒已回收 query。
 - Pro 与 API 使用 `subscription` / `api:<provider>` lane 隔离 Context 与压缩记录；切线路不显示另一条线路的旧数字。
@@ -56,6 +58,7 @@
 - `npx vitest run tests/cc-sse-consumer.test.ts tests/cc-history.test.ts tests/cc-runTurn.test.ts`：35/35 通过。
 - 定向 ESLint：通过。
 - `npm run build`：通过，`/api/cc-compact` 已进入 route 清单。
+- 2026-08-30 模块占比补充：`npm run build` 通过；本地浏览器被 Dashboard 登录页阻挡，未代填口令，待登录后做手机端视觉验收。
 - `git diff --check`：通过。
 - 完整 `npm test` 为 181 通过、1 跳过、1 个既有 selfhost 断言失败；失败项仍期待隐藏运行时信息不含 `session_id`，与本次 CC 改动无关，按范围未修改 selfhost。
 
@@ -70,6 +73,7 @@
 5. 在线且空闲时点“立即压缩”；确认弹出成本提示，并在消息间出现“手动压缩已完成 · Nk → Nk”。历史不足时应明确显示没有发生压缩。
 6. 若真实发生自动压缩，确认分隔线出现在当轮真实位置，Context 切到 post tokens，刷新后仍能恢复。
 7. 切换 Pro/API，确认两条线路不串 Context 或缓存时间。
+8. 打开“本窗”，确认宏观占比条不展开 MCP 服务；前往“工具 · MCP”，刷新一次工具清单后确认服务/工具 token 会随开关即时变化，下一句话后总 Context 再更新。
 
 ## 8. 部署
 

@@ -136,6 +136,10 @@ function cleanTools(value: unknown, serverId: string): CcMcpToolConfig[] {
       name,
       title: typeof raw.title === 'string' ? raw.title : undefined,
       description: typeof raw.description === 'string' ? raw.description : undefined,
+      inputSchema:
+        raw.inputSchema && typeof raw.inputSchema === 'object' && !Array.isArray(raw.inputSchema)
+          ? raw.inputSchema as Record<string, unknown>
+          : undefined,
       enabled: raw.enabled !== false,
       readOnly: typeof raw.readOnly === 'boolean' ? raw.readOnly : undefined,
       destructive: typeof raw.destructive === 'boolean' ? raw.destructive : undefined,

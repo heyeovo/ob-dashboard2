@@ -8,6 +8,8 @@ export type CcMcpToolConfig = {
   name: string
   title?: string
   description?: string
+  /** tools/list 返回的参数结构；用于发送给模型，也用于前端预估 context。 */
+  inputSchema?: Record<string, unknown>
   enabled: boolean
   readOnly?: boolean
   destructive?: boolean
@@ -51,6 +53,7 @@ export type CcMcpToolStatus = {
   name: string
   title?: string
   description?: string
+  inputSchema?: Record<string, unknown>
   enabled: boolean
   readOnly?: boolean
   destructive?: boolean

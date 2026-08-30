@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CcEngine, CcProUsage, CcSessionStats } from './types'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
@@ -11,6 +11,13 @@ import {
   type CcUpstreamPick,
 } from './upstream'
 import type { CcWebSettings } from './webSettings'
+import type { CcMcpConfig } from '@/app/lib/ccMcpTypes'
+import type { HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
+import {
+  estimateContextTokens,
+  estimateMcpConfigTokens,
+  estimateWebToolTokens,
+} from '@/app/lib/contextTokenEstimate'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
 //
@@ -35,6 +42,9 @@ type Props = {
   stats: CcSessionStats
   /** 界面上这一窗的总字数（消息正文加起来） */
   totalChars: number
+  conversationText: string
+  /** 当前协作者实际启用的基础提示词、定位、模块与固定事实。 */
+  systemPromptText: string
   /** 最后一轮实际使用的上游；没有已完成轮次时由页面回退到当前选择。 */
   activeProvider: string
   activeModel: string
@@ -95,6 +105,8 @@ export default function CcWindowSettings({
   sessionId,
   stats,
   totalChars,
+  conversationText,
+  systemPromptText,
   activeProvider,
   activeModel,
   contextTokens,
@@ -120,6 +132,8 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const [compactNote, setCompactNote] = useState('')
+  const [mcpConfig, setMcpConfig] = useState<CcMcpConfig>({ version: 1, servers: [] })
+  const [backgroundTokens, setBackgroundTokens] = useState(0)
   const models = modelsFor(upstream, pick.kind, pick.providerId)
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
@@ -145,6 +159,66 @@ export default function CcWindowSettings({
   const contextStale = Boolean(
     snapshot?.model && shownActiveModel && modelLabel(snapshot.model, models, pick.kind) !== shownActiveModel,
   )
+
+  useEffect(() => {
+    let alive = true
+    const loadBreakdownInputs = async () => {
+      const [mcpResponse, sessionResponse] = await Promise.all([
+        fetch('/api/cc-mcp', { cache: 'no-store' }),
+        sessionId
+          ? fetch(`/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&limit=1`, { cache: 'no-store' })
+          : Promise.resolve(null),
+      ])
+      if (mcpResponse.ok) {
+        const payload = await mcpResponse.json() as { config?: CcMcpConfig }
+        if (alive && payload.config) setMcpConfig(payload.config)
+      }
+      if (sessionResponse?.ok) {
+        const payload = await sessionResponse.json() as {
+          session?: {
+            daily_review_enabled?: boolean
+            daily_review_snapshot?: Array<{ content?: string }>
+            handoff_snapshot?: HandoffSnapshot
+          }
+        }
+        const session = payload.session
+        const handoff = Number(session?.handoff_snapshot?.stats?.effective_estimated_tokens || 0)
+        const daily = session?.daily_review_enabled
+          ? estimateContextTokens((session.daily_review_snapshot || []).map(item => item.content || '').join('\n\n'))
+          : 0
+        if (alive) setBackgroundTokens(handoff + daily)
+      }
+    }
+    void loadBreakdownInputs().catch(() => undefined)
+    return () => { alive = false }
+  }, [sessionId])
+
+  const contextBreakdown = useMemo(() => {
+    const known = [
+      { label: '提示词', tokens: estimateContextTokens(systemPromptText), color: 'var(--color-primary)' },
+      { label: '换窗资料', tokens: backgroundTokens, color: 'var(--color-primary-gradient)' },
+      { label: 'MCP 工具', tokens: estimateMcpConfigTokens(mcpConfig), color: 'var(--color-resolved)' },
+      {
+        label: 'Web 工具',
+        tokens: estimateWebToolTokens(web.searchEnabled, web.fetchEnabled),
+        color: 'var(--color-digested)',
+      },
+      { label: '本窗对话', tokens: estimateContextTokens(conversationText), color: 'var(--color-pinned)' },
+    ]
+    const knownTotal = known.reduce((sum, item) => sum + item.tokens, 0)
+    const base = Math.max(shownContextTokens, knownTotal, 1)
+    return {
+      base,
+      rows: [
+        ...known,
+        {
+          label: 'CC/SDK 其他',
+          tokens: Math.max(0, shownContextTokens - knownTotal),
+          color: 'var(--color-text-disabled)',
+        },
+      ].filter(item => item.tokens > 0),
+    }
+  }, [backgroundTokens, conversationText, mcpConfig, shownContextTokens, systemPromptText, web.fetchEnabled, web.searchEnabled])
 
   const requestCompact = async () => {
     if (!window.confirm('手动压缩会调用模型生成摘要并消耗一次用量。压缩后原对话仍保存在 Haven，但 CC 当前窗口会改用摘要继续。确定现在压缩吗？')) return
@@ -215,6 +289,35 @@ export default function CcWindowSettings({
                   {shownContextMax > 0 ? ` · 约剩 ${fmtK(Math.max(0, shownContextMax - shownContextTokens))}` : ''}
                 </div>
             ) : null}
+            <div className="my-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-[10.5px] font-medium text-[var(--color-text-secondary)]">Context 模块占比</span>
+                <span className="text-[9.5px] text-[var(--color-text-disabled)]">模块为预估 · 总量为实际</span>
+              </div>
+              <div className="mb-2 flex h-2 overflow-hidden rounded-full bg-[var(--color-border-light)]">
+                {contextBreakdown.rows.map(row => (
+                  <div
+                    key={row.label}
+                    title={`${row.label}：约 ${row.tokens.toLocaleString()} token`}
+                    style={{
+                      width: `${row.tokens / contextBreakdown.base * 100}%`,
+                      backgroundColor: row.color,
+                    }}
+                  />
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {contextBreakdown.rows.map(row => (
+                  <div key={row.label} className="flex min-w-0 items-center gap-1.5 text-[9.5px]">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+                    <span className="min-w-0 flex-1 truncate text-[var(--color-text-tertiary)]">{row.label}</span>
+                    <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
+                      {fmtK(row.tokens)} · {(row.tokens / contextBreakdown.base * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
             {stats.lastCompaction ? (
               <div className={ROW}>
                 <span className={KEY}>压缩状态</span>

@@ -79,6 +79,7 @@ export async function discoverMcpServer(server: CcMcpServer): Promise<CcMcpServe
           name,
           title: tool.title,
           description: tool.description,
+          inputSchema: tool.inputSchema as Record<string, unknown>,
           enabled: previous.get(name)?.enabled !== false,
           readOnly: tool.annotations?.readOnlyHint,
           destructive: tool.annotations?.destructiveHint,

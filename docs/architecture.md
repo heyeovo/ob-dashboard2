@@ -56,7 +56,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `TimelineDayGroup.tsx` | 时间线按天分组容器 |
 | `EntryGrid.tsx` | 记忆格视图网格容器 |
 | `HomeToolDrawer.tsx` | 主页工具抽屉 |
-| `McpManager.tsx` | MCP 工具管理组件 |
+| `McpManager.tsx` | MCP 工具管理组件；按服务/工具实时显示下轮 context 预估，工具开关先更新估算、保存失败回滚 |
 | `ServiceWorkerRegister.tsx` | PWA service worker 注册 |
 
 > 完整设计规范见 `DESIGN.md`。
@@ -169,7 +169,9 @@ Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionSto
 
 ## cc 聊天架构
 
-"本窗口设置"同时显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时估算。
+"本窗口设置"同时显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时估算，并以宏观堆叠条展示提示词、换窗资料、MCP、Web、本窗对话及 CC/SDK 其他开销。SDK 总 Context 是实际值；模块使用统一的中日韩宽字符保守 token 估算，无法归属的实际差额留在“CC/SDK 其他”，不伪装成精确账单。
+
+MCP `tools/list` 同步时持久化每个工具的名称、说明和 `inputSchema`。工具页按实际会送给模型的 tool definition 形状预估每个工具和服务的 token，并以全部已启用 MCP token 为占比分母；服务/工具开关会立即刷新“下轮预估”，实际 CC query 在下一句话重载。旧目录没有 schema 时页面提示先刷新工具清单。
 
 协作者的基础提示词可独立编辑；其余长期提示词按模块保存到 Haven，每条包含名称、正文、排序位置和"新窗口默认开启"状态。旧的单一 `prompt` 会无损显示为一个默认开启模块，保存后迁入新结构。协作者设置页负责新增、编辑、排序、删除和全局默认，聊天输入框「＋ → 提示词模块」只保存当前窗口的启停覆盖。窗口覆盖缺省时跟随协作者默认。
 

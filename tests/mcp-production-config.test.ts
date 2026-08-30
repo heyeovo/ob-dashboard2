@@ -50,6 +50,26 @@ describe('MCP production address boundary', () => {
     })
   })
 
+  it('preserves discovered input schemas for context estimates', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const config = validateMcpConfig({
+      ...remoteConfig('https://mcp.example/mcp'),
+      servers: [{
+        ...remoteConfig('https://mcp.example/mcp').servers[0],
+        tools: [{
+          name: 'mcp__ombre_brain__search',
+          description: 'Search memories',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+          enabled: true,
+        }],
+      }],
+    })
+    expect(config.servers[0].tools?.[0].inputSchema).toEqual({
+      type: 'object',
+      properties: { query: { type: 'string' } },
+    })
+  })
+
   it('loads persisted MCP config through the existing Haven gateway path', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('HAVEN_GATEWAY_URL', 'https://haven.example/root/')
