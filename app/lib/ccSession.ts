@@ -631,6 +631,25 @@ export function rememberResumePoint(resumeKey: string, ccSessionId: string) {
   if (ccSessionId) resumeHints.set(resumeKey, ccSessionId)
 }
 
+/** Context GC 只能处理已落盘且空闲的线路；有回复或工具审批时严格拒绝。 */
+export function prepareSessionForContextGc(
+  sessionId: string,
+  laneId: string,
+): { ok: boolean; error: string } {
+  const live = registry.get(sessionId)
+  const resumeKey = `${sessionId}::${laneId}`
+  if (hasPending(sessionId)) return { ok: false, error: '还有工具操作等待批准，暂时不能减负' }
+  if (!live || live.resumeKey !== resumeKey) return { ok: true, error: '' }
+  if (live.busy || live.compacting) return { ok: false, error: '当前正在回复或压缩，结束后再减负' }
+  rememberResumePoint(resumeKey, live.ccSessionId)
+  dropSession(sessionId)
+  return { ok: true, error: '' }
+}
+
+export function activateContextGcFork(sessionId: string, laneId: string, ccSessionId: string): void {
+  rememberResumePoint(`${sessionId}::${laneId}`, ccSessionId)
+}
+
 /** 界面顶部要显示的会话状态。 */
 export type SessionStats = {
   live: boolean

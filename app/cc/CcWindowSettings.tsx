@@ -12,6 +12,7 @@ import {
 } from './upstream'
 import type { CcWebSettings } from './webSettings'
 import CcContextAnalysis from './CcContextAnalysis'
+import CcContextGc from './CcContextGc'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
 //
@@ -126,7 +127,7 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const [compactNote, setCompactNote] = useState('')
-  const [activeTab, setActiveTab] = useState<'session' | 'context'>('session')
+  const [activeTab, setActiveTab] = useState<'session' | 'context' | 'gc'>('session')
   const models = modelsFor(upstream, pick.kind, pick.providerId)
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
@@ -152,6 +153,7 @@ export default function CcWindowSettings({
   const contextStale = Boolean(
     snapshot?.model && shownActiveModel && modelLabel(snapshot.model, models, pick.kind) !== shownActiveModel,
   )
+  const laneId = pick.kind === 'subscription' ? 'subscription' : `api:${pick.providerId || 'default'}`
 
   const requestCompact = async () => {
     if (!window.confirm('手动压缩会调用模型生成摘要并消耗一次用量。压缩后原对话仍保存在 Haven，但 CC 当前窗口会改用摘要继续。确定现在压缩吗？')) return
@@ -187,6 +189,7 @@ export default function CcWindowSettings({
           {([
             ['session', '会话信息'],
             ['context', 'Context 分析'],
+            ['gc', '窗口减负'],
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -217,6 +220,8 @@ export default function CcWindowSettings({
               live={stats.live}
               busy={stats.busy}
             />
+          ) : activeTab === 'gc' ? (
+            <CcContextGc sessionId={sessionId} laneId={laneId} busy={stats.busy} />
           ) : (
           <>
           {/* ── 只读信息 ── */}

@@ -58,6 +58,7 @@ export type HavenConversationSession = {
     cc_session_id?: unknown
     seen_round_id?: unknown
   }>
+  context_gc: HavenContextGcState
   prompt_module_overrides: Record<string, boolean>
   mode: 'chat' | 'work'
   daily_review_enabled: boolean
@@ -70,6 +71,25 @@ export type HavenConversationSession = {
   state_version: number
   deleted_at: string | null
   updated_at: string
+}
+
+export type HavenContextGcHistory = {
+  at: string
+  mode: 'manual' | 'auto'
+  lane_id: string
+  previous_cc_session_id: string
+  next_cc_session_id: string
+  released_tokens: number
+  candidate_count: number
+  counts: Record<string, number>
+}
+
+export type HavenContextGcState = {
+  auto_enabled?: boolean
+  schedule_time?: string
+  protected_keys?: string[]
+  history?: HavenContextGcHistory[]
+  last_auto_date?: string
 }
 
 export type HavenSession = {
@@ -552,6 +572,49 @@ export async function patchConversationSessionState(input: {
     path: '/gateway/api/conversation/session',
     sessionId,
     body,
+  })
+  return {
+    ok: res.ok,
+    session: res.ok && res.payload.session && typeof res.payload.session === 'object'
+      ? res.payload.session as HavenConversationSession
+      : null,
+    error: res.error,
+    httpStatus: res.httpStatus,
+  }
+}
+
+export async function patchConversationContextGc(input: {
+  sessionId: string
+  personaId: string
+  expectedStateVersion: number
+  preferences?: { auto_enabled?: boolean; protected_keys?: string[] }
+  commit?: {
+    lane_id: string
+    expected_cc_session_id: string
+    next_cc_session_id: string
+    released_tokens: number
+    candidate_count: number
+    counts: Record<string, number>
+    mode: 'manual' | 'auto'
+    local_date?: string
+  }
+}): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
+  const sessionId = input.sessionId.trim()
+  const personaId = input.personaId.trim()
+  if (!sessionId || !personaId) {
+    return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
+  }
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId,
+    body: {
+      session_id: sessionId,
+      persona_id: personaId,
+      expected_state_version: input.expectedStateVersion,
+      ...(input.preferences ? { context_gc_preferences: input.preferences } : {}),
+      ...(input.commit ? { context_gc_commit: input.commit } : {}),
+    },
   })
   return {
     ok: res.ok,

@@ -94,3 +94,14 @@
 - 验证：Haven `tests.test_gateway_state_contracts` 22 项通过并完成 Python 语法检查；Dashboard 定点 24 项通过，production build 通过。完整前端测试 199 通过、1 跳过、1 个既有 `automation-pro-runner append_current` 断言失败，本次未改该模块。
 - 发布顺序：先由用户提交 Haven，并在 Coolify `Ombre Brain → production → haven-test-stack → Environment Variables` 把 `HAVEN_RELEASE_SHA` 更新为完整 commit SHA，再普通 Restart/Deploy，确认 Brain/Gateway healthy；随后提交并 Redeploy Dashboard。
 - 验收：在同一 CC Pro 窗口发言并记录 1h/5m 缓存写入和 Pro 额度时间，重部署 Dashboard 后立即再发一句；1h 系统前缀应继续命中（仍受上游有效期约束），Pro 额度应先显示同一份上次值，在线查询成功后刷新时间。打开其他窗口应看到同一额度快照。
+
+## 10. 2026-08-31 Context GC / 窗口减负
+
+- 当前完成状态：Dashboard 与 Haven 实现完成，定向转换测试、Haven 23 项状态契约测试和 Dashboard production build 通过；尚未在用户真实长会话执行减负，自动开关默认关闭。
+- 产品决定：入口为“本窗口设置”的第三个 Tab“窗口减负”。默认不勾选任何候选；可逐项清理、暂时不选或按稳定 key“始终保留”。
+- 清理边界：只识别 `ombre:<bucket_id>#...` 的 OB 动态卡片和纯文字 `search_chat` tool result。OB 卡片替换为 `read_bucket(bucket_id)` 最小引用；search 只留“曾搜索「query」”。用户/助手正文、`date_recall`、普通 breath 结果和结构未知的工具结果不动，不调用额外 LLM 摘要。
+- 会话边界：Agent SDK `forkSession` 先复制原 Claude transcript，只原子改写副本；Haven 同时校验 `state_version` 与旧 `cc_session_id` 后才更新对应 lane。Dashboard `ob2-*` session 不变，`conversation_turns` 不复制、不新增，因此不会重复聊天消息。旧 Claude transcript 暂时保留，供回退。
+- 持久化：Haven `conversation_sessions.context_gc_json` 保存默认关闭的自动开关、固定 05:30、保护 key、最近 20 次 GC 记录和释放 token 估算；`cc_lanes_json` 只替换对应 lane 的 Claude 内部 session 指针。
+- 自动边界：Dashboard Node 启动时注册香港时区分钟调度，05:30–05:59 内重试；默认关闭。启用后处理窗口各 CC lane 的未保护安全候选；Haven 日回顾/周轨迹任一最新 run/execution 仍为 running、本地 Pro runner 忙、窗口回复中或有工具待批准时跳过并等待下一分钟；状态接口不可读时 fail closed。Dashboard 进程未运行则当日不会补跑。
+- 验收：部署 Haven 与 Dashboard 后，先保持自动关闭；打开一个有 OB 召回或 `search_chat` 的窗口，扫描并只选一项执行，确认窗口 ID/正文/轮次不变、下一句能继续、列表释放量合理、始终保留项不会被选中。真实结果可接受后再按窗口开启 05:30 自动减负。
+- 发布顺序：用户分别 commit + push；先更新 Haven Coolify 的 `HAVEN_RELEASE_SHA` 为完整 Haven commit SHA 并 Deploy/Restart，确认 Brain/Gateway healthy，再部署 Dashboard。未部署 Haven 前不要在 Dashboard 执行减负。

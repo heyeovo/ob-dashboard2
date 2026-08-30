@@ -143,6 +143,13 @@
 - **边界：**不把历史图片强行搬到最新 user message；不新增自动 / 手动重附加 UI；不改变只重放最近 2 个 selfhost 图片轮次、清除语义或 Haven 私有附件规则，除非新产品决定另行确认。
 - **验收：**相同模型 / Provider 在插入 cc 轮次后仍能识别历史图，且图片 token、清除、刷新、换设备和历史缩略图不回退。
 
+#### CC-08｜Context GC 旧 Claude transcript 的有界保留
+
+- **状态：**首版为安全回退暂不自动删除。每次窗口减负会保留原 Claude transcript；Haven 最近 20 条 GC 历史只限制日志，不会删除本地旧文件，长期频繁使用会增加本机 `.claude/projects` 存储。
+- **开工第一步：**先由用户确认保留口径（例如每个 lane 最近 3 份或 30 天），并确认是否需要 UI 一键回退；在回退能力验收前不自动删。
+- **边界：**只允许删除 Haven GC 历史明确记录、且已不是任何 `cc_lanes_json.cc_session_id` 当前指针的 fork；不得按目录时间批量删除未知 Claude 会话，不删除 Dashboard `conversation_turns` 或附件。
+- **验收：**超过保留口径的非活动 GC 副本可审计地清理，当前 lane、可回退副本、普通 Claude Code 会话和 Dashboard 历史均不受影响。
+
 ### cc 后续产品候选卡（尚未形成实施窗口）
 
 > 这些是增强候选，不是 v1 欠账。选中后先做产品定案；定案前不改代码。

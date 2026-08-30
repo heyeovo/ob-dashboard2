@@ -1,13 +1,13 @@
 import { timingSafeEqual } from 'node:crypto'
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk'
 import { buildCcEnv } from '@/app/lib/ccEnv'
+import { isAutomationRunnerBusy, setAutomationRunnerBusy } from '@/app/lib/automationRunnerState'
 
 export const runtime = 'nodejs'
 export const maxDuration = 360
 
 const TASKS = new Set(['daily_review', 'weekly_journey'])
 const MODEL_PATTERN = /^claude-(?:sonnet|opus)-[a-z0-9-]+$/i
-const LOCK_KEY = '__ob2_automation_pro_runner_busy__'
 const WEEKLY_JOURNEY_FLAT_FIELDS = [
   'candidate_type',
   'rationale_text',
@@ -47,8 +47,6 @@ const WEEKLY_JOURNEY_TRANSPORT_INSTRUCTION = `
 rationale_text 每条理由单独一行；evidence_bucket_ids_text 每个 materials 证据 ID 单独一行。
 append_current 使用 revised_content、summary；revised_content 必须是整合、去重后的完整阶段正文，不是追加片段。transition 使用 close_stage_end、close_summary、create_name、create_stage_start、create_summary、create_content。
 当前 candidate_type 不使用的字符串字段必须输出空字符串。runner 会确定性还原为产品要求的 proposal 对象，再由 Haven 做最终严格校验。`.trim()
-
-type RunnerGlobal = typeof globalThis & { [LOCK_KEY]?: boolean }
 
 function splitFlatList(value: unknown) {
   return Array.from(new Set(
@@ -130,8 +128,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error_code: 'unauthorized', error: '未授权' }, { status: 401 })
   }
 
-  const globalRunner = globalThis as RunnerGlobal
-  if (globalRunner[LOCK_KEY]) {
+  if (isAutomationRunnerBusy()) {
     return Response.json({ ok: false, error_code: 'pro_busy', error: '另一项 Pro 自动化正在运行' }, { status: 409 })
   }
 
@@ -152,7 +149,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error_code: 'invalid_model', error: '只允许固定 Claude Sonnet/Opus 模型 ID' }, { status: 400 })
   }
 
-  globalRunner[LOCK_KEY] = true
+  setAutomationRunnerBusy(true)
   const abortController = new AbortController()
   const timeout = setTimeout(() => abortController.abort(), 330_000)
   try {
@@ -216,6 +213,6 @@ export async function POST(request: Request) {
     )
   } finally {
     clearTimeout(timeout)
-    globalRunner[LOCK_KEY] = false
+    setAutomationRunnerBusy(false)
   }
 }
