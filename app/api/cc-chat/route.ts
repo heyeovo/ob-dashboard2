@@ -284,7 +284,7 @@ async function loadTurnInputs(body: ChatBody) {
     ? dailyReviewSystemBlock(sessionSnapshot.session.daily_review_snapshot)
     : ''
   personaAppend = [personaAppend, dailyReviewBlock].filter(Boolean).join('\n\n')
-  personaAppend = [personaAppend, sessionStaticContext(sessionId)].filter(Boolean).join('\n\n')
+  personaAppend = [personaAppend, sessionStaticContext(String(body.session_id || ''))].filter(Boolean).join('\n\n')
 
   // 缓存稳定性：同一个 session 生命周期内 personaAppend 不能变，否则 resume 后
   // 系统提示前缀跟原来对不上 → 1h 缓存 miss → 全量重写。
