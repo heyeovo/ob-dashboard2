@@ -11,7 +11,7 @@ import {
   type HavenTurn,
 } from '@/app/lib/havenTurns'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
-import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
+import { beijingRuntimeContext, sessionStaticContext } from '@/app/lib/runtimeContext'
 import { resolveAttachments, type ResolvedAttachment } from '@/app/lib/havenAttachments'
 import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
 import {
@@ -228,11 +228,13 @@ export function assembleSystem(
   promptModuleOverrides: Record<string, boolean> = {},
   dailyReviewSnapshot: HavenConversationSession['daily_review_snapshot'] = [],
   handoffContext = '',
+  sessionId = '',
 ): string {
   return [
     buildPersonaAppend(persona, promptModuleOverrides),
     dailyReviewSystemBlock(dailyReviewSnapshot),
     handoffContext,
+    sessionId ? sessionStaticContext(sessionId) : '',
     recallSystemBlock(recalledContext),
   ].filter(Boolean).join('\n\n')
 }
@@ -566,6 +568,7 @@ export function createSelfhostStream(
           prepared.session?.prompt_module_overrides,
           prepared.session?.daily_review_enabled ? prepared.session.daily_review_snapshot : [],
           prepared.handoffContext,
+          request.sessionId,
         )
         try {
           mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal)
@@ -579,7 +582,7 @@ export function createSelfhostStream(
         }))
         // 与 cc 保持一致：当前时间只进入本轮模型请求，不改浏览器气泡或 Haven user_text。
         // 预算和实际请求必须使用同一份文本，避免隐藏时间绕过上下文上限计算。
-        const currentUserText = `${request.text}\n\n${beijingRuntimeContext(new Date(), request.sessionId)}`
+        const currentUserText = `${request.text}\n\n${beijingRuntimeContext(new Date())}`
         const currentAttachments = prepared.currentAttachments || []
         const history = historyWithPersistedRecall(prepared.history)
         const replayableImageTurnIds = new Set(

@@ -535,7 +535,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
     // 当前时间只放在本轮 user 消息的动态尾部：前端气泡和 Haven user_text 仍保存用户原话；
     // 下一轮它成为固定历史，不会改写旧时间，也不会让稳定的系统提示/历史缓存前缀失效。
-    content += `\n\n${beijingRuntimeContext(new Date(), sessionId)}`
+    content += `\n\n${beijingRuntimeContext(new Date())}`
 
     const attachmentContent: Array<
       | { type: 'text'; text: string }
