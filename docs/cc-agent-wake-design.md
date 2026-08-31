@@ -1,6 +1,6 @@
 # CC 缓存保活与 Claude 主动唤醒方案
 
-> 状态：产品方案已确认，尚未实施  
+> 状态：产品方案已确认；阶段 1 Haven 持久控制面已实施，阶段 2–5 待实施
 > 建立时间：2026-08-31  
 > 涉及仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 
@@ -323,7 +323,7 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 
 ## 12. 分阶段实施
 
-### 阶段 1：Haven 持久控制面
+### 阶段 1：Haven 持久控制面（已完成）
 
 - 兼容迁移：schedule、run、`turn_kind`。
 - schedule CRUD、CAS、due claim、lease 恢复、幂等测试。
@@ -379,4 +379,3 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - WebSocket 实时后台消息。
 - 新的自动 Context GC 策略。
 - 允许后台自动批准 Bash、写文件或原本需要人工确认的 MCP。
-
