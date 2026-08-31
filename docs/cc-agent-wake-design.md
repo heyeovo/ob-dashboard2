@@ -1,0 +1,382 @@
+# CC 缓存保活与 Claude 主动唤醒方案
+
+> 状态：产品方案已确认，尚未实施  
+> 建立时间：2026-08-31  
+> 涉及仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
+
+## 1. 目标与边界
+
+在 Dashboard 的同一个 CC 会话中加入两种后台触发能力：
+
+1. 缓存保活：在 1h prompt cache 失效前，用一次真实模型 turn 刷新缓存。
+2. 主动唤醒：Claude 可以给未来的自己设置下一次 wake 时间和一条很短的原因备注。
+
+两者必须共用当前 CC lane、现有 Agent SDK session 和正常 turn 串行入口。Scheduler 持久化在 Haven，Claude 进程不得自行 `sleep`。
+
+第一版只支持 CC，不支持 selfhost 主动唤醒；只保活当前最后活跃的 CC lane，不同时维持多条 subscription/API provider 线路。
+
+## 2. 已确认的产品决定
+
+- 即使 Claude 没设置下一次 wake，只要缓存保活开启，55 分钟兜底也会真正唤醒 Claude。它可以 no-op、发消息、调用允许的工具或设置下一次 wake。
+- 不设安静时段，任何时间都允许 Claude 主动说话。
+- 第一版夜间持续保活，不增加凌晨 03:00–09:00 自动停止规则；上线后根据真实 55 分钟样本再决定。
+- 连续 24 小时没有用户活动时，只自动停止缓存保活，不删除 Claude 已经设置的未来 wake。
+- “缓存保活”和“允许主动唤醒”是两个独立开关。关闭保活后，已有 schedule 仍可在未来冷启动执行；如果没有已安排的 wake，就只能等待用户或外部任务再次触发。
+- 提供“暂停保活直到下次用户消息”快捷操作；用户下一次发言时自动重新进入保活。
+- Claude 主动设置 wake 的最短间隔暂定 10 分钟。
+- 每窗口滚动 24 小时后台模型 turn 上限暂定 48 次，可动态调整；用户消息不计入上限。达到上限后停止后台请求，允许 cache 自然冷掉。
+- 主动 wake 可以使用已开启且按现有规则自动允许的 MCP 与只读工具。需要人工批准的 MCP、Bash 和文件写入在后台不等待审批；Claude 如确有需要，应发普通消息请用户处理。
+- UI 不占用对话窗口顶部。在“本窗口设置”增加第 4 个 Tab“主动唤醒”，排在“会话信息 / Context 分析 / 窗口减负”之后。
+
+## 3. 双时钟如何运转
+
+每次真实模型请求成功后，同时更新：
+
+- `cache_keepalive_deadline = last_cache_refresh_at + 55min`
+- Claude 可选设置的 `next_agent_wake_at`
+
+实际调度时间：
+
+```text
+due_at = min(next_agent_wake_at, cache_keepalive_deadline)
+```
+
+示例：
+
+- 11:00 用户发言，缓存保活时间变为 11:55。
+- Claude 设置 12:30 主动醒来。
+- 11:55 先执行缓存保活 wake，并把新的缓存保活时间推到 12:50。
+- Claude 若未修改原计划，12:30 仍会主动 wake。
+- 12:30 的真实模型请求又把缓存保活时间推到 13:25。
+
+任何更早发生的用户消息或主动 wake 都会刷新缓存时钟，因此不会在原定 55 分钟点再重复 heartbeat。
+
+Cache TTL 必须按模型请求开始时间计算。只有成功 result 的 usage 能确认本次发生 cache read/write 时，才把该请求的 `started_at` 写成 `last_cache_refresh_at`；不能用回复结束时间高估剩余 TTL。
+
+## 4. 开关与生命周期
+
+### 4.1 两个独立开关
+
+| 缓存保活 | 允许主动唤醒 | 行为 |
+|---|---|---|
+| 开 | 开 | 55 分钟兜底，同时执行 Claude schedule |
+| 关 | 开 | 不做固定 heartbeat；已有 schedule 仍执行，可能冷启动 |
+| 开 | 关 | 只做缓存 heartbeat，不接受 Claude 的主动 schedule |
+| 关 | 关 | 不发生后台模型请求 |
+
+关闭“允许主动唤醒”时不删除已有 schedule，只标记暂停；重新开启后重新计算是否仍应执行，过期 schedule 不补跑多次。
+
+### 4.2 自动停止
+
+当 `now - last_user_activity_at >= 24h`：
+
+1. 自动停止缓存保活。
+2. 不删除未来 `next_agent_wake_at` 和 `wake_reason`。
+3. 已安排的 wake 到时仍可执行，但不会因为那次后台模型请求自动恢复 55 分钟循环。
+4. 用户再次发言时，如果本窗口的持久保活开关仍为开启，则重新 arm 缓存保活。
+
+### 4.3 停止保活到 Context GC
+
+```text
+keepalive stop
+  → cache cooling
+  → last_cache_refresh_at + 60min + grace
+  → cache cold / gc eligible
+  → 现有 Context GC 才可处理
+```
+
+第一版只预留 `gc_eligible_at` 和停止原因，不新增自动 GC 策略。现有 GC 仍需遵守 busy、compacting、待审批和 lane 校验。
+
+## 5. Context 与 token 控制
+
+### 5.1 不重复注入行为说明
+
+Claude 收到 wake 后应该如何判断、何时 no-op、如何调用调度工具，只在稳定 system prompt 中说明一次。每次 heartbeat 不重复整段说明。
+
+调度工具是固定的进程内 SDK MCP 工具，工具 schema 进入稳定缓存前缀，不随每轮增长。
+
+### 5.2 每次 wake 的动态 Context
+
+每次只加入一条短结构，例如：
+
+```xml
+<agent_wake v="1" id="wake_xxx" at="2026-08-31T11:55:00+08:00" cause="cache_keepalive" reason="看看她有没有下班"/>
+```
+
+- `wake_reason` 是 Claude 留给未来自己的短备注，限制为最多 30 个中文字符或等价长度。
+- 没话说时使用固定内部 no-op 标记；UI 不生成普通 assistant 气泡。
+- UI 文案与模型 Context 分离，不把“Claude 醒了一次”等展示文字重复塞回 Context。
+- 历史重建、跨引擎补齐和 Context GC 后都由同一个 renderer 从结构化 metadata 生成上述短格式。
+
+### 5.3 成本观察
+
+第一版整晚保活，但必须记录每次后台 turn 的：
+
+- `cache_read_input_tokens`
+- `ephemeral_1h_input_tokens`
+- `ephemeral_5m_input_tokens`
+- output tokens
+- Pro/API 可观察额度变化
+
+夜间策略不能只根据理论价格决定。当前 prompt 同时存在 1h 稳定前缀和 5m 会话段，必须用真实 55 分钟间隔验证会话段的重写量。
+
+## 6. Claude 调度工具
+
+固定内建工具：`set_agent_wake`。
+
+建议输入：
+
+```json
+{
+  "action": "schedule",
+  "after_minutes": 30,
+  "at": null,
+  "reason": "等结果出来"
+}
+```
+
+或：
+
+```json
+{ "action": "cancel" }
+```
+
+规则：
+
+- `after_minutes` 与 `at` 二选一；`at` 使用带时区 RFC 3339。
+- `schedule` 最短 10 分钟；最远时间第一版限制为 7 天。
+- 同一 turn 多次调用时，最后一次有效决定生效。
+- 工具只在当前 turn 内暂存决定，不立即写 Haven。
+- turn 成功后，消息、wake event、next schedule 和活动时间原子提交。
+- 工具始终存在，不跟普通可开关 MCP 一起被移除，避免工具前缀频繁变化。
+
+## 7. 持久化设计
+
+### 7.1 `agent_wake_schedules`
+
+Haven 新增会话级持久表，主键：
+
+```text
+(profile_id, session_id, lane_id)
+```
+
+核心字段：
+
+| 字段 | 含义 |
+|---|---|
+| `keepalive_enabled` | 本窗口持久保活开关 |
+| `keepalive_paused_until_user` | 是否暂停到下次用户消息 |
+| `agent_wake_enabled` | 是否允许 Claude schedule |
+| `last_user_activity_at` | 真实用户最后活动，heartbeat 不得刷新 |
+| `last_model_activity_at` | 最近一次实际模型请求开始时间 |
+| `last_cache_refresh_at` | usage 已确认的 cache read/write 请求开始时间 |
+| `last_heartbeat_at` | 最近一次实际后台 wake |
+| `next_agent_wake_at` | Claude 设置的下一次 wake，可空 |
+| `wake_reason` | 给未来自己的短备注 |
+| `cache_keepalive_deadline` | 缓存兜底时间 |
+| `due_at` | 两个时钟的最小值，建立到期索引 |
+| `cache_state` | `unarmed / warm / cooling / cold` |
+| `schedule_version` | 更新、取消和重复回调的 CAS 版本 |
+| `lease_owner / lease_until` | 多实例互斥与崩溃恢复 |
+| `background_turn_limit` | 动态上限，默认 48/滚动 24h |
+| `consecutive_failures / last_error` | 重试退避和熔断 |
+| `gc_eligible_at` | Context GC 生命周期接口 |
+
+这张表放在 Haven 的 profile/session 持久层；复用现有 automation scheduler 的到期查询、原子 lease 和过期 lease 恢复模式，但不直接复用按固定 `task_type` 设计的 `automation_schedules` 表。
+
+### 7.2 `agent_wake_runs`
+
+保存每次后台 job 的幂等与运维状态：
+
+```text
+wake_id, profile_id, session_id, lane_id, schedule_version,
+cause, due_at, status, started_at, completed_at, turn_id, error
+```
+
+状态：`claimed / running / completed / deferred / failed / superseded`。
+
+### 7.3 `conversation_turns`
+
+新增兼容字段：
+
+```text
+turn_kind = user | agent_wake
+```
+
+旧数据默认 `user`。Wake turn 允许 `user_text` 和 `assistant_text` 同时为空，真实语义写入短 metadata：
+
+```json
+{
+  "version": 1,
+  "turn_kind": "agent_wake",
+  "agent_wake": {
+    "wake_id": "wake_xxx",
+    "cause": "cache_keepalive",
+    "at": "2026-08-31T11:55:00+08:00",
+    "outcome": "noop"
+  },
+  "next_wake": {
+    "at": "2026-08-31T12:35:00+08:00",
+    "reason": "想看看小羊有没有去吃饭"
+  }
+}
+```
+
+## 8. 调度、并发与去重
+
+### 8.1 Haven scheduler
+
+- 复用现有 30 秒持久调度循环的结构。
+- 查询 `due_at <= now` 且 lease 空闲/过期的 schedule。
+- 原子 claim 后生成唯一 `wake_id`，携带 `schedule_version` 调用 Dashboard 内部 wake runner。
+- 重启后从 Haven 数据恢复；相同 `wake_id` 不重复执行。
+- 失败使用短退避，连续失败达到阈值后暂停后台 wake，避免错误循环。
+
+### 8.2 Dashboard `SessionTurnCoordinator`
+
+用户 turn、主动 wake 和缓存 heartbeat 必须经过同一协调器：
+
+- foreground 用户 turn 高优先级。
+- background wake 低优先级。
+- 现有 `live.busy` 保留，保护 Agent SDK iterator；Haven lease 处理多实例和重启，两者不能互相替代。
+- session 正在生成、压缩或等待工具审批时，wake 不生成 UI event、不调用模型，标记 deferred。
+- 正常 turn 完成后主动重新计算 `due_at`，scheduler 轮询只作兜底。
+
+### 8.3 同时到达
+
+- Wake 尚未开始模型请求：用户 turn 胜出，wake 标记 `superseded`。
+- 已到期的 wake reason 用极短 metadata 合并进该用户 turn，让 Claude 知道自己原本为什么想醒。
+- Wake 已经开始模型请求：不并发、不强行中断；用户 turn 排在后面。
+- 任一成功真实模型请求都会重新计算缓存 deadline，原 heartbeat 不再重复触发。
+
+## 9. 后台工具权限
+
+- `set_agent_wake`：自动允许。
+- 已开启且当前权限为自动允许的 MCP：允许。
+- 只读工具：按现有规则允许。
+- 需要浏览器批准的 MCP、Bash、Edit、Write、NotebookEdit：后台拒绝，不创建等待批准卡片。
+- Claude 如果需要用户参与，应发送普通 assistant message，说明需要用户做什么。
+
+后台拒绝只影响本次 wake，不改变该工具在正常用户 turn 中的权限。
+
+## 10. 消息类型和 UI
+
+### 10.1 历史映射
+
+`agent_wake` turn 在前端拆成：
+
+1. 一条轻量 system event：`11:55 · Claude 醒了一次`
+2. 可选的普通 assistant message
+3. 可选的 next wake 行
+
+Claude 有可见回复时，next wake 显示在回复下方：
+
+```text
+↳ 下次唤醒 12:35 · 想看看小羊有没有去吃饭
+```
+
+Claude no-op 时，不生成普通 assistant message；next wake 显示在 wake event 下方。
+
+### 10.2 “本窗口设置”第 4 个 Tab
+
+名称：“主动唤醒”。第一版包含：
+
+- 允许主动唤醒开关
+- 缓存保活开关
+- “暂停保活直到下次用户消息”
+- 当前 cache 状态
+- 最近一次 cache refresh
+- 下一次固定保活时间
+- Claude 设置的下一次 wake 与 reason
+- 取消下一次 wake
+- 24 小时无用户活动自动停止说明
+- 主动 wake 最短间隔，默认 10 分钟，可调
+- 后台 turn 上限，默认 48/滚动 24h，可调
+- 最近后台 wake 次数与最近错误
+- “立即停止所有后台唤醒”
+
+不在对话窗口顶部增加入口或状态，避免挤占现有空间。
+
+### 10.3 页面打开时更新
+
+后台 wake 没有当前用户请求的浏览器 SSE。第一版在页面可见且没有正在发送时增量拉取新 turn，并在页面重新获得焦点时立即刷新。先不引入 WebSocket。
+
+## 11. 状态机
+
+```text
+UNARMED
+  └─ 首次成功的真实模型请求
+       → WARM_IDLE
+           └─ due_at 到达
+                → CLAIMED
+                    ├─ busy / user queued → DEFERRED → WARM_IDLE
+                    ├─ version changed    → SUPERSEDED
+                    └─ turn gate acquired → RUNNING
+                                             ├─ success → WARM_IDLE
+                                             └─ error   → RETRY_BACKOFF
+
+停止保活：
+WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
+```
+
+旧窗口升级后保持 `UNARMED`，不能因为启用功能立刻触发一次昂贵冷启动。用户下一次正常请求成功后才开始 55 分钟计时。
+
+## 12. 分阶段实施
+
+### 阶段 1：Haven 持久控制面
+
+- 兼容迁移：schedule、run、`turn_kind`。
+- schedule CRUD、CAS、due claim、lease 恢复、幂等测试。
+- profile/session/lane 隔离与删除边界测试。
+
+### 阶段 2：Dashboard 后台 turn
+
+- 抽出用户/wake 共用的 `SessionTurnCoordinator`。
+- 后台 wake runner 从 Haven 还原最后活跃 lane、Persona、冻结 prompt 和 resume id。
+- 加入固定进程内 `set_agent_wake` 工具和后台权限策略。
+- 修正 cache refresh 时间语义。
+
+### 阶段 3：消息持久化与前端
+
+- Wake turn 与 schedule 原子提交。
+- 历史转换增加 wake event 和 next wake metadata。
+- “本窗口设置”新增第 4 个 Tab。
+- 页面可见时增量刷新后台消息。
+
+### 阶段 4：调度接通与故障验证
+
+- Haven scheduler 调用 Dashboard runner。
+- 验证重启恢复、重复回调、lease 过期、busy defer、用户碰撞和失败退避。
+- 加入滚动 24 小时后台上限。
+
+### 阶段 5：真实成本与生命周期验收
+
+- 收集至少 3 次真实 55 分钟 heartbeat 样本。
+- 对比夜间持续保活与早晨冷启动的 cache read/write、额度和 Context 增量。
+- 再决定是否增加 03:00–09:00 夜间策略。
+- 验证停止保活后 cache cold，再进入现有 Context GC 的边界。
+
+## 13. 第一版验收标准
+
+1. 没有 Claude schedule 时，55 分钟仍触发一次真实 wake；no-op 时只有轻量 event。
+2. Claude 设置 30 分钟 wake 后，30 分钟先触发，原 55 分钟 heartbeat 被重新计算，不重复执行。
+3. 用户消息与 wake 同时到达时不并发，不出现两次模型请求撞同一 SDK iterator。
+4. Dashboard/Haven 重启后 schedule 恢复；相同 `wake_id` 只执行一次。
+5. 正在回复、压缩或待审批时，wake 延后且不产生假的“醒了一次”事件。
+6. 主动回复按正常 assistant message 保存；no-op 不产生空消息气泡。
+7. Next wake 时间和短 reason 刷新后仍显示，后续 Claude Context 可见。
+8. Heartbeat 不刷新 `last_user_activity_at`；24 小时无用户活动能停止固定保活。
+9. 关闭缓存保活后，已安排的未来 wake 仍可执行；没有 schedule 时不会自行醒来。
+10. 后台不能挂起等待人工工具审批。
+11. 每次动态 wake 不重复注入行为说明，纯 heartbeat 的 Context 增量保持在实测可接受量级。
+12. 当前最后活跃 lane 被保活，其他历史 lane 不产生后台请求。
+
+## 14. 暂不实施
+
+- selfhost 主动 wake。
+- 同一窗口同时保活多条 CC lane。
+- 夜间自动停机或延迟消息队列。
+- WebSocket 实时后台消息。
+- 新的自动 Context GC 策略。
+- 允许后台自动批准 Bash、写文件或原本需要人工确认的 MCP。
+
