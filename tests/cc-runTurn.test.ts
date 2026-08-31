@@ -32,7 +32,8 @@ const sdk = vi.hoisted(() => ({
   usageResult: null as Record<string, unknown> | null,
 }))
 
-vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+vi.mock('@anthropic-ai/claude-agent-sdk', async importOriginal => ({
+  ...await importOriginal<typeof import('@anthropic-ai/claude-agent-sdk')>(),
   query: ({ prompt, options }: { prompt: AsyncIterable<SDKUserMessage>; options: Record<string, unknown> }) => {
     sdk.queryCalls += 1
     sdk.promptIterators.push(prompt[Symbol.asyncIterator]())
@@ -57,6 +58,10 @@ function makeIterator(script: unknown[]) {
       if (i >= script.length) return Promise.resolve({ done: true, value: undefined })
       const item = script[i++]
       if (item && (item as { _hang?: boolean })._hang) return new Promise(() => undefined)
+      if (item && (item as { _setTime?: string })._setTime) {
+        vi.setSystemTime(new Date((item as { _setTime: string })._setTime))
+        return (makeIterator(script.slice(i))).next()
+      }
       return Promise.resolve({ done: false, value: item })
     },
     return: () => Promise.resolve({ done: true, value: undefined }),
@@ -332,9 +337,41 @@ beforeEach(() => {
 afterEach(() => {
   // ccSession 的 registry 挂在 globalThis，跨测试共享 —— 用完收掉
   dropSession('ob2-test-session')
+  vi.useRealTimers()
 })
 
 describe('runTurn：普通回复', () => {
+  it('only records a cache refresh after successful cache usage, using model request start time', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-31T12:00:00Z'))
+    recall.run.mockImplementationOnce(async () => {
+      vi.setSystemTime(new Date('2026-08-31T12:00:02Z'))
+      return { ok: true, error: '', cardCount: 0, chars: 0, elapsedMs: 0, domains: [], recalledIds: [], additionalContext: '' }
+    })
+    const cached = driveTurn([
+      initMsg(),
+      textDelta('好'),
+      { _setTime: '2026-08-31T12:00:05Z' } as unknown as SDKMessage,
+      resultMsg(),
+    ])
+    const cachedResult = await cached.promise
+    expect(cachedResult.cacheRefreshAt).toBe(new Date('2026-08-31T12:00:02Z').getTime())
+
+    dropSession('ob2-test-session')
+    const uncachedResult = resultMsg() as SDKMessage & { usage: Record<string, unknown> }
+    uncachedResult.usage = {
+      input_tokens: 10,
+      output_tokens: 2,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    }
+    const uncached = driveTurn([initMsg('cc-test-2'), textDelta('好'), uncachedResult], {
+      requestId: 'request-no-cache',
+    })
+    expect((await uncached.promise).cacheRefreshAt).toBeUndefined()
+    vi.useRealTimers()
+  })
+
   it('文本回复严格走完一轮：start → delta → usage/保存 → done → after', async () => {
     const handle = driveTurn([initMsg(), textDelta('你好'), textDelta('呀'), resultMsg()])
     const result = await handle.promise

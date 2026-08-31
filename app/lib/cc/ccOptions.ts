@@ -35,6 +35,12 @@ import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
 import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
 import type { CcWebSettings } from '@/app/cc/webSettings'
 import type { CcPermKind } from '@/app/lib/ccChannel'
+import {
+  AGENT_WAKE_SERVER_NAME,
+  createAgentWakeMcpServer,
+  getCcTurnExecutionMode,
+  isSetAgentWakeTool,
+} from '@/app/lib/cc/agentWakeTool'
 
 /** 直接放行、不弹批准卡的只读工具。 */
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
@@ -277,11 +283,19 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
    * hasPending 会让闲置计时器顺延）。30 分钟没人点就按拒绝收场。
    */
   const askPermission: NonNullable<Options['canUseTool']> = async (toolName, input, meta) => {
+    if (isSetAgentWakeTool(toolName)) return { behavior: 'allow' }
     if (isMcpTool(toolName)) {
       const policy = mcpPermissionForTool(toolName)
       if (policy === 'allow') return { behavior: 'allow' }
       if (policy === 'deny') {
         return { behavior: 'deny', message: '这个 MCP 服务当前设为禁止使用。' }
+      }
+    }
+
+    if (getCcTurnExecutionMode(sessionId) === 'background') {
+      return {
+        behavior: 'deny',
+        message: '后台 wake 不等待人工批准；如确有需要，请给用户发送普通消息说明操作步骤。',
       }
     }
 
@@ -357,11 +371,14 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     // MCP 跟 Claude Code 内置工具是两条独立通道。strict 保证实际工具集
     // 跟 Home 管理页完全一致，
     // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
-    mcpServers: sdkMcpServers,
+    mcpServers: {
+      ...sdkMcpServers,
+      [AGENT_WAKE_SERVER_NAME]: createAgentWakeMcpServer(sessionId),
+    },
     strictMcpConfig: true,
     // 关闭的工具连名称/说明/参数结构都从模型上下文移除；开启的 MCP 服务
     // 在 ccMcp.ts 里设为 alwaysLoad，所以工具定义固定放在消息历史之前。
-    disallowedTools: disabledTools,
+    disallowedTools: disabledTools.filter(name => !isSetAgentWakeTool(name)),
     // 本地只读和 WebSearch 自动放行。WebFetch 按域名问；Bash 走 SDK 标准规则，
     // 用户可在卡片上选仅一次 / 本次对话 / 始终允许。
     allowedTools:
@@ -431,6 +448,18 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
               input as { tool_name?: string; tool_input?: unknown }
             const name = String(toolName || '')
 
+            if (isSetAgentWakeTool(name)) {
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'allow' as const,
+                  permissionDecisionReason: '固定的进程内 wake 工具。',
+                },
+              }
+            }
+
+            const background = getCcTurnExecutionMode(sessionId) === 'background'
+
             // MCP 权限以 Home 管理页为准。显式在 hook 层定 allow/ask/deny，
             // 避免 SDK 把某些“看起来安全”的工具直接放行、绕过 canUseTool。
             if (isMcpTool(name)) {
@@ -438,13 +467,25 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
-                  permissionDecision: policy,
+                  permissionDecision: background && policy !== 'allow' ? 'deny' : policy,
                   permissionDecisionReason:
                     policy === 'allow'
                       ? '这个 MCP 服务已设为自动允许。'
+                      : background
+                        ? '后台 wake 不等待 MCP 人工批准。'
                       : policy === 'deny'
                         ? '这个 MCP 服务已被禁用。'
                         : '这个 MCP 服务设为每次询问。',
+                },
+              }
+            }
+
+            if (background && (name === 'Bash' || WRITE_TOOLS.includes(name))) {
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'deny' as const,
+                  permissionDecisionReason: '后台 wake 禁止执行 Bash 或写文件。',
                 },
               }
             }

@@ -59,6 +59,11 @@ import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 import type { ResolvedAttachment } from '@/app/lib/havenAttachments'
+import {
+  beginAgentWakeTurn,
+  endAgentWakeTurn,
+  type AgentWakeDecision,
+} from '@/app/lib/cc/agentWakeTool'
 
 function isSubscriptionLimitError(
   msg: SDKMessage & { errors?: string[] },
@@ -114,6 +119,9 @@ export type RunTurnInput = {
   /** 第 5 条 resume：前端从历史最后一轮读出的 claude code session id。
    *  只在服务端进程已丢（重启 / 回收）时用来接回上下文；已有活进程则忽略。 */
   resumeHint?: string
+  /** 后台 wake 复用同一执行器，但阶段 2 不写 conversation_turns。 */
+  turnKind?: 'user' | 'agent_wake'
+  persistTurn?: boolean
   /** 浏览器连接。断连时 abort，主循环立刻停下 */
   signal: AbortSignal
   /** 这一轮的 SSE 推送口（route 建好传进来） */
@@ -129,6 +137,10 @@ export type RunTurnResult = {
   error?: string
   /** 为什么收尾的（succeeded / failed / cancelled），测试和日志断言用 */
   phase: TurnPhase
+  assistantText?: string
+  usage?: TurnUsage | null
+  wakeDecision?: AgentWakeDecision | null
+  cacheRefreshAt?: number
 }
 
 /* ── 私有工具函数（原 route.ts 原样搬） ── */
@@ -399,6 +411,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     stamp,
   } = input
   const attachments = inputAttachments || []
+  const turnKind = input.turnKind || 'user'
+  const persistTurn = input.persistTurn !== false
   const resumeKey = `${sessionId}::${config.laneId}`
   const state = new TurnState(sessionId)
   const startedAt = Date.now()
@@ -414,6 +428,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   let preCompactions: CcCompactionEvent[] = []
   /** 锁是不是已经在正常路径上摘过了（收尾前就摘，让人能马上发下一句） */
   let busyReleased = false
+  let wakeStateEnded = false
+  let modelRequestStartedAt = 0
+  let confirmedCacheRefreshAt = 0
+
+  beginAgentWakeTurn(sessionId, turnKind === 'agent_wake' ? 'background' : 'foreground')
 
   try {
     // 第 5 条 resume：进程已丢（重启 / 闲置回收）而前端带来了上次的 cc session id，
@@ -449,7 +468,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
     // 上一轮中断时若已过消费点，残留标记会污染这一轮，先清掉
     clearTurnInterrupted(sessionId)
-    live.lastModelCallAt = Date.now()
     stamp?.(live.turnCount > 0 ? '沿用已有子进程' : '子进程建好了')
 
     // 自己给这句话编个 id：回退（rewindFiles）要的就是「回到哪句话之前」，
@@ -488,7 +506,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
      * 任何失败都不影响这一轮对话 —— recallForPrompt 自己不抛异常。 */
     let content = text
     const prefs = recallPrefs.get(sessionId)
-    if (!prefs || prefs.recall) {
+    if (turnKind === 'user' && (!prefs || prefs.recall)) {
       const recall = await recallForPrompt(text, {
         sessionId,
         semantic: prefs ? prefs.semantic : true,
@@ -579,6 +597,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       uuid: turnUuid,
     }
 
+    modelRequestStartedAt = Date.now()
     live.push(userMessage)
     // 存用户原话，不含记忆卡 —— 回退锚点要显示的是人说的话
     recordCheckpoint(sessionId, turnUuid, text)
@@ -846,10 +865,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
         live.totalCostUsd += Number(msg.total_cost_usd || 0)
         live.turnCount += 1
-        live.lastModelCallAt = Date.now()
         live.compacting = false
         recordTurnCost(sessionId, Number(msg.total_cost_usd || 0))
         turnUsage = usageFromResult(msg.usage, msg.duration_ms, msg.total_cost_usd)
+        if (msg.subtype === 'success' && !msg.is_error) {
+          live.lastModelActivityAt = modelRequestStartedAt
+          if (turnUsage.cacheReadTokens + turnUsage.cacheWriteTokens > 0) {
+            live.lastModelCallAt = modelRequestStartedAt
+            confirmedCacheRefreshAt = modelRequestStartedAt
+          }
+        }
         break
       }
     }
@@ -869,6 +894,20 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 10.3 严格完成顺序：模型生成 → Haven 原子写入 → done。
     // usage 先发，让前端在 Haven 落库期间明确显示“正在保存”。
     if (turnUsage) send('usage', turnUsage)
+
+    if (!persistTurn) {
+      const wakeDecision = endAgentWakeTurn(sessionId)
+      wakeStateEnded = true
+      state.markSucceeded()
+      return {
+        ok: true,
+        phase: state.current,
+        assistantText,
+        usage: turnUsage,
+        wakeDecision,
+        cacheRefreshAt: confirmedCacheRefreshAt || undefined,
+      }
+    }
 
     // ── 写回 Haven 的 conversation_turns ────────────────────────────
     // sessionId 跟 hook 用的是同一个值（同一个变量），不会分组串。
@@ -1061,7 +1100,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     })
 
     state.markSucceeded()
-    return { ok: true, phase: state.current }
+    const wakeDecision = endAgentWakeTurn(sessionId)
+    wakeStateEnded = true
+    return {
+      ok: true,
+      phase: state.current,
+      assistantText,
+      usage: turnUsage,
+      wakeDecision,
+      cacheRefreshAt: confirmedCacheRefreshAt || undefined,
+    }
   } catch (e) {
     const err = e as Error
     // 浏览器断连：这一轮没跑完，不写 Haven（busy 由 finally 摘）。
@@ -1079,6 +1127,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     state.markFailed()
     return { ok: false, error: err.message || String(err), phase: state.current }
   } finally {
+    if (!wakeStateEnded) endAgentWakeTurn(sessionId)
     // 正常路径上面已经摘过了（为了让人能立刻发下一句）。
     // 这里兜出错的情况；已经摘过就别再动 —— 那可能是下一轮占的锁。
     if (live && !busyReleased) live.busy = false

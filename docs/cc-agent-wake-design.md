@@ -1,6 +1,6 @@
 # CC 缓存保活与 Claude 主动唤醒方案
 
-> 状态：产品方案已确认；阶段 1 Haven 持久控制面已实施，阶段 2–6 待实施
+> 状态：产品方案已确认；阶段 1 Haven 持久控制面与阶段 2 Dashboard 后台 turn 已实施，阶段 3–6 待实施
 > 建立时间：2026-08-31  
 > 涉及仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 
@@ -429,7 +429,7 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - schedule CRUD、CAS、due claim、lease 恢复、幂等测试。
 - profile/session/lane 隔离与删除边界测试。
 
-### 阶段 2：Dashboard 后台 turn
+### 阶段 2：Dashboard 后台 turn（已完成）
 
 - 抽出用户/wake 共用的 `SessionTurnCoordinator`。
 - 后台 wake runner 从 Haven 还原最后活跃 lane、Persona、冻结 prompt 和 resume id。

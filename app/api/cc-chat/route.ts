@@ -32,6 +32,7 @@ import {
 } from '@/app/lib/havenTurns'
 import { resolveAttachments } from '@/app/lib/havenAttachments'
 import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
+import { runForegroundSessionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
 //
@@ -464,7 +465,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await runTurn({
+      await runForegroundSessionTurn(sessionId, () => runTurn({
         sessionId,
         requestId,
         expectedLastRoundId,
@@ -479,7 +480,7 @@ export async function POST(request: NextRequest) {
         close,
         stamp,
         resumeHint,
-      })
+      }))
     },
   })
 

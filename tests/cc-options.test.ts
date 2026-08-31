@@ -6,6 +6,11 @@ import {
   thinkingConfigForModel,
   type TurnConfig,
 } from '@/app/lib/cc/ccOptions'
+import {
+  AGENT_WAKE_SERVER_NAME,
+  beginAgentWakeTurn,
+  endAgentWakeTurn,
+} from '@/app/lib/cc/agentWakeTool'
 
 function config(mode: TurnConfig['mode']): TurnConfig {
   return {
@@ -72,5 +77,29 @@ describe('cc 基础提示词渠道一致性', () => {
       preset: 'claude_code',
       append: '统一的协作者基础提示词',
     })
+  })
+
+  it('固定注入进程内 wake 工具，不随普通 MCP 清单变化', () => {
+    const options = buildCcOptions(config('chat'), null)
+    expect(options.mcpServers).toHaveProperty(AGENT_WAKE_SERVER_NAME)
+  })
+
+  it('后台拒绝 Bash 和写入，不进入浏览器批准流程', async () => {
+    beginAgentWakeTurn('prompt-test', 'background')
+    try {
+      const options = buildCcOptions(config('work'), null)
+      const preTool = options.hooks?.PreToolUse?.[0]?.hooks?.[0]
+      expect(preTool).toBeTypeOf('function')
+      const decision = await preTool!(
+        { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'pwd' } } as never,
+        undefined,
+        { signal: new AbortController().signal },
+      )
+      expect(decision).toMatchObject({
+        hookSpecificOutput: { permissionDecision: 'deny' },
+      })
+    } finally {
+      endAgentWakeTurn('prompt-test')
+    }
   })
 })

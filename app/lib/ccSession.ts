@@ -137,6 +137,8 @@ type LiveSession = {
   turnCount: number
   /** 最后一次真正打到模型的时间，用来算 prompt cache 还有多久过期 */
   lastModelCallAt: number
+  /** 最近一次成功模型请求的开始时间；不代表 cache 一定命中或写入。 */
+  lastModelActivityAt: number
   /** 启动时定死的那几项（模式 / 凭据 / 中转站），界面照实显示用 */
   boot: SessionBoot
   /** 现在跑的模型名。setModel 换过就跟着变，所以不能只看 boot */
@@ -446,6 +448,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     systemPromptKey: input.systemPromptKey,
     turnCount: 0,
     lastModelCallAt: 0,
+    lastModelActivityAt: 0,
     boot: input.boot,
     model: input.model,
     effort: input.effort,
@@ -770,7 +773,7 @@ export async function applyRuntimeSettings(
     if (patch.model !== undefined && patch.model !== live.model) {
       await live.q.setModel(patch.model || undefined)
       live.model = patch.model
-      // 换模型 = 缓存作废，缓存倒计时从头开始算才不骗人
+      // 换模型 = 原缓存不可复用；下一次只有 usage 证实 read/write 才重新计时。
       live.lastModelCallAt = 0
     }
     if (patch.effort !== undefined && patch.effort !== live.effort) {
@@ -889,6 +892,7 @@ export async function compactSession(sessionId: string): Promise<CompactSessionR
   live.lastActiveAt = Date.now()
   armIdleTimer(live)
   const commandId = randomUUID()
+  const modelRequestStartedAt = Date.now()
   live.push({
     type: 'user',
     message: { role: 'user', content: '/compact' },
@@ -941,7 +945,11 @@ export async function compactSession(sessionId: string): Promise<CompactSessionR
         throw new Error(errors || 'CC 手动压缩失败')
       }
       live.totalCostUsd += Number(msg.total_cost_usd || 0)
-      live.lastModelCallAt = Date.now()
+      live.lastModelActivityAt = modelRequestStartedAt
+      const usage = msg.usage as Record<string, unknown> | undefined
+      const cacheTokens = Number(usage?.cache_read_input_tokens || 0) +
+        Number(usage?.cache_creation_input_tokens || 0)
+      if (cacheTokens > 0) live.lastModelCallAt = modelRequestStartedAt
       break
     }
     live.busy = false
