@@ -7,27 +7,27 @@ const BEIJING_TIME_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
   hourCycle: 'h23',
 })
 
 const BEIJING_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
-  weekday: 'long',
+  weekday: 'short',
 })
 
-export function beijingRuntimeContext(now = new Date(), sessionId?: string): string {
+/** 每轮注入用户消息尾部的动态时间戳。只含时间，不含 session_id 和时区说明。 */
+export function beijingRuntimeContext(now = new Date()): string {
   const parts = Object.fromEntries(
     BEIJING_TIME_FORMATTER.formatToParts(now).map(part => [part.type, part.value]),
   )
-  const timestamp = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
   const weekday = BEIJING_WEEKDAY_FORMATTER.format(now)
-  const sessionLine = sessionId ? `当前会话 session_id：${sessionId}\n` : ''
+  return `[北京时间 ${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${weekday}]`
+}
+
+/** 放入 system prompt 的静态会话信息。session 生命周期内不变，只需缓存写一次。 */
+export function sessionStaticContext(sessionId: string): string {
   return (
-    '<运行时信息>\n' +
-    `当前北京时间：${timestamp}（${weekday}，UTC+08:00，Asia/Shanghai）。` +
-    '这是系统提供的隐藏时间，不是用户消息。\n' +
-    sessionLine +
-    '</运行时信息>'
+    `当前会话 session_id：${sessionId}\n` +
+    '所有时间戳均为北京时间（UTC+08:00，Asia/Shanghai）。'
   )
 }
