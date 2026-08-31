@@ -100,11 +100,11 @@ function cardTitle(card: string): string {
 }
 
 function recallReference(bucketId: string, title: string): string {
-  return `[memory_ref bucket_id=${bucketId}]\ntitle: ${title}\n原召回内容已在窗口减负中清理；需要时调用 read_bucket(bucket_id=${bucketId})。\n[/memory_ref]`
+  return `召回内容已清理：${title}（${bucketId}）`
 }
 
 function searchReference(query: string): string {
-  return `旧的 search_chat 结果已在窗口减负中清理。曾搜索「${query}」。如有需要，请重新调用 search_chat。`
+  return `已清理：曾搜索「${query}」`
 }
 
 function toolName(block: JsonObject): string {
@@ -155,20 +155,19 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
     const query = short(input.query, 100)
     const scope = [short(input.domain, 40), short(input.date, 30)].filter(Boolean).join(' · ')
     label = query ? `breath「${query}」` : scope ? `breath · ${scope}` : 'breath 记忆读取'
-    replacement = `旧的 breath 结果已在窗口减负中清理。曾调用 ${label}。如有需要，请使用原工具调用中的参数重新调用 breath。`
+    replacement = `已清理：breath${query || scope ? `「${query || scope}」` : ''}`
   } else if (bareName === 'websearch' || bareName === 'web_search') {
     const query = String(input.query || input.q || '').trim()
     if (!query) return null
     kind = 'web_search'
     label = `WebSearch「${short(query, 100)}」`
-    replacement = `旧的 WebSearch 结果已在窗口减负中清理。曾搜索「${query}」。如有需要，请使用原工具调用中的参数重新搜索。`
+    replacement = `已清理：曾搜索「${query}」`
   } else if (bareName === 'webfetch' || bareName === 'web_fetch') {
     const url = String(input.url || '').trim()
     if (!url) return null
-    const prompt = short(input.prompt, 160)
     kind = 'web_fetch'
     label = `WebFetch · ${short(url, 100)}`
-    replacement = `旧的 WebFetch 结果已在窗口减负中清理。曾读取 ${url}${prompt ? `；原任务「${prompt}」` : ''}。如有需要，请使用原工具调用中的参数重新读取。`
+    replacement = `已清理：曾读取「${url}」`
   } else {
     return null
   }
