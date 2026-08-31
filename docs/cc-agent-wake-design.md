@@ -11,6 +11,8 @@
 1. 缓存保活：在 1h prompt cache 失效前，用一次真实模型 turn 刷新缓存。
 2. 主动唤醒：Claude 可以给未来的自己设置下一次 wake 时间和一条很短的原因备注。
 
+另外增加一种条件性触发：正常聊天中 Claude 回复后，如果用户突然没有继续回复，由外部 scheduler 在一次随机等待后唤醒 Claude，让它当场判断是否值得追问；Claude 不需要在每轮提前猜测用户会不会离开。
+
 两者必须共用当前 CC lane、现有 Agent SDK session 和正常 turn 串行入口。Scheduler 持久化在 Haven，Claude 进程不得自行 `sleep`。
 
 第一版只支持 CC，不支持 selfhost 主动唤醒；只保活当前最后活跃的 CC lane，不同时维持多条 subscription/API provider 线路。
@@ -30,8 +32,10 @@
 - Claude 的一轮完整 assistant message 在模型 Context 和 Haven 中仍保持一条；前端只把其中可拆的普通聊天文字显示成连续气泡，代码、列表、表格等结构化内容不机械拆分。
 - Bark 只作为消息成功落库后的服务端通知通道，不作为 Claude MCP，不进入模型 Context。第一版默认只推送主动 wake 产生的可见 assistant 消息；heartbeat no-op 和只有 next wake 的轮次不推送。
 - Bark 按前端同一份气泡分段顺序推送：首条正常提醒，后续分段使用较轻通知；默认每轮最多 8 条、约 1 秒间隔，均可动态调整。
+- 正常用户 turn 的 assistant 回复结束后，外部系统创建一次条件性 `conversation_silence_check_at`。等待时间不是固定 10 分钟：默认在 8–25 分钟内抽取一次，概率偏向 12–16 分钟；用户到期前回复即取消，不请求模型、不增加 Context。
+- Silence check 每轮最多一次。Silence wake no-op 后不重复检查；Claude 因 silence 主动追问后也不自动再开下一轮检查，避免连续催促。
 
-## 3. 双时钟如何运转
+## 3. 基础双时钟与条件性沉默检查
 
 每次真实模型请求成功后，同时更新：
 
@@ -41,8 +45,14 @@
 实际调度时间：
 
 ```text
-due_at = min(next_agent_wake_at, cache_keepalive_deadline)
+due_at = min(
+  next_agent_wake_at,
+  cache_keepalive_deadline,
+  conversation_silence_check_at
+)
 ```
+
+前两个是持续存在的基础双时钟；`conversation_silence_check_at` 只在正常用户对话后的 assistant 回复结束时临时创建，不是 Claude 主动设置的 wake。
 
 示例：
 
@@ -53,6 +63,26 @@ due_at = min(next_agent_wake_at, cache_keepalive_deadline)
 - 12:30 的真实模型请求又把缓存保活时间推到 13:25。
 
 任何更早发生的用户消息或主动 wake 都会刷新缓存时钟，因此不会在原定 55 分钟点再重复 heartbeat。
+
+### 3.1 沉默检查
+
+```text
+正常用户 turn 的 assistant 回复成功落库
+  → 在 8–25 分钟内抽取一次等待时间
+  → 持久化 conversation_silence_check_at
+      ├─ 用户提前回复：原子取消，零模型调用
+      └─ 到期仍未回复：触发一次 cause=conversation_silence 的 wake
+```
+
+随机值采用中间概率更高的有界分布，默认重点落在 12–16 分钟，而不是简单固定值或每个分钟等概率。每个源 turn 只抽一次；抽中的绝对时间、`source_turn_id` 和 `policy_version` 一起持久化。Scheduler 轮询、重试、Dashboard/Haven 重启都复用同一时间，禁止重新抽样导致 deadline 漂移。
+
+Silence wake 只收到一条极短结构化触发信息，例如：
+
+```xml
+<agent_wake v="1" cause="conversation_silence" idle="14m" source_turn="123"/>
+```
+
+Claude 在确认用户确实没有回复以后，才判断 no-op、补充、追问、调用允许的工具或设置真正的下一次 wake。该规则只在稳定 system prompt 中说明一次。
 
 Cache TTL 必须按模型请求开始时间计算。只有成功 result 的 usage 能确认本次发生 cache read/write 时，才把该请求的 `started_at` 写成 `last_cache_refresh_at`；不能用回复结束时间高估剩余 TTL。
 
@@ -176,6 +206,9 @@ Haven 新增会话级持久表，主键：
 | `last_heartbeat_at` | 最近一次实际后台 wake |
 | `next_agent_wake_at` | Claude 设置的下一次 wake，可空 |
 | `wake_reason` | 给未来自己的短备注 |
+| `conversation_silence_check_at` | 正常对话后一次性抽取的沉默检查时间，可空 |
+| `silence_source_turn_id` | 本次沉默检查对应的正常 assistant 回复 |
+| `silence_policy_version` | 抽样规则版本，保证升级与幂等可追踪 |
 | `cache_keepalive_deadline` | 缓存兜底时间 |
 | `due_at` | 两个时钟的最小值，建立到期索引 |
 | `cache_state` | `unarmed / warm / cooling / cold` |
@@ -251,6 +284,8 @@ turn_kind = user | agent_wake
 - 已到期的 wake reason 用极短 metadata 合并进该用户 turn，让 Claude 知道自己原本为什么想醒。
 - Wake 已经开始模型请求：不并发、不强行中断；用户 turn 排在后面。
 - 任一成功真实模型请求都会重新计算缓存 deadline，原 heartbeat 不再重复触发。
+- 用户消息一旦被接受，应在进入模型前先按 `silence_source_turn_id/schedule_version` 原子取消未到期 silence check；取消只改持久 timer，不产生 wake event 或 Context。
+- 只有 `turn_kind=user` 的正常 assistant 回复可以创建下一次 silence check；`agent_wake` 回复、silence 追问、heartbeat 和后台工具结果都不得自动连锁创建。
 
 ## 9. 后台工具权限
 
@@ -261,6 +296,8 @@ turn_kind = user | agent_wake
 - Claude 如果需要用户参与，应发送普通 assistant message，说明需要用户做什么。
 
 后台拒绝只影响本次 wake，不改变该工具在正常用户 turn 中的权限。
+
+Conversation silence 不通过 `set_agent_wake` 创建。它是应用层根据正常 turn 成功提交自动生成的一次性条件 timer，因此 Claude 不需要在聊天中途莫名其妙预设“过几分钟看看用户回没回”。
 
 ## 10. 消息类型和 UI
 
@@ -294,6 +331,7 @@ Claude no-op 时，不生成普通 assistant message；next wake 显示在 wake 
 - 取消下一次 wake
 - 24 小时无用户活动自动停止说明
 - 主动 wake 最短间隔，默认 10 分钟，可调
+- 对话沉默检查范围，默认 8–25 分钟，可调；具体抽中时间只在本 Tab 显示
 - 后台 turn 上限，默认 48/滚动 24h，可调
 - 最近后台 wake 次数与最近错误
 - “立即停止所有后台唤醒”
@@ -401,6 +439,8 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 ### 阶段 3：消息持久化与前端
 
 - Wake turn 与 schedule 原子提交。
+- 在 Haven 控制面增加兼容迁移字段：`conversation_silence_check_at`、`silence_source_turn_id`、`silence_policy_version`。
+- 正常用户 turn 的 assistant 回复提交成功后，按当前配置只采样一次随机延迟并持久化；下一条用户消息进入时先取消尚未触发的沉默检查。
 - 历史转换增加 wake event 和 next wake metadata。
 - 为新 assistant 回复生成并保存版本化 `display_segments`；前端按 Markdown 语义把普通聊天显示成连续气泡，原子 block 保持完整。
 - “本窗口设置”新增第 4 个 Tab。
@@ -409,6 +449,8 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 ### 阶段 4：调度接通与故障验证
 
 - Haven scheduler 调用 Dashboard runner。
+- Scheduler 将持久化的 `conversation_silence_check_at` 纳入同一 due-time 计算；到点且来源 turn 仍有效时，以 `conversation_silence` 原因触发一次 wake。
+- 验证随机时间只采样一次、重启后不漂移、用户回复可取消，以及沉默 wake 不会自行链式再挂一个沉默检查。
 - 验证重启恢复、重复回调、lease 过期、busy defer、用户碰撞和失败退避。
 - 加入滚动 24 小时后台上限。
 
@@ -445,6 +487,9 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 14. 刷新、换设备和 Bark 使用同一份版本化分段，旧消息原文不因分段器升级而变化。
 15. 主动 wake 的可见气泡按顺序推送；no-op、未落库消息和前台普通回复不推送。
 16. Bark 重试不重复已成功分段，失败不影响聊天消息；key 不出现在浏览器、Context 或日志。
+17. 每次正常用户 turn 结束后，沉默检查时间只采样并持久化一次，落在当前配置范围内；服务重启或任务重试不会重新抽样。
+18. 沉默检查到点前收到用户回复时，不产生模型请求或 Context；到点仍无回复时，只触发一次 `conversation_silence` wake。
+19. 沉默 wake 无论 no-op 还是主动追问，都不会继续自动安排下一次沉默检查；只有新的正常用户 turn 才能重新挂载。
 
 ## 14. 暂不实施
 
