@@ -2,7 +2,7 @@
 
 > 建立时间：2026-08-31  
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`  
-> 状态：阶段 1 Haven 持久控制面已完成；阶段 2–5 待实施
+> 状态：阶段 1 Haven 持久控制面已完成；消息气泡拆分与 Bark 已纳入后续方案；阶段 2–6 待实施
 
 ## 当前完成状态
 
@@ -16,6 +16,7 @@
 - 新增 7 个 wake 持久化契约测试，并扩充 Gateway migration/delete 契约；相关 31 项测试全部通过。
 - Haven 全量 unittest 共发现 134 项；除 2 项既有 skip 外，唯一未运行成功项因当前 bundled Python 缺少 `httpx`，在导入 `gateway.py` 时中断，与本次代码无关。
 - 尚未接 Dashboard 模型执行、Haven scheduler 回调或前端 UI。
+- 后续方案新增“assistant 普通聊天分气泡 + Bark 分段通知”：模型 Context/Haven 原文仍保持一轮一条；版本化 `display_segments` 只服务前端与通知。Bark 在主动消息落库后由持久 outbox 发送，不作为 Claude MCP。完整规则只见主方案第 10.4、10.5 节。
 
 ## 下一窗口范围
 
@@ -35,7 +36,7 @@
 - 不同时保活多条 CC lane。
 - 不增加夜间 03:00–09:00 停机规则。
 - 不允许后台扩大 Bash、写文件或 MCP 权限。
-- 不把后续阶段提前塞进 Haven 阶段 1。
+- 不在阶段 2 提前实现前端气泡、Bark 配置或 notification outbox；它们分别属于阶段 3 和阶段 5。
 
 ## 阶段 1 验收（已完成）
 

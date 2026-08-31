@@ -1,6 +1,6 @@
 # CC 缓存保活与 Claude 主动唤醒方案
 
-> 状态：产品方案已确认；阶段 1 Haven 持久控制面已实施，阶段 2–5 待实施
+> 状态：产品方案已确认；阶段 1 Haven 持久控制面已实施，阶段 2–6 待实施
 > 建立时间：2026-08-31  
 > 涉及仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 
@@ -27,6 +27,9 @@
 - 每窗口滚动 24 小时后台模型 turn 上限暂定 48 次，可动态调整；用户消息不计入上限。达到上限后停止后台请求，允许 cache 自然冷掉。
 - 主动 wake 可以使用已开启且按现有规则自动允许的 MCP 与只读工具。需要人工批准的 MCP、Bash 和文件写入在后台不等待审批；Claude 如确有需要，应发普通消息请用户处理。
 - UI 不占用对话窗口顶部。在“本窗口设置”增加第 4 个 Tab“主动唤醒”，排在“会话信息 / Context 分析 / 窗口减负”之后。
+- Claude 的一轮完整 assistant message 在模型 Context 和 Haven 中仍保持一条；前端只把其中可拆的普通聊天文字显示成连续气泡，代码、列表、表格等结构化内容不机械拆分。
+- Bark 只作为消息成功落库后的服务端通知通道，不作为 Claude MCP，不进入模型 Context。第一版默认只推送主动 wake 产生的可见 assistant 消息；heartbeat no-op 和只有 next wake 的轮次不推送。
+- Bark 按前端同一份气泡分段顺序推送：首条正常提醒，后续分段使用较轻通知；默认每轮最多 8 条、约 1 秒间隔，均可动态调整。
 
 ## 3. 双时钟如何运转
 
@@ -301,6 +304,65 @@ Claude no-op 时，不生成普通 assistant message；next wake 显示在 wake 
 
 后台 wake 没有当前用户请求的浏览器 SSE。第一版在页面可见且没有正在发送时增量拉取新 turn，并在页面重新获得焦点时立即刷新。先不引入 WebSocket。
 
+### 10.4 Assistant 消息气泡拆分
+
+拆分只属于 presentation，不能改变模型和持久化的 turn 语义：
+
+```text
+Claude Context：一条完整 assistant message
+Haven conversation_turns：一轮、一条完整 assistant_text
+前端：同一 assistant message 显示为多个连续气泡
+Bark：复用同一份分段逐条通知
+```
+
+服务端在完整回复结束后使用 Markdown block parser 生成带版本的 `display_segments`，随该轮 presentation metadata 保存。前端历史与 Bark 都读取这份结果，不在两个调用方各写一套分割规则；旧消息没有 metadata 时可以按当前版本即时派生，但不能回写或改变原始 `assistant_text`。
+
+可拆内容：
+
+- 普通聊天段落。
+- 普通聊天文字中自然结束后的换行。
+- 独立短句、承接句和模拟连续发言的短段。
+- 在结构化 Markdown 之外，单换行也可作为气泡边界；空行必定是候选边界。
+
+保持原子、不机械拆分：
+
+- fenced code block。
+- Markdown 表格。
+- 有序/无序列表和任务列表。
+- blockquote。
+- 标题与紧随其后的内容。
+- 工具过程、thinking、附件、召回卡片、compaction 与 wake system event。
+- 其他内部依赖换行保持结构的 Markdown block。
+
+分段器必须保留原始 Markdown 文本及顺序。流式生成时，只有在边界已确认后才新开下一气泡；不能为了提早显示而把尚未闭合的代码块或列表切开。复制整轮、Context token、usage、回退和搜索仍以原始完整消息为准。
+
+### 10.5 Bark 分段推送
+
+Bark 是应用层的确定性副作用，不让 Claude 自己决定是否调用通知工具：
+
+```text
+主动 wake 生成可见 assistant message
+  → Haven 原子保存 turn + display_segments + notification outbox
+  → outbox worker 按 segment_index 顺序 POST Bark
+  → Bark/APNs 推送到 iPhone
+  → 点击通知打开对应 Dashboard 会话
+```
+
+第一版规则：
+
+- 只推 `turn_kind=agent_wake` 且存在可见 `assistant_text` 的回复；普通前台问答默认不推。
+- heartbeat no-op、只设置 next wake、失败或未确认落库的消息不推。
+- 每个普通聊天气泡对应一条 Bark；使用同一 session group 和会话 deep link。
+- 第一条使用正常提醒；同一轮后续分段使用较轻通知，避免连续响铃和亮屏。
+- 相邻通知默认间隔约 1 秒。
+- 每轮默认最多 8 条，可在设置中动态调整；超出部分合并到最后一条，并提示打开会话查看后续。
+- 代码、表格、长列表等原子 block 不把完整技术正文塞进锁屏，只推“Claude 还发来了一段代码/列表，点开查看”一类展示提示。
+- 幂等键使用 `turn_id + segment_index + splitter_version`；重启和网络重试不能重复推送已成功分段。
+- Bark 失败不回滚聊天消息；outbox 独立记录重试、成功和最终失败。
+- Bark server URL、device key 和加密配置只保存在 Haven 服务端/profile 配置，浏览器只接收掩码；不得把 key 放进前端、Claude Context、MCP 工具定义或日志。
+
+“本窗口设置 → 主动唤醒”Tab 增加窗口级开关“Claude 主动发消息时推送到 Bark”，并显示最近一次推送结果。Profile 级 Bark 地址、key、测试通知、正文隐藏/摘要模式、通知轻重、分段间隔和每轮上限放在统一通知配置中；具体入口在 Phase 5 UI 实施前确认，不在每个窗口重复保存密钥。
+
 ## 11. 状态机
 
 ```text
@@ -340,6 +402,7 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 
 - Wake turn 与 schedule 原子提交。
 - 历史转换增加 wake event 和 next wake metadata。
+- 为新 assistant 回复生成并保存版本化 `display_segments`；前端按 Markdown 语义把普通聊天显示成连续气泡，原子 block 保持完整。
 - “本窗口设置”新增第 4 个 Tab。
 - 页面可见时增量刷新后台消息。
 
@@ -349,7 +412,15 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - 验证重启恢复、重复回调、lease 过期、busy defer、用户碰撞和失败退避。
 - 加入滚动 24 小时后台上限。
 
-### 阶段 5：真实成本与生命周期验收
+### 阶段 5：Bark 分段通知
+
+- Haven 增加 profile 级 Bark 私密配置和持久 notification outbox。
+- 主动 wake 的可见消息成功落库后，按 `display_segments` 生成幂等通知项。
+- Dashboard 增加通知配置与测试入口，“本窗口设置 → 主动唤醒”增加窗口级 Bark 开关和最近状态。
+- 实现首条正常、后续较轻、默认 1 秒间隔、默认每轮最多 8 条的可调策略。
+- 实现会话 deep link、失败重试、重启恢复、敏感 key 脱敏和可选隐藏正文模式。
+
+### 阶段 6：真实成本与生命周期验收
 
 - 收集至少 3 次真实 55 分钟 heartbeat 样本。
 - 对比夜间持续保活与早晨冷启动的 cache read/write、额度和 Context 增量。
@@ -370,6 +441,10 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 10. 后台不能挂起等待人工工具审批。
 11. 每次动态 wake 不重复注入行为说明，纯 heartbeat 的 Context 增量保持在实测可接受量级。
 12. 当前最后活跃 lane 被保活，其他历史 lane 不产生后台请求。
+13. 一轮 assistant 原文在 Context/Haven 中仍是一条；普通聊天段可显示为多个气泡，代码、列表、表格和引用不被破坏。
+14. 刷新、换设备和 Bark 使用同一份版本化分段，旧消息原文不因分段器升级而变化。
+15. 主动 wake 的可见气泡按顺序推送；no-op、未落库消息和前台普通回复不推送。
+16. Bark 重试不重复已成功分段，失败不影响聊天消息；key 不出现在浏览器、Context 或日志。
 
 ## 14. 暂不实施
 
@@ -379,3 +454,5 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - WebSocket 实时后台消息。
 - 新的自动 Context GC 策略。
 - 允许后台自动批准 Bash、写文件或原本需要人工确认的 MCP。
+- 把 Bark 暴露为 Claude MCP，或让模型承担通知发送与重试。
+- 默认对普通前台问答发送 Bark。
