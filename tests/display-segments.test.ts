@@ -34,4 +34,16 @@ describe('versioned assistant display segments', () => {
     expect(result.segments.map(item => item.markdown).join('')).toBe(source)
     expect(result.segments.filter(item => item.kind === 'atomic')).toHaveLength(5)
   })
+
+  it('can promote completed streaming paragraphs without changing their text', () => {
+    const firstChunk = '第一条正在说完。'
+    const secondChunk = `${firstChunk}\n\n第二条刚开始`
+    const completed = `${secondChunk}，现在说完。`
+
+    expect(buildDisplaySegments(firstChunk).segments).toHaveLength(1)
+    expect(buildDisplaySegments(secondChunk).segments).toHaveLength(2)
+    const result = buildDisplaySegments(completed)
+    expect(result.segments).toHaveLength(2)
+    expect(result.segments.map(item => item.markdown).join('')).toBe(completed)
+  })
 })

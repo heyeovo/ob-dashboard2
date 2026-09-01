@@ -51,7 +51,7 @@ import {
   normalizeTurnContext,
   providerSelectionLocked,
 } from './engineRouting'
-import { normalizeDisplaySegments } from '@/app/lib/cc/displaySegments'
+import { buildDisplaySegments, normalizeDisplaySegments } from '@/app/lib/cc/displaySegments'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -383,7 +383,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const payload = await response.json()
       if (!response.ok || !payload.ok || !Array.isArray(payload.turns) || payload.turns.length === 0) return
       const turns = payload.turns as HavenTurnRow[]
-      const incoming = turnsToMessages(turns)
+      const incoming = turnsToMessages(turns).map(message => (
+        message.role === 'assistant' && (message.displaySegments?.length || 0) > 1
+          ? { ...message, revealDisplaySegments: true }
+          : message
+      ))
       setMessages(previous => {
         const known = new Set(previous.map(message => message.id))
         return [...previous, ...incoming.filter(message => !known.has(message.id))]
@@ -1428,6 +1432,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 ...closeOpenThinking(message.process),
                 { type: 'compact', id: compaction.id, compaction },
               ],
+              displaySegments: undefined,
+              revealDisplaySegments: false,
             }))
             setStats(current => ({
               ...current,
@@ -1456,8 +1462,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               const process = closeOpenThinking(m.process)
               const last = process.at(-1)
               const continuesTextSegment = last?.type === 'text' && last.id === id
+              let currentText = chunk
               if (continuesTextSegment) {
-                process[process.length - 1] = { ...last, text: last.text + chunk }
+                currentText = last.text + chunk
+                process[process.length - 1] = { ...last, text: currentText }
               } else {
                 process.push({ type: 'text', id, text: chunk })
               }
@@ -1466,6 +1474,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 process,
                 thinkingMs: thinkingDuration(process) || undefined,
                 text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
+                displaySegments: buildDisplaySegments(currentText).segments,
+                revealDisplaySegments: false,
               }
             })
           },
@@ -1486,6 +1496,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 ...m,
                 thinking: (m.thinking || '') + chunk,
                 process,
+                displaySegments: undefined,
+                revealDisplaySegments: false,
               }
             })
           },
@@ -1510,6 +1522,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 { type: 'tool', id: `process-${tool.id}`, tool },
               ],
               tools: [...(m.tools || []), tool],
+              displaySegments: undefined,
+              revealDisplaySegments: false,
             }))
           },
           onToolResult: payload => {
@@ -1607,6 +1621,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 roundId: roundId || m.roundId,
                 deliveryState: replayed ? 'replayed' : 'saved',
                 displaySegments: displaySegments?.segments || m.displaySegments,
+                revealDisplaySegments: false,
                 nextWake: nextWake && typeof nextWake.at === 'string' && nextWake.at
                   ? { at: nextWake.at, reason: String(nextWake.reason || '') }
                   : m.nextWake,

@@ -24,7 +24,7 @@
   - Cache refresh 仅在成功 result usage 确认 cache read/write 后更新，时间取真正送入模型前的请求开始时间；无 cache usage 不刷新倒计时。
 - Dashboard 阶段 3 已完成：
   - agent wake 的可见消息、无正文结果、wake event、next wake、usage、cache refresh 和活动时间由同一次 Haven 严格提交原子落库；`set_agent_wake` 仍只以同轮最后一次有效决定生效。
-  - `conversation_turns.raw_json` 保存版本化 `display_segments`；模型 Context/Haven assistant 原文仍是一轮一条，前端只把普通文字段显示为有独立白底/边框的连续气泡，结构化原子块保持整宽，旧消息只在读取时兼容派生、不回写。
+  - `conversation_turns.raw_json` 保存版本化 `display_segments`；模型 Context/Haven assistant 原文仍是一轮一条。前台 SSE 会逐步固定已完成的普通文字气泡、让最后一段继续流式；增量收到的后台消息按 360ms 逐段显现。结构化原子块保持整宽，初次历史与减少动态效果不重播动画，旧消息只在读取时兼容派生、不回写。
   - 历史映射显示 wake event、可选 assistant 正文和 next wake；页面可见且没有发送/载入历史时按 `after_round_id` 增量刷新，并在重新聚焦时立即刷新。
   - “本窗口设置”增加第 4 个 Tab“主动唤醒”，可管理双开关、暂停、下一次 wake、最短间隔、silence 范围和停止全部；后台次数上限只显示，阶段 4 才执行。
   - 正常用户 turn 成功提交时在同一事务只采样一次 silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer；停止全部也清除 silence timer。

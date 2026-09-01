@@ -17,6 +17,7 @@ import { parseForwardedMessage } from './forwardedMessage'
 //   Polaris 那边答完自动收起，这里不要。
 
 const LONG_PRESS_MS = 360
+const SEGMENT_REVEAL_MS = 360
 
 /** token 明细里的数字：等宽对齐，不加粗到抢眼 */
 const USAGE_NUM = 'font-medium tabular-nums text-[var(--color-text-secondary)]'
@@ -133,6 +134,10 @@ export default function CcMessageRow({
   // 上下文预算是诊断信息，收进图标浮窗，避免元数据行过长。
   const [contextOpen, setContextOpen] = useState(false)
   const [forwardOpen, setForwardOpen] = useState(false)
+  const segmentCount = message.displaySegments?.length || 0
+  const [visibleSegmentCount, setVisibleSegmentCount] = useState(() => (
+    message.revealDisplaySegments && segmentCount > 0 ? 1 : segmentCount
+  ))
   const timerRef = useRef<number | null>(null)
   const suppressClickRef = useRef(false)
   const frameRef = useRef<HTMLDivElement>(null)
@@ -185,6 +190,32 @@ export default function CcMessageRow({
     },
     [],
   )
+
+  useEffect(() => {
+    if (segmentCount === 0) {
+      setVisibleSegmentCount(0)
+      return
+    }
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+    if (!message.revealDisplaySegments || reduceMotion || segmentCount === 1) {
+      setVisibleSegmentCount(segmentCount)
+      return
+    }
+    setVisibleSegmentCount(current => Math.max(1, Math.min(current, segmentCount)))
+  }, [message.revealDisplaySegments, segmentCount])
+
+  useEffect(() => {
+    if (!message.revealDisplaySegments || visibleSegmentCount >= segmentCount) return
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+    if (reduceMotion) {
+      setVisibleSegmentCount(segmentCount)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setVisibleSegmentCount(current => Math.min(segmentCount, current + 1))
+    }, SEGMENT_REVEAL_MS)
+    return () => window.clearTimeout(timer)
+  }, [message.revealDisplaySegments, segmentCount, visibleSegmentCount])
 
   if (message.role === 'system' && message.compaction) {
     return <CompactionDivider compaction={message.compaction} />
@@ -604,16 +635,20 @@ export default function CcMessageRow({
         ) : null}
 
         {/* 正文：markdown。流式中末尾跟一个光标 */}
-        {!message.streaming && message.displaySegments?.length ? (
+        {message.displaySegments?.length ? (
           <div className="cc-assistant-segments">
-            {message.displaySegments.map((segment, index) => (
-              <div
-                className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}`}
-                key={`${message.id}-segment-${index}`}
-              >
-                <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
-              </div>
-            ))}
+            {message.displaySegments.slice(0, visibleSegmentCount).map((segment, index) => {
+              const isStreamingTail = Boolean(message.streaming) && index === message.displaySegments!.length - 1
+              return (
+                <div
+                  className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${isStreamingTail ? ' streaming' : ''}`}
+                  key={`${message.id}-segment-${index}`}
+                >
+                  <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
+                  {isStreamingTail ? <span className="cc-caret" aria-hidden="true" /> : null}
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
