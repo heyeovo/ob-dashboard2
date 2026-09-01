@@ -605,9 +605,12 @@ export default function CcMessageRow({
 
         {/* 正文：markdown。流式中末尾跟一个光标 */}
         {!message.streaming && message.displaySegments?.length ? (
-          <div className="space-y-1.5">
+          <div className="cc-assistant-segments">
             {message.displaySegments.map((segment, index) => (
-              <div className="cc-bubble-assistant" key={`${message.id}-segment-${index}`}>
+              <div
+                className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}`}
+                key={`${message.id}-segment-${index}`}
+              >
                 <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
               </div>
             ))}
