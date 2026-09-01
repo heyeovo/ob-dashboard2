@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import CcMarkdown, { highlightSearchText } from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
-import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent } from './types'
+import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent, CcTurnUsage } from './types'
 import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
 
@@ -21,6 +21,46 @@ const SEGMENT_REVEAL_MS = 360
 
 /** token 明细里的数字：等宽对齐，不加粗到抢眼 */
 const USAGE_NUM = 'font-medium tabular-nums text-[var(--color-text-secondary)]'
+
+function UsageTokenButton({ usage, onClick }: { usage: CcTurnUsage; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="ml-auto tabular-nums hover:text-[var(--color-text-secondary)]"
+      onClick={onClick}
+      title="本轮累计消耗；不是当前窗口 Context"
+    >
+      {(usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens + usage.outputTokens).toLocaleString()} tok
+    </button>
+  )
+}
+
+function UsageDetails({ usage }: { usage: CcTurnUsage }) {
+  return (
+    <div className="mt-1 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left">
+      <div className="mb-1.5 text-[11px] font-medium text-[var(--color-text-secondary)]">本轮累计消耗</div>
+      <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-2.5 gap-y-1 text-[11px] text-[var(--color-text-tertiary)]">
+        <span>↑ 输入</span>
+        <b className={USAGE_NUM}>{usage.inputTokens.toLocaleString()}</b>
+        <span>↓ 输出</span>
+        <b className={USAGE_NUM}>{usage.outputTokens.toLocaleString()}</b>
+        <span>缓存读</span>
+        <b className={USAGE_NUM}>{usage.cacheReadTokens.toLocaleString()}</b>
+        <span>缓存写</span>
+        <b className={USAGE_NUM}>
+          {usage.cacheWriteTokens.toLocaleString()}
+          {usage.cacheWrite1hTokens || usage.cacheWrite5mTokens ? (
+            <span className="font-normal text-[var(--color-text-disabled)]">
+              {' '}(1h {usage.cacheWrite1hTokens.toLocaleString()} · 5m {usage.cacheWrite5mTokens.toLocaleString()})
+            </span>
+          ) : null}
+        </b>
+        {usage.durationMs ? <><span>时长</span><b className={USAGE_NUM}>{(usage.durationMs / 1000).toFixed(1)}s</b></> : null}
+        {usage.tokensPerSec ? <><span>速度</span><b className={USAGE_NUM}>{usage.tokensPerSec.toFixed(1)} tok/s</b></> : null}
+      </div>
+    </div>
+  )
+}
 
 function formatTime(ms: number) {
   const d = new Date(ms)
@@ -125,6 +165,7 @@ export default function CcMessageRow({
   const isUser = message.role === 'user'
   const persona = personaProp || FALLBACK_PERSONA
   const shownModel = modelLabel(message.model || '')
+  const usage = message.usage || null
   const [menuOpen, setMenuOpen] = useState(false)
   // 新生成的当前轮默认展开；从 Haven 读回的历史轮默认折叠。
   // 状态只属于当前页面：实时轮结束后保持展开，刷新后会按历史规则重新折叠。
@@ -246,6 +287,12 @@ export default function CcMessageRow({
               ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
             </div>
           ) : null}
+          {usage ? (
+            <div className="mt-1 flex justify-end">
+              <UsageTokenButton usage={usage} onClick={() => setUsageOpen(open => !open)} />
+            </div>
+          ) : null}
+          {usage && usageOpen ? <UsageDetails usage={usage} /> : null}
         </div>
       </div>
     )
@@ -539,9 +586,6 @@ export default function CcMessageRow({
     ? trailingText?.text || ''
     : message.text
   const openTool = openToolId ? tools.find(tool => tool.id === openToolId) || null : null
-  // 5.2 之前的老消息没有 usage，那就不显示（不编 0）
-  const usage = message.usage || null
-
   return (
     <div
       className={`cc-row min-w-0 max-w-full flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
@@ -769,55 +813,13 @@ export default function CcMessageRow({
               复制
             </button>
             {usage ? (
-              <button
-                type="button"
-                className="ml-auto tabular-nums hover:text-[var(--color-text-secondary)]"
-                onClick={() => setUsageOpen(v => !v)}
-                title="本轮累计消耗；不是当前窗口 Context"
-              >
-                {(usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens + usage.outputTokens).toLocaleString()} tok
-              </button>
+              <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} />
             ) : null}
           </div>
         ) : null}
 
         {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
-        {usage && usageOpen ? (
-          <div className="mt-1 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-2">
-            <div className="mb-1.5 text-[11px] font-medium text-[var(--color-text-secondary)]">本轮累计消耗</div>
-            <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-2.5 gap-y-1 text-[11px] text-[var(--color-text-tertiary)]">
-              <span>↑ 输入</span>
-              <b className={USAGE_NUM}>{usage.inputTokens.toLocaleString()}</b>
-              <span>↓ 输出</span>
-              <b className={USAGE_NUM}>{usage.outputTokens.toLocaleString()}</b>
-              <span>缓存读</span>
-              <b className={USAGE_NUM}>{usage.cacheReadTokens.toLocaleString()}</b>
-              <span>缓存写</span>
-              <b className={USAGE_NUM}>
-                {usage.cacheWriteTokens.toLocaleString()}
-                {usage.cacheWrite1hTokens || usage.cacheWrite5mTokens ? (
-                  <span className="font-normal text-[var(--color-text-disabled)]">
-                    {' '}
-                    (1h {usage.cacheWrite1hTokens.toLocaleString()} · 5m{' '}
-                    {usage.cacheWrite5mTokens.toLocaleString()})
-                  </span>
-                ) : null}
-              </b>
-              {usage.durationMs ? (
-                <>
-                  <span>时长</span>
-                  <b className={USAGE_NUM}>{(usage.durationMs / 1000).toFixed(1)}s</b>
-                </>
-              ) : null}
-              {usage.tokensPerSec ? (
-                <>
-                  <span>速度</span>
-                  <b className={USAGE_NUM}>{usage.tokensPerSec.toFixed(1)} tok/s</b>
-                </>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
+        {usage && usageOpen ? <UsageDetails usage={usage} /> : null}
       </div>
 
       {openTool ? <CcToolDialog tool={openTool} onClose={() => setOpenToolId(null)} /> : null}

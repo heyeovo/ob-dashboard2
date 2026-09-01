@@ -59,6 +59,7 @@ describe('ccHistory：旧历史兼容', () => {
         agent_wake: { cause: 'conversation_silence', at: '2026-08-31T12:55:00Z', status: '看了一眼，你在忙吧' },
         next_wake: { at: '2026-08-31T13:25:00Z', reason: '等等看' },
         thinking: '现在不适合打扰。',
+        usage: { inputTokens: 3, outputTokens: 31, cacheReadTokens: 33479, cacheWriteTokens: 106 },
       }),
     })])
     expect(messages).toHaveLength(1)
@@ -66,6 +67,7 @@ describe('ccHistory：旧历史兼容', () => {
       role: 'system',
       wakeEvent: { status: '看了一眼，你在忙吧' },
       thinking: '现在不适合打扰。',
+      usage: expect.objectContaining({ cacheReadTokens: 33479, cacheWriteTokens: 106 }),
       nextWake: { reason: '等等看' },
     })
   })

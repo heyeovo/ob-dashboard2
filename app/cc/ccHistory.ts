@@ -447,6 +447,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
           wakeEvent: extra.agentWake || { cause: 'cache_keepalive', at: t.created_at },
           personaId: personaOfClient(t.client),
           thinking: !t.assistant_text?.trim() ? extra.thinking || undefined : undefined,
+          usage: !t.assistant_text?.trim() ? extra.usage : undefined,
           createdAt: at,
           fromHistory: true,
           roundId: t.round_id,
