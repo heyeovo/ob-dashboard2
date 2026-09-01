@@ -49,7 +49,7 @@ describe('/api/automation-pro-runner', () => {
       candidate_type: 'no_change',
       rationale_text: '没有实质变化',
       evidence_bucket_ids_text: '',
-      append_content: '',
+      revised_content: '',
       summary: '',
       close_stage_end: '',
       close_summary: '',
@@ -96,11 +96,11 @@ describe('/api/automation-pro-runner', () => {
       candidate_type: 'append_current',
       flat: {
         rationale_text: '相处方式有连续变化', evidence_bucket_ids_text: 'bucket-a\nbucket-b',
-        append_content: '新增轨迹正文', summary: '更新后的摘要', close_stage_end: '', close_summary: '',
+        revised_content: '新增轨迹正文', summary: '更新后的摘要', close_stage_end: '', close_summary: '',
         create_name: '', create_stage_start: '', create_summary: '', create_content: '',
       },
       proposal: {
-        append_content: '新增轨迹正文', summary: '更新后的摘要',
+        revised_content: '新增轨迹正文', summary: '更新后的摘要',
         evidence_bucket_ids: ['bucket-a', 'bucket-b'],
       },
     },
@@ -108,7 +108,7 @@ describe('/api/automation-pro-runner', () => {
       candidate_type: 'transition',
       flat: {
         rationale_text: '关系阶段发生变化', evidence_bucket_ids_text: 'bucket-c',
-        append_content: '', summary: '', close_stage_end: '2026-08-18', close_summary: '旧阶段总结',
+        revised_content: '', summary: '', close_stage_end: '2026-08-18', close_summary: '旧阶段总结',
         create_name: '新的阶段', create_stage_start: '2026-08-18',
         create_summary: '新阶段摘要', create_content: '新阶段正文',
       },
