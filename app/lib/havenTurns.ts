@@ -151,6 +151,7 @@ export type AgentWakeSchedule = {
   keepalive_enabled: boolean
   keepalive_paused_until_user: boolean
   agent_wake_enabled: boolean
+  conversation_silence_enabled: boolean
   last_user_activity_at: string
   last_model_activity_at: string
   last_cache_refresh_at: string

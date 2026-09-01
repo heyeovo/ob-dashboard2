@@ -89,6 +89,10 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           <span>缓存保活</span>
           <input type="checkbox" checked={schedule.keepalive_enabled} disabled={saving || busy} onChange={event => void save({ keepalive_enabled: event.target.checked })} />
         </label>
+        <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
+          <span>对话沉默检查</span>
+          <input type="checkbox" checked={schedule.conversation_silence_enabled} disabled={saving || busy} onChange={event => void save({ conversation_silence_enabled: event.target.checked })} />
+        </label>
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}>
           <span>暂停到下次用户消息</span>
           <button className={BUTTON} disabled={saving || busy || schedule.keepalive_paused_until_user} onClick={() => void save({ keepalive_paused_until_user: true })}>
@@ -121,7 +125,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           <span><input className="w-16 rounded border border-[var(--color-border)] px-1.5 py-1 text-right" type="number" min={1} max={10080} value={schedule.agent_wake_min_minutes} disabled={saving || busy} onChange={event => setSchedule({ ...schedule, agent_wake_min_minutes: Number(event.target.value) })} onBlur={() => void save({ agent_wake_min_minutes: schedule.agent_wake_min_minutes })} /> 分钟</span>
         </label>
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}>
-          <span>对话沉默检查</span>
+          <span>沉默检查时间范围</span>
           <span className="flex items-center gap-1">
             <input className="w-12 rounded border border-[var(--color-border)] px-1 py-1 text-right" type="number" min={1} max={1440} value={schedule.silence_min_minutes} disabled={saving || busy} onChange={event => setSchedule({ ...schedule, silence_min_minutes: Number(event.target.value) })} />
             –

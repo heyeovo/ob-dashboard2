@@ -36,6 +36,7 @@ export async function PATCH(request: NextRequest) {
       keepalive_enabled: false,
       keepalive_paused_until_user: false,
       agent_wake_enabled: false,
+      conversation_silence_enabled: false,
       next_agent_wake_at: '',
       wake_reason: '',
       conversation_silence_check_at: '',
