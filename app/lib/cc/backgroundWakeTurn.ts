@@ -3,7 +3,7 @@ import { hasPending } from '@/app/lib/ccChannel'
 import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
-import { recordTurnStrict } from '@/app/lib/havenTurns'
+import { beginAgentWakeRun, getTurnByRequestId, recordTurnStrict } from '@/app/lib/havenTurns'
 import { AGENT_WAKE_NOOP_MARKER } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import {
@@ -19,12 +19,18 @@ export type BackgroundWakeInput = {
   at: string
   cause: BackgroundWakeCause
   reason?: string
+  laneId?: string
+  scheduleVersion?: number
+  leaseOwner?: string
+  silenceSourceTurnId?: number
   signal?: AbortSignal
 }
 
 export type BackgroundWakeResult =
-  | { status: 'completed'; turn: RunTurnResult; laneId: string }
+  | { status: 'completed'; turn?: RunTurnResult; laneId: string; turnId: number; replayed?: boolean }
   | { status: 'deferred'; reason: BackgroundTurnDeferredReason }
+  | { status: 'superseded'; reason: string }
+  | { status: 'in_progress'; reason: string }
   | { status: 'failed'; error: string }
 
 function wakePrompt(input: BackgroundWakeInput, wakeId: string): string {
@@ -44,36 +50,76 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
   if (!sessionId) return { status: 'failed', error: 'sessionId 为空' }
   try {
     const loaded = await loadBackgroundTurnInputs(sessionId)
+    const expectedLane = input.laneId?.trim() || ''
+    if (expectedLane && loaded.laneId !== expectedLane) {
+      return { status: 'superseded', reason: 'claimed_lane_is_not_active' }
+    }
     const blocked = () => {
       const live = peekSession(sessionId)
       return Boolean(hasPending(sessionId) || live?.busy || live?.compacting)
     }
     const wakeId = input.wakeId?.trim() || randomUUID()
+    if (input.wakeId) {
+      const replay = await getTurnByRequestId(wakeId, { signal: input.signal })
+      if (!replay.ok) return { status: 'failed', error: replay.error }
+      if (replay.found && replay.turn) {
+        if (replay.turn.session_id !== sessionId || replay.turn.turn_kind !== 'agent_wake') {
+          return { status: 'superseded', reason: 'wake_id_reused_for_another_turn' }
+        }
+        return {
+          status: 'completed', laneId: expectedLane || loaded.laneId,
+          turnId: replay.turn.id, replayed: true,
+        }
+      }
+    }
     const result = await tryRunBackgroundSessionTurn(
       sessionId,
-      () => runTurn({
-        sessionId,
-        requestId: wakeId,
-        expectedLastRoundId: 0,
-        personaId: loaded.persona.id,
-        text: wakePrompt(input, wakeId),
-        persona: loaded.persona,
-        config: loaded.config,
-        sessionSnapshot: loaded.sessionSnapshot,
-        resumeHint: loaded.resumeHint,
-        turnKind: 'agent_wake',
-        persistTurn: false,
-        signal: input.signal || new AbortController().signal,
-        send: () => undefined,
-        close: () => undefined,
-      }),
+      async () => {
+        if (input.leaseOwner) {
+          const begin = await beginAgentWakeRun({
+            sessionId, laneId: expectedLane || loaded.laneId, wakeId,
+            leaseOwner: input.leaseOwner, scheduleVersion: Number(input.scheduleVersion || 0),
+            signal: input.signal,
+          })
+          if (!begin.ok) return { gateStatus: 'failed', gateError: begin.error } as const
+          if (begin.status !== 'started') {
+            return { gateStatus: begin.status, gateError: '' } as const
+          }
+        }
+        const turn = await runTurn({
+          sessionId,
+          requestId: wakeId,
+          expectedLastRoundId: 0,
+          personaId: loaded.persona.id,
+          text: wakePrompt(input, wakeId),
+          persona: loaded.persona,
+          config: loaded.config,
+          sessionSnapshot: loaded.sessionSnapshot,
+          resumeHint: loaded.resumeHint,
+          turnKind: 'agent_wake',
+          persistTurn: false,
+          signal: input.signal || new AbortController().signal,
+          send: () => undefined,
+          close: () => undefined,
+        })
+        return { gateStatus: 'started', gateError: '', turn } as const
+      },
       blocked,
     )
     if (result.status === 'deferred') return result
-    if (!result.value.ok) return { status: 'failed', error: result.value.error || '后台 wake 失败' }
-    const assistantText = result.value.assistantText?.trim() === AGENT_WAKE_NOOP_MARKER
+    if (result.value.gateStatus === 'duplicate') return { status: 'in_progress', reason: 'duplicate_callback' }
+    if (result.value.gateStatus === 'superseded') return { status: 'superseded', reason: 'schedule_superseded' }
+    if (result.value.gateStatus === 'scope_mismatch') return { status: 'superseded', reason: 'claim_scope_mismatch' }
+    if (result.value.gateStatus === 'limit_reached') return { status: 'deferred', reason: 'session_blocked' }
+    if (result.value.gateStatus !== 'started' || !('turn' in result.value)) {
+      return { status: 'failed', error: result.value.gateError || '后台 wake begin 失败' }
+    }
+    const turnResult = result.value.turn
+    if (!turnResult) return { status: 'failed', error: '后台 wake 未返回 turn' }
+    if (!turnResult.ok) return { status: 'failed', error: turnResult.error || '后台 wake 失败' }
+    const assistantText = turnResult.assistantText?.trim() === AGENT_WAKE_NOOP_MARKER
       ? ''
-      : result.value.assistantText || ''
+      : turnResult.assistantText || ''
     const session = loaded.sessionSnapshot.session
     if (!session) return { status: 'failed', error: 'Haven 返回空窗口' }
     const persisted = await recordTurnStrict({
@@ -96,17 +142,17 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         cc_lane_id: loaded.laneId,
         model: loaded.config.model,
         persona_id: loaded.persona.id,
-        usage: result.value.usage || undefined,
+        usage: turnResult.usage || undefined,
         display_segments: assistantText
-          ? result.value.displaySegments || buildDisplaySegments(assistantText)
+          ? turnResult.displaySegments || buildDisplaySegments(assistantText)
           : buildDisplaySegments(''),
       },
       agentWakeUpdate: {
-        model_activity_at: result.value.modelActivityAt
-          ? new Date(result.value.modelActivityAt).toISOString()
+        model_activity_at: turnResult.modelActivityAt
+          ? new Date(turnResult.modelActivityAt).toISOString()
           : input.at,
-        cache_refresh_at: result.value.cacheRefreshAt
-          ? new Date(result.value.cacheRefreshAt).toISOString()
+        cache_refresh_at: turnResult.cacheRefreshAt
+          ? new Date(turnResult.cacheRefreshAt).toISOString()
           : '',
         wake_cause: input.cause,
         agent_wake: {
@@ -115,7 +161,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
           at: input.at,
           reason: input.reason || '',
         },
-        wake_decision: result.value.wakeDecision || undefined,
+        wake_decision: turnResult.wakeDecision || undefined,
       },
       signal: input.signal,
     })
@@ -124,8 +170,9 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
     }
     return {
       status: 'completed',
-      turn: { ...result.value, assistantText, displaySegments: buildDisplaySegments(assistantText) },
+      turn: { ...turnResult, assistantText, displaySegments: buildDisplaySegments(assistantText) },
       laneId: loaded.laneId,
+      turnId: persisted.turnId,
     }
   } catch (error) {
     return { status: 'failed', error: error instanceof Error ? error.message : '后台 wake 失败' }

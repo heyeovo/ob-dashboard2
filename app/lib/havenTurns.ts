@@ -162,6 +162,7 @@ export type AgentWakeSchedule = {
   silence_policy_version: string
   cache_keepalive_deadline: string
   due_at: string
+  retry_at: string
   cache_state: 'unarmed' | 'warm' | 'cooling' | 'cold'
   schedule_version: number
   background_turn_limit: number
@@ -446,6 +447,41 @@ export async function acceptUserActivityAndCancelSilence(input: {
   return res.ok
     ? { ok: true, schedule: res.payload.schedule as AgentWakeSchedule, error: '', httpStatus: res.httpStatus }
     : { ok: false, schedule: null, error: res.error, httpStatus: res.httpStatus }
+}
+
+export async function beginAgentWakeRun(input: {
+  sessionId: string
+  laneId: string
+  wakeId: string
+  leaseOwner: string
+  scheduleVersion: number
+  signal?: AbortSignal
+}): Promise<{ ok: boolean; status: string; run: Record<string, unknown> | null; error: string; httpStatus: number | null }> {
+  const res = await havenFetch({
+    method: 'POST',
+    path: '/gateway/api/conversation/agent-wake',
+    sessionId: input.sessionId,
+    signal: input.signal,
+    body: {
+      action: 'begin_run',
+      session_id: input.sessionId,
+      lane_id: input.laneId,
+      wake_id: input.wakeId,
+      lease_owner: input.leaseOwner,
+      schedule_version: input.scheduleVersion,
+    },
+  })
+  return res.ok
+    ? {
+        ok: true,
+        status: String(res.payload.status || ''),
+        run: res.payload.run && typeof res.payload.run === 'object'
+          ? res.payload.run as Record<string, unknown>
+          : null,
+        error: '',
+        httpStatus: res.httpStatus,
+      }
+    : { ok: false, status: '', run: null, error: res.error, httpStatus: res.httpStatus }
 }
 
 /** request_id 已落库时读回完整轮次，供真正的幂等重放使用。 */

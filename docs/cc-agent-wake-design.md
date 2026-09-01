@@ -1,6 +1,6 @@
 # CC 缓存保活与 Claude 主动唤醒方案
 
-> 状态：产品方案已确认；阶段 1–3 已实施，阶段 4–6 待实施
+> 状态：产品方案已确认；阶段 1–4 已实施，阶段 5–6 待实施
 > 建立时间：2026-08-31  
 > 涉及仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 
@@ -446,13 +446,15 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - “本窗口设置”新增第 4 个 Tab。
 - 页面可见时增量刷新后台消息。
 
-### 阶段 4：调度接通与故障验证
+### 阶段 4：调度接通与故障验证（已完成）
 
-- Haven scheduler 调用 Dashboard runner。
-- Scheduler 将持久化的 `conversation_silence_check_at` 纳入同一 due-time 计算；到点且来源 turn 仍有效时，以 `conversation_silence` 原因触发一次 wake。
-- 验证随机时间只采样一次、重启后不漂移、用户回复可取消，以及沉默 wake 不会自行链式再挂一个沉默检查。
-- 验证重启恢复、重复回调、lease 过期、busy defer、用户碰撞和失败退避。
-- 加入滚动 24 小时后台上限。
+- Haven Brain 每 30 秒从持久 `due_at` 原子 claim，并通过独立 Bearer callback 调用 Dashboard runner；缺 URL/token 时 scheduler 保持关闭。
+- `conversation_silence_check_at` 与 cache/agent 时钟共用 due claim；Dashboard 取得后台协调器门禁后，Haven 原子复核 schedule version、lease、来源 user turn 和后续用户消息，再允许 `conversation_silence` 模型请求。
+- 随机时间只在正常用户 turn 成功提交时采样一次；重启和重试复用绝对时间，用户回复原子取消，silence wake 无论 no-op 或有正文都不续挂 timer。
+- 相同 `wake_id` 已落库时直接幂等回放；重复 callback、旧 version 和失活 lane 不重复运行。过期 lease 复用原 wake id 恢复，失败和 deferred 使用持久退避。
+- Busy、compacting、待审批和前台等待在 begin 前 deferred，不生成 wake event。已开始后台 turn 不强停，前台排在其后；尚未开始时前台优先。
+- 每 lane 执行滚动 24 小时后台 turn 上限；达到上限时不请求模型，保存可见 `last_error` 并延至最早额度释放时间。连续失败达到阈值后暂停领取，新的用户活动或成功 turn 可恢复。
+- 24 小时无用户活动时只暂停固定 keepalive 并进入 cooling，保留持久开关与未来 agent schedule；下一条用户消息恢复。
 
 ### 阶段 5：Bark 分段通知
 

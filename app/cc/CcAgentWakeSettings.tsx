@@ -129,7 +129,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
             分钟
           </span>
         </div>
-        <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>后台 turn 上限</span><span>{schedule.background_turn_limit}/滚动 24h（阶段 4 执行）</span></div>
+        <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>后台 turn 上限</span><span>{schedule.background_turn_limit}/滚动 24h</span></div>
       </div>
 
       {schedule.last_error || error ? <div className="text-[var(--color-danger)]">{error || schedule.last_error}</div> : null}

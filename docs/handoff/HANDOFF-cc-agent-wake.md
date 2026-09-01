@@ -1,61 +1,58 @@
 # HANDOFF — CC 缓存保活与 Claude 主动唤醒
 
-> 建立时间：2026-08-31  
-> 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`  
-> 状态：阶段 1–3 已完成；阶段 4–6 待实施
+> 建立时间：2026-08-31
+> 最后更新：2026-09-01
+> 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
+> 状态：阶段 1–4 已完成；下一窗口只进入阶段 5
 
 ## 当前完成状态
 
 - 产品决策与跨仓库实施方案仍以 `docs/cc-agent-wake-design.md` 为唯一事实源。
-- Haven 阶段 1 已完成：
-  - 新增 `agent_wake_store.py`，schedule/run 与 conversation 共用 `gateway_state.db`。
-  - `agent_wake_schedules` 按 `profile_id + session_id + lane_id` 隔离，`due_at` 由双开关、暂停状态和两个时钟派生。
-  - 已实现 schedule CRUD、版本 CAS、原子 due claim、lease 过期恢复、旧 run 失效和幂等 run 状态流转。
-  - `conversation_turns` 新增兼容字段 `turn_kind`，旧数据默认 `user`。
-  - 窗口永久删除会在同一事务内清理目标 profile/session 的 wake schedule/run，不影响其他窗口或 profile。
-- Haven 阶段 1–3 的 wake/state 定向测试共 36 项全部通过。
-- Haven 全量 unittest 本窗口执行到 139 项；除 2 项既有 skip 外，唯一未运行成功项因 bundled Python 缺少 `httpx`，在导入 `gateway.py` 时中断，与本次代码无关。
-- Dashboard 阶段 2 已完成：
-  - `SessionTurnCoordinator` 是前台用户 turn 与后台 wake 的统一进程内入口；已开始的后台 turn 不强停，排队中的前台优先于尚未开始的后台，后台遇到 busy、compacting 或待审批直接 deferred。
-  - 两类 turn 共用 `ccSession.ts` 中同一个长寿命 Agent SDK iterator；`live.busy` 继续作为底层防并发保护。
-  - 后台 runner 只从 Haven 恢复 `cc_overrides.active_cred` 对应的最后活跃 CC lane、该窗口 Persona、冻结 prompt 和 lane resume id；没有成功 CC resume 点的旧窗口不允许后台冷启动。
-  - 固定进程内 `set_agent_wake` 已进入稳定 MCP 前缀，同轮最后一次有效 schedule/cancel 决定覆盖前一次。
-  - 后台仅允许固定 wake 工具、自动允许 MCP 与受路径约束的只读工具；Bash、Edit、Write、NotebookEdit 和 ask/deny MCP 立即拒绝，不创建批准卡。
-  - Cache refresh 仅在成功 result usage 确认 cache read/write 后更新，时间取真正送入模型前的请求开始时间；无 cache usage 不刷新倒计时。
-- Dashboard 阶段 3 已完成：
-  - agent wake 的可见消息、无正文结果、wake event、next wake、usage、cache refresh 和活动时间由同一次 Haven 严格提交原子落库；`set_agent_wake` 仍只以同轮最后一次有效决定生效。
-  - `conversation_turns.raw_json` 保存版本化 `display_segments`；模型 Context/Haven assistant 原文仍是一轮一条。前台 SSE 会逐步固定已完成的普通文字气泡、让最后一段继续流式；增量收到的后台消息按 360ms 逐段显现。结构化原子块保持整宽，初次历史与减少动态效果不重播动画，旧消息只在读取时兼容派生、不回写。
-  - 历史映射显示 wake event、可选 assistant 正文和 next wake；页面可见且没有发送/载入历史时按 `after_round_id` 增量刷新，并在重新聚焦时立即刷新。
-  - “本窗口设置”增加第 4 个 Tab“主动唤醒”，可管理双开关、暂停、下一次 wake、最短间隔、silence 范围和停止全部；后台次数上限只显示，阶段 4 才执行。
-  - 正常用户 turn 成功提交时在同一事务只采样一次 silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer；停止全部也清除 silence timer。
-  - 阶段 3 Dashboard 定向 52 项测试全部通过，production build 通过。全量 Vitest 为 222 通过、1 跳过、1 个既有 `automation-pro-runner` 断言失败，与本阶段无关。
-- 尚未接 Haven scheduler 回调、30 秒调度、lease 故障验证、后台次数上限执行或 Bark/outbox。
+- 阶段 1–3 的持久控制面、统一 turn、原子消息提交、silence timer、历史映射、分段气泡、主动唤醒设置 Tab 和页面增量刷新保持不变。
+- 阶段 4 已接通 Haven Brain → Dashboard：
+  - Brain 启动独立的 30 秒持久 scheduler，从 `gateway_state.db` 按 `due_at` 原子 claim，并用独立 Bearer token 调用 `/api/cc-agent-wake-runner`。
+  - Dashboard 只有在同一 `SessionTurnCoordinator` 取得后台门禁后，才向 Haven 原子 begin run；busy、compacting、待审批、前台等待均直接 deferred，不请求模型、不产生假的 wake event。
+  - Begin 同时校验 profile/session/lane、schedule version、lease 和 silence 来源 user turn；下一条用户消息、后续 user turn、旧 version 或失活 lane 都会使旧 callback 失效。
+  - 已开始的后台 turn 不强停；用户 turn 排在其后。尚未开始时前台优先。
+  - 相同 `wake_id` 已落库时直接回放；重复 callback 不重复模型请求或重复落消息。Dashboard/Haven 重启复用持久 due、run、wake id、lease 和绝对 silence 时间。
+  - Lease 过期恢复复用同一 wake id；deferred 使用短延迟，失败使用持久指数退避，连续 5 次失败后暂停领取，错误保存在控制面。
+  - Silence timer 只由正常用户 turn 成功提交时采样一次；用户回复可取消，silence wake 无论 no-op 或有正文都不会链式创建下一次 timer。
+  - Agent schedule 在对应 wake 成功提交时一次性消费；Claude 同轮设置的新 schedule 不会被旧 callback 清除。Cache heartbeat 若没有 usage 确认 cache read/write，不伪造 refresh，并进入 cold，避免对过期 deadline 自旋。
+  - 滚动 24 小时后台 turn 上限按整个窗口跨 lane 统计；达到上限时不请求模型，保存可见 `last_error`，并延后到最早额度释放时间。用户 turn 不计数。
+  - 24 小时无用户活动时只暂停固定 keepalive、进入 cooling；未来 agent schedule 保留，下一条用户消息恢复持久保活。
+  - 非最后活跃 lane 的旧 schedule 会进入 dormant；该 lane 再次收到正常用户 turn 时才重新计算 due，不扫描或同时保活其他 lane。
 
-## 下一窗口范围
+## 验证结果
 
-下一窗口只推进方案的“阶段 4：调度接通与故障验证”：
+- Haven 阶段 4 定向：47 项通过。
+- Haven 全量 unittest：175 项全部通过。
+- Dashboard 阶段 4 定向：12 项通过。
+- Dashboard 全量 Vitest：229 项通过、1 项跳过、1 项既有失败。既有失败仍是 `tests/automation-pro-runner.test.ts` 期待旧 `append_content`，而当前既有实现使用 `revised_content`，与 agent wake 无关，本窗口未扩散修改。
+- Dashboard `npm run build`：通过，包含 `/api/cc-agent-wake-runner`。
+- 两仓库 `git diff --check`：通过。
 
-1. 接通 Haven scheduler 到 Dashboard 后台 runner，并把持久化 silence timer 纳入 due-time 执行；所有 wake 仍必须经过现有 `SessionTurnCoordinator`。
-2. 验证 30 秒调度、重启恢复、重复回调、lease 过期、busy defer、用户碰撞、失败退避，以及 silence timer 不重采样、不漂移、不链式续挂。
-3. 执行滚动 24 小时后台次数上限；只恢复最后活跃 CC lane，不扫描其他 lane。
-4. 不接阶段 5 Bark/outbox，不做阶段 6 真实 55 分钟成本实验，不扩大后台工具批准权限。
+## 部署前必须配置
 
-开始阶段 4 前仍需按全局规则列出精确文件、修改内容与明确不改项，让用户确认后再动代码。
+- Haven Brain：
+  - `OMBRE_AGENT_WAKE_RUNNER_URL=https://<Dashboard 域名>/api/cc-agent-wake-runner`
+  - `OMBRE_AGENT_WAKE_RUNNER_TOKEN=<独立随机共享密钥>`
+- Dashboard Application：
+  - `OMBRE_AGENT_WAKE_RUNNER_TOKEN=<与 Brain 完全相同的共享密钥>`
+- `compose.coolify.test.yml` 已把 URL/token 透传给 Brain。缺少任一变量时 scheduler 保持关闭，不创建内存替代计时器。
+- 正式发布仍按项目规则：用户分别 commit + push；Dashboard 在 Coolify 部署；Haven 更新 `HAVEN_RELEASE_SHA` 为已验收完整 commit SHA 后 Restart/Deploy，并确认 Brain 与 Gateway 都恢复 `Running (healthy)`。
+
+## 下一窗口范围：只做阶段 5
+
+1. Haven 增加 profile 级 Bark 私密配置与持久 notification outbox。
+2. 主动 wake 的可见 assistant 消息成功落库后，按已保存的 `display_segments` 生成幂等通知项。
+3. Dashboard 增加通知配置与测试入口；“本窗口设置 → 主动唤醒”只增加窗口级 Bark 开关和最近状态。
+4. 实现首条正常、后续较轻、默认 1 秒间隔、默认每轮最多 8 条的可调策略。
+5. 实现 deep link、失败重试、重启恢复、敏感 key 脱敏和可选隐藏正文模式。
 
 ## 不得扩散的边界
 
-- 不支持 selfhost wake。
-- 不同时保活多条 CC lane。
-- 不增加夜间 03:00–09:00 停机规则。
-- 不允许后台扩大 Bash、写文件或 MCP 权限。
-- 前端气泡与 wake UI 只归阶段 3，Bark 配置和 notification outbox 只归阶段 5。
-- 沉默检查持久化只归阶段 3，Scheduler 执行只归阶段 4；后续接入必须继续经过当前单会话 coordinator。
-
-## 阶段 1 验收（已完成）
-
-- 新库、旧库升级和重复初始化均成功。
-- `profile_id + session_id + lane_id` 隔离成立。
-- 相同到期 schedule 只能被一个 owner claim。
-- lease 过期后可以恢复；schedule version 变化后旧回调失效。
-- 相同 `wake_id` 不重复创建 run；conversation event 已在阶段 3 与 turn/schedule 原子提交。
-- 旧 conversation turn 默认仍按普通用户 turn 读取。
+- 不支持 selfhost wake，不同时保活多条 CC lane。
+- 不增加夜间 03:00–09:00 策略，不做阶段 6 的真实 55 分钟成本实验。
+- 不增加新的 Context GC 策略或 WebSocket。
+- 不允许后台扩大 Bash、写文件或 MCP 批准权限。
+- 阶段 5 不重写阶段 4 scheduler、coordinator、silence 或后台上限状态机；只在成功落库后的通知副作用上接 outbox。

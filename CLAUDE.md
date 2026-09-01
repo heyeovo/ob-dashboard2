@@ -15,7 +15,7 @@ VPS production 使用根目录 `Dockerfile` 多阶段构建，容器内非 root 
 
 ## 环境变量（.env.local）
 
-production 必须配置以下五项：
+production 必须配置以下六项：
 
 | 变量 | 用途 |
 |------|------|
@@ -24,6 +24,7 @@ production 必须配置以下五项：
 | `OMBRE_GATEWAY_TOKEN` | Haven Gateway Bearer token |
 | `DASHBOARD_LOGIN_SECRET` | 公网登录口令（>=12 字符） |
 | `DASHBOARD_SESSION_SECRET` | session 签名 secret（>=32 字符） |
+| `OMBRE_AGENT_WAKE_RUNNER_TOKEN` | Haven 主动唤醒 callback 的独立 Bearer 共享密钥；与 Brain 相同，不返回浏览器 |
 
 本机 `npm run dev` 继续兼容旧 `OMBRE_BASE_URL` / `NEXT_PUBLIC_OMBRE_*`。
 
@@ -41,7 +42,7 @@ production 必须配置以下五项：
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
-| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence 控制面；`cc-turns` 支持按 `after_round_id` 增量补消息 |
+| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence 控制面；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-turns` 支持按 `after_round_id` 增量补消息 |
 | `app/lib/` | 客户端库与工具函数 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
@@ -92,6 +93,7 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 - Claude Pro 最近额度按 profile 在 Haven 保存全局单条快照，各窗口共用并显示上次读取时间，新值覆盖旧值
 - CC 前台用户 turn 与后台 wake 共用进程内 `SessionTurnCoordinator` 和同一个长寿命 Agent SDK iterator：前台排队优先，后台遇到生成、压缩或待审批直接 deferred；后台只恢复 Haven 中 `cc_overrides.active_cred` 对应的最后活跃 lane、冻结 prompt 与该 lane 的 resume id。固定进程内 `set_agent_wake` 工具始终存在，同轮最后一次有效决定随 assistant 原文、usage、cache refresh、活动时间和 wake event 原子写入 Haven；后台禁止 Bash、写文件及所有需要人工批准的 MCP。Cache refresh 只在成功 result 的 usage 确认 cache read/write 后，按模型请求开始时间计算。
 - 正常用户 turn 成功提交时在 Haven 事务内只采样一次 conversation silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer。新 assistant 轮次保存版本化 `display_segments`，历史仍保留一轮一条原文；页面可见且空闲时按 round 游标增量刷新后台 wake 消息。
+- Haven 每 30 秒按持久 `due_at` claim 后调用 `cc-agent-wake-runner`；Dashboard 只有取得同一 `SessionTurnCoordinator` 的后台门禁后才向 Haven 原子 begin。旧 schedule version、无效 silence 来源、重复 `wake_id`、busy/compacting/待审批、失败退避、过期 lease、24 小时无用户活动和滚动后台 turn 上限均在模型请求前处理；deferred 不生成 wake event。
 - cc 换窗的折叠逐项选择、统一 token 预算、Haven 固定快照及 CC/selfhost 一致注入契约见 `docs/architecture.md`
 - 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 单行引用为“召回内容已清理：title（bucket_id）”，工具结果单行以“已清理：…”标识，原工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭，Dashboard Node 进程在线时才调度，并在 Haven 日回顾/周轨迹仍运行、窗口忙或工具待批时延后重试。
 
