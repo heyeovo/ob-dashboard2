@@ -64,12 +64,13 @@ describe('Dashboard proxy protection', () => {
     expect(proxy(request('/api/cc-chat')).status).toBe(503)
   })
 
-  it('keeps only the exact login, health, bearer runner, PWA assets, and Next build assets public', () => {
+  it('keeps only the exact login, health, bearer runners, PWA assets, and Next build assets public', () => {
     for (const path of [
       '/login',
       '/api/auth/login',
       '/api/health',
       '/api/automation-pro-runner',
+      '/api/cc-agent-wake-runner',
       '/manifest.json',
       '/sw.js',
       '/favicon.ico',
@@ -84,6 +85,7 @@ describe('Dashboard proxy protection', () => {
       '/api/mcp-relay/private',
       '/api/provider-relay',
       '/api/automation-pro-runner/private',
+      '/api/cc-agent-wake-runner/private',
     ]) {
       expect(proxy(request(path)).status, path).not.toBe(200)
     }

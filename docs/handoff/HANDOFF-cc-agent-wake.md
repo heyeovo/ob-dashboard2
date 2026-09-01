@@ -30,6 +30,7 @@
 - Dashboard 全量 Vitest：229 项通过、1 项跳过、1 项既有失败。既有失败仍是 `tests/automation-pro-runner.test.ts` 期待旧 `append_content`，而当前既有实现使用 `revised_content`，与 agent wake 无关，本窗口未扩散修改。
 - Dashboard `npm run build`：通过，包含 `/api/cc-agent-wake-runner`。
 - 两仓库 `git diff --check`：通过。
+- 首次线上验收曾出现 callback 401：原因是 Dashboard 登录代理的精确公开白名单漏掉 `/api/cc-agent-wake-runner`，请求未进入 route 自身的 Bearer 校验。现已补入精确根路径并增加回归测试；子路径仍受 Dashboard 登录保护。该修复只需重新部署 Dashboard。
 
 ## 部署前必须配置
 
