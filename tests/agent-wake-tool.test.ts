@@ -30,4 +30,12 @@ describe('set_agent_wake turn-local decision', () => {
       action: 'schedule', after_minutes: 10, reason: '长'.repeat(31),
     })).toThrow('30')
   })
+
+  it('uses the persisted window minimum for the current turn', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-31T12:00:00Z'))
+    beginAgentWakeTurn('s1', 'foreground', 20)
+    expect(() => recordAgentWakeDecision('s1', { action: 'schedule', after_minutes: 19 })).toThrow('20–10080')
+    expect(recordAgentWakeDecision('s1', { action: 'schedule', after_minutes: 20 })).toMatchObject({ action: 'schedule' })
+  })
 })

@@ -14,6 +14,8 @@ export type AgentWakeDecision =
 
 type AgentWakeTurnState = {
   mode: CcTurnExecutionMode
+  minMinutes: number
+  scheduleEnabled: boolean
   decision: AgentWakeDecision | null
 }
 
@@ -22,8 +24,18 @@ const states: Map<string, AgentWakeTurnState> =
   (globalThis as unknown as Record<string, Map<string, AgentWakeTurnState>>)[STATE_KEY] ||
   ((globalThis as unknown as Record<string, Map<string, AgentWakeTurnState>>)[STATE_KEY] = new Map())
 
-export function beginAgentWakeTurn(sessionId: string, mode: CcTurnExecutionMode): void {
-  states.set(sessionId, { mode, decision: null })
+export function beginAgentWakeTurn(
+  sessionId: string,
+  mode: CcTurnExecutionMode,
+  minMinutes = 10,
+  scheduleEnabled = true,
+): void {
+  states.set(sessionId, {
+    mode,
+    minMinutes: Math.max(1, Math.min(10080, Math.round(minMinutes))),
+    scheduleEnabled,
+    decision: null,
+  })
 }
 
 export function endAgentWakeTurn(sessionId: string): AgentWakeDecision | null {
@@ -44,15 +56,15 @@ export function isSetAgentWakeTool(toolName: string): boolean {
   return toolName === AGENT_WAKE_SDK_TOOL_NAME || toolName === AGENT_WAKE_TOOL_NAME
 }
 
-function scheduleAt(args: { after_minutes?: number; at?: string }): string {
+function scheduleAt(args: { after_minutes?: number; at?: string }, minMinutes: number): string {
   const hasAfter = args.after_minutes != null
   const hasAt = Boolean(args.at?.trim())
   if (hasAfter === hasAt) throw new Error('after_minutes 与 at 必须且只能提供一个')
   const now = Date.now()
   if (hasAfter) {
     const minutes = Number(args.after_minutes)
-    if (!Number.isInteger(minutes) || minutes < 10 || minutes > 7 * 24 * 60) {
-      throw new Error('after_minutes 必须是 10–10080 之间的整数')
+    if (!Number.isInteger(minutes) || minutes < minMinutes || minutes > 7 * 24 * 60) {
+      throw new Error(`after_minutes 必须是 ${minMinutes}–10080 之间的整数`)
     }
     return new Date(now + minutes * 60_000).toISOString()
   }
@@ -60,7 +72,7 @@ function scheduleAt(args: { after_minutes?: number; at?: string }): string {
   if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(raw)) throw new Error('at 必须是带时区的 RFC 3339 时间')
   const timestamp = Date.parse(raw)
   if (!Number.isFinite(timestamp)) throw new Error('at 不是有效时间')
-  if (timestamp < now + 10 * 60_000) throw new Error('下一次 wake 至少要在 10 分钟后')
+  if (timestamp < now + minMinutes * 60_000) throw new Error(`下一次 wake 至少要在 ${minMinutes} 分钟后`)
   if (timestamp > now + 7 * 24 * 60 * 60_000) throw new Error('下一次 wake 最远只能设置到 7 天后')
   return new Date(timestamp).toISOString()
 }
@@ -71,11 +83,14 @@ export function recordAgentWakeDecision(
 ): AgentWakeDecision {
   const state = states.get(sessionId)
   if (!state) throw new Error('当前没有可接收 wake 决定的 turn')
+  if (args.action === 'schedule' && !state.scheduleEnabled) {
+    throw new Error('当前窗口没有开启允许主动唤醒')
+  }
   const decision: AgentWakeDecision = args.action === 'cancel'
     ? { action: 'cancel' }
     : {
         action: 'schedule',
-        at: scheduleAt(args),
+        at: scheduleAt(args, state.minMinutes),
         reason: String(args.reason || '').trim(),
       }
   if (decision.action === 'schedule' && Array.from(decision.reason).length > 30) {

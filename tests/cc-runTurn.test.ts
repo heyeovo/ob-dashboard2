@@ -76,6 +76,8 @@ const turns = vi.hoisted(() => ({
   listAllTurns: vi.fn(),
   listTurns: vi.fn(),
   updatePersonaFromExchange: vi.fn(),
+  acceptUserActivity: vi.fn(),
+  getAgentWakeSchedule: vi.fn(),
 }))
 
 vi.mock('@/app/lib/havenTurns', () => ({
@@ -84,6 +86,8 @@ vi.mock('@/app/lib/havenTurns', () => ({
   listAllTurns: turns.listAllTurns,
   listTurns: turns.listTurns,
   updatePersonaFromExchange: turns.updatePersonaFromExchange,
+  acceptUserActivityAndCancelSilence: turns.acceptUserActivity,
+  getAgentWakeSchedule: turns.getAgentWakeSchedule,
 }))
 
 const recall = vi.hoisted(() => ({ run: vi.fn() }))
@@ -327,6 +331,20 @@ beforeEach(() => {
     httpStatus: 200,
   })
   turns.listAllTurns.mockReset()
+  turns.acceptUserActivity.mockReset()
+  turns.acceptUserActivity.mockResolvedValue({
+    ok: true,
+    schedule: { agent_wake_min_minutes: 10 },
+    error: '',
+    httpStatus: 200,
+  })
+  turns.getAgentWakeSchedule.mockReset()
+  turns.getAgentWakeSchedule.mockResolvedValue({
+    ok: true,
+    schedule: { agent_wake_min_minutes: 10 },
+    error: '',
+    httpStatus: 200,
+  })
   turns.listAllTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
   turns.listTurns.mockReset()
   turns.listTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
@@ -395,11 +413,29 @@ describe('runTurn：普通回复', () => {
     expect(recInput.requestId).toBe('request-test-1')
     expect(recInput.expectedLastRoundId).toBe(0)
     expect(recInput.personaId).toBe('ombre')
+    expect(recInput.turnKind).toBe('user')
+    expect(recInput.laneId).toBe('api:default')
+    expect(recInput.raw.display_segments).toMatchObject({ version: 1 })
+    expect(recInput.agentWakeUpdate).toMatchObject({
+      sample_silence: true,
+      silence_policy_version: 'conversation-silence-v1',
+    })
+    expect(turns.acceptUserActivity).toHaveBeenCalledBefore(turns.recordTurn)
 
     // done 带用量和统计
     const done = handle.events.find(e => e.event === 'done')!
     expect(done.data.usage).toMatchObject({ inputTokens: 10, outputTokens: 20 })
     expect(done.data.interrupted).toBeUndefined()
+    expect(done.data.display_segments).toMatchObject({ version: 1 })
+  })
+
+  it('does not enter the model when the incoming user message cannot cancel persisted silence state', async () => {
+    turns.acceptUserActivity.mockResolvedValueOnce({ ok: false, schedule: null, error: 'Haven unavailable' })
+    const handle = driveTurn([initMsg(), textDelta('不应执行'), resultMsg()])
+    const result = await handle.promise
+    expect(result).toMatchObject({ ok: false, error: 'Haven unavailable' })
+    expect(sdk.queryCalls).toBe(0)
+    expect(turns.recordTurn).not.toHaveBeenCalled()
   })
 
   it('当前窗口只取最后一次模型请求，不拿 result 的本轮累计 usage 覆盖', async () => {

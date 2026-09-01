@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server'
 const haven = vi.hoisted(() => ({
   listSessions: vi.fn(),
   listTurns: vi.fn(),
+  listAllTurns: vi.fn(),
   getConversationSession: vi.fn(),
   renameConversationSession: vi.fn(),
   patchConversationSessionState: vi.fn(),
@@ -19,6 +20,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   haven.listSessions.mockResolvedValue({ ok: true, sessions: [], error: '' })
   haven.listTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
+  haven.listAllTurns.mockResolvedValue({ ok: true, turns: [], error: '' })
   haven.getConversationSession.mockResolvedValue({ ok: true, found: false, session: null, error: '' })
   haven.patchConversationSessionState.mockResolvedValue({ ok: true, session: { local_engine_preference: 'selfhost' }, error: '', httpStatus: 200 })
   haven.renameConversationSession.mockResolvedValue({ ok: true, title: '新标题', error: '' })
@@ -62,6 +64,14 @@ describe('/api/cc-turns 10.3 session state and deletion integration', () => {
     const response = await GET(new NextRequest('http://localhost/api/cc-turns?session_id=s1&raw=1'))
     const payload = await response.json()
     expect(payload.session.local_engine_preference).toBe('selfhost')
+  })
+
+  it('passes after_round_id through for incremental background turns', async () => {
+    await GET(new NextRequest('http://localhost/api/cc-turns?session_id=s1&after_round_id=12&raw=1'))
+    expect(haven.listTurns).toHaveBeenCalledWith('s1', expect.objectContaining({
+      afterRoundId: 12,
+      includeRaw: true,
+    }))
   })
 
   it('persists local_engine_preference without accepting effective_engine', async () => {

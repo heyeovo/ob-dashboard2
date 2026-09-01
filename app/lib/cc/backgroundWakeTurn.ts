@@ -3,6 +3,9 @@ import { hasPending } from '@/app/lib/ccChannel'
 import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
+import { recordTurnStrict } from '@/app/lib/havenTurns'
+import { AGENT_WAKE_NOOP_MARKER } from '@/app/lib/cc/agentWakeTool'
+import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import {
   tryRunBackgroundSessionTurn,
   type BackgroundTurnDeferredReason,
@@ -67,9 +70,63 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
       blocked,
     )
     if (result.status === 'deferred') return result
-    return result.value.ok
-      ? { status: 'completed', turn: result.value, laneId: loaded.laneId }
-      : { status: 'failed', error: result.value.error || '后台 wake 失败' }
+    if (!result.value.ok) return { status: 'failed', error: result.value.error || '后台 wake 失败' }
+    const assistantText = result.value.assistantText?.trim() === AGENT_WAKE_NOOP_MARKER
+      ? ''
+      : result.value.assistantText || ''
+    const session = loaded.sessionSnapshot.session
+    if (!session) return { status: 'failed', error: 'Haven 返回空窗口' }
+    const persisted = await recordTurnStrict({
+      sessionId,
+      requestId: wakeId,
+      expectedLastRoundId: Number(session.cc_seen_round_id || 0),
+      personaId: loaded.persona.id,
+      userText: '',
+      assistantText,
+      model: loaded.config.model,
+      client: `ob2-chat/${loaded.persona.id}`,
+      route: '/api/cc-agent-wake',
+      source: 'cc',
+      turnKind: 'agent_wake',
+      laneId: loaded.laneId,
+      raw: {
+        version: 1,
+        engine: 'cc',
+        cred_mode: loaded.config.cred,
+        cc_lane_id: loaded.laneId,
+        model: loaded.config.model,
+        persona_id: loaded.persona.id,
+        usage: result.value.usage || undefined,
+        display_segments: assistantText
+          ? result.value.displaySegments || buildDisplaySegments(assistantText)
+          : buildDisplaySegments(''),
+      },
+      agentWakeUpdate: {
+        model_activity_at: result.value.modelActivityAt
+          ? new Date(result.value.modelActivityAt).toISOString()
+          : input.at,
+        cache_refresh_at: result.value.cacheRefreshAt
+          ? new Date(result.value.cacheRefreshAt).toISOString()
+          : '',
+        wake_cause: input.cause,
+        agent_wake: {
+          wake_id: wakeId,
+          cause: input.cause,
+          at: input.at,
+          reason: input.reason || '',
+        },
+        wake_decision: result.value.wakeDecision || undefined,
+      },
+      signal: input.signal,
+    })
+    if (!persisted.ok || !persisted.stored) {
+      return { status: 'failed', error: persisted.error || '后台 wake 未保存到 Haven' }
+    }
+    return {
+      status: 'completed',
+      turn: { ...result.value, assistantText, displaySegments: buildDisplaySegments(assistantText) },
+      laneId: loaded.laneId,
+    }
   } catch (error) {
     return { status: 'failed', error: error instanceof Error ? error.message : '后台 wake 失败' }
   }

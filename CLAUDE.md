@@ -41,7 +41,7 @@ production 必须配置以下五项：
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
-| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码，并把非 JSON 错误转为可读错误 |
+| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence 控制面；`cc-turns` 支持按 `after_round_id` 增量补消息 |
 | `app/lib/` | 客户端库与工具函数 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
@@ -90,7 +90,8 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 - 含密钥配置只能服务端读写，浏览器只接收掩码
 - CC 最终系统提示词追加前缀按窗口首次写入 Haven 后冻结；进程内 Map 只作加速，Dashboard 重部署后继续读取同一前缀
 - Claude Pro 最近额度按 profile 在 Haven 保存全局单条快照，各窗口共用并显示上次读取时间，新值覆盖旧值
-- CC 前台用户 turn 与后台 wake 共用进程内 `SessionTurnCoordinator` 和同一个长寿命 Agent SDK iterator：前台排队优先，后台遇到生成、压缩或待审批直接 deferred；后台只恢复 Haven 中 `cc_overrides.active_cred` 对应的最后活跃 lane、冻结 prompt 与该 lane 的 resume id。固定进程内 `set_agent_wake` 工具始终存在，但阶段 2 只保存本轮临时决定；后台禁止 Bash、写文件及所有需要人工批准的 MCP。Cache refresh 只在成功 result 的 usage 确认 cache read/write 后，按模型请求开始时间计算。
+- CC 前台用户 turn 与后台 wake 共用进程内 `SessionTurnCoordinator` 和同一个长寿命 Agent SDK iterator：前台排队优先，后台遇到生成、压缩或待审批直接 deferred；后台只恢复 Haven 中 `cc_overrides.active_cred` 对应的最后活跃 lane、冻结 prompt 与该 lane 的 resume id。固定进程内 `set_agent_wake` 工具始终存在，同轮最后一次有效决定随 assistant 原文、usage、cache refresh、活动时间和 wake event 原子写入 Haven；后台禁止 Bash、写文件及所有需要人工批准的 MCP。Cache refresh 只在成功 result 的 usage 确认 cache read/write 后，按模型请求开始时间计算。
+- 正常用户 turn 成功提交时在 Haven 事务内只采样一次 conversation silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer。新 assistant 轮次保存版本化 `display_segments`，历史仍保留一轮一条原文；页面可见且空闲时按 round 游标增量刷新后台 wake 消息。
 - cc 换窗的折叠逐项选择、统一 token 预算、Haven 固定快照及 CC/selfhost 一致注入契约见 `docs/architecture.md`
 - 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 单行引用为“召回内容已清理：title（bucket_id）”，工具结果单行以“已清理：…”标识，原工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭，Dashboard Node 进程在线时才调度，并在 Haven 日回顾/周轨迹仍运行、窗口忙或工具待批时延后重试。
 

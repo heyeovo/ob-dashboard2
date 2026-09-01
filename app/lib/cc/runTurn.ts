@@ -50,6 +50,8 @@ import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import {
   getConversationSession,
+  acceptUserActivityAndCancelSilence,
+  getAgentWakeSchedule,
   listAllTurns,
   recordTurnStrict,
   updatePersonaFromExchange,
@@ -64,6 +66,7 @@ import {
   endAgentWakeTurn,
   type AgentWakeDecision,
 } from '@/app/lib/cc/agentWakeTool'
+import { buildDisplaySegments, type VersionedDisplaySegments } from '@/app/lib/cc/displaySegments'
 
 function isSubscriptionLimitError(
   msg: SDKMessage & { errors?: string[] },
@@ -141,6 +144,8 @@ export type RunTurnResult = {
   usage?: TurnUsage | null
   wakeDecision?: AgentWakeDecision | null
   cacheRefreshAt?: number
+  modelActivityAt?: number
+  displaySegments?: VersionedDisplaySegments
 }
 
 /* ── 私有工具函数（原 route.ts 原样搬） ── */
@@ -432,9 +437,34 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   let modelRequestStartedAt = 0
   let confirmedCacheRefreshAt = 0
 
-  beginAgentWakeTurn(sessionId, turnKind === 'agent_wake' ? 'background' : 'foreground')
-
   try {
+    const wakeState = turnKind === 'user'
+      ? await acceptUserActivityAndCancelSilence({
+          sessionId,
+          laneId: config.laneId,
+          userActivityAt: new Date(startedAt).toISOString(),
+          signal,
+        })
+      : await getAgentWakeSchedule(sessionId, config.laneId, { signal })
+    if (!wakeState.ok) {
+      send('error', {
+        code: 'agent_wake_state_failed',
+        message: wakeState.error || '主动唤醒状态读取失败',
+        stage: 'persistence',
+        retryable: true,
+        request_id: requestId,
+        generated_not_saved: false,
+      })
+      state.markFailed()
+      return { ok: false, error: wakeState.error || '主动唤醒状态读取失败', phase: state.current }
+    }
+    beginAgentWakeTurn(
+      sessionId,
+      turnKind === 'agent_wake' ? 'background' : 'foreground',
+      wakeState.schedule?.agent_wake_min_minutes || 10,
+      wakeState.schedule?.agent_wake_enabled === true,
+    )
+
     // 第 5 条 resume：进程已丢（重启 / 闲置回收）而前端带来了上次的 cc session id，
     // 就先记下这个接回点，紧接着 ensureSession 新建进程时会用它接上上下文。
     // ⚠️ 只在没有活进程时才认前端这份 —— 有活进程时以服务端内存里那份为准，
@@ -895,9 +925,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // usage 先发，让前端在 Haven 落库期间明确显示“正在保存”。
     if (turnUsage) send('usage', turnUsage)
 
+    const wakeDecision = endAgentWakeTurn(sessionId)
+    wakeStateEnded = true
+    const displaySegments = buildDisplaySegments(assistantText)
+
     if (!persistTurn) {
-      const wakeDecision = endAgentWakeTurn(sessionId)
-      wakeStateEnded = true
       state.markSucceeded()
       return {
         ok: true,
@@ -906,6 +938,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         usage: turnUsage,
         wakeDecision,
         cacheRefreshAt: confirmedCacheRefreshAt || undefined,
+        modelActivityAt: modelRequestStartedAt || undefined,
+        displaySegments,
       }
     }
 
@@ -983,6 +1017,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             web: config.webSettings,
           },
           usage: turnUsage || undefined,
+          display_segments: displaySegments,
           persona_id: personaId,
           persona_name: persona?.name || undefined,
           thinking: thinkingText || undefined,
@@ -1003,6 +1038,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           // 第 5 步：改了哪些文件、跑了哪些命令、批了/拒了什么。
           // 子进程回收后工作台就靠这份重建（历史消息读回来也能看见）。
           work: turnSnapshot(sessionId),
+        },
+        turnKind: 'user',
+        laneId: config.laneId,
+        agentWakeUpdate: {
+          user_activity_at: new Date(startedAt).toISOString(),
+          model_activity_at: modelRequestStartedAt ? new Date(modelRequestStartedAt).toISOString() : '',
+          cache_refresh_at: confirmedCacheRefreshAt ? new Date(confirmedCacheRefreshAt).toISOString() : '',
+          sample_silence: !interrupted,
+          silence_policy_version: 'conversation-silence-v1',
+          wake_decision: wakeDecision,
         },
       }), STORE_TIMEOUT_MS, null)
       storeInfo = rec
@@ -1090,6 +1135,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       turn_id: Number(storeInfo.turn_id || 0),
       idempotent_replay: storeInfo.idempotent_replay === true,
       continuity_turns: missingRouteTurns.length,
+      display_segments: displaySegments,
+      next_wake: wakeDecision?.action === 'schedule'
+        ? { at: wakeDecision.at, reason: wakeDecision.reason }
+        : undefined,
     })
 
     send('after', {
@@ -1100,8 +1149,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     })
 
     state.markSucceeded()
-    const wakeDecision = endAgentWakeTurn(sessionId)
-    wakeStateEnded = true
     return {
       ok: true,
       phase: state.current,
@@ -1109,6 +1156,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       usage: turnUsage,
       wakeDecision,
       cacheRefreshAt: confirmedCacheRefreshAt || undefined,
+      modelActivityAt: modelRequestStartedAt || undefined,
+      displaySegments,
     }
   } catch (e) {
     const err = e as Error

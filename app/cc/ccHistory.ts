@@ -20,6 +20,7 @@ import type {
 import type { CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings, type CcWebSettings } from './webSettings'
 import { normalizeProviderUsage, normalizeTurnContext } from './engineRouting'
+import { buildDisplaySegments, normalizeDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
 
 const NEW_SESSION_PREFIX = 'ob2-'
 
@@ -70,6 +71,7 @@ export type HavenTurnRow = {
   assistant_text: string
   created_at: string
   source: string
+  turn_kind?: 'user' | 'agent_wake'
   client?: string
   /** 写库时原样存的那份，thinking / 工具 / 召回都在里面。要 raw=1 才有 */
   raw_json?: string
@@ -211,6 +213,9 @@ export function parseTurnRaw(rawJson: string | undefined): {
   contextSnapshot: CcContextSnapshot | null
   cacheSnapshot: CcCacheSnapshot | null
   preCompactions: CcCompactionEvent[]
+  displaySegments: DisplaySegment[] | null
+  agentWake: { cause: string; at: string } | null
+  nextWake: { at: string; reason: string } | null
 } {
   const empty = {
     thinking: '',
@@ -229,6 +234,9 @@ export function parseTurnRaw(rawJson: string | undefined): {
     contextSnapshot: null,
     cacheSnapshot: null,
     preCompactions: [] as CcCompactionEvent[],
+    displaySegments: null,
+    agentWake: null,
+    nextWake: null,
   }
   if (!rawJson) return empty
   let raw: Record<string, unknown>
@@ -293,6 +301,13 @@ export function parseTurnRaw(rawJson: string | undefined): {
     }
     return []
   })
+  const displaySegments = normalizeDisplaySegments(raw.display_segments)
+  const rawWake = raw.agent_wake && typeof raw.agent_wake === 'object'
+    ? raw.agent_wake as Record<string, unknown>
+    : null
+  const rawNextWake = raw.next_wake && typeof raw.next_wake === 'object'
+    ? raw.next_wake as Record<string, unknown>
+    : null
   return {
     thinking: typeof raw.thinking === 'string' ? raw.thinking : '',
     tools,
@@ -325,6 +340,13 @@ export function parseTurnRaw(rawJson: string | undefined): {
           return compaction ? [compaction] : []
         })
       : [],
+    displaySegments: displaySegments?.segments || null,
+    agentWake: rawWake
+      ? { cause: String(rawWake.cause || 'cache_keepalive'), at: String(rawWake.at || '') }
+      : null,
+    nextWake: rawNextWake && typeof rawNextWake.at === 'string' && rawNextWake.at
+      ? { at: rawNextWake.at, reason: String(rawNextWake.reason || '') }
+      : null,
   }
 }
 
@@ -413,6 +435,18 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         fromHistory: true,
       })
     }
+    const wakeEvent: CcMessage | null = t.turn_kind === 'agent_wake' || extra.agentWake
+      ? {
+          id: `h${t.id}w`,
+          role: 'system',
+          text: '',
+          wakeEvent: extra.agentWake || { cause: 'cache_keepalive', at: t.created_at },
+          createdAt: at,
+          fromHistory: true,
+          roundId: t.round_id,
+        }
+      : null
+    if (wakeEvent) out.push(wakeEvent)
     const attachments: CcAttachment[] = (t.attachments || []).map(item => {
       const kind = item.kind === 'file' ? 'file' : 'image'
       return {
@@ -429,7 +463,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         previewUrl: item.cleared ? undefined : `/api/cc-attachments/${encodeURIComponent(item.id)}?session_id=${encodeURIComponent(item.session_id)}`,
       }
     })
-    if (t.user_text?.trim() || attachments.length > 0) {
+    if (!wakeEvent && (t.user_text?.trim() || attachments.length > 0)) {
       out.push({
         id: `h${t.id}u`,
         role: 'user',
@@ -478,7 +512,11 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
             ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
             : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
           : undefined,
+        displaySegments: extra.displaySegments || buildDisplaySegments(t.assistant_text).segments,
+        nextWake: extra.nextWake || undefined,
       })
+    } else if (wakeEvent && extra.nextWake) {
+      wakeEvent.nextWake = extra.nextWake
     }
   }
   return out

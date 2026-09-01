@@ -99,6 +99,12 @@ export function ccMessageVisibleText(message: CcMessage): string {
   return last?.type === 'text' ? last.text : ''
 }
 
+function shortClock(value: string | number) {
+  const date = typeof value === 'number' ? new Date(value) : new Date(value)
+  if (!Number.isFinite(date.getTime())) return '—'
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 export default function CcMessageRow({
   message,
   isCurrentTurn,
@@ -182,6 +188,20 @@ export default function CcMessageRow({
 
   if (message.role === 'system' && message.compaction) {
     return <CompactionDivider compaction={message.compaction} />
+  }
+  if (message.role === 'system' && message.wakeEvent) {
+    return (
+      <div className="my-2 flex justify-center" data-role="agent-wake-event">
+        <div className="rounded-full border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-1.5 text-center text-[10.5px] text-[var(--color-text-tertiary)]">
+          <div>{shortClock(message.wakeEvent.at || message.createdAt)} · Claude 醒了一次</div>
+          {message.nextWake ? (
+            <div className="mt-0.5 text-[var(--color-text-secondary)]">
+              ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
   }
 
   const clearTimer = () => {
@@ -584,22 +604,38 @@ export default function CcMessageRow({
         ) : null}
 
         {/* 正文：markdown。流式中末尾跟一个光标 */}
-        <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
-          {finalText ? (
-            <CcMarkdown text={finalText} searchQuery={searchQuery} searchActive={searchActive} />
-          ) : null}
-          {message.streaming ? (
-            finalText ? (
-              <span className="cc-caret" aria-hidden="true" />
-            ) : !message.thinking ? (
-              <span className="cc-dots" aria-label="生成中">
-                <span />
-                <span />
-                <span />
-              </span>
-            ) : null
-          ) : null}
-        </div>
+        {!message.streaming && message.displaySegments?.length ? (
+          <div className="space-y-1.5">
+            {message.displaySegments.map((segment, index) => (
+              <div className="cc-bubble-assistant" key={`${message.id}-segment-${index}`}>
+                <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
+            {finalText ? (
+              <CcMarkdown text={finalText} searchQuery={searchQuery} searchActive={searchActive} />
+            ) : null}
+            {message.streaming ? (
+              finalText ? (
+                <span className="cc-caret" aria-hidden="true" />
+              ) : !message.thinking ? (
+                <span className="cc-dots" aria-label="生成中">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ) : null
+            ) : null}
+          </div>
+        )}
+
+        {message.nextWake ? (
+          <div className="mt-1 text-[10.5px] text-[var(--color-text-tertiary)]">
+            ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
+          </div>
+        ) : null}
 
         {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
         {message.interrupted && !message.streaming ? (

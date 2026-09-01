@@ -1,6 +1,6 @@
 # CC 缓存保活与 Claude 主动唤醒方案
 
-> 状态：产品方案已确认；阶段 1 Haven 持久控制面与阶段 2 Dashboard 后台 turn 已实施，阶段 3–6 待实施
+> 状态：产品方案已确认；阶段 1–3 已实施，阶段 4–6 待实施
 > 建立时间：2026-08-31  
 > 涉及仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 
@@ -436,7 +436,7 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - 加入固定进程内 `set_agent_wake` 工具和后台权限策略。
 - 修正 cache refresh 时间语义。
 
-### 阶段 3：消息持久化与前端
+### 阶段 3：消息持久化与前端（已完成）
 
 - Wake turn 与 schedule 原子提交。
 - 在 Haven 控制面增加兼容迁移字段：`conversation_silence_check_at`、`silence_source_turn_id`、`silence_policy_version`。

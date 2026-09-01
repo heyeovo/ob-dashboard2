@@ -33,6 +33,7 @@ export type HavenTurn = {
   client: string
   route: string
   source: string
+  turn_kind?: 'user' | 'agent_wake'
   raw_json?: string
   request_id?: string
   persona_id?: string
@@ -138,6 +139,37 @@ export type StrictRecordTurnInput = RecordTurnInput & {
   recalledBucketIds?: string[]
   createdBucketIds?: string[]
   attachmentIds?: string[]
+  turnKind?: 'user' | 'agent_wake'
+  laneId?: string
+  agentWakeUpdate?: Record<string, unknown>
+}
+
+export type AgentWakeSchedule = {
+  profile_id: string
+  session_id: string
+  lane_id: string
+  keepalive_enabled: boolean
+  keepalive_paused_until_user: boolean
+  agent_wake_enabled: boolean
+  last_user_activity_at: string
+  last_model_activity_at: string
+  last_cache_refresh_at: string
+  last_heartbeat_at: string
+  next_agent_wake_at: string
+  wake_reason: string
+  conversation_silence_check_at: string
+  silence_source_turn_id: number
+  silence_policy_version: string
+  cache_keepalive_deadline: string
+  due_at: string
+  cache_state: 'unarmed' | 'warm' | 'cooling' | 'cold'
+  schedule_version: number
+  background_turn_limit: number
+  agent_wake_min_minutes: number
+  silence_min_minutes: number
+  silence_max_minutes: number
+  consecutive_failures: number
+  last_error: string
 }
 
 export type StrictRecordTurnResult = RecordTurnResult & {
@@ -330,6 +362,9 @@ export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<St
       attachment_ids: input.attachmentIds || [],
       recalled_bucket_ids: input.recalledBucketIds || [],
       created_bucket_ids: input.createdBucketIds || [],
+      turn_kind: input.turnKind || 'user',
+      lane_id: input.laneId || '',
+      agent_wake_update: input.agentWakeUpdate,
     },
   })
   if (!res.ok) {
@@ -347,6 +382,70 @@ export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<St
     code: '',
     details: {},
   }
+}
+
+export async function getAgentWakeSchedule(
+  sessionId: string,
+  laneId: string,
+  options?: { signal?: AbortSignal },
+): Promise<{ ok: boolean; schedule: AgentWakeSchedule | null; error: string; httpStatus: number | null }> {
+  const params = new URLSearchParams({ session_id: sessionId.trim(), lane_id: laneId.trim() })
+  const res = await havenFetch({
+    method: 'GET',
+    path: `/gateway/api/conversation/agent-wake?${params.toString()}`,
+    sessionId,
+    signal: options?.signal,
+  })
+  return res.ok
+    ? { ok: true, schedule: res.payload.schedule as AgentWakeSchedule, error: '', httpStatus: res.httpStatus }
+    : { ok: false, schedule: null, error: res.error, httpStatus: res.httpStatus }
+}
+
+export async function patchAgentWakeSchedule(input: {
+  sessionId: string
+  laneId: string
+  expectedVersion?: number
+  changes: Record<string, unknown>
+  signal?: AbortSignal
+}): Promise<{ ok: boolean; schedule: AgentWakeSchedule | null; error: string; httpStatus: number | null }> {
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/agent-wake',
+    sessionId: input.sessionId,
+    signal: input.signal,
+    body: {
+      session_id: input.sessionId,
+      lane_id: input.laneId,
+      expected_version: input.expectedVersion,
+      changes: input.changes,
+    },
+  })
+  return res.ok
+    ? { ok: true, schedule: res.payload.schedule as AgentWakeSchedule, error: '', httpStatus: res.httpStatus }
+    : { ok: false, schedule: null, error: res.error, httpStatus: res.httpStatus }
+}
+
+export async function acceptUserActivityAndCancelSilence(input: {
+  sessionId: string
+  laneId: string
+  userActivityAt: string
+  signal?: AbortSignal
+}): Promise<{ ok: boolean; schedule: AgentWakeSchedule | null; error: string; httpStatus: number | null }> {
+  const res = await havenFetch({
+    method: 'POST',
+    path: '/gateway/api/conversation/agent-wake',
+    sessionId: input.sessionId,
+    signal: input.signal,
+    body: {
+      action: 'accept_user',
+      session_id: input.sessionId,
+      lane_id: input.laneId,
+      user_activity_at: input.userActivityAt,
+    },
+  })
+  return res.ok
+    ? { ok: true, schedule: res.payload.schedule as AgentWakeSchedule, error: '', httpStatus: res.httpStatus }
+    : { ok: false, schedule: null, error: res.error, httpStatus: res.httpStatus }
 }
 
 /** request_id 已落库时读回完整轮次，供真正的幂等重放使用。 */

@@ -20,6 +20,50 @@ function turn(overrides: Partial<HavenTurnRow>): HavenTurnRow {
 }
 
 describe('ccHistory：旧历史兼容', () => {
+  it('maps an agent wake into event, optional assistant bubbles and next wake', () => {
+    const messages = turnsToMessages([turn({
+      id: 9,
+      round_id: 4,
+      turn_kind: 'agent_wake',
+      user_text: '',
+      assistant_text: '第一句。\n第二句。',
+      raw_json: JSON.stringify({
+        agent_wake: { wake_id: 'wake-9', cause: 'cache_keepalive', at: '2026-08-31T12:55:00Z' },
+        next_wake: { at: '2026-08-31T13:25:00Z', reason: '稍后再看' },
+        display_segments: {
+          version: 1,
+          segments: [
+            { kind: 'text', markdown: '第一句。\n' },
+            { kind: 'text', markdown: '第二句。' },
+          ],
+        },
+      }),
+    })])
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toMatchObject({ role: 'system', wakeEvent: { cause: 'cache_keepalive' } })
+    expect(messages[1]).toMatchObject({
+      role: 'assistant',
+      text: '第一句。\n第二句。',
+      nextWake: { reason: '稍后再看' },
+    })
+    expect(messages[1].displaySegments).toHaveLength(2)
+  })
+
+  it('keeps a no-op wake as an event and shows next wake under it', () => {
+    const messages = turnsToMessages([turn({
+      id: 10,
+      turn_kind: 'agent_wake',
+      user_text: '',
+      assistant_text: '',
+      raw_json: JSON.stringify({
+        agent_wake: { cause: 'conversation_silence', at: '2026-08-31T12:55:00Z' },
+        next_wake: { at: '2026-08-31T13:25:00Z', reason: '等等看' },
+      }),
+    })])
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({ role: 'system', nextWake: { reason: '等等看' } })
+  })
+
   it('没有 raw_json 的老消息正常展示，不带 thinking / 工具 / process', () => {
     const rows: HavenTurnRow[] = [
       turn({ id: 1, user_text: '第一句', assistant_text: '第一答' }),

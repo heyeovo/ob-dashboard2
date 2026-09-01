@@ -1,6 +1,8 @@
 // /cc 聊天页的前端类型。故意跟 Haven 的 HavenTurn 分开：
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
 
+import type { DisplaySegment } from '@/app/lib/cc/displaySegments'
+
 export type CcRole = 'user' | 'assistant' | 'system'
 export type CcEngine = 'cc' | 'selfhost'
 
@@ -181,6 +183,10 @@ export type CcMessage = {
   cacheSnapshot?: CcCacheSnapshot | null
   /** 独立系统分隔消息使用。 */
   compaction?: CcCompactionEvent
+  /** presentation-only：完整 assistant 原文仍保存在 text。 */
+  displaySegments?: DisplaySegment[]
+  wakeEvent?: { cause: string; at: string }
+  nextWake?: { at: string; reason: string }
   requestId?: string
   roundId?: number
   deliveryState?: CcDeliveryState

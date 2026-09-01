@@ -51,6 +51,7 @@ import {
   normalizeTurnContext,
   providerSelectionLocked,
 } from './engineRouting'
+import { normalizeDisplaySegments } from '@/app/lib/cc/displaySegments'
 
 // /cc 聊天页的状态与 SSE 消费。UI 组件不碰 fetch，全在这里。
 //
@@ -228,6 +229,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const abortRef = useRef<AbortController | null>(null)
   const lastRoundIdRef = useRef(0)
   const activeTurnRef = useRef<{ assistantId: string; engine: CcEngine } | null>(null)
+  const incrementalRefreshRef = useRef(false)
   // 停止请求发过就不要再发 —— interrupt 一次就够，重复发没意义。done/error 到达时复位。
   const stoppingRef = useRef(false)
   // 第 5 条 resume：切回旧会话时从历史最后一轮读出的 cc session id。
@@ -368,6 +370,50 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     const timer = window.setTimeout(() => void refreshSessions(), 0)
     return () => window.clearTimeout(timer)
   }, [refreshSessions])
+
+  const refreshBackgroundTurns = useCallback(async () => {
+    if (!sessionId || sending || historyLoading || document.visibilityState !== 'visible') return
+    if (lastRoundIdRef.current <= 0 || incrementalRefreshRef.current) return
+    incrementalRefreshRef.current = true
+    try {
+      const response = await fetch(
+        `/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&after_round_id=${lastRoundIdRef.current}&limit=100&raw=1`,
+        { cache: 'no-store' },
+      )
+      const payload = await response.json()
+      if (!response.ok || !payload.ok || !Array.isArray(payload.turns) || payload.turns.length === 0) return
+      const turns = payload.turns as HavenTurnRow[]
+      const incoming = turnsToMessages(turns)
+      setMessages(previous => {
+        const known = new Set(previous.map(message => message.id))
+        return [...previous, ...incoming.filter(message => !known.has(message.id))]
+      })
+      lastRoundIdRef.current = turns.reduce(
+        (largest, turn) => Math.max(largest, Number(turn.round_id || 0)),
+        lastRoundIdRef.current,
+      )
+      setHistoryTurnCount(previous => previous + turns.length)
+      historyLoadedAtRef.current = Date.now()
+      void refreshSessions()
+    } catch {
+      // 后台增量刷新失败不打断当前聊天；下次可见/轮询时继续。
+    } finally {
+      incrementalRefreshRef.current = false
+    }
+  }, [historyLoading, refreshSessions, sending, sessionId])
+
+  useEffect(() => {
+    const tick = () => void refreshBackgroundTurns()
+    const onVisibility = () => { if (document.visibilityState === 'visible') tick() }
+    window.addEventListener('focus', tick)
+    document.addEventListener('visibilitychange', onVisibility)
+    const timer = window.setInterval(tick, 15_000)
+    return () => {
+      window.removeEventListener('focus', tick)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.clearInterval(timer)
+    }
+  }, [refreshBackgroundTurns])
 
   // 顶部的费用 / 缓存剩余时间：每 20 秒问一次服务端
   //
@@ -1542,6 +1588,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             const replayed = payload.idempotent_replay === true
             const continuityTurns = Number(payload.continuity_turns || 0)
             const roundId = Number(payload.round_id || 0)
+            const displaySegments = normalizeDisplaySegments(payload.display_segments)
+            const nextWake = payload.next_wake && typeof payload.next_wake === 'object'
+              ? payload.next_wake as Record<string, unknown>
+              : null
             if (roundId > 0) lastRoundIdRef.current = Math.max(lastRoundIdRef.current, roundId)
             patch(m => {
               const process = closeOpenThinking(m.process)
@@ -1556,6 +1606,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 thinkingMs: thinkingDuration(process) || undefined,
                 roundId: roundId || m.roundId,
                 deliveryState: replayed ? 'replayed' : 'saved',
+                displaySegments: displaySegments?.segments || m.displaySegments,
+                nextWake: nextWake && typeof nextWake.at === 'string' && nextWake.at
+                  ? { at: nextWake.at, reason: String(nextWake.reason || '') }
+                  : m.nextWake,
                 deliveryNote: interruptedReason === 'pro_limit'
                   ? m.text.trim()
                     ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'

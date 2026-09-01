@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
         : listTurns(sessionId, {
             limit: Number(sp.get('limit') || 200),
             beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
+            afterRoundId: sp.get('after_round_id') ? Number(sp.get('after_round_id')) : undefined,
             includeRaw: sp.get('raw') === '1',
           }),
       getConversationSession(sessionId),

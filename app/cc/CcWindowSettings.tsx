@@ -13,6 +13,7 @@ import {
 import type { CcWebSettings } from './webSettings'
 import CcContextAnalysis from './CcContextAnalysis'
 import CcContextGc from './CcContextGc'
+import CcAgentWakeSettings from './CcAgentWakeSettings'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
 //
@@ -127,7 +128,7 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const [compactNote, setCompactNote] = useState('')
-  const [activeTab, setActiveTab] = useState<'session' | 'context' | 'gc'>('session')
+  const [activeTab, setActiveTab] = useState<'session' | 'context' | 'gc' | 'wake'>('session')
   const models = modelsFor(upstream, pick.kind, pick.providerId)
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
@@ -190,6 +191,7 @@ export default function CcWindowSettings({
             ['session', '会话信息'],
             ['context', 'Context 分析'],
             ['gc', '窗口减负'],
+            ['wake', '主动唤醒'],
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -222,6 +224,8 @@ export default function CcWindowSettings({
             />
           ) : activeTab === 'gc' ? (
             <CcContextGc sessionId={sessionId} laneId={laneId} busy={stats.busy} />
+          ) : activeTab === 'wake' ? (
+            <CcAgentWakeSettings sessionId={sessionId} laneId={laneId} busy={stats.busy} />
           ) : (
           <>
           {/* ── 只读信息 ── */}
