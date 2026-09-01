@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   beginAgentWakeTurn,
   endAgentWakeTurn,
+  parseAgentWakeNoop,
   recordAgentWakeDecision,
 } from '@/app/lib/cc/agentWakeTool'
 
@@ -27,8 +28,17 @@ describe('set_agent_wake turn-local decision', () => {
     expect(() => recordAgentWakeDecision('s1', { action: 'schedule', after_minutes: 9 })).toThrow('10–10080')
     expect(() => recordAgentWakeDecision('s1', { action: 'schedule', at: '2026-09-01T12:00:00' })).toThrow('带时区')
     expect(() => recordAgentWakeDecision('s1', {
-      action: 'schedule', after_minutes: 10, reason: '长'.repeat(31),
-    })).toThrow('30')
+      action: 'schedule', after_minutes: 10, reason: '长'.repeat(51),
+    })).toThrow('50')
+    expect(recordAgentWakeDecision('s1', {
+      action: 'schedule', after_minutes: 10, reason: '长'.repeat(50),
+    })).toMatchObject({ action: 'schedule' })
+  })
+
+  it('parses an optional short status after the no-op marker', () => {
+    expect(parseAgentWakeNoop('[agent_wake_noop] 想你，但不打扰')).toEqual({ status: '想你，但不打扰' })
+    expect(parseAgentWakeNoop('[agent_wake_noop]')).toEqual({ status: '' })
+    expect(parseAgentWakeNoop('普通消息')).toBeNull()
   })
 
   it('uses the persisted window minimum for the current turn', () => {

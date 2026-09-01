@@ -96,6 +96,7 @@
 #### CC-02｜缓存 usage 与中转站账单口径不一致 / 连续缓存写
 
 - **状态：**未排期、停止付费盲测。曾出现 Dashboard 显示 cache write 33,227，而中转站记录 53,667，相差 20,440；连续数轮只有缓存写、没有缓存读。selfhost 当前没有主动发送 `cache_control`。
+- **2026-09-02 补充：**foreground / background wake 的 Web 工具 schema 分叉已修复。wake 正常增量仍可能约 100–500 token（含上一轮 assistant、wake XML、thinking、tool block 等）；用户决定暂不做成本压缩，待稳定线上数据证明存在可观收益后再评估。
 - **开工第一步：**先确认中转站现在能否查看原始 SSE usage 帧；若不能，只新增一条不含密钥、正文和附件的 usage 帧诊断，再用最少轮次复现一次。
 - **定位入口：**`rg -n "cache_creation_input_tokens|cache_read_input_tokens|usage" app/api/cc-chat-selfhost app/lib/selfhost app/cc`，从 SSE 解析、usage 累计和持久化三个命中点中选择最小证据集。
 - **待判定分支：**中转站计费口径不同；同一响应含多条非标准 usage 事件；解析器错误覆盖后值；上游没有缓存命中。没有原始帧前不选分支。

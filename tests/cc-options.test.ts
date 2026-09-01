@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import {
   buildCcOptions,
+  cacheRelevantFingerprint,
+  CACHE_STABLE_WEB_TOOLS,
   sdkModelForProvider,
+  setTurnWebSettings,
   thinkingConfigForModel,
   type TurnConfig,
 } from '@/app/lib/cc/ccOptions'
@@ -20,7 +23,6 @@ function config(mode: TurnConfig['mode']): TurnConfig {
     systemPromptKey: 'prompt-key',
     cwd: 'C:\\workspace',
     additionalDirectories: [],
-    activeWebTools: [],
     sdkModel: 'test-model',
     effort: '',
     thinking: true,
@@ -82,6 +84,43 @@ describe('cc 基础提示词渠道一致性', () => {
   it('固定注入进程内 wake 工具，不随普通 MCP 清单变化', () => {
     const options = buildCcOptions(config('chat'), null)
     expect(options.mcpServers).toHaveProperty(AGENT_WAKE_SERVER_NAME)
+  })
+
+  it('联网开关不改变 cache-relevant 工具定义或 fingerprint', () => {
+    const enabled = config('chat')
+    const disabled = config('chat')
+    disabled.webSettings = { ...DEFAULT_WEB_SETTINGS, searchEnabled: false, fetchEnabled: false }
+    expect(buildCcOptions(enabled, null).tools).toEqual(CACHE_STABLE_WEB_TOOLS)
+    expect(buildCcOptions(disabled, null).tools).toEqual(CACHE_STABLE_WEB_TOOLS)
+    expect(buildCcOptions(enabled, null).allowedTools).toEqual(['WebSearch'])
+    expect(buildCcOptions(disabled, null).allowedTools).toEqual(['WebSearch'])
+    expect(cacheRelevantFingerprint(enabled)).toEqual(cacheRelevantFingerprint(disabled))
+  })
+
+  it('前台关闭联网和后台 wake 都在运行时拒绝 WebSearch', async () => {
+    const options = buildCcOptions(config('chat'), null)
+    const preTool = options.hooks?.PreToolUse?.[0]?.hooks?.[0]
+    expect(preTool).toBeTypeOf('function')
+    setTurnWebSettings('prompt-test', { ...DEFAULT_WEB_SETTINGS, searchEnabled: false })
+    const disabled = await preTool!(
+      { hook_event_name: 'PreToolUse', tool_name: 'WebSearch', tool_input: { query: 'test' } } as never,
+      undefined,
+      { signal: new AbortController().signal },
+    )
+    expect(disabled).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
+
+    setTurnWebSettings('prompt-test', DEFAULT_WEB_SETTINGS)
+    beginAgentWakeTurn('prompt-test', 'background')
+    try {
+      const background = await preTool!(
+        { hook_event_name: 'PreToolUse', tool_name: 'WebSearch', tool_input: { query: 'test' } } as never,
+        undefined,
+        { signal: new AbortController().signal },
+      )
+      expect(background).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
+    } finally {
+      endAgentWakeTurn('prompt-test')
+    }
   })
 
   it('后台拒绝 Bash 和写入，不进入浏览器批准流程', async () => {

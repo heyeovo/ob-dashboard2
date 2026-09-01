@@ -104,7 +104,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3">
         <div className={ROW}><span>Cache 状态</span><span>{schedule.cache_state}</span></div>
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>最近 cache refresh</span><span>{fmt(schedule.last_cache_refresh_at)}</span></div>
-        <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>下一次固定保活</span><span>{fmt(schedule.cache_keepalive_deadline)}</span></div>
+        <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>下一次固定保活</span><span>{schedule.keepalive_enabled ? fmt(schedule.cache_keepalive_deadline) : '未开启'}</span></div>
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>本轮沉默检查</span><span>{fmt(schedule.conversation_silence_check_at)}</span></div>
       </div>
 

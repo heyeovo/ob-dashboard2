@@ -111,7 +111,9 @@ describe('Dashboard background wake runner', () => {
     runner.run.mockResolvedValueOnce({
       ok: true,
       phase: 'succeeded',
-      assistantText: '[agent_wake_noop]',
+      assistantText: '[agent_wake_noop] 路过了，不打扰',
+      thinking: '她现在应该在忙，先不打扰。',
+      process: [{ type: 'thinking', id: 'thinking-1', text: '她现在应该在忙，先不打扰。' }],
       modelActivityAt: Date.parse('2026-08-31T12:55:01Z'),
       wakeDecision: { action: 'schedule', at: '2026-08-31T13:25:00Z', reason: '稍后再看' },
     })
@@ -121,8 +123,13 @@ describe('Dashboard background wake runner', () => {
     expect(result).toMatchObject({ status: 'completed', turn: { assistantText: '' } })
     expect(haven.record).toHaveBeenCalledWith(expect.objectContaining({
       assistantText: '',
+      raw: expect.objectContaining({
+        thinking: '她现在应该在忙，先不打扰。',
+        process: expect.arrayContaining([expect.objectContaining({ type: 'thinking' })]),
+      }),
       agentWakeUpdate: expect.objectContaining({
         wake_cause: 'cache_keepalive',
+        agent_wake: expect.objectContaining({ status: '路过了，不打扰' }),
         wake_decision: expect.objectContaining({ action: 'schedule' }),
       }),
     }))

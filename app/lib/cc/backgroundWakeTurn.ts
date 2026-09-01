@@ -4,7 +4,7 @@ import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
 import { beginAgentWakeRun, getTurnByRequestId, recordTurnStrict } from '@/app/lib/havenTurns'
-import { AGENT_WAKE_NOOP_MARKER } from '@/app/lib/cc/agentWakeTool'
+import { parseAgentWakeNoop } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import {
   tryRunBackgroundSessionTurn,
@@ -117,9 +117,8 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
     const turnResult = result.value.turn
     if (!turnResult) return { status: 'failed', error: '后台 wake 未返回 turn' }
     if (!turnResult.ok) return { status: 'failed', error: turnResult.error || '后台 wake 失败' }
-    const assistantText = turnResult.assistantText?.trim() === AGENT_WAKE_NOOP_MARKER
-      ? ''
-      : turnResult.assistantText || ''
+    const noop = parseAgentWakeNoop(turnResult.assistantText || '')
+    const assistantText = noop ? '' : turnResult.assistantText || ''
     const session = loaded.sessionSnapshot.session
     if (!session) return { status: 'failed', error: 'Haven 返回空窗口' }
     const persisted = await recordTurnStrict({
@@ -143,6 +142,8 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         model: loaded.config.model,
         persona_id: loaded.persona.id,
         usage: turnResult.usage || undefined,
+        thinking: turnResult.thinking || undefined,
+        process: turnResult.process?.length ? turnResult.process : undefined,
         display_segments: assistantText
           ? turnResult.displaySegments || buildDisplaySegments(assistantText)
           : buildDisplaySegments(''),
@@ -160,6 +161,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
           cause: input.cause,
           at: input.at,
           reason: input.reason || '',
+          status: noop?.status || '',
         },
         wake_decision: turnResult.wakeDecision || undefined,
       },

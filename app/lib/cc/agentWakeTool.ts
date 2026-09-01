@@ -5,6 +5,7 @@ export const AGENT_WAKE_SERVER_NAME = 'ombre_agent_wake'
 export const AGENT_WAKE_TOOL_NAME = 'set_agent_wake'
 export const AGENT_WAKE_SDK_TOOL_NAME = `mcp__${AGENT_WAKE_SERVER_NAME}__${AGENT_WAKE_TOOL_NAME}`
 export const AGENT_WAKE_NOOP_MARKER = '[agent_wake_noop]'
+export const AGENT_WAKE_NOOP_STATUS_MAX_CHARS = 30
 
 export type CcTurnExecutionMode = 'foreground' | 'background'
 
@@ -93,11 +94,20 @@ export function recordAgentWakeDecision(
         at: scheduleAt(args, state.minMinutes),
         reason: String(args.reason || '').trim(),
       }
-  if (decision.action === 'schedule' && Array.from(decision.reason).length > 30) {
-    throw new Error('reason 最多 30 个字符')
+  if (decision.action === 'schedule' && Array.from(decision.reason).length > 50) {
+    throw new Error('reason 最多 50 个字符')
   }
   state.decision = decision
   return decision
+}
+
+export function parseAgentWakeNoop(text: string): { status: string } | null {
+  const value = text.trim()
+  if (!value.startsWith(AGENT_WAKE_NOOP_MARKER)) return null
+  const status = Array.from(value.slice(AGENT_WAKE_NOOP_MARKER.length).trim())
+    .slice(0, AGENT_WAKE_NOOP_STATUS_MAX_CHARS)
+    .join('')
+  return { status }
 }
 
 export function createAgentWakeMcpServer(sessionId: string): McpSdkServerConfigWithInstance {
@@ -107,7 +117,8 @@ export function createAgentWakeMcpServer(sessionId: string): McpSdkServerConfigW
     alwaysLoad: true,
     instructions:
       `When the user message is an <agent_wake .../> trigger, decide whether anything useful ` +
-      `should happen now. If nothing should be shown or done, reply with exactly ${AGENT_WAKE_NOOP_MARKER}. ` +
+      `should happen now. If nothing should be shown or done, reply with ${AGENT_WAKE_NOOP_MARKER}, ` +
+      `optionally followed on the same line by one natural status of at most ${AGENT_WAKE_NOOP_STATUS_MAX_CHARS} characters. ` +
       `Use set_agent_wake only to schedule or cancel a future wake. Background turns cannot wait for ` +
       `human approval; if user action is needed, send a normal concise assistant message explaining it.`,
     tools: [

@@ -1,13 +1,16 @@
 # HANDOFF — CC 缓存保活与 Claude 主动唤醒
 
 > 建立时间：2026-08-31
-> 最后更新：2026-09-01
+> 最后更新：2026-09-02
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 > 状态：阶段 1–4 已完成；下一窗口只进入阶段 5
 
 ## 当前完成状态
 
 - 产品决策与跨仓库实施方案仍以 `docs/cc-agent-wake-design.md` 为唯一事实源。
+- 2026-09-02 已完成线上缓存异常修复：前台开启 WebSearch/WebFetch、后台 wake 删除两项工具定义，曾导致 A/B cache prefix 分叉。现在两项 schema 始终固定，前台关闭开关或后台 wake 均在运行时 hook 拒绝；cache fingerprint 日志可直接对照 system/tools/MCP/options hash、lane、CC session 和 iterator 冷热状态。
+- No-op wake 现在允许在 `[agent_wake_noop]` 后带最多 30 字自然状态，后台只把状态显示为 wake 事件小字，不生成正式助手气泡；SDK 返回的 thinking 会持久化并折叠展示，事件名称使用当前协作者。`set_agent_wake` reason 上限为 50 字。
+- 主动唤醒设置仍严格按 profile/session/lane 隔离；保活关闭时页面显示“未开启”，不会再把仅供计算的 deadline 表达成实际调度。
 - 阶段 1–3 的持久控制面、统一 turn、原子消息提交、silence timer、历史映射、分段气泡、主动唤醒设置 Tab 和页面增量刷新保持不变。
 - 阶段 4 已接通 Haven Brain → Dashboard：
   - Brain 启动独立的 30 秒持久 scheduler，从 `gateway_state.db` 按 `due_at` 原子 claim，并用独立 Bearer token 调用 `/api/cc-agent-wake-runner`。
@@ -23,6 +26,8 @@
   - 非最后活跃 lane 的旧 schedule 会进入 dormant；该 lane 再次收到正常用户 turn 时才重新计算 due，不扫描或同时保活其他 lane。
 
 ## 验证结果
+
+- 2026-09-02 Dashboard 全量 Vitest：45 个测试文件，235 项通过、1 项跳过；`npm run build` 与 `git diff --check` 通过。未修改 Haven 代码或数据结构。
 
 - Haven 阶段 4 定向：47 项通过。
 - Haven 全量 unittest：175 项全部通过。

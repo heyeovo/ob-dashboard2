@@ -10,6 +10,7 @@
 // 而它跟「协作者配的写目录」绑定、跨轮存活（配置改完立刻生效），不适合
 // 打进每一轮的快照里。
 
+import { createHash } from 'node:crypto'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import {
   EXEC_TOOLS,
@@ -33,7 +34,7 @@ import type { CcMode } from '@/app/lib/ccModes'
 import { autoAllowEdits, recordCommand, recordFileChange, requestPermission } from '@/app/lib/ccChannel'
 import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
 import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
-import type { CcWebSettings } from '@/app/cc/webSettings'
+import { DEFAULT_WEB_SETTINGS, type CcWebSettings } from '@/app/cc/webSettings'
 import type { CcPermKind } from '@/app/lib/ccChannel'
 import {
   AGENT_WAKE_SERVER_NAME,
@@ -48,10 +49,11 @@ const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
 /**
  * 模型手上有哪些工具。
  *
- * 只列界面能说明和展示的工具；WebSearch / WebFetch 在两种模式都开放，
- * 其余工作工具只在工作模式开放。
+ * 只列界面能说明和展示的工具；WebSearch / WebFetch 的 schema 在两种模式都固定存在，
+ * 实际是否放行由每轮 hook 决定，其余工作工具只在工作模式存在。
  */
 const WORK_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
+export const CACHE_STABLE_WEB_TOOLS = ['WebSearch', 'WebFetch']
 
 /**
  * API 中转站要求收到自己的模型 ID，但 Claude Code 需要认识模型身份才能采用正确上下文。
@@ -97,8 +99,6 @@ export type TurnConfig = {
   systemPromptKey: string
   cwd: string
   additionalDirectories: string[]
-  /** 闲聊模式只给本窗口开启的联网工具；工作模式另有 7 个内置工具 */
-  activeWebTools: string[]
   sdkModel: string
   effort: string
   thinking: boolean
@@ -121,8 +121,35 @@ export function ccLaneId(cred: CredMode, providerId: string): string {
   return cred === 'subscription' ? 'subscription' : `api:${providerId.trim() || 'default'}`
 }
 
+function shortHash(value: unknown): string {
+  return createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex').slice(0, 16)
+}
+
+/** 只记录 hash 与名称，不把提示词、路径、MCP 配置正文写进日志。 */
+export function cacheRelevantFingerprint(config: TurnConfig) {
+  const toolNames = config.mode === 'chat'
+    ? [...CACHE_STABLE_WEB_TOOLS]
+    : [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
+  const mcpServerNames = [...Object.keys(config.sdkMcpServers), AGENT_WAKE_SERVER_NAME].sort()
+  const systemPromptHash = shortHash({ mode: config.mode, personaAppend: config.personaAppend })
+  const toolsHash = shortHash(toolNames)
+  const mcpToolsHash = shortHash({ mcpServerNames, disabledTools: [...config.disabledTools].sort() })
+  const sdkCacheRelevantOptionsHash = shortHash({
+    model: config.sdkModel,
+    effort: config.effort,
+    thinking: thinkingConfigForModel(config.sdkModel, config.thinking),
+    systemPromptHash,
+    toolsHash,
+    mcpToolsHash,
+    permissionMode: 'default',
+    strictMcpConfig: true,
+  })
+  return { systemPromptHash, toolsHash, mcpToolsHash, sdkCacheRelevantOptionsHash, toolNames, mcpServerNames }
+}
+
 /** 这个会话能写哪些目录。同样每轮重读 —— 改完配置开新对话生效，跟提示词一致。 */
 const writeDirsBySession = new Map<string, string[]>()
+const webSettingsBySession = new Map<string, CcWebSettings>()
 
 export function setWriteDirs(sessionId: string, dirs: string[]) {
   writeDirsBySession.set(sessionId, dirs)
@@ -134,6 +161,16 @@ export function getWriteDirs(sessionId: string): string[] {
 
 export function clearWriteDirs(sessionId: string) {
   writeDirsBySession.delete(sessionId)
+  webSettingsBySession.delete(sessionId)
+}
+
+/** 工具 schema 固定在 query 启动时；联网开关则每轮从这里读取并在 hook 层执行。 */
+export function setTurnWebSettings(sessionId: string, settings: CcWebSettings): void {
+  webSettingsBySession.set(sessionId, settings)
+}
+
+function currentWebSettings(sessionId: string): CcWebSettings {
+  return webSettingsBySession.get(sessionId) || DEFAULT_WEB_SETTINGS
 }
 
 /* ── 工具分类 ── */
@@ -260,13 +297,11 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     personaAppend,
     cwd,
     additionalDirectories,
-    activeWebTools,
     sdkModel,
     effort,
     thinking,
     sdkMcpServers,
     disabledTools,
-    webSettings,
     permanentAllowRules,
     cred,
     envOverrides,
@@ -366,8 +401,9 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
           : { type: 'preset', preset: 'claude_code' },
     cwd,
     additionalDirectories,
-    // 闲聊模式只给本窗口开启的联网工具；工作模式再加读写、搜索文件与 Bash。
-    tools: mode === 'chat' ? activeWebTools : [...WORK_TOOLS, ...activeWebTools],
+    // Web 工具 schema 永远保留，确保 foreground / background wake 共用同一 cache prefix。
+    // 是否真的能调用由每轮 PreToolUse 读取当前开关并决定，不再靠删除工具定义实现。
+    tools: mode === 'chat' ? [...CACHE_STABLE_WEB_TOOLS] : [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS],
     // MCP 跟 Claude Code 内置工具是两条独立通道。strict 保证实际工具集
     // 跟 Home 管理页完全一致，
     // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
@@ -383,13 +419,11 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     // 用户可在卡片上选仅一次 / 本次对话 / 始终允许。
     allowedTools:
       mode === 'chat'
-        ? webSettings.searchEnabled
-          ? ['WebSearch']
-          : []
+        ? ['WebSearch']
         : [
             ...READ_ONLY_TOOLS,
             'Bash',
-            ...(webSettings.searchEnabled ? ['WebSearch'] : []),
+            'WebSearch',
           ],
     // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
     // 根本走不到 canUseTool，也就没有批准这回事了。
@@ -427,7 +461,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
  * 消息，中转站不认这种 role，静默丢掉 —— 模型压根收不到记忆卡。
  */
 function buildCcHooks(config: TurnConfig): Options['hooks'] {
-  const { sessionId, webSettings, cwd, additionalDirectories } = config
+  const { sessionId, cwd, additionalDirectories } = config
   const readDirs = [cwd, ...additionalDirectories]
 
   return {
@@ -491,8 +525,19 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
             }
 
             if (name === 'WebSearch' || name === 'WebFetch') {
+              const webSettings = currentWebSettings(sessionId)
               const current = getTurnBucket(sessionId)
               const webInput = (toolInput || {}) as Record<string, unknown>
+
+              if (background) {
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse' as const,
+                    permissionDecision: 'deny' as const,
+                    permissionDecisionReason: '后台 wake 禁止联网；工具定义仅为保持缓存前缀稳定。',
+                  },
+                }
+              }
 
               if (name === 'WebSearch') {
                 if (!webSettings.searchEnabled) {

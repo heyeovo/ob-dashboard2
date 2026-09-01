@@ -147,7 +147,7 @@ export default function CcContextAnalysis(props: Props) {
       { label: '提示词', tokens: estimateContextTokens(props.systemPromptText), color: COLORS[0] },
       { label: '换窗资料', tokens: backgroundTokens, color: COLORS[1] },
       { label: 'MCP 工具', tokens: estimateMcpConfigTokens(mcpConfig), color: COLORS[2] },
-      { label: 'Web 工具', tokens: estimateWebToolTokens(props.web.searchEnabled, props.web.fetchEnabled), color: COLORS[3] },
+      { label: 'Web 工具', tokens: estimateWebToolTokens(true, true), color: COLORS[3] },
       { label: '本窗对话', tokens: estimateContextTokens(props.conversationText), color: COLORS[4] },
     ]
     const knownTotal = sumTokens(known)
@@ -160,7 +160,7 @@ export default function CcContextAnalysis(props: Props) {
         color: COLORS[5],
       }].filter(item => item.tokens > 0),
     }
-  }, [backgroundTokens, mcpConfig, props.actualTokens, props.conversationText, props.systemPromptText, props.web.fetchEnabled, props.web.searchEnabled])
+  }, [backgroundTokens, mcpConfig, props.actualTokens, props.conversationText, props.systemPromptText])
 
   const readExact = async (force: boolean) => {
     setLoading(true)

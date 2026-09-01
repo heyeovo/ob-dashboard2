@@ -76,7 +76,6 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     systemPromptKey: session.frozen_persona_append,
     cwd: readDirs.cwd,
     additionalDirectories: readDirs.additionalDirectories,
-    activeWebTools: [],
     sdkModel: sdkModelForProvider(model, cred),
     effort,
     thinking,

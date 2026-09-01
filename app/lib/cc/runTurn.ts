@@ -44,7 +44,7 @@ import {
   type TurnUsage,
   type CcCompactionEvent,
 } from '@/app/lib/ccSession'
-import { buildCcOptions, isWebTool, sdkModelForProvider, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
+import { buildCcOptions, cacheRelevantFingerprint, isWebTool, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
@@ -141,6 +141,8 @@ export type RunTurnResult = {
   /** 为什么收尾的（succeeded / failed / cancelled），测试和日志断言用 */
   phase: TurnPhase
   assistantText?: string
+  thinking?: string
+  process?: Array<Record<string, unknown>>
   usage?: TurnUsage | null
   wakeDecision?: AgentWakeDecision | null
   cacheRefreshAt?: number
@@ -419,6 +421,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   const turnKind = input.turnKind || 'user'
   const persistTurn = input.persistTurn !== false
   const resumeKey = `${sessionId}::${config.laneId}`
+  setTurnWebSettings(sessionId, config.webSettings)
   const state = new TurnState(sessionId)
   const startedAt = Date.now()
 
@@ -485,6 +488,15 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       effort: config.effort,
       thinking: config.thinking,
       systemPromptKey: config.systemPromptKey,
+    })
+    console.info('[cc-cache-fingerprint]', {
+      turnKind,
+      sessionId,
+      laneId: config.laneId,
+      ccSessionId: live.ccSessionId || input.resumeHint || '',
+      resumeHint: input.resumeHint || '',
+      iterator: currentLive === live ? 'reused' : input.resumeHint ? 'cold_resumed' : 'cold_started',
+      ...cacheRelevantFingerprint(config),
     })
     preCompactions = getPendingCompactions(sessionId)
 
@@ -668,6 +680,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
         live.ccSessionId = msg.session_id
         rememberResumePoint(resumeKey, msg.session_id)
+        console.info('[cc-cache-session-init]', {
+          turnKind,
+          sessionId,
+          laneId: config.laneId,
+          ccSessionId: msg.session_id,
+        })
         send('init', {
           ...initInfo,
           engine: 'cc',
@@ -935,6 +953,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         ok: true,
         phase: state.current,
         assistantText,
+        thinking: thinkingText,
+        process: [...bucket.processEvents],
         usage: turnUsage,
         wakeDecision,
         cacheRefreshAt: confirmedCacheRefreshAt || undefined,
@@ -1153,6 +1173,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       ok: true,
       phase: state.current,
       assistantText,
+      thinking: thinkingText,
+      process: [...bucket.processEvents],
       usage: turnUsage,
       wakeDecision,
       cacheRefreshAt: confirmedCacheRefreshAt || undefined,

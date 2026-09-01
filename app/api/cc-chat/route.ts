@@ -226,11 +226,6 @@ async function loadTurnInputs(body: ChatBody) {
     domain_mode: body.web_domain_mode,
     domains: body.web_domains,
   })
-  const activeWebTools = [
-    ...(webSettings.searchEnabled ? ['WebSearch'] : []),
-    ...(webSettings.fetchEnabled ? ['WebFetch'] : []),
-  ]
-
   // 5.2 上游：走 Haven 那份「上游模型配置」。
   // ⚠️ token 只在服务端出现，前端送的是 provider_id。读不到配置就退回 .env.local
   // 那一条（第 4 步起的行为），不能让聊天页因为配置拿不到就发不了话。
@@ -340,7 +335,6 @@ async function loadTurnInputs(body: ChatBody) {
     systemPromptKey,
     cwd,
     additionalDirectories,
-    activeWebTools,
     sdkModel: sdkModelForProvider(model, cred),
     effort,
     thinking,

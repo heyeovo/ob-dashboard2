@@ -208,7 +208,6 @@ function makeConfig(overrides: Partial<TurnConfig> = {}): TurnConfig {
     systemPromptKey: '',
     cwd: 'C:\\Users\\test\\repo',
     additionalDirectories: [],
-    activeWebTools: [],
     sdkModel: 'test-model',
     effort: '',
     thinking: true,

@@ -187,7 +187,7 @@ export type CcMessage = {
   displaySegments?: DisplaySegment[]
   /** 仅用于本次增量收到的后台消息；初次历史载入不重播逐段显现。 */
   revealDisplaySegments?: boolean
-  wakeEvent?: { cause: string; at: string }
+  wakeEvent?: { cause: string; at: string; status?: string }
   nextWake?: { at: string; reason: string }
   requestId?: string
   roundId?: number

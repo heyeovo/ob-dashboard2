@@ -56,12 +56,18 @@ describe('ccHistory：旧历史兼容', () => {
       user_text: '',
       assistant_text: '',
       raw_json: JSON.stringify({
-        agent_wake: { cause: 'conversation_silence', at: '2026-08-31T12:55:00Z' },
+        agent_wake: { cause: 'conversation_silence', at: '2026-08-31T12:55:00Z', status: '看了一眼，你在忙吧' },
         next_wake: { at: '2026-08-31T13:25:00Z', reason: '等等看' },
+        thinking: '现在不适合打扰。',
       }),
     })])
     expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({ role: 'system', nextWake: { reason: '等等看' } })
+    expect(messages[0]).toMatchObject({
+      role: 'system',
+      wakeEvent: { status: '看了一眼，你在忙吧' },
+      thinking: '现在不适合打扰。',
+      nextWake: { reason: '等等看' },
+    })
   })
 
   it('没有 raw_json 的老消息正常展示，不带 thinking / 工具 / process', () => {

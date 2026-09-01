@@ -123,6 +123,7 @@ export default function CcMessageRow({
   onStartSelect,
 }: Props) {
   const isUser = message.role === 'user'
+  const persona = personaProp || FALLBACK_PERSONA
   const shownModel = modelLabel(message.model || '')
   const [menuOpen, setMenuOpen] = useState(false)
   // 新生成的当前轮默认展开；从 Haven 读回的历史轮默认折叠。
@@ -224,7 +225,22 @@ export default function CcMessageRow({
     return (
       <div className="my-2 flex justify-center" data-role="agent-wake-event">
         <div className="rounded-full border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-1.5 text-center text-[10.5px] text-[var(--color-text-tertiary)]">
-          <div>{shortClock(message.wakeEvent.at || message.createdAt)} · Claude 醒了一次</div>
+          <div>{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次</div>
+          {message.wakeEvent.status ? (
+            <div className="mt-0.5 text-[var(--color-text-secondary)]">{message.wakeEvent.status}</div>
+          ) : null}
+          {message.thinking ? (
+            <div className="mt-1 border-t border-[var(--color-border-light)] pt-1 text-left">
+              <button
+                type="button"
+                className="w-full text-center text-[var(--color-text-tertiary)]"
+                onClick={() => setThinkingOpen(open => !open)}
+              >
+                {thinkingOpen ? '收起深度思考' : '查看深度思考'}
+              </button>
+              {thinkingOpen ? <div className="mt-1 max-w-md text-[var(--color-text-secondary)]"><CcMarkdown text={message.thinking} /></div> : null}
+            </div>
+          ) : null}
           {message.nextWake ? (
             <div className="mt-0.5 text-[var(--color-text-secondary)]">
               ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
@@ -491,7 +507,6 @@ export default function CcMessageRow({
 
   /* ---------- 助手侧 ---------- */
   // 历史消息不记「当时是谁回的」，一律按当前协作者显示。要按轮存 persona 是以后的事。
-  const persona = personaProp || FALLBACK_PERSONA
   const savedProcess = message.process || []
   const tools =
     message.tools?.length
