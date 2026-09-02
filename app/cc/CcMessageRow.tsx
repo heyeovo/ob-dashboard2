@@ -6,6 +6,7 @@ import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent, CcTurnUsage } from './types'
 import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
+import { buildDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
 
 // 一条消息。
 //
@@ -138,6 +139,39 @@ export function ccMessageVisibleText(message: CcMessage): string {
   if (!process.some(event => event.type === 'text')) return message.text
   const last = process.at(-1)
   return last?.type === 'text' ? last.text : ''
+}
+
+function AssistantSegments({
+  segments,
+  messageId,
+  keyPrefix,
+  streaming = false,
+  searchQuery = '',
+  searchActive = false,
+}: {
+  segments: DisplaySegment[]
+  messageId: string
+  keyPrefix: string
+  streaming?: boolean
+  searchQuery?: string
+  searchActive?: boolean
+}) {
+  return (
+    <div className="cc-assistant-segments">
+      {segments.map((segment, index) => {
+        const isStreamingTail = streaming && index === segments.length - 1
+        return (
+          <div
+            className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${isStreamingTail ? ' streaming' : ''}`}
+            key={`${messageId}-${keyPrefix}-${index}`}
+          >
+            <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
+            {isStreamingTail ? <span className="cc-caret" aria-hidden="true" /> : null}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function shortClock(value: string | number) {
@@ -592,9 +626,15 @@ export default function CcMessageRow({
   const lastProcessEvent = process.at(-1)
   const trailingText = lastProcessEvent?.type === 'text' ? lastProcessEvent : null
   const visibleProcess = trailingText ? process.slice(0, -1) : process
-  const finalText = process.some(event => event.type === 'text')
+  const hasProcessText = process.some(event => event.type === 'text')
+  const finalText = hasProcessText
     ? trailingText?.text || ''
     : message.text
+  // displaySegments 保存的是整轮正文；过程时间线存在 text 事件时，前面的正文已经
+  // 在其真实位置展示，这里只能为最后一段重新拆泡，不能再次渲染整轮正文。
+  const finalSegments = hasProcessText
+    ? buildDisplaySegments(finalText).segments
+    : message.displaySegments || []
   const openTool = openToolId ? tools.find(tool => tool.id === openToolId) || null : null
   return (
     <div
@@ -649,16 +689,17 @@ export default function CcMessageRow({
                       className="cc-think-toggle"
                       onClick={() => setThinkingOpen(value => !value)}
                     >
-                      <span className="cc-process-icon" aria-hidden="true">◉</span>
+                      <span>
+                        {isActive
+                          ? '正在思考'
+                          : event.durationMs != null
+                            ? `${title} · ${(event.durationMs / 1000).toFixed(1)}s`
+                            : `${title} · 时长未记录`}
+                      </span>
                       <span
                         className={`cc-think-caret${thinkingOpen ? ' open' : ''}`}
                         aria-hidden="true"
                       />
-                      {isActive
-                        ? '正在思考'
-                        : event.durationMs != null
-                          ? `${title} (${(event.durationMs / 1000).toFixed(1)}s)`
-                          : `${title}（时长未记录）`}
                     </button>
                     {thinkingOpen
                       ? <div className="cc-think-body">{event.text}</div>
@@ -669,9 +710,12 @@ export default function CcMessageRow({
 
               if (event.type === 'text') {
                 return (
-                  <div className="cc-process-text" key={event.id}>
-                    <CcMarkdown text={event.text} />
-                  </div>
+                  <AssistantSegments
+                    key={event.id}
+                    segments={buildDisplaySegments(event.text).segments}
+                    messageId={message.id}
+                    keyPrefix={event.id}
+                  />
                 )
               }
 
@@ -704,21 +748,15 @@ export default function CcMessageRow({
         ) : null}
 
         {/* 正文：markdown。流式中末尾跟一个光标 */}
-        {message.displaySegments?.length ? (
-          <div className="cc-assistant-segments">
-            {message.displaySegments.slice(0, visibleSegmentCount).map((segment, index) => {
-              const isStreamingTail = Boolean(message.streaming) && index === message.displaySegments!.length - 1
-              return (
-                <div
-                  className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${isStreamingTail ? ' streaming' : ''}`}
-                  key={`${message.id}-segment-${index}`}
-                >
-                  <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
-                  {isStreamingTail ? <span className="cc-caret" aria-hidden="true" /> : null}
-                </div>
-              )
-            })}
-          </div>
+        {finalSegments.length ? (
+          <AssistantSegments
+            segments={finalSegments.slice(0, visibleSegmentCount)}
+            messageId={message.id}
+            keyPrefix="final"
+            streaming={Boolean(message.streaming) && visibleSegmentCount >= finalSegments.length}
+            searchQuery={searchQuery}
+            searchActive={searchActive}
+          />
         ) : (
           <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
             {finalText ? (
