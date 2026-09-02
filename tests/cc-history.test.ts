@@ -59,7 +59,6 @@ describe('ccHistory：旧历史兼容', () => {
         agent_wake: {
           cause: 'conversation_silence',
           at: '2026-08-31T12:55:00Z',
-          reason: '看看她有没有回来',
           status: '看了一眼，你在忙吧',
         },
         next_wake: { at: '2026-08-31T13:25:00Z', reason: '等等看' },
@@ -71,7 +70,7 @@ describe('ccHistory：旧历史兼容', () => {
     expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
       role: 'system',
-      wakeEvent: { reason: '看看她有没有回来', status: '看了一眼，你在忙吧' },
+      wakeEvent: { status: '看了一眼，你在忙吧' },
       thinking: '现在不适合打扰。',
       thinkingMs: 1400,
       usage: expect.objectContaining({ cacheReadTokens: 33479, cacheWriteTokens: 106 }),
@@ -86,7 +85,7 @@ describe('ccHistory：旧历史兼容', () => {
       user_text: '',
       assistant_text: '',
       raw_json: JSON.stringify({
-        agent_wake: { cause: 'cache_keepalive', at: '2026-08-31T13:55:00Z', status: '', reason: '' },
+        agent_wake: { cause: 'cache_keepalive', at: '2026-08-31T13:55:00Z', status: '' },
       }),
     })])
 
@@ -96,7 +95,6 @@ describe('ccHistory：旧历史兼容', () => {
       wakeEvent: { cause: 'cache_keepalive', at: '2026-08-31T13:55:00Z' },
     })
     expect(messages[0].wakeEvent?.status).toBeUndefined()
-    expect(messages[0].wakeEvent?.reason).toBeUndefined()
   })
 
   it('没有 raw_json 的老消息正常展示，不带 thinking / 工具 / process', () => {

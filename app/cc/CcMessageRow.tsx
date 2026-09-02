@@ -271,11 +271,8 @@ export default function CcMessageRow({
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
         </div>
         <div className="mx-auto mt-1 max-w-md space-y-0.5 px-3 text-center text-[10.5px] text-[var(--color-text-tertiary)]">
-          {message.wakeEvent.reason ? (
-            <div>唤醒原因 · {message.wakeEvent.reason}</div>
-          ) : null}
           {message.wakeEvent.status ? (
-            <div className="text-[var(--color-text-secondary)]">没有发消息 · {message.wakeEvent.status}</div>
+            <div className="text-[var(--color-text-secondary)]">这次没有发消息 · {message.wakeEvent.status}</div>
           ) : null}
           {message.nextWake ? (
             <div>

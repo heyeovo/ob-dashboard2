@@ -15,7 +15,8 @@
 - 2026-09-02 Bark 首次线上测试曾返回 `HTTP 400`，用户已解决；该问题不再是当前阻塞项，不继续排查。
 - Dashboard 通知设置页已在本地补充固定底部 Tab 与 iPhone safe area 留白，解决手机端“保存设置”按钮被 Tab 遮挡；`git diff --check` 与 `npm run build` 已通过，等待用户提交、推送并重新部署 Dashboard。
 - 2026-09-02 已完成线上缓存异常修复：前台开启 WebSearch/WebFetch、后台 wake 删除两项工具定义，曾导致 A/B cache prefix 分叉。现在两项 schema 始终固定，前台关闭开关或后台 wake 均在运行时 hook 拒绝；cache fingerprint 日志可直接对照 system/tools/MCP/options hash、lane、CC session 和 iterator 冷热状态。
-- No-op wake 允许在 `[agent_wake_noop]` 后带最多 30 字自然状态；完整解析、写库、历史映射和测试链已存在，未出现短状态通常表示 Claude 只返回了裸 marker。wake UI 已把轻量事件、本次唤醒 reason、可选 no-op 状态、SDK thinking 和 usage 分层：thinking 独立折叠并明确标注为 Claude 的真实思考，token usage 位于整组右下角并独立展开，不再挤在事件胶囊内。`set_agent_wake` reason 上限为 50 字。
+- No-op wake 允许在 `[agent_wake_noop]` 后带最多 30 字用户可见 skip reason；它不是 `set_agent_wake` 参数。解析、写库和历史映射链已存在，本轮进一步把精确格式与示例同时写进 MCP instructions 和始终加载的工具描述，避免 Claude 只看 schedule/cancel 参数而不知道 marker 后可附带文字。wake UI 将可选原因显示为“这次没有发消息”，SDK thinking 独立折叠并明确标注为 Claude 的真实思考，token usage 位于整组右下角并独立展开。`set_agent_wake` reason 上限为 50 字。
+- 本轮修改了始终加载的 agent wake MCP instructions/工具描述，因此 Dashboard 部署后的第一轮会建立一次新的稳定缓存前缀；该次 cache miss 属于预期。缓存异常调查必须比较同一部署版本建立新前缀之后的连续轮次，不得拿部署前后的 tools/MCP hash 直接判定为再次失效。
 - 主动唤醒设置仍严格按 profile/session/lane 隔离；保活关闭时页面显示“未开启”，不会再把仅供计算的 deadline 表达成实际调度。
 - 线上初测中 conversation silence 与 Claude 主动安排的 wake 都已连续命中正常缓存；用户将继续整晚观察 foreground → wake → foreground 的 cache read/write，当前不做 wake 100–500 token 级增量压缩。
 - 阶段 1–3 的持久控制面、统一 turn、原子消息提交、silence timer、历史映射、分段气泡、主动唤醒设置 Tab 和页面增量刷新保持不变。
@@ -40,7 +41,7 @@
 
 - 2026-09-02 Dashboard 全量 Vitest：45 个测试文件，235 项通过、1 项跳过；`npm run build` 与 `git diff --check` 通过。未修改 Haven 代码或数据结构。
 - 2026-09-02 no-op wake token 角标补丁：复用普通消息的 token 角标和展开详情；定向测试 19 项通过，Dashboard production build 与 `git diff --check` 通过。
-- 2026-09-02 wake UI 分层与 reason 展示：定向 Vitest 24 项通过；Dashboard 全量 Vitest 47 个文件、242 项通过、1 项跳过；production build 通过。未修改 Haven、scheduler、silence、cache、coordinator 或 lane 状态机，阶段 6 未开始。
+- 2026-09-02 wake UI 分层与 noop skip reason 展示：定向 Vitest 24 项通过；Dashboard 全量 Vitest 47 个文件、242 项通过、1 项跳过；production build 通过。未修改 Haven、scheduler、silence、cache、coordinator 或 lane 状态机，阶段 6 未开始。
 
 - Haven 阶段 4 定向：47 项通过。
 - Haven 全量 unittest：175 项全部通过。
@@ -63,9 +64,10 @@
 ## 下一步
 
 1. 用户提交并推送 Dashboard，在 Coolify 的 Dashboard Application 点击 `Redeploy`；本轮没有 Haven 改动，不部署 Haven。
-2. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、唤醒原因/no-op 状态、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
+2. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、可选“这次没有发消息”原因、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
 3. 等待后续真实 no-op 样本，确认 Claude 是否主动附带 30 字内自然状态；完整功能链已经存在，不为强制出现短文本修改 prompt 或后端。
-4. 阶段 6 的真实 55 分钟成本实验另开窗口，不在本次 UI 验收中实施。
+4. 下一窗口定点排查一次新的“唤醒期间缓存失效”样本。昨天已修复的原因是前台与后台 `WebSearch` / `WebFetch` schema 不一致导致 cache prefix 分叉；这次现象不同，不得直接套用旧结论。先确认样本发生在本次 MCP 文案部署之前还是之后；部署后的首轮预期建立新前缀，不算异常。再向用户收集异常发生时间、前一轮前台消息时间、wake 时间、后续前台消息时间，以及对应 `cc-cache-fingerprint` / usage 日志，用最小证据集对比 system、tools、MCP、options hash、lane、CC session、iterator 冷热状态和 cache read/write。
+5. 该窗口只做缓存失效诊断；确认根因和修改范围后再等用户授权动手。不要顺手改 scheduler、silence、coordinator、lane 状态机或后台权限，也不要开始阶段 6 的真实 55 分钟成本实验。
 
 ## 不得扩散的边界
 

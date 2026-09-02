@@ -117,14 +117,18 @@ export function createAgentWakeMcpServer(sessionId: string): McpSdkServerConfigW
     alwaysLoad: true,
     instructions:
       `When the user message is an <agent_wake .../> trigger, decide whether anything useful ` +
-      `should happen now. If nothing should be shown or done, reply with ${AGENT_WAKE_NOOP_MARKER}, ` +
-      `optionally followed on the same line by one natural status of at most ${AGENT_WAKE_NOOP_STATUS_MAX_CHARS} characters. ` +
+      `should happen now. If nothing should be shown or done, reply on one line in exactly this form: ` +
+      `${AGENT_WAKE_NOOP_MARKER} <optional skip reason>. The text after the marker is a user-visible ` +
+      `natural reason of at most ${AGENT_WAKE_NOOP_STATUS_MAX_CHARS} characters, not a normal assistant message. ` +
+      `Example: ${AGENT_WAKE_NOOP_MARKER} 她在忙，先不打扰。 ` +
       `Use set_agent_wake only to schedule or cancel a future wake. Background turns cannot wait for ` +
       `human approval; if user action is needed, send a normal concise assistant message explaining it.`,
     tools: [
       tool(
         AGENT_WAKE_TOOL_NAME,
-        'Set or cancel the next wake for this CC session. The last valid call in this turn wins.',
+        `Set or cancel the next future wake for this CC session. This tool is not used for a current-wake no-op: ` +
+        `reply with ${AGENT_WAKE_NOOP_MARKER} followed by an optional user-visible skip reason instead. ` +
+        `The last valid tool call in this turn wins.`,
         {
           action: z.enum(['schedule', 'cancel']),
           after_minutes: z.number().optional(),

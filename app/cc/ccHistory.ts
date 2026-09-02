@@ -214,7 +214,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
   cacheSnapshot: CcCacheSnapshot | null
   preCompactions: CcCompactionEvent[]
   displaySegments: DisplaySegment[] | null
-  agentWake: { cause: string; at: string; reason?: string; status?: string } | null
+  agentWake: { cause: string; at: string; status?: string } | null
   nextWake: { at: string; reason: string } | null
 } {
   const empty = {
@@ -345,7 +345,6 @@ export function parseTurnRaw(rawJson: string | undefined): {
       ? {
           cause: String(rawWake.cause || 'cache_keepalive'),
           at: String(rawWake.at || ''),
-          reason: String(rawWake.reason || '').trim() || undefined,
           status: String(rawWake.status || '').trim() || undefined,
         }
       : null,

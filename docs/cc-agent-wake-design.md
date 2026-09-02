@@ -315,7 +315,7 @@ Claude 有可见回复时，next wake 显示在回复下方：
 ↳ 下次唤醒 12:35 · 想看看小羊有没有去吃饭
 ```
 
-Claude no-op 时，不生成普通 assistant message；若在固定 no-op marker 后附带短状态，则作为“没有发消息”的自然状态显示在 wake event 下方。已保存的本次唤醒 reason 同区显示为“唤醒原因”，与 no-op 状态明确区分。
+Claude no-op 时，不生成普通 assistant message；可在固定 no-op marker 后附带一条最多 30 字的自然 skip reason。该文字是用户可见的“这次没有发消息”说明，显示在 wake event 下方，不是 `set_agent_wake` 参数，也不形成正式助手气泡。MCP instructions 和始终加载的工具描述都必须明确说明该格式，避免 Claude 只从 schedule/cancel 参数误以为没有填写入口。
 
 SDK 返回的 thinking 是 Claude 的真实思考过程，不是 no-op 短状态；它在 wake event 下方使用独立折叠区并明确标注“Claude 的深度思考”。本轮 token usage 不放进 wake event 容器，复用普通助手消息右下角的 token 入口和独立展开明细。next wake 仍显示在 wake event 说明区。
 
