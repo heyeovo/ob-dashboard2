@@ -135,6 +135,24 @@ export type RunTurnInput = {
   stamp?: (label: string) => void
 }
 
+export type CacheDiagnostic = {
+  version: 1
+  dashboard_instance_id: string
+  turn_kind: 'user' | 'agent_wake'
+  lane: string
+  cc_session_id: string
+  resume_hint: string
+  iterator: 'reused' | 'cold_resumed' | 'cold_started'
+  iterator_created_at: string
+  model_request_started_at: string
+  system_hash: string
+  tools_hash: string
+  mcp_hash: string
+  options_hash: string
+  tool_names: string[]
+  mcp_server_names: string[]
+}
+
 export type RunTurnResult = {
   ok: boolean
   error?: string
@@ -147,8 +165,13 @@ export type RunTurnResult = {
   wakeDecision?: AgentWakeDecision | null
   cacheRefreshAt?: number
   modelActivityAt?: number
+  /** 只写入消息 raw_json 的缓存排障黑匣子，不进入模型 Context。 */
+  cacheDiagnostic?: CacheDiagnostic
   displaySegments?: VersionedDisplaySegments
 }
+
+/** 同一 Node 进程内固定；变化表示 Dashboard 进程/部署实例已经切换。 */
+const DASHBOARD_INSTANCE_ID = randomUUID()
 
 /* ── 私有工具函数（原 route.ts 原样搬） ── */
 
@@ -439,6 +462,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   let wakeStateEnded = false
   let modelRequestStartedAt = 0
   let confirmedCacheRefreshAt = 0
+  let cacheDiagnostic: CacheDiagnostic | undefined
+  const currentCacheDiagnostic = (): CacheDiagnostic | undefined => cacheDiagnostic
+    ? {
+        ...cacheDiagnostic,
+        cc_session_id: live?.ccSessionId || cacheDiagnostic.cc_session_id,
+        model_request_started_at: modelRequestStartedAt
+          ? new Date(modelRequestStartedAt).toISOString()
+          : '',
+      }
+    : undefined
 
   try {
     const wakeState = turnKind === 'user'
@@ -489,14 +522,33 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       thinking: config.thinking,
       systemPromptKey: config.systemPromptKey,
     })
+    const fingerprint = cacheRelevantFingerprint(config)
+    const iterator = currentLive === live ? 'reused' : input.resumeHint ? 'cold_resumed' : 'cold_started'
+    cacheDiagnostic = {
+      version: 1,
+      dashboard_instance_id: DASHBOARD_INSTANCE_ID,
+      turn_kind: turnKind,
+      lane: config.laneId,
+      cc_session_id: live.ccSessionId || input.resumeHint || '',
+      resume_hint: input.resumeHint || '',
+      iterator,
+      iterator_created_at: new Date(live.createdAt).toISOString(),
+      model_request_started_at: '',
+      system_hash: fingerprint.systemPromptHash,
+      tools_hash: fingerprint.toolsHash,
+      mcp_hash: fingerprint.mcpToolsHash,
+      options_hash: fingerprint.sdkCacheRelevantOptionsHash,
+      tool_names: fingerprint.toolNames,
+      mcp_server_names: fingerprint.mcpServerNames,
+    }
     console.info('[cc-cache-fingerprint]', {
       turnKind,
       sessionId,
       laneId: config.laneId,
       ccSessionId: live.ccSessionId || input.resumeHint || '',
       resumeHint: input.resumeHint || '',
-      iterator: currentLive === live ? 'reused' : input.resumeHint ? 'cold_resumed' : 'cold_started',
-      ...cacheRelevantFingerprint(config),
+      iterator,
+      ...fingerprint,
     })
     preCompactions = getPendingCompactions(sessionId)
 
@@ -959,6 +1011,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         wakeDecision,
         cacheRefreshAt: confirmedCacheRefreshAt || undefined,
         modelActivityAt: modelRequestStartedAt || undefined,
+        cacheDiagnostic: currentCacheDiagnostic(),
         displaySegments,
       }
     }
@@ -1037,6 +1090,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             web: config.webSettings,
           },
           usage: turnUsage || undefined,
+          cache_diagnostic: currentCacheDiagnostic(),
           display_segments: displaySegments,
           persona_id: personaId,
           persona_name: persona?.name || undefined,
@@ -1179,6 +1233,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       wakeDecision,
       cacheRefreshAt: confirmedCacheRefreshAt || undefined,
       modelActivityAt: modelRequestStartedAt || undefined,
+      cacheDiagnostic: currentCacheDiagnostic(),
       displaySegments,
     }
   } catch (e) {

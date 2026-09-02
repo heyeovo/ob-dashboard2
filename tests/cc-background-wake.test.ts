@@ -115,6 +115,23 @@ describe('Dashboard background wake runner', () => {
       thinking: '她现在应该在忙，先不打扰。',
       process: [{ type: 'thinking', id: 'thinking-1', text: '她现在应该在忙，先不打扰。' }],
       modelActivityAt: Date.parse('2026-08-31T12:55:01Z'),
+      cacheDiagnostic: {
+        version: 1,
+        dashboard_instance_id: 'dashboard-test',
+        turn_kind: 'agent_wake',
+        lane: 'subscription',
+        cc_session_id: 'native-session',
+        resume_hint: 'native-session',
+        iterator: 'cold_resumed',
+        iterator_created_at: '2026-08-31T12:55:00.000Z',
+        model_request_started_at: '2026-08-31T12:55:01.000Z',
+        system_hash: 'system-hash',
+        tools_hash: 'tools-hash',
+        mcp_hash: 'mcp-hash',
+        options_hash: 'options-hash',
+        tool_names: ['WebSearch', 'WebFetch'],
+        mcp_server_names: ['agent-wake'],
+      },
       wakeDecision: { action: 'schedule', at: '2026-08-31T13:25:00Z', reason: '稍后再看' },
     })
     const result = await runBackgroundWake({
@@ -126,6 +143,12 @@ describe('Dashboard background wake runner', () => {
       raw: expect.objectContaining({
         thinking: '她现在应该在忙，先不打扰。',
         process: expect.arrayContaining([expect.objectContaining({ type: 'thinking' })]),
+        cache_diagnostic: expect.objectContaining({
+          dashboard_instance_id: 'dashboard-test',
+          iterator: 'cold_resumed',
+          system_hash: 'system-hash',
+          options_hash: 'options-hash',
+        }),
       }),
       agentWakeUpdate: expect.objectContaining({
         wake_cause: 'cache_keepalive',

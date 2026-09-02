@@ -142,6 +142,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         model: loaded.config.model,
         persona_id: loaded.persona.id,
         usage: turnResult.usage || undefined,
+        cache_diagnostic: turnResult.cacheDiagnostic || undefined,
         thinking: turnResult.thinking || undefined,
         process: turnResult.process?.length ? turnResult.process : undefined,
         display_segments: assistantText

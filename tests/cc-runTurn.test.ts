@@ -358,6 +358,56 @@ afterEach(() => {
 })
 
 describe('runTurn：普通回复', () => {
+  it('returns a persistent-safe cache diagnostic for cold starts and cold resumes', async () => {
+    const config = makeConfig({
+      personaAppend: 'private-persona-marker',
+      envOverrides: { authToken: 'api-secret' },
+    })
+    const firstScript = [initMsg('native-cold-start'), textDelta('好'), resultMsg()]
+    const coldStarted = await driveTurn(firstScript, { config }).promise
+    expect(coldStarted.cacheDiagnostic).toMatchObject({
+      version: 1,
+      turn_kind: 'user',
+      lane: 'api:default',
+      cc_session_id: 'native-cold-start',
+      resume_hint: '',
+      iterator: 'cold_started',
+      system_hash: expect.any(String),
+      tools_hash: expect.any(String),
+      mcp_hash: expect.any(String),
+      options_hash: expect.any(String),
+      model_request_started_at: expect.any(String),
+    })
+    expect(JSON.stringify(coldStarted.cacheDiagnostic)).not.toContain('private-persona-marker')
+    expect(JSON.stringify(coldStarted.cacheDiagnostic)).not.toContain('api-secret')
+    expect(turns.recordTurn.mock.calls[0][0].raw.cache_diagnostic).toEqual(coldStarted.cacheDiagnostic)
+
+    firstScript.push(textDelta('再好'), resultMsg())
+    const reused = await driveTurn([], {
+      requestId: 'request-reused',
+      expectedLastRoundId: 1,
+      config,
+    }).promise
+    expect(reused.cacheDiagnostic).toMatchObject({
+      cc_session_id: 'native-cold-start',
+      resume_hint: '',
+      iterator: 'reused',
+    })
+    expect(sdk.queryCalls).toBe(1)
+
+    dropSession('ob2-test-session')
+    const coldResumed = await driveTurn([initMsg('native-resumed'), textDelta('好'), resultMsg()], {
+      requestId: 'request-cold-resumed',
+      resumeHint: 'native-cold-start',
+      config,
+    }).promise
+    expect(coldResumed.cacheDiagnostic).toMatchObject({
+      cc_session_id: 'native-resumed',
+      resume_hint: 'native-cold-start',
+      iterator: 'cold_resumed',
+    })
+  })
+
   it('only records a cache refresh after successful cache usage, using model request start time', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-31T12:00:00Z'))
