@@ -128,6 +128,7 @@ html {
   --chat-bubble-radius:     20px;
   --chat-user-fill:         #F2EAE4;
   --chat-user-text:         #3A3836;
+  --chat-assistant-fill:    #F3EFEB;
   --chat-assistant-width:   760px;
   --chat-line-height:       1.72;
   --chat-stream-bar:        linear-gradient(180deg, rgba(217,119,87,.62), rgba(217,119,87,.18));
@@ -212,7 +213,14 @@ body {
   width: fit-content;
   padding: 9px 13px;
   border-radius: var(--radius-lg);
-  background: var(--color-surface-secondary);
+  background: var(--chat-assistant-fill);
+}
+.cc-bubble-assistant.entering {
+  animation: ccBubbleEnter var(--duration-normal) var(--ease-standard) both;
+}
+@keyframes ccBubbleEnter {
+  from { opacity: 0; transform: translateY(5px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* 流式中：左侧一道橙色渐变竖条，答完淡出。 */
@@ -386,7 +394,11 @@ body {
   border-radius: var(--radius-lg);
   background: var(--chat-think-bg);
   padding: 8px 11px;
+  transition: background var(--duration-normal) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
 }
+.cc-think:has(.cc-think-toggle:hover) { background: var(--color-surface-secondary); }
+.cc-think:has(.cc-think-toggle:active) { transform: scale(.994); }
 .cc-think-toggle {
   display: flex;
   width: 100%;
@@ -395,9 +407,11 @@ body {
   gap: 10px;
   font-size: 11.5px;
   color: var(--color-text-tertiary);
-  transition: color var(--duration-normal) var(--ease-standard);
+  transition: color var(--duration-normal) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
 }
 .cc-think-toggle:hover { color: var(--color-text-secondary); }
+.cc-think-toggle:active { transform: translateY(1px); }
 .cc-think-caret {
   width: 0;
   height: 0;
@@ -407,6 +421,24 @@ body {
   transition: transform var(--duration-normal) var(--ease-standard);
 }
 .cc-think-caret.open { transform: rotate(90deg) translateX(1px); }
+.cc-think-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: grid-template-rows var(--duration-slow) var(--ease-standard),
+              opacity var(--duration-normal) var(--ease-standard),
+              transform var(--duration-slow) var(--ease-standard);
+}
+.cc-think-reveal.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+}
+.cc-think-reveal-inner {
+  min-height: 0;
+  overflow: hidden;
+}
 .cc-think-body {
   margin-top: 7px;
   padding: 2px 1px 1px;
@@ -415,6 +447,14 @@ body {
   color: var(--color-text-secondary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-bubble-assistant.entering { animation: none; }
+  .cc-think,
+  .cc-think-toggle,
+  .cc-think-caret,
+  .cc-think-reveal { transition: none; }
 }
 
 /* ---- 流式光标：正文末尾一道竖条 ---- */

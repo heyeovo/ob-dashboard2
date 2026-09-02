@@ -1475,13 +1475,14 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               } else {
                 process.push({ type: 'text', id, text: chunk })
               }
+              const displaySegments = buildDisplaySegments(currentText).segments
               return {
                 ...m,
                 process,
                 thinkingMs: thinkingDuration(process) || undefined,
                 text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
-                displaySegments: buildDisplaySegments(currentText).segments,
-                revealDisplaySegments: false,
+                displaySegments,
+                revealDisplaySegments: true,
               }
             })
           },
@@ -1627,7 +1628,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                 roundId: roundId || m.roundId,
                 deliveryState: replayed ? 'replayed' : 'saved',
                 displaySegments: displaySegments?.segments || m.displaySegments,
-                revealDisplaySegments: false,
+                revealDisplaySegments: m.revealDisplaySegments,
                 nextWake: nextWake && typeof nextWake.at === 'string' && nextWake.at
                   ? { at: nextWake.at, reason: String(nextWake.reason || '') }
                   : m.nextWake,

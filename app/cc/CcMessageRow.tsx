@@ -146,6 +146,7 @@ function AssistantSegments({
   messageId,
   keyPrefix,
   streaming = false,
+  animate = false,
   searchQuery = '',
   searchActive = false,
 }: {
@@ -153,6 +154,7 @@ function AssistantSegments({
   messageId: string
   keyPrefix: string
   streaming?: boolean
+  animate?: boolean
   searchQuery?: string
   searchActive?: boolean
 }) {
@@ -162,7 +164,7 @@ function AssistantSegments({
         const isStreamingTail = streaming && index === segments.length - 1
         return (
           <div
-            className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${isStreamingTail ? ' streaming' : ''}`}
+            className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${isStreamingTail ? ' streaming' : ''}${animate ? ' entering' : ''}`}
             key={`${messageId}-${keyPrefix}-${index}`}
           >
             <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
@@ -210,7 +212,15 @@ export default function CcMessageRow({
   // 上下文预算是诊断信息，收进图标浮窗，避免元数据行过长。
   const [contextOpen, setContextOpen] = useState(false)
   const [forwardOpen, setForwardOpen] = useState(false)
-  const segmentCount = message.displaySegments?.length || 0
+  const messageProcess = message.process || []
+  const messageLastProcessEvent = messageProcess.at(-1)
+  const messageTrailingText = messageLastProcessEvent?.type === 'text'
+    ? messageLastProcessEvent.text
+    : ''
+  const renderedSegments = messageProcess.some(event => event.type === 'text')
+    ? buildDisplaySegments(messageTrailingText).segments
+    : message.displaySegments || []
+  const segmentCount = renderedSegments.length
   const [visibleSegmentCount, setVisibleSegmentCount] = useState(() => (
     message.revealDisplaySegments && segmentCount > 0 ? 1 : segmentCount
   ))
@@ -287,11 +297,12 @@ export default function CcMessageRow({
       setVisibleSegmentCount(segmentCount)
       return
     }
+    const revealDelay = isCurrentTurn && !message.fromHistory ? 180 : SEGMENT_REVEAL_MS
     const timer = window.setTimeout(() => {
       setVisibleSegmentCount(current => Math.min(segmentCount, current + 1))
-    }, SEGMENT_REVEAL_MS)
+    }, revealDelay)
     return () => window.clearTimeout(timer)
-  }, [message.revealDisplaySegments, segmentCount, visibleSegmentCount])
+  }, [isCurrentTurn, message.fromHistory, message.revealDisplaySegments, segmentCount, visibleSegmentCount])
 
   if (message.role === 'system' && message.compaction) {
     return <CompactionDivider compaction={message.compaction} />
@@ -633,7 +644,7 @@ export default function CcMessageRow({
   // displaySegments 保存的是整轮正文；过程时间线存在 text 事件时，前面的正文已经
   // 在其真实位置展示，这里只能为最后一段重新拆泡，不能再次渲染整轮正文。
   const finalSegments = hasProcessText
-    ? buildDisplaySegments(finalText).segments
+    ? renderedSegments
     : message.displaySegments || []
   const openTool = openToolId ? tools.find(tool => tool.id === openToolId) || null : null
   return (
@@ -701,9 +712,14 @@ export default function CcMessageRow({
                         aria-hidden="true"
                       />
                     </button>
-                    {thinkingOpen
-                      ? <div className="cc-think-body">{event.text}</div>
-                      : null}
+                    <div
+                      className={`cc-think-reveal${thinkingOpen ? ' open' : ''}`}
+                      aria-hidden={!thinkingOpen}
+                    >
+                      <div className="cc-think-reveal-inner">
+                        <div className="cc-think-body">{event.text}</div>
+                      </div>
+                    </div>
                   </div>
                 )
               }
@@ -754,6 +770,7 @@ export default function CcMessageRow({
             messageId={message.id}
             keyPrefix="final"
             streaming={Boolean(message.streaming) && visibleSegmentCount >= finalSegments.length}
+            animate={Boolean(message.revealDisplaySegments)}
             searchQuery={searchQuery}
             searchActive={searchActive}
           />
