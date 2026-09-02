@@ -7,6 +7,7 @@ import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent, CcTurnU
 import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
 import { buildDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
+import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 
 // 一条消息。
 //
@@ -202,6 +203,7 @@ export default function CcMessageRow({
   const persona = personaProp || FALLBACK_PERSONA
   const shownModel = modelLabel(message.model || '')
   const usage = message.usage || null
+  const { showRuntimeInfo, showTokenInfo } = useChatDisplayPreferences()
   const [menuOpen, setMenuOpen] = useState(false)
   // 新生成的当前轮默认展开；从 Haven 读回的历史轮默认折叠。
   // 状态只属于当前页面：实时轮结束后保持展开，刷新后会按历史规则重新折叠。
@@ -712,14 +714,9 @@ export default function CcMessageRow({
                         aria-hidden="true"
                       />
                     </button>
-                    <div
-                      className={`cc-think-reveal${thinkingOpen ? ' open' : ''}`}
-                      aria-hidden={!thinkingOpen}
-                    >
-                      <div className="cc-think-reveal-inner">
-                        <div className="cc-think-body">{event.text}</div>
-                      </div>
-                    </div>
+                    {thinkingOpen
+                      ? <div className="cc-think-body">{event.text}</div>
+                      : null}
                   </div>
                 )
               }
@@ -806,9 +803,9 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
-        {!message.streaming && (message.engine || shownModel || message.deliveryNote) ? (
+        {!message.streaming && (showRuntimeInfo && (message.engine || message.providerLabel || shownModel || message.context) || message.deliveryNote || message.deliveryState === 'persistence_unknown') ? (
           <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {showRuntimeInfo ? <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
               {shownModel ? <span>模型：{shownModel}</span> : null}
@@ -853,7 +850,7 @@ export default function CcMessageRow({
                   ) : null}
                 </div>
               ) : null}
-            </div>
+            </div> : null}
             {message.deliveryNote ? (
               <div className={`mt-1 ${message.deliveryState === 'saved' || message.deliveryState === 'replayed' ? 'text-emerald-700' : message.deliveryState === 'saving' ? 'text-[var(--color-primary)]' : 'text-rose-600'}`}>
                 {message.deliveryNote}
@@ -877,14 +874,14 @@ export default function CcMessageRow({
             <button type="button" className="hover:text-[var(--color-text-secondary)]" onClick={() => onCopy(message.text)}>
               复制
             </button>
-            {usage ? (
+            {usage && showTokenInfo ? (
               <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} />
             ) : null}
           </div>
         ) : null}
 
         {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
-        {usage && usageOpen ? <UsageDetails usage={usage} /> : null}
+        {usage && showTokenInfo && usageOpen ? <UsageDetails usage={usage} /> : null}
       </div>
 
       {openTool ? <CcToolDialog tool={openTool} onClose={() => setOpenToolId(null)} /> : null}
