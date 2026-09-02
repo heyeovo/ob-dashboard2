@@ -114,7 +114,7 @@ export default function NotificationSettingsPage() {
   if (loading) return <div className="p-6 text-sm text-[var(--color-text-tertiary)]">正在读取通知设置…</div>
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 text-[var(--color-text-primary)] sm:px-6">
+    <main className="mx-auto min-h-screen max-w-3xl px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-8 text-[var(--color-text-primary)] sm:px-6 md:pb-8">
       <Link href="/settings" className="text-xs text-[var(--color-text-tertiary)]">← 返回设置</Link>
       <h1 className="mt-4 text-2xl font-bold text-[var(--color-text-heading)]">Bark 通知</h1>
       <p className="mt-2 text-sm leading-6 text-[var(--color-text-tertiary)]">
