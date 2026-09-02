@@ -284,6 +284,11 @@ body {
 }
 .cc-dots span:nth-child(2) { animation-delay: .15s; }
 .cc-dots span:nth-child(3) { animation-delay: .3s; }
+.cc-assistant-pending {
+  min-height: 20px;
+  padding: 3px 2px 1px;
+  color: var(--color-text-disabled);
+}
 @keyframes ccDot {
   0%, 60%, 100% { opacity: .25; transform: translateY(0); }
   30%           { opacity: .9;  transform: translateY(-2px); }

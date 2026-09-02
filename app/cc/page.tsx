@@ -750,7 +750,7 @@ export default function CcChatPage() {
           </div>
         ) : (
           conversationMessages.map(m => (
-              <div key={`${m.id}:${m.id === latestAssistantId ? 'current' : 'history'}`}>
+              <div key={m.id}>
                 <CcMessageRow
                   message={m}
                   isCurrentTurn={m.id === latestAssistantId}

@@ -6,7 +6,7 @@ import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent, CcTurnUsage } from './types'
 import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
-import { buildDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
+import { buildDisplaySegments, buildStableDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
 import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 
 // 一条消息。
@@ -146,7 +146,6 @@ function AssistantSegments({
   segments,
   messageId,
   keyPrefix,
-  streaming = false,
   animate = false,
   searchQuery = '',
   searchActive = false,
@@ -154,7 +153,6 @@ function AssistantSegments({
   segments: DisplaySegment[]
   messageId: string
   keyPrefix: string
-  streaming?: boolean
   animate?: boolean
   searchQuery?: string
   searchActive?: boolean
@@ -162,14 +160,12 @@ function AssistantSegments({
   return (
     <div className="cc-assistant-segments">
       {segments.map((segment, index) => {
-        const isStreamingTail = streaming && index === segments.length - 1
         return (
           <div
-            className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${isStreamingTail ? ' streaming' : ''}${animate ? ' entering' : ''}`}
+            className={`cc-bubble-assistant${segment.kind === 'text' ? ' cc-bubble-assistant-segment' : ''}${animate ? ' entering' : ''}`}
             key={`${messageId}-${keyPrefix}-${index}`}
           >
             <CcMarkdown text={segment.markdown} searchQuery={searchQuery} searchActive={searchActive} />
-            {isStreamingTail ? <span className="cc-caret" aria-hidden="true" /> : null}
           </div>
         )
       })}
@@ -216,15 +212,21 @@ export default function CcMessageRow({
   const [forwardOpen, setForwardOpen] = useState(false)
   const messageProcess = message.process || []
   const messageLastProcessEvent = messageProcess.at(-1)
+  const isActivelyThinking = Boolean(
+    message.streaming &&
+    messageLastProcessEvent?.type === 'thinking' &&
+    messageLastProcessEvent.durationMs == null,
+  )
   const messageTrailingText = messageLastProcessEvent?.type === 'text'
     ? messageLastProcessEvent.text
     : ''
   const renderedSegments = messageProcess.some(event => event.type === 'text')
-    ? buildDisplaySegments(messageTrailingText).segments
+    ? buildStableDisplaySegments(messageTrailingText, !message.streaming).segments
     : message.displaySegments || []
   const segmentCount = renderedSegments.length
+  const shouldRevealSegments = Boolean(message.revealDisplaySegments && isCurrentTurn)
   const [visibleSegmentCount, setVisibleSegmentCount] = useState(() => (
-    message.revealDisplaySegments && segmentCount > 0 ? 1 : segmentCount
+    shouldRevealSegments && segmentCount > 0 ? 1 : segmentCount
   ))
   const timerRef = useRef<number | null>(null)
   const suppressClickRef = useRef(false)
@@ -285,15 +287,15 @@ export default function CcMessageRow({
       return
     }
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-    if (!message.revealDisplaySegments || reduceMotion || segmentCount === 1) {
+    if (!shouldRevealSegments || reduceMotion || segmentCount === 1) {
       setVisibleSegmentCount(segmentCount)
       return
     }
     setVisibleSegmentCount(current => Math.max(1, Math.min(current, segmentCount)))
-  }, [message.revealDisplaySegments, segmentCount])
+  }, [shouldRevealSegments, segmentCount])
 
   useEffect(() => {
-    if (!message.revealDisplaySegments || visibleSegmentCount >= segmentCount) return
+    if (!shouldRevealSegments || visibleSegmentCount >= segmentCount) return
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
     if (reduceMotion) {
       setVisibleSegmentCount(segmentCount)
@@ -304,7 +306,7 @@ export default function CcMessageRow({
       setVisibleSegmentCount(current => Math.min(segmentCount, current + 1))
     }, revealDelay)
     return () => window.clearTimeout(timer)
-  }, [isCurrentTurn, message.fromHistory, message.revealDisplaySegments, segmentCount, visibleSegmentCount])
+  }, [isCurrentTurn, message.fromHistory, shouldRevealSegments, segmentCount, visibleSegmentCount])
 
   if (message.role === 'system' && message.compaction) {
     return <CompactionDivider compaction={message.compaction} />
@@ -760,35 +762,31 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
-        {/* 正文：markdown。流式中末尾跟一个光标 */}
+        {/* 正文：只有完整段落才整颗显现；流式中的半截留在缓冲区。 */}
         {finalSegments.length ? (
           <AssistantSegments
             segments={finalSegments.slice(0, visibleSegmentCount)}
             messageId={message.id}
             keyPrefix="final"
-            streaming={Boolean(message.streaming) && visibleSegmentCount >= finalSegments.length}
-            animate={Boolean(message.revealDisplaySegments)}
+            animate={shouldRevealSegments}
             searchQuery={searchQuery}
             searchActive={searchActive}
           />
-        ) : (
-          <div className={`cc-bubble-assistant${message.streaming ? ' streaming' : ''}`}>
-            {finalText ? (
-              <CcMarkdown text={finalText} searchQuery={searchQuery} searchActive={searchActive} />
-            ) : null}
-            {message.streaming ? (
-              finalText ? (
-                <span className="cc-caret" aria-hidden="true" />
-              ) : !message.thinking ? (
-                <span className="cc-dots" aria-label="生成中">
-                  <span />
-                  <span />
-                  <span />
-                </span>
-              ) : null
-            ) : null}
+        ) : !message.streaming && finalText ? (
+          <div className="cc-bubble-assistant">
+            <CcMarkdown text={finalText} searchQuery={searchQuery} searchActive={searchActive} />
           </div>
-        )}
+        ) : null}
+
+        {message.streaming && !isActivelyThinking ? (
+          <div className="cc-assistant-pending" aria-label="正在组织下一条消息">
+            <span className="cc-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        ) : null}
 
         {message.nextWake ? (
           <div className="mt-1 text-[10.5px] text-[var(--color-text-tertiary)]">

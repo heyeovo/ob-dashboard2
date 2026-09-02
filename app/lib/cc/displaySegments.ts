@@ -2,7 +2,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 
-export const DISPLAY_SEGMENTS_VERSION = 1
+export const DISPLAY_SEGMENTS_VERSION = 2
 
 export type DisplaySegment = {
   kind: 'text' | 'atomic'
@@ -16,6 +16,7 @@ export type VersionedDisplaySegments = {
 
 type PositionedNode = {
   type?: string
+  children?: PositionedNode[]
   position?: { start?: { offset?: number }; end?: { offset?: number } }
 }
 
@@ -37,6 +38,12 @@ function splitParagraph(markdown: string, contentEnd: number): DisplaySegment[] 
       kind: 'text' as const,
       markdown: line + (index === lines.length - 1 ? trailing : ''),
     }))
+}
+
+function isStrongSectionLabel(node: PositionedNode | undefined) {
+  return node?.type === 'paragraph' &&
+    node.children?.length === 1 &&
+    node.children[0]?.type === 'strong'
 }
 
 /**
@@ -65,6 +72,19 @@ export function buildDisplaySegments(text: string): VersionedDisplaySegments {
       if (index + 1 < nodes.length && nodes[index + 1]?.type !== 'heading') lastIndex = index + 1
     }
 
+    // 「**主动唤醒**」这类粗体小标题是一个章节标签，不是聊天短句。
+    // 把它与后续连续正文合成一块，直到下一个标题或结构块。
+    if (isStrongSectionLabel(node)) {
+      kind = 'atomic'
+      while (
+        lastIndex + 1 < nodes.length &&
+        nodes[lastIndex + 1]?.type === 'paragraph' &&
+        !isStrongSectionLabel(nodes[lastIndex + 1])
+      ) {
+        lastIndex += 1
+      }
+    }
+
     const next = nodes[lastIndex + 1]
     const end = next ? (offset(next, 'start') ?? text.length) : text.length
     const markdown = text.slice(start, end)
@@ -78,6 +98,18 @@ export function buildDisplaySegments(text: string): VersionedDisplaySegments {
   }
 
   return { version: DISPLAY_SEGMENTS_VERSION, segments }
+}
+
+/**
+ * 流式中只交付已经遇到换行边界的完整气泡；最后半截留在缓冲区。
+ * 整轮结束后再交付最后一颗，避免文字在气泡内部断续生长。
+ */
+export function buildStableDisplaySegments(text: string, complete: boolean): VersionedDisplaySegments {
+  const result = buildDisplaySegments(text)
+  if (complete || !text || result.segments.length === 0) return result
+  const tail = result.segments.at(-1)
+  if (tail?.kind === 'text' && text.endsWith('\n')) return result
+  return { version: DISPLAY_SEGMENTS_VERSION, segments: result.segments.slice(0, -1) }
 }
 
 export function normalizeDisplaySegments(value: unknown): VersionedDisplaySegments | null {
