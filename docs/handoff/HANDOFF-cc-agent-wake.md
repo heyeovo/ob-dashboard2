@@ -3,11 +3,15 @@
 > 建立时间：2026-08-31
 > 最后更新：2026-09-02
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
-> 状态：阶段 1–4 已完成；下一窗口只进入阶段 5
+> 状态：阶段 1–5 已完成；待用户提交、部署并进行 Bark 真实验收
 
 ## 当前完成状态
 
 - 产品决策与跨仓库实施方案仍以 `docs/cc-agent-wake-design.md` 为唯一事实源。
+- 2026-09-02 已完成阶段 5 Bark：Haven 新增 profile 级私密配置、持久 notification outbox 和独立 worker；只有带正式 `assistant_text` 的 agent wake 在消息同一事务内按已保存 `display_segments` 入队，no-op、普通前台回复、失败和幂等重放不重复推送。
+- Bark 首段固定 `active`、后续固定 `passive`，默认间隔 1 秒、每轮最多 8 条且两项可调；超限最后一条提示打开会话。Outbox 使用 `profile_id + turn_id + segment_index + splitter_version` 唯一键、持久 lease、固定指数退避和 8 次最终失败上限，重启后恢复，通知失败不回滚聊天。
+- Bark server、device key、可选 16 字节 AES-128-CBC key、隐藏正文、Dashboard 地址和分段策略按 profile 存在 Haven `gateway_state.db`；浏览器只收到掩码。每条加密通知使用随机 IV，真实 key 不进入 outbox、Claude Context、MCP、浏览器存储或日志。
+- Dashboard 新增“设置 → 通知”、测试推送和最近状态；“本窗口设置 → 主动唤醒”只增加当前 scope 的 Bark 开关及最近状态。通知 deep link 使用 `/cc?session_id=...` 并能直接恢复对应窗口。
 - 2026-09-02 已完成线上缓存异常修复：前台开启 WebSearch/WebFetch、后台 wake 删除两项工具定义，曾导致 A/B cache prefix 分叉。现在两项 schema 始终固定，前台关闭开关或后台 wake 均在运行时 hook 拒绝；cache fingerprint 日志可直接对照 system/tools/MCP/options hash、lane、CC session 和 iterator 冷热状态。
 - No-op wake 现在允许在 `[agent_wake_noop]` 后带最多 30 字自然状态，后台只把状态显示为 wake 事件小字，不生成正式助手气泡；SDK 返回的 thinking 会持久化并折叠展示，事件名称使用当前协作者，token usage 复用普通消息的右下角角标与展开详情。`set_agent_wake` reason 上限为 50 字。
 - 主动唤醒设置仍严格按 profile/session/lane 隔离；保活关闭时页面显示“未开启”，不会再把仅供计算的 deadline 表达成实际调度。
@@ -27,6 +31,10 @@
   - 非最后活跃 lane 的旧 schedule 会进入 dormant；该 lane 再次收到正常用户 turn 时才重新计算 due，不扫描或同时保活其他 lane。
 
 ## 验证结果
+
+- 2026-09-02 阶段 5 Haven 定向：56 项通过；Haven 全量 unittest：184 项全部通过。当前本机 Haven venv 未安装 pytest，因此按项目既有 unittest discover 全量入口执行。
+- 2026-09-02 阶段 5 Dashboard 定向：8 项通过；全量 Vitest：47 个测试文件、241 项通过、1 项跳过；production build 通过并包含 `/api/cc-notifications` 与 `/settings/notifications`。
+- 2026-09-02 阶段 5 两仓库 `git diff --check` 通过；Dashboard build 首次因沙箱无法连接 Google Fonts 失败，允许联网后同一最终代码重跑通过。
 
 - 2026-09-02 Dashboard 全量 Vitest：45 个测试文件，235 项通过、1 项跳过；`npm run build` 与 `git diff --check` 通过。未修改 Haven 代码或数据结构。
 - 2026-09-02 no-op wake token 角标补丁：复用普通消息的 token 角标和展开详情；定向测试 19 项通过，Dashboard production build 与 `git diff --check` 通过。
@@ -49,13 +57,13 @@
 - `compose.coolify.test.yml` 已把 URL/token 透传给 Brain。缺少任一变量时 scheduler 保持关闭，不创建内存替代计时器。
 - 正式发布仍按项目规则：用户分别 commit + push；Dashboard 在 Coolify 部署；Haven 更新 `HAVEN_RELEASE_SHA` 为已验收完整 commit SHA 后 Restart/Deploy，并确认 Brain 与 Gateway 都恢复 `Running (healthy)`。
 
-## 下一窗口范围：只做阶段 5
+## 下一步
 
-1. Haven 增加 profile 级 Bark 私密配置与持久 notification outbox。
-2. 主动 wake 的可见 assistant 消息成功落库后，按已保存的 `display_segments` 生成幂等通知项。
-3. Dashboard 增加通知配置与测试入口；“本窗口设置 → 主动唤醒”只增加窗口级 Bark 开关和最近状态。
-4. 实现首条正常、后续较轻、默认 1 秒间隔、默认每轮最多 8 条的可调策略。
-5. 实现 deep link、失败重试、重启恢复、敏感 key 脱敏和可选隐藏正文模式。
+1. 用户分别提交并推送 Haven 与 Dashboard。
+2. 先按 `HAVEN_RELEASE_SHA` 流程部署 Haven，确认 Brain/Gateway 均 healthy；再在 Dashboard Application 执行 Redeploy。
+3. Dashboard“设置 → 通知”填写 Bark server、device key、公开 Dashboard 地址和与 Bark App 相同的 16 字节加密 key，保存后发送测试通知。
+4. 在一个窗口开启 Bark，等待一次带正式正文的 agent wake，验收分段顺序、正文解密、deep link、最近状态；再用 no-op wake 确认不会推送。
+5. 阶段 6 的真实 55 分钟成本实验另开窗口，不在部署验收时顺手实施。
 
 ## 不得扩散的边界
 

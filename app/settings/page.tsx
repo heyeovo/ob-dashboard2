@@ -10,6 +10,7 @@ import EntryGrid, { type Entry } from '../components/EntryGrid'
  */
 
 const DATA_ENTRIES: Entry[] = [
+  { key: 'notifications', label: '通知', desc: 'Bark 推送、正文加密与发送状态', href: '/settings/notifications' },
   { key: 'import', label: '导入', desc: '拖拽 / 粘贴，试跑后入库', href: '/import' },
   { key: 'trash', label: '回收站', desc: '恢复 / 彻底删除 / 清空', href: '/trash' },
   { key: 'graph', label: '关系图谱', desc: '暂时收在这里', href: '/graph' },

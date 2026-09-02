@@ -48,6 +48,17 @@ describe('/api/cc-agent-wake', () => {
     })
   })
 
+  it('passes the window Bark switch through to Haven', async () => {
+    const response = await PATCH(request({
+      changes: { bark_notification_enabled: true },
+    }))
+
+    expect(response.status).toBe(200)
+    expect(haven.patchAgentWakeSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      changes: { bark_notification_enabled: true },
+    }))
+  })
+
   it('turns silence off and clears its pending timer when stopping all wakes', async () => {
     const response = await PATCH(request({ action: 'stop_all' }))
 

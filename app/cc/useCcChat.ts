@@ -138,6 +138,11 @@ function rememberSessionHistory(
   }
 }
 
+export function requestedCcSessionId(search: string): string {
+  const value = new URLSearchParams(search).get('session_id')?.trim() || ''
+  return value && value.length <= 200 ? value : ''
+}
+
 export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionId, setSessionId] = useState('')
   const [sessions, setSessions] = useState<CcSessionListItem[]>([])
@@ -304,7 +309,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   // 首次进页面：开一个新会话 id + 拉会话列表
   useEffect(() => {
-    const timer = window.setTimeout(() => setSessionId(newSessionId()), 0)
+    const initialSessionId = requestedCcSessionId(window.location.search) || newSessionId()
+    const timer = window.setTimeout(() => setSessionId(initialSessionId), 0)
     return () => window.clearTimeout(timer)
   }, [])
 

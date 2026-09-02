@@ -1,9 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import type { AgentWakeSchedule } from '@/app/lib/havenTurns'
+import Link from 'next/link'
+import type { AgentWakeSchedule, BarkNotificationConfig, BarkNotificationRecent } from '@/app/lib/havenTurns'
 
 type Payload = { ok?: boolean; schedule?: AgentWakeSchedule; error?: string }
+type NotificationPayload = {
+  ok?: boolean
+  config?: BarkNotificationConfig
+  recent?: BarkNotificationRecent | null
+  error?: string
+}
 
 const BUTTON = 'rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
 const ROW = 'flex items-center justify-between gap-3 py-2 text-[11px]'
@@ -16,6 +23,16 @@ function fmt(value: string) {
     : '—'
 }
 
+function notificationStatus(value: BarkNotificationRecent['status']) {
+  return ({
+    pending: '等待发送',
+    sending: '正在发送',
+    retrying: '等待重试',
+    sent: '发送成功',
+    failed: '发送失败',
+  } as const)[value] || value
+}
+
 export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
   sessionId: string
   laneId: string
@@ -25,16 +42,28 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [notificationReady, setNotificationReady] = useState(false)
+  const [notificationRecent, setNotificationRecent] = useState<BarkNotificationRecent | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const query = new URLSearchParams({ session_id: sessionId, lane_id: laneId })
-      const response = await fetch(`/api/cc-agent-wake?${query.toString()}`, { cache: 'no-store' })
-      const payload = await response.json() as Payload
+      const [response, notificationResponse] = await Promise.all([
+        fetch(`/api/cc-agent-wake?${query.toString()}`, { cache: 'no-store' }),
+        fetch(`/api/cc-notifications?${query.toString()}`, { cache: 'no-store' }),
+      ])
+      const [payload, notificationPayload] = await Promise.all([
+        response.json() as Promise<Payload>,
+        notificationResponse.json() as Promise<NotificationPayload>,
+      ])
       if (!response.ok || !payload.ok || !payload.schedule) throw new Error(payload.error || '读取失败')
       setSchedule(payload.schedule)
+      if (notificationResponse.ok && notificationPayload.ok && notificationPayload.config) {
+        setNotificationReady(notificationPayload.config.ready)
+        setNotificationRecent(notificationPayload.recent || null)
+      }
     } catch (cause) {
       setError((cause as Error).message || '读取失败')
     } finally {
@@ -93,6 +122,15 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           <span>对话沉默检查</span>
           <input type="checkbox" checked={schedule.conversation_silence_enabled} disabled={saving || busy} onChange={event => void save({ conversation_silence_enabled: event.target.checked })} />
         </label>
+        <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
+          <span>主动消息推送到 Bark</span>
+          <input type="checkbox" checked={schedule.bark_notification_enabled} disabled={saving || busy || !notificationReady} onChange={event => void save({ bark_notification_enabled: event.target.checked })} />
+        </label>
+        {!notificationReady ? (
+          <div className="border-t border-[var(--color-border-light)] py-2 text-[10px] text-[var(--color-text-tertiary)]">
+            请先到 <Link href="/settings/notifications" className="underline">设置 → 通知</Link> 完成 Bark 配置。
+          </div>
+        ) : null}
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}>
           <span>暂停到下次用户消息</span>
           <button className={BUTTON} disabled={saving || busy || schedule.keepalive_paused_until_user} onClick={() => void save({ keepalive_paused_until_user: true })}>
@@ -116,6 +154,16 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
         {schedule.next_agent_wake_at ? (
           <button className={`${BUTTON} mt-2`} disabled={saving || busy} onClick={() => void save({}, 'cancel_next')}>取消下一次 wake</button>
         ) : null}
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-3">
+        <div className="font-medium text-[var(--color-text-heading)]">最近 Bark 推送</div>
+        <div className="mt-1 text-[var(--color-text-tertiary)]">
+          {notificationRecent
+            ? `${notificationStatus(notificationRecent.status)} · ${notificationRecent.sent_count}/${notificationRecent.total_count} · ${fmt(notificationRecent.sent_at || notificationRecent.updated_at)}`
+            : '还没有发送记录'}
+        </div>
+        {notificationRecent?.last_error ? <div className="mt-1 text-[var(--color-danger)]">{notificationRecent.last_error}</div> : null}
       </div>
 
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-3">

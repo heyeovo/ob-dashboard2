@@ -90,6 +90,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `cc-permission/route.ts` | 写权限批准 |
 | `cc-session-settings/route.ts` | 本窗会话配置 |
 | `cc-pro-usage/route.ts` | Pro 用量读取；实时成功后覆盖 Haven 全局快照，重部署后回显上次值 |
+| `cc-notifications/route.ts` | Bark profile 掩码配置、当前窗口最近状态与测试推送的服务端代理；真实 key 不返回浏览器 |
 | `automation-pro-runner/route.ts` | 日回顾/每周轨迹 Claude Pro 单次执行入口 |
 | `cc-web-settings/route.ts` | web 工具开关 |
 | `cc-workbench/route.ts` | 工作台数据 |
@@ -120,6 +121,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `settings/models/page.tsx` | 召回/自动记忆/日回顾模型设置 |
 | `settings/recall/page.tsx` | 召回设置 |
 | `settings/automation/page.tsx` | 自动化与状态 |
+| `settings/notifications/page.tsx` | Bark server、device key、正文加密、deep link、分段间隔、每轮上限、测试推送与最近状态 |
 | `persona/page.tsx` | 用户画像 |
 | `impressions/page.tsx` | 日回顾月历 |
 | `care/page.tsx` | 照顾备忘 + 待办 |
@@ -173,6 +175,8 @@ Prompt 页面以 Haven `/api/prompts` 为唯一事实源，不使用 `sessionSto
 ## cc 聊天架构
 
 “本窗口设置”顶层分为“会话信息 / Context 分析”两个 Tab。会话信息继续显示 Prompt cache 的 1 小时系统缓存与 5 分钟会话缓存倒计时；Context 分析把提示词、换窗资料、MCP、Web、本窗对话及“未归因差额”的产品估算与 SDK 官方精确数据分开显示。官方分析只允许用户在当前原生 lane 在线且空闲时手动读取，明确提示可能产生额外 Pro/API 请求；结果仅缓存于当前 live session，每次模型调用完成后失效，不自动轮询。官方页展示 SDK categories、前缀聚合与 message breakdown，但 MCP 服务/工具级占比仍只在 MCP 配置页展示。
+
+“主动唤醒”Tab 的窗口级 Bark 开关写入 Haven `agent_wake_schedules`，profile 级 Bark 地址、密钥、AES 加密和分段策略统一在“设置 → 通知”维护。可见 agent wake 的 `conversation_turns` 与 notification outbox 在 Haven 同一事务提交；Dashboard 不执行通知发送。通知 body 复用已持久的版本化 `display_segments`，首段 active、后续 passive，默认 1 秒和最多 8 条。`/cc?session_id=...` 会直接恢复对应窗口，供 Bark deep link 使用。
 
 CC 首次启动窗口时把最终 `personaAppend` 作为不可覆盖的冻结前缀写入 Haven `conversation_sessions`；后续轮次、Dashboard 重部署与换设备均读取同一正文，进程内 Map 只作热路径缓存。这样部署本身不会改变 1 小时系统 Prompt Cache 的前缀；上游 TTL、模型或工具集合变化仍可导致正常重写。
 

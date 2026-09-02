@@ -152,6 +152,7 @@ export type AgentWakeSchedule = {
   keepalive_paused_until_user: boolean
   agent_wake_enabled: boolean
   conversation_silence_enabled: boolean
+  bark_notification_enabled: boolean
   last_user_activity_at: string
   last_model_activity_at: string
   last_cache_refresh_at: string
@@ -172,6 +173,34 @@ export type AgentWakeSchedule = {
   silence_max_minutes: number
   consecutive_failures: number
   last_error: string
+}
+
+export type BarkNotificationConfig = {
+  profile_id: string
+  enabled: boolean
+  server_url: string
+  encryption_enabled: boolean
+  dashboard_base_url: string
+  hide_body: boolean
+  segment_interval_ms: number
+  max_segments: number
+  has_device_key: boolean
+  device_key_masked: string
+  has_encryption_key: boolean
+  encryption_key_masked: string
+  ready: boolean
+  updated_at: string
+}
+
+export type BarkNotificationRecent = {
+  batch_key: string
+  kind: 'agent_wake' | 'test'
+  status: 'pending' | 'sending' | 'retrying' | 'sent' | 'failed'
+  sent_count: number
+  total_count: number
+  sent_at: string
+  last_error: string
+  updated_at: string
 }
 
 export type StrictRecordTurnResult = RecordTurnResult & {
@@ -425,6 +454,72 @@ export async function patchAgentWakeSchedule(input: {
   return res.ok
     ? { ok: true, schedule: res.payload.schedule as AgentWakeSchedule, error: '', httpStatus: res.httpStatus }
     : { ok: false, schedule: null, error: res.error, httpStatus: res.httpStatus }
+}
+
+export async function getBarkNotifications(input?: {
+  sessionId?: string
+  laneId?: string
+  signal?: AbortSignal
+}): Promise<{
+  ok: boolean
+  config: BarkNotificationConfig | null
+  recent: BarkNotificationRecent | null
+  error: string
+  httpStatus: number | null
+}> {
+  const params = new URLSearchParams()
+  if (input?.sessionId) params.set('session_id', input.sessionId)
+  if (input?.laneId) params.set('lane_id', input.laneId)
+  const query = params.size ? `?${params.toString()}` : ''
+  const res = await havenFetch({
+    method: 'GET',
+    path: `/gateway/api/notifications/bark${query}`,
+    sessionId: input?.sessionId,
+    signal: input?.signal,
+  })
+  return res.ok
+    ? {
+        ok: true,
+        config: res.payload.config as BarkNotificationConfig,
+        recent: res.payload.recent && typeof res.payload.recent === 'object'
+          ? res.payload.recent as BarkNotificationRecent
+          : null,
+        error: '',
+        httpStatus: res.httpStatus,
+      }
+    : { ok: false, config: null, recent: null, error: res.error, httpStatus: res.httpStatus }
+}
+
+export async function patchBarkNotifications(changes: Record<string, unknown>): Promise<{
+  ok: boolean
+  config: BarkNotificationConfig | null
+  error: string
+  httpStatus: number | null
+}> {
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/notifications/bark',
+    body: { changes },
+  })
+  return res.ok
+    ? { ok: true, config: res.payload.config as BarkNotificationConfig, error: '', httpStatus: res.httpStatus }
+    : { ok: false, config: null, error: res.error, httpStatus: res.httpStatus }
+}
+
+export async function enqueueBarkTest(): Promise<{
+  ok: boolean
+  queued: boolean
+  error: string
+  httpStatus: number | null
+}> {
+  const res = await havenFetch({
+    method: 'POST',
+    path: '/gateway/api/notifications/bark',
+    body: { action: 'test' },
+  })
+  return res.ok
+    ? { ok: true, queued: res.payload.queued === true, error: '', httpStatus: res.httpStatus }
+    : { ok: false, queued: false, error: res.error, httpStatus: res.httpStatus }
 }
 
 export async function acceptUserActivityAndCancelSilence(input: {

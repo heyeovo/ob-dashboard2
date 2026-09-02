@@ -456,13 +456,15 @@ WARM_IDLE → COOLING → COLD → GC_ELIGIBLE → GC_RUNNING
 - 每 lane 执行滚动 24 小时后台 turn 上限；达到上限时不请求模型，保存可见 `last_error` 并延至最早额度释放时间。连续失败达到阈值后暂停领取，新的用户活动或成功 turn 可恢复。
 - 24 小时无用户活动时只暂停固定 keepalive 并进入 cooling，保留持久开关与未来 agent schedule；下一条用户消息恢复。
 
-### 阶段 5：Bark 分段通知
+### 阶段 5：Bark 分段通知（已完成）
 
 - Haven 增加 profile 级 Bark 私密配置和持久 notification outbox。
 - 主动 wake 的可见消息成功落库后，按 `display_segments` 生成幂等通知项。
 - Dashboard 增加通知配置与测试入口，“本窗口设置 → 主动唤醒”增加窗口级 Bark 开关和最近状态。
 - 实现首条正常、后续较轻、默认 1 秒间隔、默认每轮最多 8 条的可调策略。
 - 实现会话 deep link、失败重试、重启恢复、敏感 key 脱敏和可选隐藏正文模式。
+- 正文加密采用 Bark 支持的 AES-128-CBC：Haven 每条生成随机 16 字节 IV，device key 与 16 字节加密 key 只在服务端保存，读取只返回掩码。
+- 通知级别固定为首条 `active`、后续 `passive`；间隔和每轮上限可调，重试策略由服务端固定，不增加设置噪声。
 
 ### 阶段 6：真实成本与生命周期验收
 
