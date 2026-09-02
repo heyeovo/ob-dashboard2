@@ -214,7 +214,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
   cacheSnapshot: CcCacheSnapshot | null
   preCompactions: CcCompactionEvent[]
   displaySegments: DisplaySegment[] | null
-  agentWake: { cause: string; at: string; status?: string } | null
+  agentWake: { cause: string; at: string; reason?: string; status?: string } | null
   nextWake: { at: string; reason: string } | null
 } {
   const empty = {
@@ -345,6 +345,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
       ? {
           cause: String(rawWake.cause || 'cache_keepalive'),
           at: String(rawWake.at || ''),
+          reason: String(rawWake.reason || '').trim() || undefined,
           status: String(rawWake.status || '').trim() || undefined,
         }
       : null,
@@ -447,6 +448,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
           wakeEvent: extra.agentWake || { cause: 'cache_keepalive', at: t.created_at },
           personaId: personaOfClient(t.client),
           thinking: !t.assistant_text?.trim() ? extra.thinking || undefined : undefined,
+          thinkingMs: !t.assistant_text?.trim() ? thinkingDuration(extra.process) || undefined : undefined,
           usage: !t.assistant_text?.trim() ? extra.usage : undefined,
           createdAt: at,
           fromHistory: true,

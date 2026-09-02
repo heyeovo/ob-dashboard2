@@ -3,7 +3,7 @@
 > 建立时间：2026-08-31
 > 最后更新：2026-09-02
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
-> 状态：阶段 1–5 已完成；待用户提交、部署并进行 Bark 真实验收
+> 状态：阶段 1–5 已完成；Bark HTTP 400 已解决，阶段 6 尚未开始
 
 ## 当前完成状态
 
@@ -12,8 +12,10 @@
 - Bark 首段固定 `active`、后续固定 `passive`，默认间隔 1 秒、每轮最多 8 条且两项可调；超限最后一条提示打开会话。Outbox 使用 `profile_id + turn_id + segment_index + splitter_version` 唯一键、持久 lease、固定指数退避和 8 次最终失败上限，重启后恢复，通知失败不回滚聊天。
 - Bark server、device key、可选 16 字节 AES-128-CBC key、隐藏正文、Dashboard 地址和分段策略按 profile 存在 Haven `gateway_state.db`；浏览器只收到掩码。每条加密通知使用随机 IV，真实 key 不进入 outbox、Claude Context、MCP、浏览器存储或日志。
 - Dashboard 新增“设置 → 通知”、测试推送和最近状态；“本窗口设置 → 主动唤醒”只增加当前 scope 的 Bark 开关及最近状态。通知 deep link 使用 `/cc?session_id=...` 并能直接恢复对应窗口。
+- 2026-09-02 Bark 首次线上测试曾返回 `HTTP 400`，用户已解决；该问题不再是当前阻塞项，不继续排查。
+- Dashboard 通知设置页已在本地补充固定底部 Tab 与 iPhone safe area 留白，解决手机端“保存设置”按钮被 Tab 遮挡；`git diff --check` 与 `npm run build` 已通过，等待用户提交、推送并重新部署 Dashboard。
 - 2026-09-02 已完成线上缓存异常修复：前台开启 WebSearch/WebFetch、后台 wake 删除两项工具定义，曾导致 A/B cache prefix 分叉。现在两项 schema 始终固定，前台关闭开关或后台 wake 均在运行时 hook 拒绝；cache fingerprint 日志可直接对照 system/tools/MCP/options hash、lane、CC session 和 iterator 冷热状态。
-- No-op wake 现在允许在 `[agent_wake_noop]` 后带最多 30 字自然状态，后台只把状态显示为 wake 事件小字，不生成正式助手气泡；SDK 返回的 thinking 会持久化并折叠展示，事件名称使用当前协作者，token usage 复用普通消息的右下角角标与展开详情。`set_agent_wake` reason 上限为 50 字。
+- No-op wake 允许在 `[agent_wake_noop]` 后带最多 30 字自然状态；完整解析、写库、历史映射和测试链已存在，未出现短状态通常表示 Claude 只返回了裸 marker。wake UI 已把轻量事件、本次唤醒 reason、可选 no-op 状态、SDK thinking 和 usage 分层：thinking 独立折叠并明确标注为 Claude 的真实思考，token usage 位于整组右下角并独立展开，不再挤在事件胶囊内。`set_agent_wake` reason 上限为 50 字。
 - 主动唤醒设置仍严格按 profile/session/lane 隔离；保活关闭时页面显示“未开启”，不会再把仅供计算的 deadline 表达成实际调度。
 - 线上初测中 conversation silence 与 Claude 主动安排的 wake 都已连续命中正常缓存；用户将继续整晚观察 foreground → wake → foreground 的 cache read/write，当前不做 wake 100–500 token 级增量压缩。
 - 阶段 1–3 的持久控制面、统一 turn、原子消息提交、silence timer、历史映射、分段气泡、主动唤醒设置 Tab 和页面增量刷新保持不变。
@@ -38,6 +40,7 @@
 
 - 2026-09-02 Dashboard 全量 Vitest：45 个测试文件，235 项通过、1 项跳过；`npm run build` 与 `git diff --check` 通过。未修改 Haven 代码或数据结构。
 - 2026-09-02 no-op wake token 角标补丁：复用普通消息的 token 角标和展开详情；定向测试 19 项通过，Dashboard production build 与 `git diff --check` 通过。
+- 2026-09-02 wake UI 分层与 reason 展示：定向 Vitest 24 项通过；Dashboard 全量 Vitest 47 个文件、242 项通过、1 项跳过；production build 通过。未修改 Haven、scheduler、silence、cache、coordinator 或 lane 状态机，阶段 6 未开始。
 
 - Haven 阶段 4 定向：47 项通过。
 - Haven 全量 unittest：175 项全部通过。
@@ -59,11 +62,10 @@
 
 ## 下一步
 
-1. 用户分别提交并推送 Haven 与 Dashboard。
-2. 先按 `HAVEN_RELEASE_SHA` 流程部署 Haven，确认 Brain/Gateway 均 healthy；再在 Dashboard Application 执行 Redeploy。
-3. Dashboard“设置 → 通知”填写 Bark server、device key、公开 Dashboard 地址和与 Bark App 相同的 16 字节加密 key，保存后发送测试通知。
-4. 在一个窗口开启 Bark，等待一次带正式正文的 agent wake，验收分段顺序、正文解密、deep link、最近状态；再用 no-op wake 确认不会推送。
-5. 阶段 6 的真实 55 分钟成本实验另开窗口，不在部署验收时顺手实施。
+1. 用户提交并推送 Dashboard，在 Coolify 的 Dashboard Application 点击 `Redeploy`；本轮没有 Haven 改动，不部署 Haven。
+2. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、唤醒原因/no-op 状态、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
+3. 等待后续真实 no-op 样本，确认 Claude 是否主动附带 30 字内自然状态；完整功能链已经存在，不为强制出现短文本修改 prompt 或后端。
+4. 阶段 6 的真实 55 分钟成本实验另开窗口，不在本次 UI 验收中实施。
 
 ## 不得扩散的边界
 

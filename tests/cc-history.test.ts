@@ -56,20 +56,47 @@ describe('ccHistory：旧历史兼容', () => {
       user_text: '',
       assistant_text: '',
       raw_json: JSON.stringify({
-        agent_wake: { cause: 'conversation_silence', at: '2026-08-31T12:55:00Z', status: '看了一眼，你在忙吧' },
+        agent_wake: {
+          cause: 'conversation_silence',
+          at: '2026-08-31T12:55:00Z',
+          reason: '看看她有没有回来',
+          status: '看了一眼，你在忙吧',
+        },
         next_wake: { at: '2026-08-31T13:25:00Z', reason: '等等看' },
         thinking: '现在不适合打扰。',
+        process: [{ type: 'thinking', id: 'thinking-1', text: '现在不适合打扰。', durationMs: 1400 }],
         usage: { inputTokens: 3, outputTokens: 31, cacheReadTokens: 33479, cacheWriteTokens: 106 },
       }),
     })])
     expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
       role: 'system',
-      wakeEvent: { status: '看了一眼，你在忙吧' },
+      wakeEvent: { reason: '看看她有没有回来', status: '看了一眼，你在忙吧' },
       thinking: '现在不适合打扰。',
+      thinkingMs: 1400,
       usage: expect.objectContaining({ cacheReadTokens: 33479, cacheWriteTokens: 106 }),
       nextWake: { reason: '等等看' },
     })
+  })
+
+  it('keeps a bare no-op wake lightweight when no optional status or reason was saved', () => {
+    const messages = turnsToMessages([turn({
+      id: 11,
+      turn_kind: 'agent_wake',
+      user_text: '',
+      assistant_text: '',
+      raw_json: JSON.stringify({
+        agent_wake: { cause: 'cache_keepalive', at: '2026-08-31T13:55:00Z', status: '', reason: '' },
+      }),
+    })])
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      role: 'system',
+      wakeEvent: { cause: 'cache_keepalive', at: '2026-08-31T13:55:00Z' },
+    })
+    expect(messages[0].wakeEvent?.status).toBeUndefined()
+    expect(messages[0].wakeEvent?.reason).toBeUndefined()
   })
 
   it('没有 raw_json 的老消息正常展示，不带 thinking / 工具 / process', () => {

@@ -264,36 +264,49 @@ export default function CcMessageRow({
   }
   if (message.role === 'system' && message.wakeEvent) {
     return (
-      <div className="my-2 flex justify-center" data-role="agent-wake-event">
-        <div className="rounded-full border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-1.5 text-center text-[10.5px] text-[var(--color-text-tertiary)]">
-          <div>{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次</div>
-          {message.wakeEvent.status ? (
-            <div className="mt-0.5 text-[var(--color-text-secondary)]">{message.wakeEvent.status}</div>
+      <div className="my-3 w-full" data-role="agent-wake-event">
+        <div className="flex items-center gap-3 text-[10.5px] text-[var(--color-text-tertiary)]" role="separator">
+          <span className="h-px flex-1 bg-[var(--color-border-light)]" />
+          <span className="shrink-0">{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次</span>
+          <span className="h-px flex-1 bg-[var(--color-border-light)]" />
+        </div>
+        <div className="mx-auto mt-1 max-w-md space-y-0.5 px-3 text-center text-[10.5px] text-[var(--color-text-tertiary)]">
+          {message.wakeEvent.reason ? (
+            <div>唤醒原因 · {message.wakeEvent.reason}</div>
           ) : null}
-          {message.thinking ? (
-            <div className="mt-1 border-t border-[var(--color-border-light)] pt-1 text-left">
-              <button
-                type="button"
-                className="w-full text-center text-[var(--color-text-tertiary)]"
-                onClick={() => setThinkingOpen(open => !open)}
-              >
-                {thinkingOpen ? '收起深度思考' : '查看深度思考'}
-              </button>
-              {thinkingOpen ? <div className="mt-1 max-w-md text-[var(--color-text-secondary)]"><CcMarkdown text={message.thinking} /></div> : null}
-            </div>
+          {message.wakeEvent.status ? (
+            <div className="text-[var(--color-text-secondary)]">没有发消息 · {message.wakeEvent.status}</div>
           ) : null}
           {message.nextWake ? (
-            <div className="mt-0.5 text-[var(--color-text-secondary)]">
+            <div>
               ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
             </div>
           ) : null}
-          {usage ? (
-            <div className="mt-1 flex justify-end">
-              <UsageTokenButton usage={usage} onClick={() => setUsageOpen(open => !open)} />
-            </div>
-          ) : null}
-          {usage && usageOpen ? <UsageDetails usage={usage} /> : null}
         </div>
+        {message.thinking ? (
+          <div className="mt-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[11px]">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+              aria-expanded={thinkingOpen}
+              onClick={() => setThinkingOpen(open => !open)}
+            >
+              <span className={`cc-think-caret${thinkingOpen ? ' open' : ''}`} aria-hidden="true" />
+              <span>Claude 的深度思考{message.thinkingMs ? ` (${(message.thinkingMs / 1000).toFixed(1)}s)` : ''}</span>
+            </button>
+            {thinkingOpen ? (
+              <div className="border-t border-[var(--color-border-light)] px-3 py-2 text-[var(--color-text-secondary)]">
+                <CcMarkdown text={message.thinking} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {usage ? (
+          <div className="mt-1 flex items-center text-[11px] text-[var(--color-text-tertiary)]">
+            <UsageTokenButton usage={usage} onClick={() => setUsageOpen(open => !open)} />
+          </div>
+        ) : null}
+        {usage && usageOpen ? <UsageDetails usage={usage} /> : null}
       </div>
     )
   }
