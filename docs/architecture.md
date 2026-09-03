@@ -186,7 +186,7 @@ MCP `tools/list` 同步时持久化每个工具的名称、说明和 `inputSchem
 
 新对话与换窗共用折叠选择弹窗，分为日回顾、全量钉选桶、最近记忆、feel、journal 和旧窗口聊天原文；每组可逐项勾选并有独立的全选/全不选。只有钉选桶默认全选，其余默认全不选；日回顾默认展示最近 5 天、可调 0–366 天，最近记忆、feel、未锁定且有正文的 journal、旧聊天候选数量均可输入任意非负整数，不设 50 轮上限，旧聊天由 Dashboard 经 Haven 500 条一页完整分页后展示。弹窗显示每组及总计的字数与统一预估 token；handoff 预算为 100,000 预估 token，超出时明确警告，逐项选择的非聊天资料优先保留，聊天从最新轮次向前装入，最终恢复时间正序。确认后把裁剪完成的统一正文和统计作为窗口固定快照首次写入 Haven `conversation_sessions`，后续不得覆盖；CC 每条原生线路启动时与无状态 selfhost 每轮都读取同一份快照，因此切引擎、重启或换设备不会丢失或重新筛选。
 
-订阅、API 中转站和 selfhost 共用同一份协作者基础提示词；默认值是原 cc 闲聊模式提示词。cc 工作模式仍保留 Claude Code preset，再追加同一份协作者配置。最终都按"协作者基础 system + 定位 + 当前有效提示词模块 + 记忆"组装，每个模块以 `【模块名称】` 开头。selfhost 每轮重组；cc 对协作者配置组合计算启动指纹，内容变化时回收空闲 SDK query，并用原 Claude session resume。换窗 handoff 不计入该指纹。每轮隐藏运行时信息直接提供北京时间和中文星期。
+订阅、API 中转站和 selfhost 共用同一份协作者基础提示词；默认值是原 cc 闲聊模式提示词。cc 工作模式仍保留 Claude Code preset，再追加同一份协作者配置。最终都按"协作者基础 system + 定位 + 当前有效提示词模块 + 固定窗口 handoff + 运行时信息 + 动态召回"组装，每个提示词模块以 `【模块名称】` 开头。新窗口不再初始化独立日回顾快照；日回顾若被选择就属于统一 handoff，无 handoff 的历史窗口才兼容旧独立日回顾，二者不同时注入。selfhost 与 cc 都在每轮读取最新协作者配置；cc 对完整 request prefix 计算启动指纹，协作者提示词或模型可见 MCP instructions / 工具名称 / 说明 / schema 变化时回收空闲 SDK query，并用原 Claude session resume。handoff 内容本身在窗口内固定。每轮隐藏运行时信息直接提供北京时间和中文星期。
 
 ### cc-chat/route.ts
 

@@ -206,6 +206,7 @@ function makeConfig(overrides: Partial<TurnConfig> = {}): TurnConfig {
     mode: 'chat',
     personaAppend: '',
     systemPromptKey: '',
+    mcpDefinitionKey: 'test-mcp-surface',
     cwd: 'C:\\Users\\test\\repo',
     additionalDirectories: [],
     sdkModel: 'test-model',

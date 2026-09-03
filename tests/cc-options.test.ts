@@ -21,6 +21,7 @@ function config(mode: TurnConfig['mode']): TurnConfig {
     mode,
     personaAppend: '统一的协作者基础提示词',
     systemPromptKey: 'prompt-key',
+    mcpDefinitionKey: 'mcp-v1',
     cwd: 'C:\\workspace',
     additionalDirectories: [],
     sdkModel: 'test-model',
@@ -95,6 +96,16 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(buildCcOptions(enabled, null).allowedTools).toEqual(['WebSearch'])
     expect(buildCcOptions(disabled, null).allowedTools).toEqual(['WebSearch'])
     expect(cacheRelevantFingerprint(enabled)).toEqual(cacheRelevantFingerprint(disabled))
+  })
+
+  it('模型可见 MCP 定义变化会改变 request-prefix fingerprint', () => {
+    const before = config('chat')
+    const after = config('chat')
+    after.mcpDefinitionKey = 'mcp-v2-with-new-instructions'
+    expect(cacheRelevantFingerprint(before).mcpToolsHash)
+      .not.toBe(cacheRelevantFingerprint(after).mcpToolsHash)
+    expect(cacheRelevantFingerprint(before).sdkCacheRelevantOptionsHash)
+      .not.toBe(cacheRelevantFingerprint(after).sdkCacheRelevantOptionsHash)
   })
 
   it('前台关闭联网和后台 wake 都在运行时拒绝 WebSearch', async () => {

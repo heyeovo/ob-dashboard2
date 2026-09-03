@@ -47,9 +47,7 @@ function itemBlock(item: HandoffSourceItem): string {
   const title = item.title.trim() || item.id
   const content = item.content.trim()
   if (!content) return ''
-  const label = item.kind === 'chat'
-    ? '旧窗口对话'
-    : item.kind === 'daily_review'
+  const label = item.kind === 'daily_review'
       ? '日回顾'
     : item.kind === 'journal'
       ? '日记'
@@ -57,12 +55,25 @@ function itemBlock(item: HandoffSourceItem): string {
         ? 'feel'
         : item.kind === 'pinned'
           ? '钉选记忆'
-          : '最近记忆'
+          : item.kind === 'chat'
+            ? ''
+            : '最近记忆'
+  if (item.kind === 'chat') return `【${title}】\n${content}`
   return `【${label}｜${title}】\n${content}`
 }
 
 function contextBlock(items: HandoffSourceItem[]): string {
-  const parts = items.map(itemBlock).filter(Boolean)
+  const parts: string[] = []
+  let chatHeadingAdded = false
+  for (const item of items) {
+    const block = itemBlock(item)
+    if (!block) continue
+    if (item.kind === 'chat' && !chatHeadingAdded) {
+      parts.push('【旧窗口对话】')
+      chatHeadingAdded = true
+    }
+    parts.push(block)
+  }
   if (parts.length === 0) return ''
   return [
     '<window_handoff_snapshot>',
@@ -156,6 +167,15 @@ export function handoffChatTranscript(snapshot: unknown): string {
   for (const match of content.matchAll(pattern)) {
     const block = String(match[1] || '').trim()
     if (block) blocks.push(block)
+  }
+  if (blocks.length === 0) {
+    const section = content.match(/【旧窗口对话】\n([\s\S]*?)(?=\n<\/window_handoff_snapshot>|$)/)
+    if (section) {
+      const compact = String(section[1] || '')
+        .replace(/^【[^\n]+】\n/gm, '')
+        .trim()
+      if (compact) blocks.push(compact)
+    }
   }
   return blocks.join('\n\n')
     .replace(/^用户：/gm, '小羊：')

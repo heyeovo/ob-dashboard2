@@ -409,6 +409,27 @@ export function disabledMcpTools(config: CcMcpConfig): string[] {
   )
 }
 
+/**
+ * 只描述模型能看到的 MCP 表面，不包含密钥、地址或 handler。
+ * tools/list 重新同步或启停后，这份定义会变化并触发旧窗口重建 query。
+ */
+export function configuredMcpModelSurface(config: CcMcpConfig) {
+  return config.servers
+    .filter(server => server.enabled)
+    .map(server => ({
+      name: server.name,
+      alwaysLoad: true,
+      tools: (server.tools || [])
+        .filter(tool => tool.enabled)
+        .map(tool => ({
+          name: tool.name,
+          title: tool.title || '',
+          description: tool.description || '',
+          inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+        })),
+    }))
+}
+
 function serverForTool(toolName: string): CcMcpServer | null {
   if (!toolName.startsWith('mcp__')) return null
   const config = state.config

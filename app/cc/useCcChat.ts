@@ -243,7 +243,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const resumeHintLaneIdRef = useRef('')
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
   const handoffRef = useRef<{ snapshot: HandoffPayload['snapshot'] } | null>(null)
-  const dailyReviewEnabledRef = useRef(true)
+  const dailyReviewEnabledRef = useRef(false)
 
   // 上游配置：进页面拉一次。拉不到就用空配置（引擎层会退回 .env.local）
   useEffect(() => {
@@ -617,7 +617,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setPromptModuleOverrides({})
         promptModuleOverridesRef.current = {}
         setMode('chat')
-        dailyReviewEnabledRef.current = true
+        dailyReviewEnabledRef.current = false
         setWebSettings(webDefaults)
         setCredChosen(false)
         const defaultRoutes = routePicksFromConfig(upstreamRef.current)
@@ -893,7 +893,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     // 新对话没有接回点
     resumeHintRef.current = ''
     resumeHintLaneIdRef.current = ''
-    dailyReviewEnabledRef.current = true
+    dailyReviewEnabledRef.current = false
     // 新对话回到配置里的默认上游。模式不重置 —— 用户刚点的那个模式就是他要的
     const defaultPick = pickFromConfig(upstream)
     ccRoutePicksRef.current = routePicksFromConfig(upstream)

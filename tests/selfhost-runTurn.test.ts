@@ -25,6 +25,7 @@ function prepared(): PreparedSelfhostTurn {
       created_at: '', updated_at: '',
     },
     session: null,
+    handoffContext: '',
     history: [{
       id: 2, session_id: 'session-1', round_id: 2, created_at: '', user_text: '之前', assistant_text: '回答',
       model: '', client: '', route: '', source: 'cc',
@@ -89,6 +90,16 @@ describe('runSelfhostTurn stream contract', () => {
     const snapshot = '<window_handoff_snapshot>\n固定换窗背景\n</window_handoff_snapshot>'
     const system = assembleSystem(prepared().persona, '', {}, [], snapshot)
     expect(system).toContain(snapshot)
+  })
+
+  it('uses handoff as the only fixed background when legacy daily review data also exists', () => {
+    const snapshot = '<window_handoff_snapshot>\n固定换窗背景\n</window_handoff_snapshot>'
+    const system = assembleSystem(prepared().persona, '', {}, [
+      { review_date: '2026-08-08', content: '旧兼容日回顾，不应重复注入。' },
+    ], snapshot)
+    expect(system).toContain(snapshot)
+    expect(system).not.toContain('<daily_review_snapshot>')
+    expect(system).not.toContain('旧兼容日回顾')
   })
 
   afterEach(() => vi.restoreAllMocks())

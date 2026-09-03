@@ -78,6 +78,7 @@
 4. 跨 UTC 日期的首次 cold resume 缓存重写暂不处理；后续若再出现，只需用本节“缓存诊断查看方法”确认是否仍是同一模式，不重复从头排查。
 5. Dashboard 部署本次 wake XML 压缩后，对比至少两条连续同类型 `cache_keepalive` 的 usage；确认相邻 transcript/cache 增量由既有约 90–95 token 降向目标 50–65 token，并确认 cache fingerprint、唤醒语义、no-op 格式和前后台工具边界未发生非预期变化。
 6. `frozen_persona_append` 边界另开窗口修复：只冻结 handoff、日回顾等窗口快照；协作者基础 system 与提示词模块人工修改后应在旧窗口下一轮生效，并允许因此发生一次预期 cache rewrite。不得把该修复并入 wake token 补丁。
+7. 下一窗口先只讨论 handoff snapshot 的 token 压缩，不改代码：区分 handoff 固定快照、跨线路 `<上次聊到这里>`、原生 CC transcript 和 `frozen_persona_append`，从真实窗口的 Context 分析或现有快照结构拆出各部分 token；逐项判断哪些重复、哪些可压缩、预计节省及上下文能力损失。不得重新讨论跨 UTC `currentDate`，也不得顺手修改 wake、iterator、scheduler、silence、coordinator、lane 状态机、后台权限或 `frozen_persona_append` 边界。
 
 ## 缓存诊断查看方法（给后续排查窗口）
 

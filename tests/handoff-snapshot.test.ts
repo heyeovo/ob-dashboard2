@@ -15,7 +15,9 @@ describe('handoff snapshot', () => {
     ])
     expect(snapshot.content).toContain('【钉选记忆｜钉选】')
     expect(snapshot.content).toContain('【日记｜今天】')
-    expect(snapshot.content).toContain('【旧窗口对话｜第 1 轮】')
+    expect(snapshot.content).toContain('【旧窗口对话】')
+    expect(snapshot.content).toContain('【第 1 轮】')
+    expect(snapshot.content).not.toContain('【旧窗口对话｜第 1 轮】')
     expect(handoffSnapshotContent(snapshot)).toBe(snapshot.content)
     expect(handoffChatTranscript(snapshot)).toBe('小羊：你好\nOmbre：你好')
     expect(snapshot.stats.selected_estimated_tokens).toBeGreaterThan(0)
@@ -24,6 +26,12 @@ describe('handoff snapshot', () => {
   it('restores chat text from legacy persisted snapshots', () => {
     expect(handoffChatTranscript({
       content: '<window_handoff_snapshot>\n【旧窗口对话｜第 1 轮】\n用户：你好\n\n助手：你好\n</window_handoff_snapshot>',
+    })).toBe('小羊：你好\n\n言之：你好')
+  })
+
+  it('restores chat text from the compact heading format when the denormalized field is absent', () => {
+    expect(handoffChatTranscript({
+      content: '<window_handoff_snapshot>\n【旧窗口对话】\n\n【第 1 轮】\n用户：你好\n\n助手：你好\n</window_handoff_snapshot>',
     })).toBe('小羊：你好\n\n言之：你好')
   })
 

@@ -37,11 +37,10 @@ import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
 import { DEFAULT_WEB_SETTINGS, type CcWebSettings } from '@/app/cc/webSettings'
 import type { CcPermKind } from '@/app/lib/ccChannel'
 import {
-  AGENT_WAKE_SERVER_NAME,
-  createAgentWakeMcpServer,
   getCcTurnExecutionMode,
   isSetAgentWakeTool,
 } from '@/app/lib/cc/agentWakeTool'
+import { builtInMcpServerNames, builtInMcpServers } from '@/app/lib/cc/builtInMcp'
 
 /** 直接放行、不弹批准卡的只读工具。 */
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
@@ -95,8 +94,10 @@ export type TurnConfig = {
   sessionId: string
   mode: CcMode
   personaAppend: string
-  /** 只标识协作者身份与提示词模块；不包含仅在新窗口首轮装载的 handoff。 */
+  /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
+  /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */
+  mcpDefinitionKey: string
   cwd: string
   additionalDirectories: string[]
   sdkModel: string
@@ -130,10 +131,14 @@ export function cacheRelevantFingerprint(config: TurnConfig) {
   const toolNames = config.mode === 'chat'
     ? [...CACHE_STABLE_WEB_TOOLS]
     : [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
-  const mcpServerNames = [...Object.keys(config.sdkMcpServers), AGENT_WAKE_SERVER_NAME].sort()
+  const mcpServerNames = [...Object.keys(config.sdkMcpServers), ...builtInMcpServerNames()].sort()
   const systemPromptHash = shortHash({ mode: config.mode, personaAppend: config.personaAppend })
   const toolsHash = shortHash(toolNames)
-  const mcpToolsHash = shortHash({ mcpServerNames, disabledTools: [...config.disabledTools].sort() })
+  const mcpToolsHash = shortHash({
+    definition: config.mcpDefinitionKey,
+    mcpServerNames,
+    disabledTools: [...config.disabledTools].sort(),
+  })
   const sdkCacheRelevantOptionsHash = shortHash({
     model: config.sdkModel,
     effort: config.effort,
@@ -409,7 +414,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
     mcpServers: {
       ...sdkMcpServers,
-      [AGENT_WAKE_SERVER_NAME]: createAgentWakeMcpServer(sessionId),
+      ...builtInMcpServers(sessionId),
     },
     strictMcpConfig: true,
     // 关闭的工具连名称/说明/参数结构都从模型上下文移除；开启的 MCP 服务

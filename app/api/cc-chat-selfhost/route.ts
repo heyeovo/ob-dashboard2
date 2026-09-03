@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       : [],
     expectedLastRoundId: Number(body.expected_last_round_id),
     mode: body.mode === 'work' ? 'work' : 'chat',
-    includeDailyReview: body.include_daily_review !== false,
+    includeDailyReview: body.include_daily_review === true,
     handoffSnapshot: body.handoff_snapshot && typeof body.handoff_snapshot === 'object'
       ? body.handoff_snapshot as SelfhostRequest['handoffSnapshot']
       : undefined,

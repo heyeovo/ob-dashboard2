@@ -1,18 +1,20 @@
 import { resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
-import { getPersona } from '@/app/lib/havenPersonas'
+import { buildPersonaAppend, getPersona } from '@/app/lib/havenPersonas'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import { loadPermanentPermissionRules, permissionRuleStrings } from '@/app/lib/havenPermissions'
-import { disabledMcpTools, loadMcpConfig, toSdkMcpServers } from '@/app/lib/ccMcp'
+import { configuredMcpModelSurface, disabledMcpTools, loadMcpConfig, toSdkMcpServers } from '@/app/lib/ccMcp'
 import { getConversationSession } from '@/app/lib/havenTurns'
-import { setFrozenAppend } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import {
   ccLaneId,
+  cacheRelevantFingerprint,
   sdkModelForProvider,
   setWriteDirs,
   type TurnConfig,
 } from '@/app/lib/cc/ccOptions'
 import type { CredMode } from '@/app/lib/ccEnv'
+import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
+import { composeWindowPersonaAppend } from '@/app/lib/cc/windowPrompt'
 
 /** Restore the single last-active native CC lane without any browser state. */
 export async function loadBackgroundTurnInputs(sessionId: string) {
@@ -62,18 +64,25 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     resolveWriteDirs(persona.write_dirs),
   ])
   setWriteDirs(sessionId, writeDirs)
-  setFrozenAppend(sessionId, session.frozen_persona_append)
-
   const webSettings = {
     ...DEFAULT_WEB_SETTINGS,
     searchEnabled: false,
     fetchEnabled: false,
   }
+  const personaAppend = composeWindowPersonaAppend(
+    buildPersonaAppend(persona, session.prompt_module_overrides),
+    session,
+    sessionId,
+  )
   const config: TurnConfig = {
     sessionId,
     mode: session.mode,
-    personaAppend: session.frozen_persona_append,
-    systemPromptKey: session.frozen_persona_append,
+    personaAppend,
+    systemPromptKey: '',
+    mcpDefinitionKey: JSON.stringify({
+      configured: configuredMcpModelSurface(mcpConfig),
+      builtIn: builtInMcpModelSurfaces(),
+    }),
     cwd: readDirs.cwd,
     additionalDirectories: readDirs.additionalDirectories,
     sdkModel: sdkModelForProvider(model, cred),
@@ -90,5 +99,6 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     providerId,
     providerLabel,
   }
+  config.systemPromptKey = cacheRelevantFingerprint(config).sdkCacheRelevantOptionsHash
   return { persona, config, sessionSnapshot: sessionResult, resumeHint, laneId }
 }

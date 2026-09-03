@@ -2,19 +2,19 @@ import { NextRequest } from 'next/server'
 import { resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import type { CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
-import { sessionStaticContext } from '@/app/lib/runtimeContext'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import {
   loadPermanentPermissionRules,
   permissionRuleStrings,
 } from '@/app/lib/havenPermissions'
-import { loadMcpConfig, toSdkMcpServers, disabledMcpTools } from '@/app/lib/ccMcp'
-import { getSessionStats, dropSession, getFrozenAppend, setFrozenAppend, clearFrozenAppend } from '@/app/lib/ccSession'
+import { configuredMcpModelSurface, loadMcpConfig, toSdkMcpServers, disabledMcpTools } from '@/app/lib/ccMcp'
+import { getSessionStats, dropSession } from '@/app/lib/ccSession'
 import { resetChannel } from '@/app/lib/ccChannel'
 import { isCcMode, type CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings } from '@/app/cc/webSettings'
 import {
   clearWriteDirs,
+  cacheRelevantFingerprint,
   ccLaneId,
   sdkModelForProvider,
   setWriteDirs,
@@ -24,7 +24,6 @@ import { clearRecallPrefs, runTurn, setRecallPrefs } from '@/app/lib/cc/runTurn'
 import { clearTurnBucket } from '@/app/lib/cc/processCollector'
 import { encodeSse } from '@/app/lib/cc/sseEvents'
 import {
-  dailyReviewSystemBlock,
   getConversationSession,
   getTurnByRequestId,
   patchConversationSessionState,
@@ -32,6 +31,8 @@ import {
 } from '@/app/lib/havenTurns'
 import { resolveAttachments } from '@/app/lib/havenAttachments'
 import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
+import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
+import { composeWindowPersonaAppend } from '@/app/lib/cc/windowPrompt'
 import { runForegroundSessionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
@@ -209,8 +210,8 @@ async function loadTurnInputs(body: ChatBody) {
     sessionId: String(body.session_id || ''),
     personaId: String(body.persona_id || ''),
     mode,
-    dailyReviewEnabled: body.include_daily_review !== false,
-    initializeDailyReviewSnapshot: true,
+    dailyReviewEnabled: body.include_daily_review === true,
+    initializeDailyReviewSnapshot: body.include_daily_review === true,
     handoffSnapshot: body.handoff_snapshot,
   })
   if (!initializedSession.ok) {
@@ -267,29 +268,10 @@ async function loadTurnInputs(body: ChatBody) {
   const legacyResumeHint = String(body.resume_hint_lane_id || '').trim() === laneId
     ? String(body.resume_hint || '').trim()
     : ''
-  let personaAppend = buildPersonaAppend(
-    persona,
-    sessionSnapshot.session?.prompt_module_overrides,
-  )
-
-  // CC 的每条原生线路在启动时读取 Haven 同一份冻结快照；活跃 query 的
-  // systemPromptKey 不变，不会逐轮重复追加。selfhost 也读取这个字段。
-  const handoffBlock = handoffSnapshotContent(sessionSnapshot.session?.handoff_snapshot)
-  personaAppend = [personaAppend, handoffBlock].filter(Boolean).join('\n\n')
-  const dailyReviewBlock = sessionSnapshot.session?.daily_review_enabled
-    ? dailyReviewSystemBlock(sessionSnapshot.session.daily_review_snapshot)
-    : ''
-  personaAppend = [personaAppend, dailyReviewBlock].filter(Boolean).join('\n\n')
-  personaAppend = [personaAppend, sessionStaticContext(String(body.session_id || ''))].filter(Boolean).join('\n\n')
-
-  // 缓存稳定性：同一个 session 生命周期内 personaAppend 不能变，否则 resume 后
-  // 系统提示前缀跟原来对不上 → 1h 缓存 miss → 全量重写。
-  // 首次建会话时写入 Haven 并冻结，后续轮次、Dashboard 重部署和换设备都复用。
-  // 进程内 Map 只做热路径缓存，不再是唯一事实源。
-  if (sessionSnapshot.session.frozen_persona_append_initialized) {
-    personaAppend = sessionSnapshot.session.frozen_persona_append
-  } else {
-    const candidate = getFrozenAppend(body.session_id || '') ?? personaAppend
+  // 只把窗口创建时选定的 handoff 标记为冻结；旧窗的独立日回顾仍从自己的快照字段兼容读取。
+  // 协作者 system / 定位 / 提示词模块每轮重读，修改后旧窗口下一轮即可生效。
+  if (!sessionSnapshot.session.frozen_persona_append_initialized) {
+    const candidate = handoffSnapshotContent(sessionSnapshot.session.handoff_snapshot)
     const saved = await patchConversationSessionState({
       sessionId: String(body.session_id || ''),
       personaId: String(body.persona_id || ''),
@@ -298,7 +280,6 @@ async function loadTurnInputs(body: ChatBody) {
     })
     if (saved.ok && saved.session?.frozen_persona_append_initialized) {
       sessionSnapshot = { ...sessionSnapshot, session: saved.session }
-      personaAppend = saved.session.frozen_persona_append
     } else {
       // 两个请求同时首次启动时，另一个可能先写入并让 CAS 冲突；重读已冻结值即可。
       const reread = await getConversationSession(body.session_id || '', {
@@ -308,11 +289,15 @@ async function loadTurnInputs(body: ChatBody) {
         throw new Error(`保存窗口缓存前缀失败：${saved.error || reread.error || 'Haven 写入失败'}`)
       }
       sessionSnapshot = reread
-      personaAppend = reread.session.frozen_persona_append
     }
   }
-  setFrozenAppend(body.session_id || '', personaAppend)
-  const systemPromptKey = personaAppend
+  const promptSession = sessionSnapshot.session
+  if (!promptSession) throw new Error('读取窗口状态失败：Haven 未返回 session')
+  const personaAppend = composeWindowPersonaAppend(
+    buildPersonaAppend(persona, promptSession.prompt_module_overrides),
+    promptSession,
+    String(body.session_id || ''),
+  )
 
   // 能读哪些目录：本机没配退回仓库根；production 没配只进 dashboard workspace。
   // 敏感文件的拦截跟这个无关，是 ccOptions 里 PreToolUse 那道硬规则。
@@ -332,7 +317,11 @@ async function loadTurnInputs(body: ChatBody) {
     sessionId: body.session_id || '',
     mode,
     personaAppend,
-    systemPromptKey,
+    systemPromptKey: '',
+    mcpDefinitionKey: JSON.stringify({
+      configured: configuredMcpModelSurface(mcpConfig),
+      builtIn: builtInMcpModelSurfaces(),
+    }),
     cwd,
     additionalDirectories,
     sdkModel: sdkModelForProvider(model, cred),
@@ -349,6 +338,7 @@ async function loadTurnInputs(body: ChatBody) {
     providerId,
     providerLabel,
   }
+  config.systemPromptKey = cacheRelevantFingerprint(config).sdkCacheRelevantOptionsHash
 
   return {
     persona,
@@ -503,7 +493,6 @@ export async function DELETE(request: NextRequest) {
   clearRecallPrefs(sessionId)
   clearWriteDirs(sessionId)
   clearTurnBucket(sessionId)
-  clearFrozenAppend(sessionId)
   // 工作台那四格跟着清 —— 回退点已经随子进程失效了，留着只会骗人
   resetChannel(sessionId, '会话被手动收掉了，这个操作取消。')
   return Response.json({ ok: true })

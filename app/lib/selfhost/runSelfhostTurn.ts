@@ -136,7 +136,7 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     personaId: request.personaId,
     mode: request.mode,
     dailyReviewEnabled: request.includeDailyReview,
-    initializeDailyReviewSnapshot: true,
+    initializeDailyReviewSnapshot: request.includeDailyReview,
     handoffSnapshot: request.handoffSnapshot,
   })
   if (!initialized.ok) {
@@ -230,10 +230,10 @@ export function assembleSystem(
   handoffContext = '',
   sessionId = '',
 ): string {
+  const fixedWindowContext = handoffContext || dailyReviewSystemBlock(dailyReviewSnapshot)
   return [
     buildPersonaAppend(persona, promptModuleOverrides),
-    dailyReviewSystemBlock(dailyReviewSnapshot),
-    handoffContext,
+    fixedWindowContext,
     sessionId ? sessionStaticContext(sessionId) : '',
     recallSystemBlock(recalledContext),
   ].filter(Boolean).join('\n\n')
