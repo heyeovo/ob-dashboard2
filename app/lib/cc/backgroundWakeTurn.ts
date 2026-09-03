@@ -33,11 +33,8 @@ export type BackgroundWakeResult =
   | { status: 'in_progress'; reason: string }
   | { status: 'failed'; error: string }
 
-function wakePrompt(input: BackgroundWakeInput, wakeId: string): string {
+function wakePrompt(input: BackgroundWakeInput): string {
   const attributes = [
-    'v="1"',
-    `id=${JSON.stringify(wakeId)}`,
-    `at=${JSON.stringify(input.at)}`,
     `cause=${JSON.stringify(input.cause)}`,
     input.reason ? `reason=${JSON.stringify(input.reason)}` : '',
   ].filter(Boolean)
@@ -91,7 +88,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
           requestId: wakeId,
           expectedLastRoundId: 0,
           personaId: loaded.persona.id,
-          text: wakePrompt(input, wakeId),
+          text: wakePrompt(input),
           persona: loaded.persona,
           config: loaded.config,
           sessionSnapshot: loaded.sessionSnapshot,

@@ -133,10 +133,13 @@ Claude 收到 wake 后应该如何判断、何时 no-op、如何调用调度工�
 每次只加入一条短结构，例如：
 
 ```xml
-<agent_wake v="1" id="wake_xxx" at="2026-08-31T11:55:00+08:00" cause="cache_keepalive" reason="看看她有没有下班"/>
+<agent_wake cause="cache_keepalive"/>
+<agent_wake cause="agent_schedule" reason="看看她有没有下班"/>
 ```
 
-- `wake_reason` 是 Claude 留给未来自己的短备注，限制为最多 30 个中文字符或等价长度。
+- 模型当前时间继续复用每轮 user 消息统一追加的北京时间尾缀，不在 wake XML 重复传 `at`。
+- `wake_id`、精确触发时间和协议版本只用于 Dashboard/Haven 幂等、持久化与诊断，不进入模型 Context。
+- `reason` 是 Claude 留给未来自己的短备注，限制为最多 50 个字符。
 - 没话说时使用固定内部 no-op 标记；UI 不生成普通 assistant 气泡。
 - UI 文案与模型 Context 分离，不把“Claude 醒了一次”等展示文字重复塞回 Context。
 - 历史重建、跨引擎补齐和 Context GC 后都由同一个 renderer 从结构化 metadata 生成上述短格式。

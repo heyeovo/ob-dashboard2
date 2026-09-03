@@ -42,10 +42,23 @@ describe('Dashboard background wake runner', () => {
     expect(result).toMatchObject({ status: 'completed', laneId: 'subscription' })
     expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'window-1', requestId: 'wake-1', resumeHint: 'native-session',
+      text: '<agent_wake cause="cache_keepalive"/>',
       turnKind: 'agent_wake', persistTurn: false,
     }))
     expect(haven.record).toHaveBeenCalledWith(expect.objectContaining({
       requestId: 'wake-1', expectedLastRoundId: 3, turnKind: 'agent_wake', laneId: 'subscription',
+    }))
+  })
+
+  it('sends only the cause and optional reason to the model', async () => {
+    await runBackgroundWake({
+      sessionId: 'window-1', wakeId: 'wake-scheduled', at: '2026-08-31T12:55:00Z',
+      cause: 'agent_schedule', reason: '稍后再看',
+    })
+
+    expect(runner.run).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: 'wake-scheduled',
+      text: '<agent_wake cause="agent_schedule" reason="稍后再看"/>',
     }))
   })
 

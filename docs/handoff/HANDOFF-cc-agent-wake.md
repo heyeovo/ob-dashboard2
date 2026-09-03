@@ -24,6 +24,8 @@
 - `currentDate` 的插入位置不由 Dashboard system prompt、tools、MCP 或公开 Agent SDK options 控制，Dashboard 层无法直接移动。改容器时区只能移动每日异常时刻，延长 iterator 生命周期只能减少部分 cold resume；冻结日期、补丁 Claude Code 或代理改写请求都会引入日期错误或高维护成本。当前决定先接受这次每日跨日重写，不改缓存、iterator、scheduler 或 prompt 逻辑，等待上游修复；若将来最终 outgoing request 证明字节完全相同却仍 miss，再转查 Anthropic cache lookup/routing。
 - 主动唤醒设置仍严格按 profile/session/lane 隔离；保活关闭时页面显示“未开启”，不会再把仅供计算的 deadline 表达成实际调度。
 - 线上初测中 conversation silence 与 Claude 主动安排的 wake 都已连续命中正常缓存；用户将继续整晚观察 foreground → wake → foreground 的 cache read/write，当前不做 wake 100–500 token 级增量压缩。
+- 2026-09-04 已完成第一阶段固定 token 压缩：模型可见 wake XML 删除重复的 `v`、`id`、`at`，只保留 `cause` 与可选 `reason`；当前时间继续由所有 `runTurn` 共用的北京时间 user 尾缀提供。后台 `wake_id`、request id、精确时间、幂等和数据库 metadata 均未改变。按既有连续 no-op 样本每轮约 90–95 token 的 transcript 增量估算，目标减少约 30–45 token、降至约 50–65 token；最终数值以上线后同类型连续 wake usage 为准。
+- 本窗口另确认 `frozen_persona_append` 当前误将“协作者基础 system + 提示词模块 + handoff + 日回顾 + session 静态信息”整串冻结；原始需求只需固定 handoff、日回顾等窗口快照，人工修改协作者 prompt 后发生一次预期 cache rewrite 可以接受。该冻结边界修复必须单独实施，不与本次 wake token 补丁混改。
 - 阶段 1–3 的持久控制面、统一 turn、原子消息提交、silence timer、历史映射、分段气泡、主动唤醒设置 Tab 和页面增量刷新保持不变。
 - 阶段 4 已接通 Haven Brain → Dashboard：
   - Brain 启动独立的 30 秒持久 scheduler，从 `gateway_state.db` 按 `due_at` 原子 claim，并用独立 Bearer token 调用 `/api/cc-agent-wake-runner`。
@@ -48,6 +50,7 @@
 - 2026-09-02 no-op wake token 角标补丁：复用普通消息的 token 角标和展开详情；定向测试 19 项通过，Dashboard production build 与 `git diff --check` 通过。
 - 2026-09-02 wake UI 分层与 noop skip reason 展示：定向 Vitest 24 项通过；Dashboard 全量 Vitest 47 个文件、242 项通过、1 项跳过；production build 通过。未修改 Haven、scheduler、silence、cache、coordinator 或 lane 状态机，阶段 6 未开始。
 - 2026-09-02 cache diagnostic 黑匣子：Dashboard 全量 Vitest 47 个文件、243 项通过、1 项跳过；production build 与 `git diff --check` 通过。首次全量运行仅有既有 `dashboard-auth` 随机 token 尾字符用例偶发失败，单测与第二次全量复跑均通过。本补丁只增加 raw 诊断持久化与测试，不修改前端展示、Haven、缓存策略或状态机。
+- 2026-09-04 wake 动态 XML 压缩：`tests/cc-background-wake.test.ts` 定向 7 项通过，覆盖纯 `cache_keepalive` 仅发送 cause、`agent_schedule` 保留可选 reason，以及后台 requestId/持久化链不变；`git diff --check` 通过。尚待 production build 与线上连续 wake usage 验收。
 
 - Haven 阶段 4 定向：47 项通过。
 - Haven 全量 unittest：175 项全部通过。
@@ -73,8 +76,8 @@
 2. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、可选“这次没有发消息”原因、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
 3. 等待后续真实 no-op 样本，确认 Claude 是否主动附带 30 字内自然状态；完整功能链已经存在，不为强制出现短文本修改 prompt 或后端。
 4. 跨 UTC 日期的首次 cold resume 缓存重写暂不处理；后续若再出现，只需用本节“缓存诊断查看方法”确认是否仍是同一模式，不重复从头排查。
-5. 下一窗口单独讨论“压缩每次唤醒的固定 token 消耗量”：先从现有真实 wake 样本拆分固定输入、cache read/write、thinking 和输出成本，定位可压缩部分并估算节省；讨论阶段不改代码。不得把跨日 `currentDate` 缓存问题混入该优化，也不得顺手调整 10 分钟 iterator 回收、scheduler、silence、coordinator、lane 状态机或后台权限。
-6. 只有用户确认具体压缩方案后才进入实施；验收需对比修改前后同类型 wake 的 usage，并确认 cache fingerprint、唤醒语义、no-op 格式和前后台工具边界未发生非预期变化。
+5. Dashboard 部署本次 wake XML 压缩后，对比至少两条连续同类型 `cache_keepalive` 的 usage；确认相邻 transcript/cache 增量由既有约 90–95 token 降向目标 50–65 token，并确认 cache fingerprint、唤醒语义、no-op 格式和前后台工具边界未发生非预期变化。
+6. `frozen_persona_append` 边界另开窗口修复：只冻结 handoff、日回顾等窗口快照；协作者基础 system 与提示词模块人工修改后应在旧窗口下一轮生效，并允许因此发生一次预期 cache rewrite。不得把该修复并入 wake token 补丁。
 
 ## 缓存诊断查看方法（给后续排查窗口）
 
