@@ -1,7 +1,7 @@
 # HANDOFF — CC 缓存保活与 Claude 主动唤醒
 
 > 建立时间：2026-08-31
-> 最后更新：2026-09-02
+> 最后更新：2026-09-04
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
 > 状态：阶段 1–5 已完成；Bark HTTP 400 已解决，阶段 6 尚未开始
 
@@ -19,6 +19,9 @@
 - 本轮修改了始终加载的 agent wake MCP instructions/工具描述，因此 Dashboard 部署后的第一轮会建立一次新的稳定缓存前缀；该次 cache miss 属于预期。缓存异常调查必须比较同一部署版本建立新前缀之后的连续轮次，不得拿部署前后的 tools/MCP hash 直接判定为再次失效。
 - 2026-09-02 第二次缓存异常已定点到 `ob2-20260901-c7s6jz` round 71：round 70（07:24:50）读 35,354 / 写 95，round 71（08:19:58）读 18,272 / 写 17,267，间隔仅 55 分 08 秒；三轮均为 subscription lane、Opus 4.6、`cache_keepalive`、输入 3 / 输出 11 的 no-op。失去的是约 17k 的后半段 1h session/transcript prefix，前 18,272 的 system/tools prefix 仍命中，5m 写入为 0；下一轮已恢复。历史 raw 未保存当时 iterator/hash/CC session，旧 Coolify 日志也已消失，因此只能把原因收窄到 cold resume 后 transcript 漂移或 Anthropic 单次 cache unavailable，不能事后强行二选一。
 - Dashboard 已为后续轮次增加持久 `raw_json.cache_diagnostic` 黑匣子：保存 Dashboard 进程实例、模型请求开始时间、lane、CC session、resume hint、iterator 的 `reused/cold_resumed/cold_started`、system/tools/MCP/options hash 及工具/MCP 名称。该对象不含 prompt 正文、密钥，不进入 Claude Context，也不改变前端展示；foreground 与 background wake 都保存，不需要依赖 Coolify 历史日志。
+- 2026-09-03 黑匣子捕获到同类异常：session `ob2-20260901-c7s6jz` round 175 在 23:49:16 UTC 读 67,384 / 写 92；round 176 在跨日后的 00:44:25 UTC 读 18,309 / 写 49,262；round 177 在 01:25:27 UTC 又恢复为读 67,571 / 写 120。round 175→176 仅 55 分 08 秒，且 Dashboard 进程实例、subscription lane、CC session、resume hint、`cold_resumed` iterator、system/tools/MCP/options 四组 hash 及工具/MCP 名称全部相同，排除了 Dashboard 重启、稳定配置漂移和正常 1h TTL 到期。
+- Dashboard 容器与 Node 进程已由用户在线上终端确认均使用 UTC。结合 Claude Code issue [#86299](https://github.com/anthropics/claude-code/issues/86299) 的可控复现，当前最可信根因是：跨日期 cold resume 时 Claude Code / Agent SDK 在内部重新生成 `currentDate` / `Today's date is YYYY-MM-DD`，使 system/tools 之后的 transcript 前缀断裂；因此仍命中约 18.3k 固定前缀，却重写其后约 49.3k。连续两天的异常都发生在香港时间 08 点后、即 UTC 00:00 后第一次 cold resume，且同日下一次 resume 恢复完整命中。
+- `currentDate` 的插入位置不由 Dashboard system prompt、tools、MCP 或公开 Agent SDK options 控制，Dashboard 层无法直接移动。改容器时区只能移动每日异常时刻，延长 iterator 生命周期只能减少部分 cold resume；冻结日期、补丁 Claude Code 或代理改写请求都会引入日期错误或高维护成本。当前决定先接受这次每日跨日重写，不改缓存、iterator、scheduler 或 prompt 逻辑，等待上游修复；若将来最终 outgoing request 证明字节完全相同却仍 miss，再转查 Anthropic cache lookup/routing。
 - 主动唤醒设置仍严格按 profile/session/lane 隔离；保活关闭时页面显示“未开启”，不会再把仅供计算的 deadline 表达成实际调度。
 - 线上初测中 conversation silence 与 Claude 主动安排的 wake 都已连续命中正常缓存；用户将继续整晚观察 foreground → wake → foreground 的 cache read/write，当前不做 wake 100–500 token 级增量压缩。
 - 阶段 1–3 的持久控制面、统一 turn、原子消息提交、silence timer、历史映射、分段气泡、主动唤醒设置 Tab 和页面增量刷新保持不变。
@@ -69,8 +72,9 @@
 1. 用户提交并推送 Dashboard，在 Coolify 的 Dashboard Application 点击 `Redeploy`；本轮没有 Haven 改动，不部署 Haven。
 2. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、可选“这次没有发消息”原因、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
 3. 等待后续真实 no-op 样本，确认 Claude 是否主动附带 30 字内自然状态；完整功能链已经存在，不为强制出现短文本修改 prompt 或后端。
-4. 后续再出现缓存异常时，不要求用户记参数或翻 Coolify 日志。由排查助手读取本节“缓存诊断查看方法”，从对应消息的 `raw_json.cache_diagnostic` 与 `usage` 比较相邻三轮；先确认样本发生在本次 MCP 文案部署之前还是之后，部署后的首轮预期建立新前缀，不算异常。
-5. 当前仍不调整 10 分钟 iterator 闲置回收策略；它使约 55 分钟 wake 通常走 `cold_resumed`，但多数冷恢复仍正常命中，尚不足以证明它就是 round 71 单轮 miss 的根因。不要顺手改 scheduler、silence、coordinator、lane 状态机或后台权限，也不要开始阶段 6 的真实 55 分钟成本实验。
+4. 跨 UTC 日期的首次 cold resume 缓存重写暂不处理；后续若再出现，只需用本节“缓存诊断查看方法”确认是否仍是同一模式，不重复从头排查。
+5. 下一窗口单独讨论“压缩每次唤醒的固定 token 消耗量”：先从现有真实 wake 样本拆分固定输入、cache read/write、thinking 和输出成本，定位可压缩部分并估算节省；讨论阶段不改代码。不得把跨日 `currentDate` 缓存问题混入该优化，也不得顺手调整 10 分钟 iterator 回收、scheduler、silence、coordinator、lane 状态机或后台权限。
+6. 只有用户确认具体压缩方案后才进入实施；验收需对比修改前后同类型 wake 的 usage，并确认 cache fingerprint、唤醒语义、no-op 格式和前后台工具边界未发生非预期变化。
 
 ## 缓存诊断查看方法（给后续排查窗口）
 
