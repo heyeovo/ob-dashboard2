@@ -5,11 +5,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 type Candidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews'
   label: string
   detail: string
   estimatedTokens: number
   protected: boolean
+  cleared: boolean
 }
 
 type History = {
@@ -33,6 +34,12 @@ type Payload = {
 }
 
 const BUTTON = 'rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
+
+const KIND_GROUPS: Array<{ key: string; label: string; kinds: Set<Candidate['kind']> }> = [
+  { key: 'memory', label: 'OB 记忆', kinds: new Set(['ob_recall', 'read_bucket', 'breath', 'introspection', 'read_daily_reviews']) },
+  { key: 'chat', label: '聊天搜索', kinds: new Set(['search_chat', 'get_chat_context']) },
+  { key: 'web', label: '网络内容', kinds: new Set(['web_search', 'web_fetch']) },
+]
 
 function fmtTokens(value: number) {
   return value >= 1000 ? `约 ${(value / 1000).toFixed(1)}k token` : `约 ${value} token`
@@ -134,11 +141,11 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
     }
   }
 
-  const available = candidates.filter(item => !item.protected)
+  const available = candidates.filter(item => !item.protected && !item.cleared)
   return (
     <div className="text-[11px] text-[var(--color-text-secondary)]">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
-        只清理可重新获取的 OB 桶召回、breath、search_chat、WebSearch 和 WebFetch 结果。用户与助手正文、日期召回都不会改。实际执行时会复制 Claude 会话，旧副本暂时保留。
+        只清理可重新获取的 OB 记忆读取、聊天搜索、WebSearch 和 WebFetch 结果。用户与助手正文、日期召回都不会改。实际执行时会复制 Claude 会话，旧副本暂时保留。
       </div>
 
       <div className="my-3 flex items-center justify-between gap-2">
@@ -153,31 +160,47 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
         <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] p-3 text-[var(--color-text-tertiary)]">当前线路没有识别到可安全清理的内容。</div>
       ) : null}
 
-      <div className="space-y-2">
-        {candidates.map(item => (
-          <div key={item.id} className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-2.5">
-            <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                disabled={item.protected || running}
-                checked={selected.has(item.id)}
-                onChange={event => setSelected(current => {
-                  const next = new Set(current)
-                  if (event.target.checked) next.add(item.id); else next.delete(item.id)
-                  return next
-                })}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="break-words text-[var(--color-text-heading)]">{item.label}</div>
-                <div className="mt-0.5 break-all text-[9.5px] text-[var(--color-text-disabled)]">{item.detail} · 可释放 {fmtTokens(item.estimatedTokens)}</div>
+      <div className="space-y-4">
+        {KIND_GROUPS.map(group => {
+          const items = candidates.filter(c => group.kinds.has(c.kind))
+          if (items.length === 0) return null
+          const sorted = [...items].sort((a, b) => (a.cleared ? 1 : 0) - (b.cleared ? 1 : 0))
+          return (
+            <div key={group.key}>
+              <div className="mb-1.5 text-[10px] font-medium text-[var(--color-text-tertiary)]">{group.label}</div>
+              <div className="space-y-2">
+                {sorted.map(item => (
+                  <div key={item.id} className={`rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-2.5 ${item.cleared ? 'opacity-40' : ''}`}>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        disabled={item.protected || item.cleared || running}
+                        checked={selected.has(item.id)}
+                        onChange={event => setSelected(current => {
+                          const next = new Set(current)
+                          if (event.target.checked) next.add(item.id); else next.delete(item.id)
+                          return next
+                        })}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="break-words text-[var(--color-text-heading)]">{item.label}</div>
+                        <div className="mt-0.5 break-all text-[9.5px] text-[var(--color-text-disabled)]">
+                          {item.detail}{!item.cleared && <> · 可释放 {fmtTokens(item.estimatedTokens)}</>}
+                        </div>
+                      </div>
+                      {!item.cleared && (
+                        <button type="button" className={BUTTON} disabled={saving || running} onClick={() => toggleProtected(item)}>
+                          {item.protected ? '取消保留' : '始终保留'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <button type="button" className={BUTTON} disabled={saving || running} onClick={() => toggleProtected(item)}>
-                {item.protected ? '取消保留' : '始终保留'}
-              </button>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {available.length > 0 ? (

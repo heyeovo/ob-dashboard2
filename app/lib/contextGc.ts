@@ -10,11 +10,12 @@ type JsonObject = Record<string, unknown>
 export type ContextGcCandidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews'
   label: string
   detail: string
   estimatedTokens: number
   protected: boolean
+  cleared: boolean
 }
 
 export type ContextGcScan = {
@@ -168,6 +169,30 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
     kind = 'web_fetch'
     label = `WebFetch · ${short(url, 100)}`
     replacement = `已清理：曾读取「${url}」`
+  } else if (bareName === 'read_bucket') {
+    kind = 'read_bucket'
+    const bucketId = short(input.bucket_id, 60)
+    label = bucketId ? `read_bucket「${bucketId}」` : 'read_bucket'
+    replacement = `已清理：read_bucket${bucketId ? `「${bucketId}」` : ''}`
+  } else if (bareName === 'get_chat_context') {
+    kind = 'get_chat_context'
+    const turnId = String(input.turn_id || '')
+    label = `get_chat_context · turn ${turnId}`
+    replacement = `已清理：get_chat_context turn ${turnId}`
+  } else if (bareName === 'introspection') {
+    kind = 'introspection'
+    const date = short(input.created_date || input.created_from, 20)
+    label = date ? `introspection · ${date}` : 'introspection'
+    replacement = `已清理：introspection${date ? ` · ${date}` : ''}`
+  } else if (bareName === 'read_daily_reviews') {
+    kind = 'read_daily_reviews'
+    const startDate = short(input.start_date, 20)
+    const endDate = short(input.end_date, 20)
+    const range = startDate && endDate ? `${startDate} ~ ${endDate}` : startDate || endDate || ''
+    const days = input.last_days ? `最近 ${input.last_days} 天` : ''
+    const scope = range || days || ''
+    label = scope ? `日回顾「${scope}」` : '日回顾'
+    replacement = `已清理：日回顾${scope ? `「${scope}」` : ''}`
   } else {
     return null
   }
@@ -215,6 +240,7 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
   let recallIndex = 0
   const indexes: Record<RecoverableToolKind, number> = {
     search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
+    read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
   }
   const recoverableCalls = new Map<string, RecoverableCall>()
 
@@ -228,14 +254,16 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
         const full = match[0]
         const title = cardTitle(full)
         const protectKey = `ob:${bucketId}`
+        const fullTokens = estimateContextTokens(full)
         candidates.push({
           id: `ob:${recallIndex}:${hash(bucketId)}`,
           protectKey,
           kind: 'ob_recall',
           label: title,
-          detail: `bucket_id: ${bucketId}`,
-          estimatedTokens: Math.max(0, estimateContextTokens(full) - estimateContextTokens(recallReference(bucketId, title))),
+          detail: `${bucketId} · 约 ${fullTokens.toLocaleString()} token`,
+          estimatedTokens: Math.max(0, fullTokens - estimateContextTokens(recallReference(bucketId, title))),
           protected: protectedKeys.has(protectKey),
+          cleared: false,
         })
       }
     }
@@ -252,14 +280,17 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
         const text = call ? resultText(block) : null
         if (!call || text == null) continue
         const identity = candidateIdentity(call)
+        const cleared = text.startsWith('已清理：') || text.startsWith('召回内容已清理：')
+        const totalTokens = estimateContextTokens(text)
         candidates.push({
           id: identity.id,
           protectKey: identity.protectKey,
           kind: call.kind,
           label: call.label,
-          detail: `${text.length.toLocaleString()} 字原始结果`,
-          estimatedTokens: Math.max(0, estimateContextTokens(text) - estimateContextTokens(call.replacement)),
+          detail: cleared ? '已清理' : `约 ${totalTokens.toLocaleString()} token`,
+          estimatedTokens: Math.max(0, totalTokens - estimateContextTokens(call.replacement)),
           protected: protectedKeys.has(identity.protectKey),
+          cleared,
         })
       }
     }
@@ -287,9 +318,11 @@ function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGc
   let candidateCount = 0
   const counts: Record<string, number> = {
     ob_recall: 0, search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
+    read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
   }
   const indexes: Record<RecoverableToolKind, number> = {
     search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
+    read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
   }
   const recoverableCalls = new Map<string, RecoverableCall>()
 
