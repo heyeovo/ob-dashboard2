@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { activateContextGcFork, prepareSessionForContextGc } from '@/app/lib/ccSession'
-import { applyContextGc, scanContextGc } from '@/app/lib/contextGc'
+import { applyContextGc, purgeSupersededTranscripts, scanContextGc } from '@/app/lib/contextGc'
 import { getConversationSession, patchConversationContextGc } from '@/app/lib/havenTurns'
 
 export const runtime = 'nodejs'
@@ -114,6 +114,20 @@ export async function POST(request: NextRequest) {
       return errorResponse(new Error(`新副本已安全生成，但 Haven 没有切换：${committed.error || '保存失败'}`), committed.httpStatus || 409)
     }
     activateContextGcFork(sessionId, laneId, applied.nextCcSessionId)
+
+    const updatedSession = committed.session
+    if (updatedSession) {
+      const activeCcIds = new Set(
+        Object.values(updatedSession.cc_lanes || {})
+          .map(lane => laneSessionId(lane))
+          .filter(Boolean),
+      )
+      const superseded = (updatedSession.context_gc?.history || [])
+        .filter(h => h.previous_cc_session_id)
+        .map(h => ({ cc_session_id: h.previous_cc_session_id, replaced_at: h.at }))
+      purgeSupersededTranscripts(superseded, activeCcIds).catch(() => {})
+    }
+
     return NextResponse.json({ ok: true, ...applied, context_gc: committed.session?.context_gc || {} })
   } catch (error) {
     return errorResponse(error)

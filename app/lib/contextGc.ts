@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { forkSession } from '@anthropic-ai/claude-agent-sdk'
 import { estimateContextTokens } from './contextTokenEstimate'
 
@@ -392,6 +392,32 @@ export async function applyContextGc(
   await writeFile(tempPath, nextText, 'utf8')
   await rename(tempPath, forkPath)
   return { nextCcSessionId: fork.sessionId, ...result }
+}
+
+const RETENTION_MS = 24 * 60 * 60 * 1000
+
+export type SupersededEntry = { cc_session_id: string; replaced_at: string }
+
+export async function purgeSupersededTranscripts(
+  entries: SupersededEntry[],
+  activeCcSessionIds: Set<string>,
+): Promise<{ deleted: string[]; skipped: string[] }> {
+  const now = Date.now()
+  const deleted: string[] = []
+  const skipped: string[] = []
+  for (const entry of entries) {
+    if (activeCcSessionIds.has(entry.cc_session_id)) { skipped.push(entry.cc_session_id); continue }
+    const age = now - new Date(entry.replaced_at).getTime()
+    if (age < RETENTION_MS) { skipped.push(entry.cc_session_id); continue }
+    try {
+      const path = await transcriptPath(entry.cc_session_id)
+      await unlink(path)
+      deleted.push(entry.cc_session_id)
+    } catch {
+      skipped.push(entry.cc_session_id)
+    }
+  }
+  return { deleted, skipped }
 }
 
 export const contextGcTest = { collect, transform }
