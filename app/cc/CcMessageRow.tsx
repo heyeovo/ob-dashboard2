@@ -815,7 +815,16 @@ export default function CcMessageRow({
         {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}
         {!message.streaming && message.text ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
-            <button type="button" className="hover:text-[var(--color-text-secondary)]" onClick={() => onCopy(message.text)}>
+            <button
+              type="button"
+              className="hover:text-[var(--color-text-secondary)]"
+              onClick={e => {
+                onCopy(message.text)
+                const btn = e.currentTarget
+                btn.textContent = '已复制'
+                setTimeout(() => { btn.textContent = '复制' }, 1200)
+              }}
+            >
               复制
             </button>
 
