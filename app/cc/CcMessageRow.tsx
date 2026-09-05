@@ -801,68 +801,14 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
-        {!message.streaming && (showRuntimeInfo && (message.engine || message.providerLabel || shownModel || message.context) || message.deliveryNote || message.deliveryState === 'persistence_unknown') ? (
+        {/* 开发者模式：引擎/模型/Provider */}
+        {!message.streaming && showRuntimeInfo && (message.engine || message.providerLabel || shownModel) ? (
           <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
-            {showRuntimeInfo ? <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
               {shownModel ? <span>模型：{shownModel}</span> : null}
-              {message.context ? (
-                <div ref={contextRef} className="static sm:relative">
-                  <button
-                    type="button"
-                    aria-label="上下文详情"
-                    aria-expanded={contextOpen}
-                    title="上下文详情"
-                    onClick={() => setContextOpen(open => !open)}
-                    className="flex size-6 items-center justify-center rounded-full text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-secondary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
-                  >
-                    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4.9 19a9 9 0 1 1 14.2 0" />
-                      <path d="m12 14 3.5-3.5" />
-                      <path d="M12 5v1.5M5 12h1.5M17.5 12H19" />
-                    </svg>
-                  </button>
-                  {contextOpen ? (
-                    <div
-                      role="dialog"
-                      aria-label="上下文详情"
-                      className="absolute inset-x-3 top-full z-30 mt-1.5 w-auto rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg sm:left-0 sm:right-auto sm:w-64"
-                    >
-                      <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
-                      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
-                        <dt>本轮总输入估算</dt>
-                        <dd className={USAGE_NUM}>{message.context.inputTokensEstimated.toLocaleString()}</dd>
-                        <dt>带入历史</dt>
-                        <dd className={USAGE_NUM}>{message.context.includedHistoryRounds.toLocaleString()} 轮</dd>
-                        <dt>丢弃历史</dt>
-                        <dd className={USAGE_NUM}>{message.context.omittedHistoryRounds.toLocaleString()} 轮</dd>
-                        <dt>历史估算</dt>
-                        <dd className={USAGE_NUM}>{message.context.historyTokensEstimated.toLocaleString()} token</dd>
-                        <dt>模型名义上限</dt>
-                        <dd className={USAGE_NUM}>{message.context.modelContextLimit.toLocaleString()}</dd>
-                        <dt>回复预留</dt>
-                        <dd className={USAGE_NUM}>{message.context.replyReserveTokens.toLocaleString()} token</dd>
-                      </dl>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div> : null}
-            {message.deliveryNote ? (
-              <div className={`mt-1 ${message.deliveryState === 'saved' || message.deliveryState === 'replayed' ? 'text-emerald-700' : message.deliveryState === 'saving' ? 'text-[var(--color-primary)]' : 'text-rose-600'}`}>
-                {message.deliveryNote}
-              </div>
-            ) : null}
-            {message.deliveryState === 'persistence_unknown' && onRetryPersistence ? (
-              <button
-                type="button"
-                onClick={() => onRetryPersistence(message)}
-                className="mt-1.5 rounded-full border border-amber-300 px-2.5 py-1 text-amber-700 hover:bg-amber-50"
-              >
-                核对保存状态
-              </button>
-            ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -872,6 +818,83 @@ export default function CcMessageRow({
             <button type="button" className="hover:text-[var(--color-text-secondary)]" onClick={() => onCopy(message.text)}>
               复制
             </button>
+
+            {/* 保存状态图标 */}
+            {message.deliveryState === 'saved' || message.deliveryState === 'replayed' ? (
+              <span title={message.deliveryNote || '已保存'} className="text-emerald-600">
+                <svg aria-hidden="true" viewBox="0 0 20 10" className="h-3 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 5 4 8 10 2" />
+                  <polyline points="7 5 10 8 16 2" />
+                </svg>
+              </span>
+            ) : message.deliveryState === 'saving' ? (
+              <span title={message.deliveryNote || '保存中…'} className="animate-pulse text-[var(--color-primary)]">
+                <svg aria-hidden="true" viewBox="0 0 20 10" className="h-3 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="2 5 6 9 14 1" />
+                </svg>
+              </span>
+            ) : message.deliveryState && message.deliveryState !== 'generating' && message.deliveryState !== 'stopped' ? (
+              <button
+                type="button"
+                title={message.deliveryNote || '保存异常'}
+                onClick={() => {
+                  if (message.deliveryState === 'persistence_unknown' && onRetryPersistence) {
+                    onRetryPersistence(message)
+                  }
+                }}
+                className={`text-rose-500 ${message.deliveryState === 'persistence_unknown' && onRetryPersistence ? 'cursor-pointer hover:text-rose-700' : 'cursor-default'}`}
+              >
+                <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="8" cy="8" r="7" />
+                  <path d="M8 4.5v4" />
+                  <circle cx="8" cy="11.5" r="0.5" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            ) : null}
+
+            {/* 上下文详情 */}
+            {message.context ? (
+              <div ref={contextRef} className="relative">
+                <button
+                  type="button"
+                  aria-label="上下文详情"
+                  aria-expanded={contextOpen}
+                  title="上下文详情"
+                  onClick={() => setContextOpen(open => !open)}
+                  className="flex items-center justify-center text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4.9 19a9 9 0 1 1 14.2 0" />
+                    <path d="m12 14 3.5-3.5" />
+                    <path d="M12 5v1.5M5 12h1.5M17.5 12H19" />
+                  </svg>
+                </button>
+                {contextOpen ? (
+                  <div
+                    role="dialog"
+                    aria-label="上下文详情"
+                    className="absolute bottom-full left-0 z-30 mb-1.5 w-64 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg"
+                  >
+                    <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
+                    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
+                      <dt>本轮总输入估算</dt>
+                      <dd className={USAGE_NUM}>{message.context.inputTokensEstimated.toLocaleString()}</dd>
+                      <dt>带入历史</dt>
+                      <dd className={USAGE_NUM}>{message.context.includedHistoryRounds.toLocaleString()} 轮</dd>
+                      <dt>丢弃历史</dt>
+                      <dd className={USAGE_NUM}>{message.context.omittedHistoryRounds.toLocaleString()} 轮</dd>
+                      <dt>历史估算</dt>
+                      <dd className={USAGE_NUM}>{message.context.historyTokensEstimated.toLocaleString()} token</dd>
+                      <dt>模型名义上限</dt>
+                      <dd className={USAGE_NUM}>{message.context.modelContextLimit.toLocaleString()}</dd>
+                      <dt>回复预留</dt>
+                      <dd className={USAGE_NUM}>{message.context.replyReserveTokens.toLocaleString()} token</dd>
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {usage && showTokenInfo ? (
               <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} />
             ) : null}
