@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 type Candidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews' | 'hold' | 'comment_bucket'
   label: string
   detail: string
   estimatedTokens: number
@@ -36,7 +36,7 @@ type Payload = {
 const BUTTON = 'rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
 
 const KIND_GROUPS: Array<{ key: string; label: string; kinds: Set<Candidate['kind']> }> = [
-  { key: 'memory', label: 'OB 记忆', kinds: new Set(['ob_recall', 'read_bucket', 'breath', 'introspection', 'read_daily_reviews']) },
+  { key: 'memory', label: 'OB 记忆', kinds: new Set(['ob_recall', 'read_bucket', 'breath', 'introspection', 'read_daily_reviews', 'hold', 'comment_bucket']) },
   { key: 'chat', label: '聊天搜索', kinds: new Set(['search_chat', 'get_chat_context']) },
   { key: 'web', label: '网络内容', kinds: new Set(['web_search', 'web_fetch']) },
 ]

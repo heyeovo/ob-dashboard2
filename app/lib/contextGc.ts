@@ -10,7 +10,7 @@ type JsonObject = Record<string, unknown>
 export type ContextGcCandidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews' | 'hold' | 'comment_bucket'
   label: string
   detail: string
   estimatedTokens: number
@@ -123,6 +123,7 @@ type RecoverableCall = {
   fingerprint: string
   label: string
   replacement: string
+  writeField?: string
 }
 
 function stableJson(value: unknown): string {
@@ -145,6 +146,7 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
   let kind: RecoverableToolKind
   let label = ''
   let replacement = ''
+  let writeField: string | undefined
   if (isSearchChat(name)) {
     const query = String(input.query || input.q || '').trim()
     if (!query) return null
@@ -193,6 +195,22 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
     const scope = range || days || ''
     label = scope ? `日回顾「${scope}」` : '日回顾'
     replacement = `已清理：日回顾${scope ? `「${scope}」` : ''}`
+  } else if (bareName === 'hold') {
+    const content = String(input.content || '')
+    if (!content) return null
+    kind = 'hold'
+    const title = short(input.title || content, 60)
+    label = `hold「${title}」`
+    replacement = `已清理：hold「${title}」`
+    writeField = 'content'
+  } else if (bareName === 'comment_bucket') {
+    const content = String(input.content || '')
+    if (!content) return null
+    kind = 'comment_bucket'
+    const bucketId = short(input.bucket_id, 40)
+    label = `comment_bucket「${bucketId}」`
+    replacement = `已清理：comment_bucket「${bucketId}」`
+    writeField = 'content'
   } else {
     return null
   }
@@ -200,7 +218,7 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
   const fingerprint = kind === 'search_chat'
     ? String(input.query || input.q || '').trim()
     : stableJson({ name: bareName, input })
-  return { kind, index: indexes[kind], fingerprint, label, replacement }
+  return { kind, index: indexes[kind], fingerprint, label, replacement, writeField }
 }
 
 function candidateIdentity(call: RecoverableCall): { id: string; protectKey: string } {
@@ -241,8 +259,10 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
   const indexes: Record<RecoverableToolKind, number> = {
     search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
     read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
+    hold: 0, comment_bucket: 0,
   }
   const recoverableCalls = new Map<string, RecoverableCall>()
+  const writeContents = new Map<string, string>()
 
   for (const row of rows) {
     for (const slot of userTextSlots(row)) {
@@ -273,15 +293,25 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
       if (block.type === 'tool_use') {
         const call = recoverableCall(block, indexes)
         const id = String(block.id || '').trim()
-        if (id && call) recoverableCalls.set(id, call)
+        if (id && call) {
+          recoverableCalls.set(id, call)
+          if (call.writeField) {
+            const input = object(block.input) || {}
+            writeContents.set(id, String(input[call.writeField] || ''))
+          }
+        }
       }
       if (block.type === 'tool_result') {
-        const call = recoverableCalls.get(String(block.tool_use_id || '').trim())
-        const text = call ? resultText(block) : null
-        if (!call || text == null) continue
+        const toolUseId = String(block.tool_use_id || '').trim()
+        const call = recoverableCalls.get(toolUseId)
+        if (!call) continue
+        const sourceText = call.writeField
+          ? (writeContents.get(toolUseId) ?? null)
+          : resultText(block)
+        if (sourceText == null) continue
         const identity = candidateIdentity(call)
-        const cleared = text.startsWith('已清理：') || text.startsWith('召回内容已清理：')
-        const totalTokens = estimateContextTokens(text)
+        const cleared = sourceText.startsWith('已清理：') || sourceText.startsWith('召回内容已清理：')
+        const totalTokens = estimateContextTokens(sourceText)
         candidates.push({
           id: identity.id,
           protectKey: identity.protectKey,
@@ -319,12 +349,15 @@ function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGc
   const counts: Record<string, number> = {
     ob_recall: 0, search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
     read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
+    hold: 0, comment_bucket: 0,
   }
   const indexes: Record<RecoverableToolKind, number> = {
     search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
     read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
+    hold: 0, comment_bucket: 0,
   }
   const recoverableCalls = new Map<string, RecoverableCall>()
+  const processedWrites = new Set<string>()
 
   for (const row of rows) {
     for (const slot of userTextSlots(row)) {
@@ -350,10 +383,28 @@ function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGc
       if (block.type === 'tool_use') {
         const call = recoverableCall(block, indexes)
         const id = String(block.id || '').trim()
-        if (id && call) recoverableCalls.set(id, call)
+        if (id && call) {
+          recoverableCalls.set(id, call)
+          if (call.writeField) {
+            const identity = candidateIdentity(call)
+            if (selectedIds.has(identity.id)) {
+              const input = object(block.input)
+              if (input && typeof input[call.writeField] === 'string') {
+                const before = String(input[call.writeField])
+                input[call.writeField] = call.replacement
+                releasedTokens += Math.max(0, estimateContextTokens(before) - estimateContextTokens(call.replacement))
+                candidateCount += 1
+                counts[call.kind] += 1
+                processedWrites.add(id)
+              }
+            }
+          }
+        }
       }
       if (block.type === 'tool_result') {
-        const call = recoverableCalls.get(String(block.tool_use_id || '').trim())
+        const toolUseId = String(block.tool_use_id || '').trim()
+        if (processedWrites.has(toolUseId)) continue
+        const call = recoverableCalls.get(toolUseId)
         if (!call) continue
         const identity = candidateIdentity(call)
         if (!selectedIds.has(identity.id)) continue
