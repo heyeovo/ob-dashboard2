@@ -1,5 +1,6 @@
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
+import { getAgentWakeInstructions, getAgentWakeToolDescription } from './agentWakePrompt'
 
 export const AGENT_WAKE_SERVER_NAME = 'ombre_agent_wake'
 export const AGENT_WAKE_TOOL_NAME = 'set_agent_wake'
@@ -8,18 +9,6 @@ export const AGENT_WAKE_NOOP_MARKER = '[agent_wake_noop]'
 export const AGENT_WAKE_NOOP_STATUS_MAX_CHARS = 30
 
 const AGENT_WAKE_MCP_VERSION = '1.0.0'
-const AGENT_WAKE_MCP_INSTRUCTIONS =
-  `When the user message is an <agent_wake .../> trigger, decide whether anything useful ` +
-  `should happen now. If nothing should be shown or done, reply on one line in exactly this form: ` +
-  `${AGENT_WAKE_NOOP_MARKER} <optional skip reason>. The text after the marker is a user-visible ` +
-  `natural reason of at most ${AGENT_WAKE_NOOP_STATUS_MAX_CHARS} characters, not a normal assistant message. ` +
-  `Example: ${AGENT_WAKE_NOOP_MARKER} 她在忙，先不打扰。 ` +
-  `Use set_agent_wake only to schedule or cancel a future wake. Background turns cannot wait for ` +
-  `human approval; if user action is needed, send a normal concise assistant message explaining it.`
-const AGENT_WAKE_TOOL_DESCRIPTION =
-  `Set or cancel the next future wake for this CC session. This tool is not used for a current-wake no-op: ` +
-  `reply with ${AGENT_WAKE_NOOP_MARKER} followed by an optional user-visible skip reason instead. ` +
-  `The last valid tool call in this turn wins.`
 const AGENT_WAKE_TOOL_INPUT = {
   action: z.enum(['schedule', 'cancel']),
   after_minutes: z.number().optional(),
@@ -33,10 +22,10 @@ export function agentWakeMcpModelSurface() {
     name: AGENT_WAKE_SERVER_NAME,
     version: AGENT_WAKE_MCP_VERSION,
     alwaysLoad: true,
-    instructions: AGENT_WAKE_MCP_INSTRUCTIONS,
+    instructions: getAgentWakeInstructions(),
     tools: [{
       name: AGENT_WAKE_TOOL_NAME,
-      description: AGENT_WAKE_TOOL_DESCRIPTION,
+      description: getAgentWakeToolDescription(),
       alwaysLoad: true,
       inputSchema: z.toJSONSchema(z.object(AGENT_WAKE_TOOL_INPUT)),
     }],
@@ -151,11 +140,11 @@ export function createAgentWakeMcpServer(sessionId: string): McpSdkServerConfigW
     name: AGENT_WAKE_SERVER_NAME,
     version: AGENT_WAKE_MCP_VERSION,
     alwaysLoad: true,
-    instructions: AGENT_WAKE_MCP_INSTRUCTIONS,
+    instructions: getAgentWakeInstructions(),
     tools: [
       tool(
         AGENT_WAKE_TOOL_NAME,
-        AGENT_WAKE_TOOL_DESCRIPTION,
+        getAgentWakeToolDescription(),
         AGENT_WAKE_TOOL_INPUT,
         async args => {
           try {

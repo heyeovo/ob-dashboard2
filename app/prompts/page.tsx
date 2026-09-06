@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Card from '../components/Card'
 import DetailPanel from '../components/DetailPanel'
 
@@ -16,6 +16,15 @@ type PromptItem = {
   runtime_layers: string[]
   model_hard_constraints: string
   server_validations: string[]
+}
+
+type WakePromptConfig = {
+  instructions: string
+  tool_description: string
+  default_instructions: string
+  default_tool_description: string
+  customized: boolean
+  updated_at: string
 }
 
 const PROMPT_META: Record<string, { label: string; description: string }> = {
@@ -266,8 +275,138 @@ export default function PromptsPage() {
             </Card>
           })}
         </div>
+        <AgentWakePromptSection />
       </main>
       {testName && prompts[testName] && <TestModal item={prompts[testName]} draft={editing[testName] || ''} onClose={() => setTestName(null)} />}
+    </div>
+  )
+}
+
+function AgentWakePromptSection() {
+  const [config, setConfig] = useState<WakePromptConfig | null>(null)
+  const [instructions, setInstructions] = useState('')
+  const [toolDesc, setToolDesc] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
+  const [collapsed, setCollapsed] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/cc-agent-wake-prompt', { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok || !data.config) throw new Error(data.error || '读取失败')
+      setConfig(data.config)
+      setInstructions(data.config.instructions)
+      setToolDesc(data.config.tool_description)
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const save = async () => {
+    if (!instructions.trim() || !toolDesc.trim()) {
+      setMessage({ type: 'error', text: '提示词和工具描述不能为空' })
+      return
+    }
+    setBusy(true); setMessage(null)
+    try {
+      const res = await fetch('/api/cc-agent-wake-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instructions: instructions.trim(), tool_description: toolDesc.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '保存失败')
+      setConfig(data.config)
+      setInstructions(data.config.instructions)
+      setToolDesc(data.config.tool_description)
+      setMessage({ type: 'ok', text: '已保存，下一次唤醒生效' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const reset = async () => {
+    if (!window.confirm('恢复主动唤醒提示词的系统默认版本？')) return
+    setBusy(true); setMessage(null)
+    try {
+      const res = await fetch('/api/cc-agent-wake-prompt', { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '恢复失败')
+      setConfig(data.config)
+      setInstructions(data.config.instructions)
+      setToolDesc(data.config.tool_description)
+      setMessage({ type: 'ok', text: '已恢复系统默认' })
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return null
+  if (!config) return null
+
+  const dirtyInstructions = instructions !== config.instructions
+  const dirtyToolDesc = toolDesc !== config.tool_description
+  const dirty = dirtyInstructions || dirtyToolDesc
+
+  return (
+    <div className="mt-10 border-t border-[var(--color-border)] pt-8">
+      <div className="mb-4">
+        <h2 className="text-lg sm:text-2xl font-bold tracking-tight text-[var(--color-text-heading)]">CC 引擎提示词</h2>
+        <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm mt-1">Dashboard 本地存储 · 保存后下次唤醒生效</p>
+      </div>
+      <Card variant="outline" padding="none" className="overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-4">
+          <button className="text-left flex-1" onClick={() => setCollapsed(!collapsed)}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium">主动唤醒</span>
+              <span className="text-[10px] font-mono text-[var(--color-text-disabled)]">agent_wake_instructions</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${config.customized ? 'bg-[#FEF3EE] text-[#C86B45]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+                {config.customized ? '用户自定义' : '系统默认'}
+              </span>
+              {dirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
+            </div>
+            <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">醒来时的 MCP 指引和工具描述，影响唤醒行为和 thinking 语言</p>
+            {config.updated_at && <p className="text-[10px] text-[var(--color-text-disabled)] mt-1">更新于 {config.updated_at}</p>}
+          </button>
+          <div className="flex gap-2 flex-wrap items-center">
+            {dirty && <button onClick={() => { setInstructions(config.instructions); setToolDesc(config.tool_description) }} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg">还原未保存修改</button>}
+            {config.customized && <button onClick={reset} disabled={busy} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg disabled:opacity-40">恢复系统默认</button>}
+            <button onClick={save} disabled={!dirty || busy} className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40">{busy ? '处理中…' : '保存并生效'}</button>
+            <button onClick={() => setCollapsed(!collapsed)} className="text-xs text-[#C0BBB5]">{collapsed ? '▾' : '▴'}</button>
+          </div>
+        </div>
+        {message && <div className={`px-4 sm:px-6 pb-3 text-xs ${message.type === 'error' ? 'text-red-500' : 'text-[var(--color-digested)]'}`}>{message.text}</div>}
+        {!collapsed && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
+          <div className="mt-4 mb-2">
+            <div className="text-xs font-medium text-[var(--color-text-primary)]">MCP 指引</div>
+            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">醒来时注入的行为引导，用中文写能让 thinking 也保持中文</div>
+          </div>
+          <textarea value={instructions} onChange={e => setInstructions(e.target.value)}
+            rows={Math.max(6, instructions.split('\n').length + 2)}
+            className="w-full text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
+          <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{instructions.length} 字符</div>
+
+          <div className="mt-4 mb-2">
+            <div className="text-xs font-medium text-[var(--color-text-primary)]">工具描述</div>
+            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">set_agent_wake 工具的说明文字</div>
+          </div>
+          <textarea value={toolDesc} onChange={e => setToolDesc(e.target.value)}
+            rows={Math.max(3, toolDesc.split('\n').length + 1)}
+            className="w-full text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
+          <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{toolDesc.length} 字符</div>
+        </div>}
+      </Card>
     </div>
   )
 }
