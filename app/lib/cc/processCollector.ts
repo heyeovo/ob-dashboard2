@@ -18,6 +18,7 @@ export type TurnBucket = {
   processEvents: Array<Record<string, unknown>>
   webSearchCount: number
   webFetchCount: number
+  toolCallCount: number
 }
 
 export function newTurnBucket(): TurnBucket {
@@ -27,6 +28,7 @@ export function newTurnBucket(): TurnBucket {
     processEvents: [],
     webSearchCount: 0,
     webFetchCount: 0,
+    toolCallCount: 0,
   }
 }
 

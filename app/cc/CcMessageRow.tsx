@@ -843,22 +843,27 @@ export default function CcMessageRow({
                 </svg>
               </span>
             ) : message.deliveryState && message.deliveryState !== 'generating' && message.deliveryState !== 'stopped' ? (
-              <button
-                type="button"
-                title={message.deliveryNote || '保存异常'}
-                onClick={() => {
-                  if (message.deliveryState === 'persistence_unknown' && onRetryPersistence) {
-                    onRetryPersistence(message)
-                  }
-                }}
-                className={`text-rose-500 ${message.deliveryState === 'persistence_unknown' && onRetryPersistence ? 'cursor-pointer hover:text-rose-700' : 'cursor-default'}`}
-              >
-                <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="8" cy="8" r="7" />
-                  <path d="M8 4.5v4" />
-                  <circle cx="8" cy="11.5" r="0.5" fill="currentColor" stroke="none" />
-                </svg>
-              </button>
+              <>
+                <button
+                  type="button"
+                  title={message.deliveryNote || '保存异常'}
+                  onClick={() => {
+                    if (message.deliveryState === 'persistence_unknown' && onRetryPersistence) {
+                      onRetryPersistence(message)
+                    }
+                  }}
+                  className={`text-rose-500 ${message.deliveryState === 'persistence_unknown' && onRetryPersistence ? 'cursor-pointer hover:text-rose-700' : 'cursor-default'}`}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="7" />
+                    <path d="M8 4.5v4" />
+                    <circle cx="8" cy="11.5" r="0.5" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+                {message.deliveryNote ? (
+                  <span className="text-xs text-rose-500/80">{message.deliveryNote}</span>
+                ) : null}
+              </>
             ) : null}
 
             {/* 上下文详情 */}

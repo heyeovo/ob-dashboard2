@@ -44,7 +44,7 @@ import {
   type TurnUsage,
   type CcCompactionEvent,
 } from '@/app/lib/ccSession'
-import { buildCcOptions, cacheRelevantFingerprint, isWebTool, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
+import { buildCcOptions, cacheRelevantFingerprint, isWebTool, MAX_CC_TOOL_CALLS_PER_TURN, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
@@ -1108,6 +1108,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             : undefined,
           created_bucket_ids: [...createdBucketIds],
           tools: bucket.toolEvents,
+          tool_call_count: bucket.toolCallCount,
+          max_tool_calls: MAX_CC_TOOL_CALLS_PER_TURN,
           result: resultInfo,
           // 第 5 步：改了哪些文件、跑了哪些命令、批了/拒了什么。
           // 子进程回收后工作台就靠这份重建（历史消息读回来也能看见）。
