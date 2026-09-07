@@ -62,6 +62,10 @@ type Candidate = {
   shadow_relevance_reason?: string
   shadow_utility?: ShadowUtilityDebug
   was_formal_candidate?: boolean
+  candidate_origin?: 'legacy_selected' | 'retrieved_admitted_unselected' | 'legacy_suppressed'
+  legacy_score?: number
+  rebuilt_score?: number
+  rebuilt_freshness_ignored?: boolean
   content_preview?: string
   recall_why?: {
     primary_source?: string
@@ -104,6 +108,8 @@ type RecallShadowDebug = {
   utility_candidates?: ShadowUtilityDebug[]
   utility_contract?: string
   shadow_max_cards?: number
+  reviewed_candidate_count?: number
+  candidate_debug_truncated?: boolean
 }
 
 type ShadowCandidateDecision = {
@@ -401,6 +407,15 @@ function RoundDetail({ round }: { round: DebugRound }) {
       candidateNames.set(candidate.bucket_id, candidate.bucket_name)
     }
   })
+  const rejectedById = new Map<string, Candidate>()
+  suppressed.forEach((candidate, index) => {
+    rejectedById.set(candidate.bucket_id || `formal-${index}`, candidate)
+  })
+  shadowRejectedCandidates.forEach((candidate, index) => {
+    const key = candidate.bucket_id || `shadow-${index}`
+    rejectedById.set(key, { ...(rejectedById.get(key) || {}), ...candidate })
+  })
+  const displayedRejectedCandidates = Array.from(rejectedById.values())
   const plannerCopy = getPlannerStatusCopy(shadow?.planner_status)
   const fallbackCopy = getFallbackStrategyCopy(shadow?.fallback_strategy)
 
@@ -446,6 +461,12 @@ function RoundDetail({ round }: { round: DebugRound }) {
             <InfoRow label="最终生效结果" value={formatBucketIds(shadow.effective_bucket_ids || shadow.formal_bucket_ids)} />
             <InfoRow label="新规则新增" value={formatBucketIds(shadow.added_bucket_ids)} />
             <InfoRow label="新规则移除" value={formatBucketIds(shadow.removed_bucket_ids)} />
+            <InfoRow
+              label="新规则实际审核候选"
+              value={typeof shadow.reviewed_candidate_count === 'number'
+                ? `${shadow.reviewed_candidate_count} 个${shadow.candidate_debug_truncated ? '（详情已截断）' : ''}`
+                : '旧记录未保存'}
+            />
             <InfoRow label="Utility 契约" value={shadow.utility_contract || '旧记录未保存'} />
             <InfoRow
               label="新规则卡片上限"
@@ -492,7 +513,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
         <InfoRow label="清理后词组" value={formatTerms(residueTerms)} />
         <InfoRow label="核心主题轴" value={formatTerms(axisTerms)} />
         <InfoRow label="必需锚点" value={formatTerms(anchorTerms)} />
-        <InfoRow label="候选数量" value={String(payload.hook_recall_debug?.candidate_count ?? '未知')} />
+        <InfoRow label="旧链路 Debug 候选数量" value={String(payload.hook_recall_debug?.candidate_count ?? '未知')} />
         {errors.length > 0 && (
           <div className="mt-3 space-y-2 border-t border-[var(--color-border-light)] pt-3">
             {errors.map((code) => <RuleExplanation key={code} code={code} />)}
@@ -523,8 +544,8 @@ function RoundDetail({ round }: { round: DebugRound }) {
         />
       )}
       <CandidateSection
-        title={`被拒候选 · ${suppressed.length}`}
-        candidates={suppressed}
+        title={`被拒候选 · ${displayedRejectedCandidates.length}`}
+        candidates={displayedRejectedCandidates}
         kind="formal-rejected"
         shadow={shadow}
         shadowDecisions={shadowDecisions}
@@ -622,6 +643,12 @@ function CandidateCard({
   shadow?: RecallShadowDebug
 }) {
   const shadowCandidate = shadowDecision?.candidate
+  const candidateOrigin = shadowCandidate?.candidate_origin || candidate.candidate_origin
+  const legacyAdmittedUnselected = candidateOrigin === 'retrieved_admitted_unselected'
+  const legacyScore = shadowCandidate?.legacy_score ?? candidate.legacy_score
+  const rebuiltScore = shadowCandidate?.rebuilt_score ?? candidate.rebuilt_score
+  const rebuiltFreshnessIgnored = shadowCandidate?.rebuilt_freshness_ignored
+    ?? candidate.rebuilt_freshness_ignored
   const formalReason = shadowCandidate?.formal_admission_reason
     || candidate.formal_admission_reason
     || (candidate.admission_reason?.startsWith('shadow_') ? '' : candidate.admission_reason)
@@ -651,8 +678,8 @@ function CandidateCard({
             <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
               {candidate.bucket_name || '未命名桶'}
             </h3>
-            <MiniStatus effect={formalSelected ? 'allow' : 'reject'}>
-              {formalSelected ? '旧规则已选' : '旧规则拒绝'}
+            <MiniStatus effect={formalSelected ? 'allow' : legacyAdmittedUnselected ? 'degraded' : 'reject'}>
+              {formalSelected ? '旧规则已选' : legacyAdmittedUnselected ? '旧规则已准入未选' : '旧规则拒绝'}
             </MiniStatus>
             {shadow && (
               <MiniStatus effect={shadowSelected ? 'allow' : 'reject'}>
@@ -665,7 +692,14 @@ function CandidateCard({
           )}
         </div>
         <div className="flex flex-wrap justify-end gap-1">
-          <DataBadge label="总分" value={formatScore(candidate.score)} size="xs" />
+          {typeof rebuiltScore === 'number' ? (
+            <>
+              <DataBadge label="旧分" value={formatScore(legacyScore)} size="xs" />
+              <DataBadge label="新分" value={formatScore(rebuiltScore)} size="xs" />
+            </>
+          ) : (
+            <DataBadge label="总分" value={formatScore(candidate.score)} size="xs" />
+          )}
           <DataBadge label="语义" value={formatScore(candidate.semantic_score)} size="xs" />
           <DataBadge label="关键词" value={formatScore(candidate.keyword_score)} size="xs" />
         </div>
@@ -675,6 +709,15 @@ function CandidateCard({
         <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
           主要来源：{sourceLabel(candidate.recall_why.primary_source)}
         </p>
+      )}
+
+      {candidateOrigin && (
+        <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
+          <InfoRow label="候选来源" value={candidateOriginLabel(candidateOrigin)} />
+          {rebuiltFreshnessIgnored && (
+            <InfoRow label="时间新鲜度" value="rebuilt 排序已忽略" />
+          )}
+        </div>
       )}
 
       {semanticStatus && semanticCopy && (
@@ -917,6 +960,15 @@ function sourceLabel(source: string) {
     planner_lexical: '查询规划器的关键词结果',
   }
   return labels[source] || source
+}
+
+function candidateOriginLabel(origin: Candidate['candidate_origin']) {
+  const labels: Record<NonNullable<Candidate['candidate_origin']>, string> = {
+    legacy_selected: '旧规则最终选中',
+    retrieved_admitted_unselected: '检索已命中，旧规则准入但未选中',
+    legacy_suppressed: '旧规则抑制或拒绝',
+  }
+  return origin ? labels[origin] : '未记录'
 }
 
 function formatTime(value: string, includeDate = false) {
