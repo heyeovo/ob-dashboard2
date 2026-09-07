@@ -66,6 +66,7 @@ type Candidate = {
   legacy_score?: number
   rebuilt_score?: number
   rebuilt_freshness_ignored?: boolean
+  shadow_selection_reason?: 'shadow_promote_priority' | 'shadow_single_card_limit'
   content_preview?: string
   recall_why?: {
     primary_source?: string
@@ -76,6 +77,7 @@ type ShadowUtilityStatus = 'promote' | 'neutral' | 'reject'
 
 type ShadowUtilityDebug = {
   bucket_id?: string
+  bucket_name?: string
   status?: ShadowUtilityStatus
   reason_codes?: string[]
   context_available?: boolean
@@ -104,6 +106,7 @@ type RecallShadowDebug = {
   added_bucket_ids?: string[]
   removed_bucket_ids?: string[]
   selected_candidates?: Candidate[]
+  eligible_unselected_candidates?: Candidate[]
   rejected_candidates?: Candidate[]
   utility_candidates?: ShadowUtilityDebug[]
   utility_contract?: string
@@ -386,6 +389,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
   const necessity = payload.recall_necessity_debug
   const shadow = payload.recall_shadow_debug
   const shadowCandidates = shadow?.selected_candidates || []
+  const shadowEligibleUnselectedCandidates = shadow?.eligible_unselected_candidates || []
   const shadowRejectedCandidates = shadow?.rejected_candidates || []
   const formalBucketIds = new Set(shadow?.formal_bucket_ids || recalled.map((candidate) => candidate.bucket_id || ''))
   const shadowBucketIds = new Set(shadow?.shadow_bucket_ids || shadowCandidates.map((candidate) => candidate.bucket_id || ''))
@@ -396,13 +400,22 @@ function RoundDetail({ round }: { round: DebugRound }) {
   shadowCandidates.forEach((candidate) => {
     if (candidate.bucket_id) shadowDecisions.set(candidate.bucket_id, { candidate, selected: true })
   })
+  shadowEligibleUnselectedCandidates.forEach((candidate) => {
+    if (candidate.bucket_id) shadowDecisions.set(candidate.bucket_id, { candidate, selected: false })
+  })
   const utilityCandidates = shadow?.utility_candidates || []
   const utilityDecisions = new Map<string, ShadowUtilityDebug>()
   utilityCandidates.forEach((candidate) => {
     if (candidate.bucket_id) utilityDecisions.set(candidate.bucket_id, candidate)
   })
   const candidateNames = new Map<string, string>()
-  ;[...recalled, ...suppressed, ...shadowCandidates, ...shadowRejectedCandidates].forEach((candidate) => {
+  ;[
+    ...recalled,
+    ...suppressed,
+    ...shadowCandidates,
+    ...shadowEligibleUnselectedCandidates,
+    ...shadowRejectedCandidates,
+  ].forEach((candidate) => {
     if (candidate.bucket_id && candidate.bucket_name) {
       candidateNames.set(candidate.bucket_id, candidate.bucket_name)
     }
@@ -491,7 +504,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
                     <UtilityDecisionBlock
                       key={`${utility.bucket_id || 'utility'}-${index}`}
                       utility={utility}
-                      bucketName={utility.bucket_id ? candidateNames.get(utility.bucket_id) : undefined}
+                      bucketName={utility.bucket_name || (utility.bucket_id ? candidateNames.get(utility.bucket_id) : undefined)}
                       compact
                     />
                   ))}
@@ -543,6 +556,18 @@ function RoundDetail({ round }: { round: DebugRound }) {
           shadowBucketIds={shadowBucketIds}
         />
       )}
+      {shadow && Array.isArray(shadow.eligible_unselected_candidates) && (
+        <CandidateSection
+          title={`保留资格但未入选 · ${shadowEligibleUnselectedCandidates.length}`}
+          candidates={shadowEligibleUnselectedCandidates}
+          kind="shadow-eligible-unselected"
+          shadow={shadow}
+          shadowDecisions={shadowDecisions}
+          utilityDecisions={utilityDecisions}
+          formalBucketIds={formalBucketIds}
+          shadowBucketIds={shadowBucketIds}
+        />
+      )}
       <CandidateSection
         title={`被拒候选 · ${displayedRejectedCandidates.length}`}
         candidates={displayedRejectedCandidates}
@@ -569,7 +594,7 @@ function CandidateSection({
 }: {
   title: string
   candidates: Candidate[]
-  kind: 'formal-selected' | 'shadow-selected' | 'formal-rejected'
+  kind: 'formal-selected' | 'shadow-selected' | 'shadow-eligible-unselected' | 'formal-rejected'
   shadow?: RecallShadowDebug
   shadowDecisions: Map<string, ShadowCandidateDecision>
   utilityDecisions: Map<string, ShadowUtilityDebug>
@@ -601,7 +626,9 @@ function CandidateSection({
             ? '本轮没有注入长期记忆'
             : kind === 'shadow-selected'
               ? '新规则本轮没有选择长期记忆'
-              : '本轮没有被拒候选'}
+              : kind === 'shadow-eligible-unselected'
+                ? '本轮没有保留资格但未入选的候选'
+                : '本轮没有被拒候选'}
         </p>
       ) : (
         <div className="mt-3 space-y-3">
@@ -611,6 +638,7 @@ function CandidateSection({
               candidate={candidate}
               formalSelected={Boolean(candidate.bucket_id && formalBucketIds.has(candidate.bucket_id))}
               shadowSelected={Boolean(candidate.bucket_id && shadowBucketIds.has(candidate.bucket_id))}
+              shadowEligibleUnselected={kind === 'shadow-eligible-unselected'}
               shadowDecision={candidate.bucket_id ? shadowDecisions.get(candidate.bucket_id) : undefined}
               utilityDecision={candidate.bucket_id ? utilityDecisions.get(candidate.bucket_id) : undefined}
               shadow={shadow}
@@ -631,6 +659,7 @@ function CandidateCard({
   candidate,
   formalSelected,
   shadowSelected,
+  shadowEligibleUnselected,
   shadowDecision,
   utilityDecision,
   shadow,
@@ -638,6 +667,7 @@ function CandidateCard({
   candidate: Candidate
   formalSelected: boolean
   shadowSelected: boolean
+  shadowEligibleUnselected: boolean
   shadowDecision?: ShadowCandidateDecision
   utilityDecision?: ShadowUtilityDebug
   shadow?: RecallShadowDebug
@@ -682,8 +712,8 @@ function CandidateCard({
               {formalSelected ? '旧规则已选' : legacyAdmittedUnselected ? '旧规则已准入未选' : '旧规则拒绝'}
             </MiniStatus>
             {shadow && (
-              <MiniStatus effect={shadowSelected ? 'allow' : 'reject'}>
-                {shadowSelected ? '新规则选择' : '新规则拒绝'}
+              <MiniStatus effect={shadowSelected ? 'allow' : shadowEligibleUnselected ? 'score' : 'reject'}>
+                {shadowSelected ? '新规则选择' : shadowEligibleUnselected ? '新规则保留未选' : '新规则拒绝'}
               </MiniStatus>
             )}
           </div>
@@ -717,6 +747,17 @@ function CandidateCard({
           {rebuiltFreshnessIgnored && (
             <InfoRow label="时间新鲜度" value="rebuilt 排序已忽略" />
           )}
+        </div>
+      )}
+
+      {shadowEligibleUnselected && candidate.shadow_selection_reason && (
+        <div className="mt-2 text-xs text-[var(--color-text-secondary)]">
+          <InfoRow
+            label="未选原因"
+            value={candidate.shadow_selection_reason === 'shadow_promote_priority'
+              ? '本轮存在 promote 候选，优先选择明确高价值记忆'
+              : '超过本轮单卡上限，按 rebuilt 排序保留排名更高的记忆'}
+          />
         </div>
       )}
 
@@ -835,13 +876,17 @@ function UtilityDecisionBlock({
 }) {
   const copy = getUtilityStatusCopy(utility.status)
   const reasons = utility.reason_codes || []
-  const identity = bucketName || utility.bucket_id
+  const resolvedBucketName = bucketName || utility.bucket_name
+  const identity = resolvedBucketName || utility.bucket_id
 
   return (
     <div className={`rounded-[var(--radius-md)] ${effectSurface(copy.effect)} ${compact ? 'px-2.5 py-2' : 'px-3 py-2.5'}`}>
       <div className="flex flex-wrap items-center gap-2">
         <MiniStatus effect={copy.effect}>{copy.title}</MiniStatus>
         {identity && <span className="text-xs font-medium text-[var(--color-text-primary)]">{identity}</span>}
+        {resolvedBucketName && utility.bucket_id && resolvedBucketName !== utility.bucket_id && (
+          <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{utility.bucket_id}</span>
+        )}
         {utility.status && (
           <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{utility.status}</span>
         )}
