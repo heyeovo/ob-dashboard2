@@ -28,6 +28,7 @@ type ShadowRelevanceDebug = {
   ignored_configured_address_terms?: string[]
   ignored_topic_terms?: string[]
   matched_topic_terms?: string[]
+  matched_title_topic_terms?: string[]
   rare_name_terms?: string[]
   rare_name_direct?: boolean
   identity_name_direct?: boolean
@@ -40,6 +41,8 @@ type ShadowRelevanceDebug = {
   query_semantic_unavailable?: boolean
   query_unavailable_keyword_min?: number
   query_unavailable_keyword_fallback?: boolean
+  explicit_query_unavailable_keyword_min?: number
+  explicit_query_unavailable_title_fallback?: boolean
 }
 
 type Candidate = {
@@ -732,6 +735,7 @@ function CandidateCard({
             <InfoRow label="原始主题 raw_topic_terms" value={formatTerms(relevance.raw_topic_terms || [])} />
             <InfoRow label="清理后主题 topic_terms" value={formatTerms(relevance.topic_terms || [])} />
             <InfoRow label="桶命中主题 matched_topic_terms" value={formatTerms(relevance.matched_topic_terms || [])} />
+            <InfoRow label="标题命中主题 matched_title_topic_terms" value={formatTerms(relevance.matched_title_topic_terms || [])} />
             <InfoRow label="忽略称呼 ignored_address_terms" value={formatTerms(relevance.ignored_address_terms || [])} />
             <InfoRow label="身份称呼 ignored_identity_terms" value={formatTerms(relevance.ignored_identity_terms || [])} />
             <InfoRow label="额外称呼 ignored_configured_address_terms" value={formatTerms(relevance.ignored_configured_address_terms || [])} />
@@ -748,6 +752,8 @@ function CandidateCard({
             <InfoRow label="Query 语义不可用 query_semantic_unavailable" value={formatBoolean(relevance.query_semantic_unavailable)} />
             <InfoRow label="关键词故障降级 query_unavailable_keyword_fallback" value={formatBoolean(relevance.query_unavailable_keyword_fallback)} />
             <InfoRow label="故障降级门槛 query_unavailable_keyword_min" value={formatScore(relevance.query_unavailable_keyword_min)} />
+            <InfoRow label="明确回忆标题降级 explicit_query_unavailable_title_fallback" value={formatBoolean(relevance.explicit_query_unavailable_title_fallback)} />
+            <InfoRow label="明确回忆标题降级门槛 explicit_query_unavailable_keyword_min" value={formatScore(relevance.explicit_query_unavailable_keyword_min)} />
           </div>
         </details>
       )}

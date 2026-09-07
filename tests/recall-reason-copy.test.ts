@@ -65,6 +65,7 @@ const shadowAdmissionReasons = [
   'shadow_explicit_semantic_topic',
   'shadow_explicit_exact_topic',
   'shadow_query_unavailable_formal_topic_keyword',
+  'shadow_explicit_query_unavailable_title_keyword',
   'shadow_semantic_not_scored',
   'shadow_keyword_only_without_unique_anchor',
   'shadow_query_topic_missing',

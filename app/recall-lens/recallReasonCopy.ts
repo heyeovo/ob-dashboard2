@@ -117,6 +117,11 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     description: '本轮语义查询不可用，但该候选原本已在正式结果中，且关键词分和可信主题命中都达到保守降级要求，因此 Shadow 保留。',
     effect: 'degraded',
   },
+  shadow_explicit_query_unavailable_title_keyword: {
+    title: '明确回忆在语义故障时使用标题主题降级',
+    description: '本轮是明确回忆请求，语义查询超时或失败；候选标题直接命中清理后的可信主题，且关键词分达到保守门槛，因此新规则允许它继续进入 Utility。',
+    effect: 'degraded',
+  },
   shadow_semantic_not_scored: {
     title: '候选没有可用语义分',
     description: '候选本轮没有获得语义分，且不满足受限的关键词故障降级条件，因此 Shadow 拒绝。具体原因请查看语义状态。',
