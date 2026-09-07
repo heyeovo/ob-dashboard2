@@ -208,6 +208,7 @@ export type CcRecallModule = {
   key: string
   card_count: number
   chars: number
+  estimated_tokens?: number
   text: string
 }
 
@@ -215,6 +216,7 @@ export type CcRecallInfo = {
   ok: boolean
   card_count: number
   chars: number
+  estimated_tokens?: number
   elapsed_ms: number
   injected: boolean
   domains?: string[]

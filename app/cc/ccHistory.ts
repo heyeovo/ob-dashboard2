@@ -21,6 +21,7 @@ import type { CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings, type CcWebSettings } from './webSettings'
 import { normalizeProviderUsage, normalizeTurnContext } from './engineRouting'
 import { buildDisplaySegments, normalizeDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
+import { estimateTextTokens } from '@/app/lib/recallDisplay'
 
 const NEW_SESSION_PREFIX = 'ob2-'
 
@@ -101,6 +102,7 @@ function normalizeRecall(value: unknown): CcRecallInfo | null {
           key: String(detail.key || 'memory_card'),
           card_count: Number(detail.card_count || 0),
           chars: Number(detail.chars || 0),
+          estimated_tokens: Number(detail.estimated_tokens || estimateTextTokens(String(detail.text || ''))),
           text: String(detail.text || ''),
         }]
       })
@@ -109,6 +111,7 @@ function normalizeRecall(value: unknown): CcRecallInfo | null {
           key: 'memory_card',
           card_count: Number(raw.card_count || 0),
           chars: Number(raw.chars || additionalContext.length),
+          estimated_tokens: Number(raw.estimated_tokens || estimateTextTokens(additionalContext)),
           text: additionalContext,
         }]
       : []
@@ -122,6 +125,11 @@ function normalizeRecall(value: unknown): CcRecallInfo | null {
     ok: raw.ok !== false,
     card_count: Number(raw.card_count ?? fallbackCardCount),
     chars: Number(raw.chars ?? fallbackChars),
+    estimated_tokens: Number(
+      raw.estimated_tokens
+      || estimateTextTokens(additionalContext)
+      || modules.reduce((total, detail) => total + Number(detail.estimated_tokens || 0), 0),
+    ),
     elapsed_ms: Number(raw.elapsed_ms || 0),
     injected: typeof raw.injected === 'boolean'
       ? raw.injected

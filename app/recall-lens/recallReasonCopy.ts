@@ -69,7 +69,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
   },
   shadow_direct_candidate: {
     title: 'Shadow 直接检索候选',
-    description: '正式路径提前结束后，shadow 只使用现有直接检索通道生成候选，不影响正式注入。',
+    description: '旧路径提前结束后，新规则使用现有直接检索通道生成候选；是否影响正式注入取决于本轮 decision mode。',
     effect: 'score',
   },
   shadow_insufficient_positive_evidence: {

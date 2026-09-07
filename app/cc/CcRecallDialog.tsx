@@ -1,6 +1,7 @@
 'use client'
 import { useEffect } from 'react'
 import type { CcMessage, CcRecallModule } from './types'
+import { estimateTextTokens } from '@/app/lib/recallDisplay'
 
 // 这一轮动态召回的详情，按模块分段。
 //
@@ -43,6 +44,7 @@ export default function CcRecallDialog({
           key: 'memory_card',
           card_count: recall?.card_count ?? 0,
           chars: recall?.chars ?? 0,
+          estimated_tokens: recall?.estimated_tokens ?? 0,
           text: '',
         },
       ]
@@ -57,7 +59,7 @@ export default function CcRecallDialog({
               这一轮的动态召回
             </div>
             <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">
-              共 {recall?.card_count ?? 0} 条 / {recall?.chars ?? 0} 字 · {recall?.elapsed_ms ?? 0} ms
+              共 {recall?.card_count ?? 0} 条 / 约 {recall?.estimated_tokens ?? 0} token（完整注入） · {recall?.elapsed_ms ?? 0} ms
               {recall?.injected ? '' : ' · 未注入'}
             </div>
           </div>
@@ -89,7 +91,8 @@ export default function CcRecallDialog({
                   <span className="cc-modal-label">{meta.title}</span>
                   <span className="text-[11px] text-[var(--color-text-disabled)]">
                     {mod.card_count ? `${mod.card_count} 条 · ` : ''}
-                    {mod.chars} 字
+                    约 {mod.estimated_tokens ?? estimateTextTokens(mod.text)} token
+                    （{mod.key === 'date_recall' ? '日期正文' : '卡片正文'}）
                   </span>
                 </div>
                 {meta.hint ? (

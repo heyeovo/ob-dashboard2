@@ -34,16 +34,16 @@ production 必须配置以下六项：
 |-----------|------|
 | `app/page.tsx` | 主页（时间线/记忆格） |
 | `app/memory/` | 记忆库（三格切换） |
-| `app/cc/` | 聊天主页（cc / selfhost） |
+| `app/cc/` | 聊天主页（cc / selfhost）；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
 | `app/workbench/` | 工作台 |
-| `app/recall-lens/` | 召回透镜（按 session 查看 necessity、relevance、utility 三档、正式/Shadow 单卡结果、候选证据与中文规则解释） |
+| `app/recall-lens/` | 召回透镜（按 session 查看 necessity、relevance、utility 三档、旧规则/新规则/最终生效单卡结果、候选证据与中文规则解释） |
 | `app/settings/` | 设置聚合页及子页 |
 | `app/impressions/` | 日回顾月历 |
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
 | `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 只固定注入窗口 handoff（无 handoff 的历史窗口才兼容独立日回顾），每轮重读协作者提示词；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id` 增量补消息 |
-| `app/lib/` | 客户端库与工具函数 |
+| `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 在稳定 system prompt 中提供召回背景使用规则，动态正文不重复说明 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
 

@@ -91,7 +91,9 @@ type RecallShadowDebug = {
   planner_status?: 'normal' | 'degraded' | 'not_triggered' | 'disabled' | 'not_run'
   fallback_strategy?: string
   formal_bucket_ids?: string[]
+  legacy_bucket_ids?: string[]
   shadow_bucket_ids?: string[]
+  effective_bucket_ids?: string[]
   added_bucket_ids?: string[]
   removed_bucket_ids?: string[]
   selected_candidates?: Candidate[]
@@ -416,12 +418,16 @@ function RoundDetail({ round }: { round: DebugRound }) {
 
       <Card padding="lg">
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">新规则 Shadow 对比</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">新旧召回规则对比</h2>
           {necessity?.necessity && (
             <MiniStatus effect="info">{necessityLabel(necessity.necessity)}</MiniStatus>
           )}
           {shadow?.planner_status === 'degraded' && <MiniStatus effect="degraded">Planner 降级</MiniStatus>}
-          {shadow && <MiniStatus effect="score">不影响正式召回</MiniStatus>}
+          {shadow && (
+            <MiniStatus effect={shadow.affects_recall ? 'allow' : 'score'}>
+              {shadow.affects_recall ? '新规则已正式接管' : '仅观察，不影响正式召回'}
+            </MiniStatus>
+          )}
         </div>
         {!shadow ? (
           <p className="text-sm text-[var(--color-text-tertiary)]">这条旧记录还没有 Phase 1 shadow 数据。</p>
@@ -432,13 +438,14 @@ function RoundDetail({ round }: { round: DebugRound }) {
             <InfoRow label="前文是否可用" value={formatOptionalBoolean(necessity?.context_available, '可用', '不可用')} />
             <InfoRow label="Planner 状态" value={formatCopyWithCode(plannerCopy, shadow.planner_status)} />
             <InfoRow label="Fallback strategy" value={formatCopyWithCode(fallbackCopy, shadow.fallback_strategy)} />
-            <InfoRow label="正式结果" value={formatBucketIds(shadow.formal_bucket_ids)} />
-            <InfoRow label="Shadow 结果" value={formatBucketIds(shadow.shadow_bucket_ids)} />
-            <InfoRow label="Shadow 新增" value={formatBucketIds(shadow.added_bucket_ids)} />
-            <InfoRow label="Shadow 移除" value={formatBucketIds(shadow.removed_bucket_ids)} />
+            <InfoRow label="旧规则结果" value={formatBucketIds(shadow.legacy_bucket_ids || shadow.formal_bucket_ids)} />
+            <InfoRow label="新规则结果" value={formatBucketIds(shadow.shadow_bucket_ids)} />
+            <InfoRow label="最终生效结果" value={formatBucketIds(shadow.effective_bucket_ids || shadow.formal_bucket_ids)} />
+            <InfoRow label="新规则新增" value={formatBucketIds(shadow.added_bucket_ids)} />
+            <InfoRow label="新规则移除" value={formatBucketIds(shadow.removed_bucket_ids)} />
             <InfoRow label="Utility 契约" value={shadow.utility_contract || '旧记录未保存'} />
             <InfoRow
-              label="Shadow 卡片上限"
+              label="新规则卡片上限"
               value={typeof shadow.shadow_max_cards === 'number' ? `${shadow.shadow_max_cards} 张` : '旧记录未保存'}
             />
             {(necessity?.reason_codes?.length || 0) > 0 && (
@@ -502,7 +509,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
       />
       {shadow && (
         <CandidateSection
-          title={`Shadow 会选 · ${shadowCandidates.length}`}
+          title={`新规则会选 · ${shadowCandidates.length}`}
           candidates={shadowCandidates}
           kind="shadow-selected"
           shadow={shadow}
@@ -569,7 +576,7 @@ function CandidateSection({
           {kind === 'formal-selected'
             ? '本轮没有注入长期记忆'
             : kind === 'shadow-selected'
-              ? 'Shadow 本轮没有选择长期记忆'
+              ? '新规则本轮没有选择长期记忆'
               : '本轮没有被拒候选'}
         </p>
       ) : (
@@ -642,11 +649,11 @@ function CandidateCard({
               {candidate.bucket_name || '未命名桶'}
             </h3>
             <MiniStatus effect={formalSelected ? 'allow' : 'reject'}>
-              {formalSelected ? '正式已选' : '正式拒绝'}
+              {formalSelected ? '旧规则已选' : '旧规则拒绝'}
             </MiniStatus>
             {shadow && (
               <MiniStatus effect={shadowSelected ? 'allow' : 'reject'}>
-                {shadowSelected ? 'Shadow 选择' : 'Shadow 拒绝'}
+                {shadowSelected ? '新规则选择' : '新规则拒绝'}
               </MiniStatus>
             )}
           </div>

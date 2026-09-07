@@ -679,7 +679,7 @@ export default function CcMessageRow({
               title="点开看这一轮各模块注入了什么"
             >
               {message.recall.injected
-                ? `记忆 ${message.recall.card_count} · ${message.recall.chars} 字`
+                ? `记忆 ${message.recall.card_count} · 约 ${message.recall.estimated_tokens ?? 0} token`
                 : '未召回'}
             </button>
           ) : null}
