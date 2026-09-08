@@ -65,6 +65,7 @@ const shadowAdmissionReasons = [
   'shadow_explicit_semantic_topic',
   'shadow_explicit_exact_topic',
   'shadow_query_unavailable_formal_topic_keyword',
+  'shadow_contextual_query_unavailable_content_keyword',
   'shadow_explicit_query_unavailable_title_keyword',
   'shadow_semantic_not_scored',
   'shadow_keyword_only_without_unique_anchor',
@@ -157,6 +158,8 @@ describe('recall lens Chinese explanations', () => {
       'conservative_no_expansion',
       'contextual_strict_relevance',
       'explicit_strict_relevance_with_planner_fallback',
+      'contextual_unified_retrieval',
+      'explicit_unified_retrieval',
     ]) {
       expect(getFallbackStrategyCopy(code).title, code).not.toContain('未识别')
     }
@@ -168,7 +171,7 @@ describe('recall lens Chinese explanations', () => {
     }
     expect(getUtilityStatusCopy('promote').title).toBe('优先召回')
     expect(getUtilityStatusCopy('neutral').title).toBe('保留召回资格')
-    expect(getUtilityStatusCopy('neutral').description).toContain('仍可被 Shadow 选择')
+    expect(getUtilityStatusCopy('neutral').description).toContain('仍可被统一规则选择')
     expect(getUtilityStatusCopy('reject').effect).toBe('reject')
   })
 

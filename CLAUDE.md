@@ -36,7 +36,7 @@ production 必须配置以下六项：
 | `app/memory/` | 记忆库（三格切换） |
 | `app/cc/` | 聊天主页（cc / selfhost）；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
 | `app/workbench/` | 工作台 |
-| `app/recall-lens/` | 召回透镜（按 session 查看 necessity、relevance、utility 三档、旧规则/新规则/最终生效单卡结果、完整 rebuilt 审核候选、保留资格但未获单卡位的候选、候选来源、旧分/无 freshness 新分、语义查询状态与明确回忆故障降级说明） |
+| `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页及子页 |
 | `app/impressions/` | 日回顾月历 |
 | `app/journal/` | 日记页 |

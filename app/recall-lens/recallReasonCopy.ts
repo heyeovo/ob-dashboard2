@@ -19,7 +19,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
   },
   explicit_recall_request: {
     title: '用户明确要求回忆',
-    description: '本轮明确出现了记得、上次、之前等回忆意图，shadow 会积极执行直接检索。',
+    description: '本轮明确出现了记得、上次、之前等回忆意图，统一规则会积极执行直接检索。',
     effect: 'allow',
   },
   explicit_memory_search: {
@@ -59,97 +59,102 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
   },
   natural_contextual_topic: {
     title: '自然话题允许相关记忆进入',
-    description: '本轮没有明确要求回忆，但包含可定位的自然话题。Shadow 会审核相关候选，没有可靠候选时仍可保持为空。',
+    description: '本轮没有明确要求回忆，但包含可定位的自然话题。统一规则会审核相关候选，没有可靠候选时仍可保持为空。',
     effect: 'info',
   },
   shadow_explicit_soft_gate: {
-    title: 'Shadow 软化了查询形状误杀',
-    description: '候选原本被模糊、主题轴或锚点规则拒绝；明确回忆请求下，shadow 将该规则降为软证据后重新比较。',
+    title: '统一规则软化了查询形状误杀',
+    description: '候选原本被模糊、主题轴或锚点规则拒绝；明确回忆请求下，统一规则将该规则降为软证据后重新比较。',
     effect: 'score',
   },
   shadow_direct_candidate: {
-    title: 'Shadow 直接检索候选',
-    description: '旧路径提前结束后，新规则使用现有直接检索通道生成候选；是否影响正式注入取决于本轮 decision mode。',
+    title: '统一规则直接检索候选',
+    description: '统一规则使用现有直接检索通道生成候选，并继续执行相关性与 Utility 判断。',
     effect: 'score',
   },
   shadow_insufficient_positive_evidence: {
     title: '软化误杀后仍缺少正向证据',
-    description: '即使不让模糊或主题轴一票否决，这个候选仍没有足够可靠的直接证据，因此 shadow 也不选择。',
+    description: '即使不让模糊或主题轴一票否决，这个候选仍没有足够可靠的直接证据，因此统一规则也不选择。',
     effect: 'reject',
   },
   shadow_invalid_candidate: {
-    title: 'Shadow 无法读取候选',
-    description: '候选缺少可识别的记忆桶数据，Shadow 无法继续判断，因此拒绝。',
+    title: '统一规则无法读取候选',
+    description: '候选缺少可识别的记忆桶数据，统一规则无法继续判断，因此拒绝。',
     effect: 'reject',
   },
   shadow_hard_exclusion: {
-    title: 'Shadow 保留正式硬排除',
-    description: '候选命中了会话去重或排除域等不可软化的边界，Shadow 不会重新放行。',
+    title: '统一规则保留正式硬排除',
+    description: '候选命中了会话去重或排除域等不可软化的边界，统一规则不会重新放行。',
     effect: 'reject',
   },
   shadow_unique_direct_evidence: {
-    title: 'Shadow 命中唯一直接证据',
+    title: '统一规则命中唯一直接证据',
     description: '候选命中了明确桶 ID、可信稀有名称、身份实体或来源记录等可唯一定位的直接证据，因此选择。',
     effect: 'allow',
   },
   shadow_strong_semantic_topic: {
     title: '强语义与本轮主题一致',
-    description: '候选达到强语义阈值，并且命中清理称呼后的可信主题，因此 Shadow 选择。',
+    description: '候选达到强语义阈值，并且命中清理称呼后的可信主题，因此统一规则选择。',
     effect: 'allow',
   },
   shadow_semantic_keyword_agreement: {
     title: '语义与关键词共同支持主题',
-    description: '候选同时获得足够的语义和关键词支持，并命中清理后的可信主题，因此 Shadow 选择。',
+    description: '候选同时获得足够的语义和关键词支持，并命中清理后的可信主题，因此统一规则选择。',
     effect: 'allow',
   },
   shadow_explicit_semantic_topic: {
     title: '明确回忆下语义命中主题',
-    description: '本轮是明确回忆请求；候选具有足够语义相关性，并命中可信主题，因此 Shadow 选择。',
+    description: '本轮是明确回忆请求；候选具有足够语义相关性，并命中可信主题，因此统一规则选择。',
     effect: 'allow',
   },
   shadow_explicit_exact_topic: {
     title: '明确回忆下精确命中主题',
-    description: '本轮是明确回忆请求；候选的精确锚点与清理后的可信主题一致，因此 Shadow 选择。',
+    description: '本轮是明确回忆请求；候选的精确锚点与清理后的可信主题一致，因此统一规则选择。',
     effect: 'allow',
   },
   shadow_query_unavailable_formal_topic_keyword: {
-    title: '语义查询故障时保守保留正式候选',
-    description: '本轮语义查询不可用，但该候选原本已在正式结果中，且关键词分和可信主题命中都达到保守降级要求，因此 Shadow 保留。',
+    title: '历史语义故障保留规则',
+    description: '这是旧版 Debug 的历史原因码；当前统一召回不再根据旧算法是否选中过候选进行判断。',
+    effect: 'degraded',
+  },
+  shadow_contextual_query_unavailable_content_keyword: {
+    title: '自然召回在语义故障时使用正文与关键词降级',
+    description: '本轮语义查询超时或失败；清理后的可信主题命中候选正文，且本轮统一关键词分达到高门槛，因此候选可以继续进入 Utility。标题命中不能单独触发此规则。',
     effect: 'degraded',
   },
   shadow_explicit_query_unavailable_title_keyword: {
-    title: '明确回忆在语义故障时使用标题主题降级',
-    description: '本轮是明确回忆请求，语义查询超时或失败；候选标题直接命中清理后的可信主题，且关键词分达到保守门槛，因此新规则允许它继续进入 Utility。',
+    title: '明确回忆在语义故障时使用标题、正文与关键词降级',
+    description: '本轮是明确回忆请求，语义查询超时或失败；可信主题同时命中候选标题和正文，且关键词分达到门槛，因此候选可以继续进入 Utility。纯标题命中不会放行。',
     effect: 'degraded',
   },
   shadow_semantic_not_scored: {
     title: '候选没有可用语义分',
-    description: '候选本轮没有获得语义分，且不满足受限的关键词故障降级条件，因此 Shadow 拒绝。具体原因请查看语义状态。',
+    description: '候选本轮没有获得语义分，且不满足受限的关键词故障降级条件，因此统一规则拒绝。具体原因请查看语义状态。',
     effect: 'reject',
   },
   shadow_keyword_only_without_unique_anchor: {
     title: '只有关键词，没有唯一锚点',
-    description: '候选只有关键词命中，没有可靠语义或唯一直接证据；普通词碰撞不足以证明相关，因此 Shadow 拒绝。',
+    description: '候选只有关键词命中，没有可靠语义或唯一直接证据；普通词碰撞不足以证明相关，因此统一规则拒绝。',
     effect: 'reject',
   },
   shadow_query_topic_missing: {
     title: '没有命中清理后的可信主题',
-    description: '候选未命中去除日常称呼后的本轮主题。称呼或身份背景不能单独证明记忆相关，因此 Shadow 拒绝。',
+    description: '候选未命中去除日常称呼后的本轮主题。称呼或身份背景不能单独证明记忆相关，因此统一规则拒绝。',
     effect: 'reject',
   },
   shadow_insufficient_relevance: {
-    title: 'Shadow 综合相关性不足',
+    title: '统一规则综合相关性不足',
     description: '候选虽然可能有部分分数或命中，但没有形成足以选择的可信主题与相关性组合。',
     effect: 'reject',
   },
   shadow_selected: {
-    title: 'Shadow 已选择候选',
-    description: '后端记录该候选已进入 Shadow 结果，但没有返回更具体的选择原因。',
+    title: '统一规则已选择候选',
+    description: '后端记录该候选已进入最终结果，但没有返回更具体的选择原因。',
     effect: 'allow',
   },
   shadow_utility_rejected: {
     title: '召回价值明确不足',
-    description: '候选已经通过相关性审核，但 Utility 判断认为它对当前回复没有增量价值，因此不进入 Shadow 最终结果。',
+    description: '候选已经通过相关性审核，但 Utility 判断认为它对当前回复没有增量价值，因此不进入统一规则最终结果。',
     effect: 'reject',
   },
   utility_explicit_recall_expectation: {
@@ -178,8 +183,8 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     effect: 'reject',
   },
   shadow_not_selected_without_candidate_debug: {
-    title: 'Shadow 未选择，逐候选原因未记录',
-    description: '该桶不在 Shadow 结果中，但本条 Debug 没有对应的逐候选判断记录。页面保留真实结果，不推测具体拒绝规则。',
+    title: '统一规则未选择，逐候选原因未记录',
+    description: '该桶不在最终结果中，但本条 Debug 没有对应的逐候选判断记录。页面保留真实结果，不推测具体拒绝规则。',
     effect: 'reject',
   },
   non_explicit_query: {
@@ -198,7 +203,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     effect: 'allow',
   },
   admitted_bucket: {
-    title: '正式路径已准入',
+    title: '历史旧路径已准入',
     description: '候选已经通过正式召回路径并进入可选结果；旧记录可能只保留这个通用原因。',
     effect: 'allow',
   },
@@ -269,7 +274,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
   },
   category_overview_item_missing: {
     title: '缺少类别总览证据',
-    description: '本轮按类别总览检索，但候选不是该类别的总览项，因此被正式路径拒绝。',
+    description: '历史记录按类别总览检索，但候选不是该类别的总览项，因此被当时的旧路径拒绝。',
     effect: 'reject',
   },
   retrieval_alias_only: {
@@ -284,7 +289,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
   },
   weak_evidence_only: {
     title: '只有弱语义或关系提示',
-    description: '候选只有语义命中或图关系等弱信号，没有正式路径认可的强证据，因此拒绝。',
+    description: '这是历史旧路径的拒绝说明：候选只有语义命中或图关系等弱信号，没有当时规则认可的强证据。',
     effect: 'reject',
   },
   session_hard_exclude: {
@@ -318,7 +323,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     effect: 'reject',
   },
   suppressed: {
-    title: '正式路径未准入',
+    title: '历史旧路径未准入',
     description: '旧记录只保留了通用抑制状态，没有更具体的正式拒绝原因。',
     effect: 'reject',
   },
@@ -389,7 +394,7 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
   },
   identity_name_match: {
     title: '命中身份名称',
-    description: '候选命中了当前配置中的身份名称；正式路径将它记录为直接证据，Shadow 还会检查可信主题。',
+    description: '候选命中了当前配置中的身份名称；统一规则仍会继续检查可信主题。',
     effect: 'score',
   },
   source_record_exact: {
@@ -465,18 +470,20 @@ const SEMANTIC_STATUS_COPY: Record<string, RecallRuleCopy> = {
 const PLANNER_STATUS_COPY: Record<string, RecallRuleCopy> = {
   normal: { title: 'Planner 正常完成', description: '查询规划器已运行并返回可用计划。', effect: 'info' },
   degraded: { title: 'Planner 已降级', description: '查询规划器出现错误，本轮使用降级路径。', effect: 'degraded' },
-  not_triggered: { title: '本轮无需调用 Planner', description: '正式路径不需要额外整理查询，因此没有触发 Planner。', effect: 'info' },
+  not_triggered: { title: '本轮无需调用 Planner', description: '候选检索不需要额外整理查询，因此没有触发 Planner。', effect: 'info' },
   disabled: { title: 'Planner 已关闭', description: '当前 Haven 配置没有启用查询规划器。', effect: 'degraded' },
-  not_run: { title: '正式路径提前结束，Planner 未运行', description: '本轮在空查询、模糊查询或零卡片等条件下提前结束，没有进入 Planner。', effect: 'info' },
+  not_run: { title: '候选检索提前结束，Planner 未运行', description: '本轮在空查询、模糊查询或零卡片等条件下提前结束，没有进入 Planner。', effect: 'info' },
 }
 
 const FALLBACK_STRATEGY_COPY: Record<string, RecallRuleCopy> = {
-  shadow_disabled: { title: 'Shadow 已关闭', description: '本轮没有执行 Phase 1 Shadow 判断。', effect: 'info' },
-  necessity_none: { title: '无需召回，Shadow 结果为空', description: '召回必要性判断为 none，因此 Shadow 不审核候选并保持空结果。', effect: 'info' },
-  explicit_target_missing: { title: '明确想回忆，但不扩大猜测', description: '用户有回忆意图但缺少可定位目标，Shadow 不扩大检索。', effect: 'reject' },
-  conservative_no_expansion: { title: 'Planner 不可用时保守不扩召回', description: 'contextual 轮次遇到 Planner 降级、关闭或未运行时，Shadow 只允许删除正式噪声，不从额外候选新增记忆。', effect: 'degraded' },
-  contextual_strict_relevance: { title: '自然话题使用严格相关性', description: 'Shadow 可以审核额外候选，但只有可信主题与强相关证据同时成立时才会选择。', effect: 'info' },
+  shadow_disabled: { title: '历史统一判断未运行', description: '旧版记录显示本轮没有执行当时的 Phase 1 判断。', effect: 'info' },
+  necessity_none: { title: '本轮无需召回', description: '召回必要性判断为 none，因此统一规则不审核候选并保持空结果。', effect: 'info' },
+  explicit_target_missing: { title: '明确想回忆，但不扩大猜测', description: '用户有回忆意图但缺少可定位目标，统一规则不扩大检索。', effect: 'reject' },
+  conservative_no_expansion: { title: '历史 Planner 降级边界', description: '这是旧版 Debug 的策略码；当前统一路线直接审核有界检索池。', effect: 'degraded' },
+  contextual_strict_relevance: { title: '自然话题使用严格相关性', description: '统一规则可以审核额外候选，但只有可信主题与强相关证据同时成立时才会选择。', effect: 'info' },
   explicit_strict_relevance_with_planner_fallback: { title: '明确回忆使用严格相关性与 Planner 降级', description: '明确回忆即使 Planner 不可用也可继续审核，但候选仍必须具有严格的直接或主题相关证据。', effect: 'info' },
+  contextual_unified_retrieval: { title: '自然话题使用统一候选池', description: '本轮自然召回直接审核检索阶段找到的候选，不再依赖旧算法的准入或选中结果。', effect: 'info' },
+  explicit_unified_retrieval: { title: '明确回忆使用统一候选池', description: '本轮明确回忆直接审核检索阶段找到的候选，不再依赖旧算法的准入或选中结果。', effect: 'info' },
 }
 
 const UTILITY_STATUS_COPY: Record<string, RecallRuleCopy> = {
@@ -487,12 +494,12 @@ const UTILITY_STATUS_COPY: Record<string, RecallRuleCopy> = {
   },
   neutral: {
     title: '保留召回资格',
-    description: '候选确实相关，但增量价值暂不确定。neutral 仍可被 Shadow 选择，不等于拒绝。',
+    description: '候选确实相关，但增量价值暂不确定。neutral 仍可被统一规则选择，不等于拒绝。',
     effect: 'info',
   },
   reject: {
     title: '不值得本轮召回',
-    description: '系统能明确判断候选对当前回复没有增量价值，因此不进入 Shadow 最终选择。',
+    description: '系统能明确判断候选对当前回复没有增量价值，因此不进入统一规则最终选择。',
     effect: 'reject',
   },
 }
@@ -519,7 +526,7 @@ export function getRecallRuleCopy(code: string): RecallRuleCopy {
   const category = code.startsWith('utility_')
     ? 'Utility 判断'
     : code.startsWith('shadow_')
-    ? 'Shadow 判断'
+    ? '统一规则判断'
     : code.startsWith('query_planner_')
       ? '查询规划器状态'
       : code.includes('semantic') || code.includes('embedding')
@@ -527,7 +534,7 @@ export function getRecallRuleCopy(code: string): RecallRuleCopy {
         : '召回规则'
   return {
     title: `未识别的${category}：${code || '空内部码'}`,
-    description: `Haven 返回了新的${category}。页面尚无专门中文解释，但已保留完整内部码；请结合正式/Shadow 结果、语义状态和证据字段判断其实际影响。`,
+    description: `Haven 返回了新的${category}。页面尚无专门中文解释，但已保留完整内部码；请结合最终结果、语义状态和证据字段判断其实际影响。`,
     effect: 'info',
   }
 }
@@ -552,7 +559,7 @@ export function getPlannerStatusCopy(code?: string): RecallRuleCopy {
 }
 
 export function getFallbackStrategyCopy(code?: string): RecallRuleCopy {
-  return getStatusCopy(code, FALLBACK_STRATEGY_COPY, 'Shadow 降级策略')
+  return getStatusCopy(code, FALLBACK_STRATEGY_COPY, '统一规则降级策略')
 }
 
 export function getUtilityStatusCopy(code?: string): RecallRuleCopy {

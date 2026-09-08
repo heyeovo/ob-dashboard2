@@ -19,8 +19,7 @@ type ShadowRelevanceDebug = {
   semantic_status?: string
   semantic_score?: number | null
   keyword_score?: number
-  formal_keyword_score?: number
-  shadow_keyword_score?: number
+  retrieval_keyword_score?: number
   topic_terms?: string[]
   raw_topic_terms?: string[]
   ignored_address_terms?: string[]
@@ -29,6 +28,7 @@ type ShadowRelevanceDebug = {
   ignored_topic_terms?: string[]
   matched_topic_terms?: string[]
   matched_title_topic_terms?: string[]
+  matched_content_topic_terms?: string[]
   rare_name_terms?: string[]
   rare_name_direct?: boolean
   identity_name_direct?: boolean
@@ -37,10 +37,9 @@ type ShadowRelevanceDebug = {
   explicit_bucket_id?: boolean
   unique_direct?: boolean
   exact_direct?: boolean
-  formal_candidate?: boolean
   query_semantic_unavailable?: boolean
-  query_unavailable_keyword_min?: number
-  query_unavailable_keyword_fallback?: boolean
+  contextual_query_unavailable_keyword_min?: number
+  contextual_query_unavailable_keyword_fallback?: boolean
   explicit_query_unavailable_keyword_min?: number
   explicit_query_unavailable_title_fallback?: boolean
 }
@@ -55,15 +54,14 @@ type Candidate = {
   keyword_score?: number
   evidence_labels?: string[]
   hard_evidence_labels?: string[]
-  formal_admission_reason?: string
+  retrieval_reason?: string
   shadow_admission_reason?: string
   shadow_softened_reasons?: string[]
   shadow_relevance_debug?: ShadowRelevanceDebug
   shadow_relevance_reason?: string
   shadow_utility?: ShadowUtilityDebug
-  was_formal_candidate?: boolean
-  candidate_origin?: 'legacy_selected' | 'retrieved_admitted_unselected' | 'legacy_suppressed'
-  legacy_score?: number
+  candidate_origin?: string
+  retrieval_score?: number
   rebuilt_score?: number
   rebuilt_freshness_ignored?: boolean
   shadow_selection_reason?: 'shadow_promote_priority' | 'shadow_single_card_limit'
@@ -99,12 +97,8 @@ type RecallShadowDebug = {
   affects_recall?: boolean
   planner_status?: 'normal' | 'degraded' | 'not_triggered' | 'disabled' | 'not_run'
   fallback_strategy?: string
-  formal_bucket_ids?: string[]
-  legacy_bucket_ids?: string[]
   shadow_bucket_ids?: string[]
   effective_bucket_ids?: string[]
-  added_bucket_ids?: string[]
-  removed_bucket_ids?: string[]
   selected_candidates?: Candidate[]
   eligible_unselected_candidates?: Candidate[]
   rejected_candidates?: Candidate[]
@@ -346,8 +340,7 @@ function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selec
   const suppressed = round.payload.suppressed_bucket_candidates?.length || 0
   const degraded = round.payload.query_planner_debug?.errors?.length || 0
   const necessity = round.payload.recall_necessity_debug?.necessity
-  const shadowAdded = round.payload.recall_shadow_debug?.added_bucket_ids?.length || 0
-  const shadowRemoved = round.payload.recall_shadow_debug?.removed_bucket_ids?.length || 0
+  const reviewedCandidates = round.payload.recall_shadow_debug?.reviewed_candidate_count || 0
 
   return (
     <button type="button" onClick={onSelect} className="block w-full text-left">
@@ -368,9 +361,7 @@ function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selec
           {suppressed > 0 && <MiniStatus effect="reject">拒绝 {suppressed}</MiniStatus>}
           {degraded > 0 && <MiniStatus effect="degraded">系统降级</MiniStatus>}
           {necessity && <MiniStatus effect="info">{necessityLabel(necessity)}</MiniStatus>}
-          {(shadowAdded > 0 || shadowRemoved > 0) && (
-            <MiniStatus effect="score">Shadow +{shadowAdded} / -{shadowRemoved}</MiniStatus>
-          )}
+          {reviewedCandidates > 0 && <MiniStatus effect="score">审核 {reviewedCandidates}</MiniStatus>}
           {recalled === 0 && suppressed === 0 && <MiniStatus effect="info">未进入召回</MiniStatus>}
         </div>
       </Card>
@@ -391,7 +382,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
   const shadowCandidates = shadow?.selected_candidates || []
   const shadowEligibleUnselectedCandidates = shadow?.eligible_unselected_candidates || []
   const shadowRejectedCandidates = shadow?.rejected_candidates || []
-  const formalBucketIds = new Set(shadow?.formal_bucket_ids || recalled.map((candidate) => candidate.bucket_id || ''))
+  const effectiveBucketIds = new Set(shadow?.effective_bucket_ids || recalled.map((candidate) => candidate.bucket_id || ''))
   const shadowBucketIds = new Set(shadow?.shadow_bucket_ids || shadowCandidates.map((candidate) => candidate.bucket_id || ''))
   const shadowDecisions = new Map<string, ShadowCandidateDecision>()
   shadowRejectedCandidates.forEach((candidate) => {
@@ -449,19 +440,19 @@ function RoundDetail({ round }: { round: DebugRound }) {
 
       <Card padding="lg">
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">新旧召回规则对比</h2>
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">召回决策</h2>
           {necessity?.necessity && (
             <MiniStatus effect="info">{necessityLabel(necessity.necessity)}</MiniStatus>
           )}
           {shadow?.planner_status === 'degraded' && <MiniStatus effect="degraded">Planner 降级</MiniStatus>}
           {shadow && (
             <MiniStatus effect={shadow.affects_recall ? 'allow' : 'score'}>
-              {shadow.affects_recall ? '新规则已正式接管' : '仅观察，不影响正式召回'}
+              {shadow.affects_recall ? '统一规则已生效' : '本轮无生效结果'}
             </MiniStatus>
           )}
         </div>
         {!shadow ? (
-          <p className="text-sm text-[var(--color-text-tertiary)]">这条旧记录还没有 Phase 1 shadow 数据。</p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">这条旧记录还没有统一召回决策数据。</p>
         ) : (
           <>
             <InfoRow label="本轮是否需要召回" value={necessityLabel(necessity?.necessity)} />
@@ -469,20 +460,16 @@ function RoundDetail({ round }: { round: DebugRound }) {
             <InfoRow label="前文是否可用" value={formatOptionalBoolean(necessity?.context_available, '可用', '不可用')} />
             <InfoRow label="Planner 状态" value={formatCopyWithCode(plannerCopy, shadow.planner_status)} />
             <InfoRow label="Fallback strategy" value={formatCopyWithCode(fallbackCopy, shadow.fallback_strategy)} />
-            <InfoRow label="旧规则结果" value={formatBucketIds(shadow.legacy_bucket_ids || shadow.formal_bucket_ids)} />
-            <InfoRow label="新规则结果" value={formatBucketIds(shadow.shadow_bucket_ids)} />
-            <InfoRow label="最终生效结果" value={formatBucketIds(shadow.effective_bucket_ids || shadow.formal_bucket_ids)} />
-            <InfoRow label="新规则新增" value={formatBucketIds(shadow.added_bucket_ids)} />
-            <InfoRow label="新规则移除" value={formatBucketIds(shadow.removed_bucket_ids)} />
+            <InfoRow label="最终生效结果" value={formatBucketIds(shadow.effective_bucket_ids || shadow.shadow_bucket_ids)} />
             <InfoRow
-              label="新规则实际审核候选"
+              label="实际审核候选"
               value={typeof shadow.reviewed_candidate_count === 'number'
                 ? `${shadow.reviewed_candidate_count} 个${shadow.candidate_debug_truncated ? '（详情已截断）' : ''}`
                 : '旧记录未保存'}
             />
             <InfoRow label="Utility 契约" value={shadow.utility_contract || '旧记录未保存'} />
             <InfoRow
-              label="新规则卡片上限"
+              label="卡片上限"
               value={typeof shadow.shadow_max_cards === 'number' ? `${shadow.shadow_max_cards} 张` : '旧记录未保存'}
             />
             {(necessity?.reason_codes?.length || 0) > 0 && (
@@ -526,7 +513,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
         <InfoRow label="清理后词组" value={formatTerms(residueTerms)} />
         <InfoRow label="核心主题轴" value={formatTerms(axisTerms)} />
         <InfoRow label="必需锚点" value={formatTerms(anchorTerms)} />
-        <InfoRow label="旧链路 Debug 候选数量" value={String(payload.hook_recall_debug?.candidate_count ?? '未知')} />
+        <InfoRow label="检索阶段 Debug 候选数量" value={String(payload.hook_recall_debug?.candidate_count ?? '未知')} />
         {errors.length > 0 && (
           <div className="mt-3 space-y-2 border-t border-[var(--color-border-light)] pt-3">
             {errors.map((code) => <RuleExplanation key={code} code={code} />)}
@@ -541,21 +528,9 @@ function RoundDetail({ round }: { round: DebugRound }) {
         shadow={shadow}
         shadowDecisions={shadowDecisions}
         utilityDecisions={utilityDecisions}
-        formalBucketIds={formalBucketIds}
+        effectiveBucketIds={effectiveBucketIds}
         shadowBucketIds={shadowBucketIds}
       />
-      {shadow && (
-        <CandidateSection
-          title={`新规则会选 · ${shadowCandidates.length}`}
-          candidates={shadowCandidates}
-          kind="shadow-selected"
-          shadow={shadow}
-          shadowDecisions={shadowDecisions}
-          utilityDecisions={utilityDecisions}
-          formalBucketIds={formalBucketIds}
-          shadowBucketIds={shadowBucketIds}
-        />
-      )}
       {shadow && Array.isArray(shadow.eligible_unselected_candidates) && (
         <CandidateSection
           title={`保留资格但未入选 · ${shadowEligibleUnselectedCandidates.length}`}
@@ -564,7 +539,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
           shadow={shadow}
           shadowDecisions={shadowDecisions}
           utilityDecisions={utilityDecisions}
-          formalBucketIds={formalBucketIds}
+          effectiveBucketIds={effectiveBucketIds}
           shadowBucketIds={shadowBucketIds}
         />
       )}
@@ -575,7 +550,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
         shadow={shadow}
         shadowDecisions={shadowDecisions}
         utilityDecisions={utilityDecisions}
-        formalBucketIds={formalBucketIds}
+        effectiveBucketIds={effectiveBucketIds}
         shadowBucketIds={shadowBucketIds}
       />
     </div>
@@ -589,16 +564,16 @@ function CandidateSection({
   shadow,
   shadowDecisions,
   utilityDecisions,
-  formalBucketIds,
+  effectiveBucketIds,
   shadowBucketIds,
 }: {
   title: string
   candidates: Candidate[]
-  kind: 'formal-selected' | 'shadow-selected' | 'shadow-eligible-unselected' | 'formal-rejected'
+  kind: 'formal-selected' | 'shadow-eligible-unselected' | 'formal-rejected'
   shadow?: RecallShadowDebug
   shadowDecisions: Map<string, ShadowCandidateDecision>
   utilityDecisions: Map<string, ShadowUtilityDebug>
-  formalBucketIds: Set<string>
+  effectiveBucketIds: Set<string>
   shadowBucketIds: Set<string>
 }) {
   const startsExpanded = kind !== 'formal-rejected'
@@ -624,9 +599,7 @@ function CandidateSection({
         <p className="mt-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] px-3 py-4 text-center text-sm text-[var(--color-text-tertiary)]">
           {kind === 'formal-selected'
             ? '本轮没有注入长期记忆'
-            : kind === 'shadow-selected'
-              ? '新规则本轮没有选择长期记忆'
-              : kind === 'shadow-eligible-unselected'
+            : kind === 'shadow-eligible-unselected'
                 ? '本轮没有保留资格但未入选的候选'
                 : '本轮没有被拒候选'}
         </p>
@@ -636,7 +609,7 @@ function CandidateSection({
             <CandidateCard
               key={`${candidate.bucket_id || candidate.bucket_name || 'candidate'}-${index}`}
               candidate={candidate}
-              formalSelected={Boolean(candidate.bucket_id && formalBucketIds.has(candidate.bucket_id))}
+              effectiveSelected={Boolean(candidate.bucket_id && effectiveBucketIds.has(candidate.bucket_id))}
               shadowSelected={Boolean(candidate.bucket_id && shadowBucketIds.has(candidate.bucket_id))}
               shadowEligibleUnselected={kind === 'shadow-eligible-unselected'}
               shadowDecision={candidate.bucket_id ? shadowDecisions.get(candidate.bucket_id) : undefined}
@@ -657,7 +630,7 @@ function CandidateSection({
 
 function CandidateCard({
   candidate,
-  formalSelected,
+  effectiveSelected,
   shadowSelected,
   shadowEligibleUnselected,
   shadowDecision,
@@ -665,7 +638,7 @@ function CandidateCard({
   shadow,
 }: {
   candidate: Candidate
-  formalSelected: boolean
+  effectiveSelected: boolean
   shadowSelected: boolean
   shadowEligibleUnselected: boolean
   shadowDecision?: ShadowCandidateDecision
@@ -674,15 +647,10 @@ function CandidateCard({
 }) {
   const shadowCandidate = shadowDecision?.candidate
   const candidateOrigin = shadowCandidate?.candidate_origin || candidate.candidate_origin
-  const legacyAdmittedUnselected = candidateOrigin === 'retrieved_admitted_unselected'
-  const legacyScore = shadowCandidate?.legacy_score ?? candidate.legacy_score
+  const retrievalScore = shadowCandidate?.retrieval_score ?? candidate.retrieval_score
   const rebuiltScore = shadowCandidate?.rebuilt_score ?? candidate.rebuilt_score
   const rebuiltFreshnessIgnored = shadowCandidate?.rebuilt_freshness_ignored
     ?? candidate.rebuilt_freshness_ignored
-  const formalReason = shadowCandidate?.formal_admission_reason
-    || candidate.formal_admission_reason
-    || (candidate.admission_reason?.startsWith('shadow_') ? '' : candidate.admission_reason)
-    || (formalSelected ? 'admitted_bucket' : 'suppressed')
   const shadowReason = shadowCandidate?.shadow_admission_reason
     || candidate.shadow_admission_reason
     || (candidate.admission_reason?.startsWith('shadow_') ? candidate.admission_reason : '')
@@ -698,7 +666,7 @@ function CandidateCard({
 
   return (
     <div className={`rounded-[var(--radius-lg)] border p-3 ${
-      formalSelected
+      effectiveSelected
         ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
         : 'border-[var(--color-border)] bg-[var(--color-surface)]'
     }`}>
@@ -708,14 +676,9 @@ function CandidateCard({
             <h3 className="text-sm font-semibold text-[var(--color-text-heading)]">
               {candidate.bucket_name || '未命名桶'}
             </h3>
-            <MiniStatus effect={formalSelected ? 'allow' : legacyAdmittedUnselected ? 'degraded' : 'reject'}>
-              {formalSelected ? '旧规则已选' : legacyAdmittedUnselected ? '旧规则已准入未选' : '旧规则拒绝'}
+            <MiniStatus effect={effectiveSelected || shadowSelected ? 'allow' : shadowEligibleUnselected ? 'score' : 'reject'}>
+              {effectiveSelected || shadowSelected ? '最终注入' : shadowEligibleUnselected ? '保留资格但未选' : '相关性拒绝'}
             </MiniStatus>
-            {shadow && (
-              <MiniStatus effect={shadowSelected ? 'allow' : shadowEligibleUnselected ? 'score' : 'reject'}>
-                {shadowSelected ? '新规则选择' : shadowEligibleUnselected ? '新规则保留未选' : '新规则拒绝'}
-              </MiniStatus>
-            )}
           </div>
           {candidate.bucket_id && (
             <p className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{candidate.bucket_id}</p>
@@ -724,8 +687,8 @@ function CandidateCard({
         <div className="flex flex-wrap justify-end gap-1">
           {typeof rebuiltScore === 'number' ? (
             <>
-              <DataBadge label="旧分" value={formatScore(legacyScore)} size="xs" />
-              <DataBadge label="新分" value={formatScore(rebuiltScore)} size="xs" />
+              <DataBadge label="检索分" value={formatScore(retrievalScore)} size="xs" />
+              <DataBadge label="排序分" value={formatScore(rebuiltScore)} size="xs" />
             </>
           ) : (
             <DataBadge label="总分" value={formatScore(candidate.score)} size="xs" />
@@ -769,17 +732,9 @@ function CandidateCard({
         </div>
       )}
 
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        <div>
-          <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">正式判断</p>
-          <RuleExplanation code={formalReason} />
-        </div>
-        {shadow && (
-          <div>
-            <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">Shadow 判断</p>
-            <RuleExplanation code={shadowReason} />
-          </div>
-        )}
+      <div className="mt-3">
+        <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">统一相关性判断</p>
+        <RuleExplanation code={shadowReason} />
       </div>
 
       {shadow && (
@@ -796,7 +751,7 @@ function CandidateCard({
               </p>
               <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">
                 {shadow.utility_contract
-                  ? '这个候选没有通过 Shadow relevance，或没有进入本轮 Utility 候选池，因此不会进行召回价值判断。'
+                  ? '这个候选没有通过统一 relevance，或没有进入本轮 Utility 候选池，因此不会进行召回价值判断。'
                   : '这条 Debug 产生于 Utility 上线前，不能从缺少字段推断为 neutral 或 reject。'}
               </p>
             </div>
@@ -813,20 +768,20 @@ function CandidateCard({
       {relevance && (
         <details className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3 py-2">
           <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-secondary)]">
-            查看 Shadow 主题、直接证据与降级信息
+            查看主题、直接证据与降级信息
           </summary>
           <div className="mt-2">
             <InfoRow label="原始主题 raw_topic_terms" value={formatTerms(relevance.raw_topic_terms || [])} />
             <InfoRow label="清理后主题 topic_terms" value={formatTerms(relevance.topic_terms || [])} />
             <InfoRow label="桶命中主题 matched_topic_terms" value={formatTerms(relevance.matched_topic_terms || [])} />
             <InfoRow label="标题命中主题 matched_title_topic_terms" value={formatTerms(relevance.matched_title_topic_terms || [])} />
+            <InfoRow label="正文命中主题 matched_content_topic_terms" value={formatTerms(relevance.matched_content_topic_terms || [])} />
             <InfoRow label="忽略称呼 ignored_address_terms" value={formatTerms(relevance.ignored_address_terms || [])} />
             <InfoRow label="身份称呼 ignored_identity_terms" value={formatTerms(relevance.ignored_identity_terms || [])} />
             <InfoRow label="额外称呼 ignored_configured_address_terms" value={formatTerms(relevance.ignored_configured_address_terms || [])} />
             <InfoRow label="其他清理词 ignored_topic_terms" value={formatTerms(relevance.ignored_topic_terms || [])} />
             <InfoRow label="语义状态 semantic_status" value={formatCopyWithCode(getSemanticStatusCopy(relevance.semantic_status), relevance.semantic_status)} />
-            <InfoRow label="正式关键词分 formal_keyword_score" value={formatScore(relevance.formal_keyword_score)} />
-            <InfoRow label="Shadow 关键词分 shadow_keyword_score" value={formatScore(relevance.shadow_keyword_score)} />
+            <InfoRow label="检索关键词分 retrieval_keyword_score" value={formatScore(relevance.retrieval_keyword_score)} />
             <InfoRow label="明确桶 ID explicit_bucket_id" value={formatBoolean(relevance.explicit_bucket_id)} />
             <InfoRow label="稀有名称 rare_name_direct" value={formatBoolean(relevance.rare_name_direct, relevance.rare_name_terms)} />
             <InfoRow label="身份名称 identity_name_direct" value={formatBoolean(relevance.identity_name_direct)} />
@@ -834,8 +789,8 @@ function CandidateCard({
             <InfoRow label="唯一直接证据 unique_direct" value={formatBoolean(relevance.unique_direct)} />
             <InfoRow label="精确主题 exact_direct" value={formatBoolean(relevance.exact_direct)} />
             <InfoRow label="Query 语义不可用 query_semantic_unavailable" value={formatBoolean(relevance.query_semantic_unavailable)} />
-            <InfoRow label="关键词故障降级 query_unavailable_keyword_fallback" value={formatBoolean(relevance.query_unavailable_keyword_fallback)} />
-            <InfoRow label="故障降级门槛 query_unavailable_keyword_min" value={formatScore(relevance.query_unavailable_keyword_min)} />
+            <InfoRow label="自然召回正文降级 contextual_query_unavailable_keyword_fallback" value={formatBoolean(relevance.contextual_query_unavailable_keyword_fallback)} />
+            <InfoRow label="自然召回正文降级门槛 contextual_query_unavailable_keyword_min" value={formatScore(relevance.contextual_query_unavailable_keyword_min)} />
             <InfoRow label="明确回忆标题降级 explicit_query_unavailable_title_fallback" value={formatBoolean(relevance.explicit_query_unavailable_title_fallback)} />
             <InfoRow label="明确回忆标题降级门槛 explicit_query_unavailable_keyword_min" value={formatScore(relevance.explicit_query_unavailable_keyword_min)} />
           </div>
@@ -1008,12 +963,16 @@ function sourceLabel(source: string) {
 }
 
 function candidateOriginLabel(origin: Candidate['candidate_origin']) {
-  const labels: Record<NonNullable<Candidate['candidate_origin']>, string> = {
-    legacy_selected: '旧规则最终选中',
-    retrieved_admitted_unselected: '检索已命中，旧规则准入但未选中',
-    legacy_suppressed: '旧规则抑制或拒绝',
+  const labels: Record<string, string> = {
+    direct_retrieval: '本轮直接检索',
+    relation_axis_retrieval: '关系轴补充检索',
+    planner_supplemental_retrieval: 'Planner 补充检索',
+    retrieved: '本轮检索候选',
+    legacy_selected: '历史记录中的已选候选',
+    retrieved_admitted_unselected: '历史记录中的未选候选',
+    legacy_suppressed: '历史记录中的受抑制候选',
   }
-  return origin ? labels[origin] : '未记录'
+  return origin ? labels[origin] || origin : '未记录'
 }
 
 function formatTime(value: string, includeDate = false) {
