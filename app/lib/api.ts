@@ -58,6 +58,17 @@ export async function getBuckets(full?: boolean) {
     return res.json();
 }
 
+export async function getJournals() {
+    const cookie = await getSessionCookie();
+    const baseUrl = getHavenBaseUrl()
+    const res = await fetch(`${baseUrl}/api/journal`, {
+        headers: { 'Cookie': cookie },
+        cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch journals');
+    return res.json();
+}
+
 export interface PaginatedBuckets {
     buckets: unknown[];
     count: number;

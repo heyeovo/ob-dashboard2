@@ -48,6 +48,8 @@ export type RollingContextConfig = {
   timezone: string
   day_start_hour: number
   day_modes: Record<string, 'raw' | 'review' | 'omit'>
+  selected_pinned_ids?: string[] | null
+  selected_journal_ids?: string[] | null
 }
 
 export type ConversationContextDay = {

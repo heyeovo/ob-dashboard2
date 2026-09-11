@@ -150,6 +150,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [messages, setMessages] = useState<CcMessage[]>([])
   const [handoffTranscript, setHandoffTranscript] = useState('')
+  const [isRolling, setIsRolling] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [earlierHistoryLoading, setEarlierHistoryLoading] = useState(false)
   const [historyBeforeId, setHistoryBeforeId] = useState<number | null>(null)
@@ -669,8 +670,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             mode?: string
             daily_review_enabled?: boolean
             handoff_snapshot?: unknown
+            rolling_context?: { strategy?: string }
           } | null
           const restoredHandoffTranscript = handoffChatTranscript(sessionState?.handoff_snapshot)
+          setIsRolling(sessionState?.rolling_context?.strategy === 'daily_rolling')
           const restoredEngine = sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc'
           const selfhostProviderId = String(sessionState?.selfhost_overrides?.provider_id || '').trim()
           const selfhostModel = String(sessionState?.selfhost_overrides?.model || '').trim()
@@ -1908,5 +1911,6 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     refreshPending,
     // 5.5 换窗 handoff
     startWithHandoff,
+    isRolling,
   }
 }

@@ -7,7 +7,7 @@ import {
 } from '@/app/lib/havenTurns'
 import { handoffSnapshotContent } from '@/app/lib/cc/handoffSnapshot'
 import { sessionStaticContext } from '@/app/lib/runtimeContext'
-import { getBuckets } from '@/app/lib/api'
+import { getBuckets, getJournals } from '@/app/lib/api'
 
 type FixedWindowSource = Pick<
   HavenConversationSession,
@@ -15,6 +15,7 @@ type FixedWindowSource = Pick<
 >
 
 type PinnedBucket = { id: string; title: string; content: string }
+type JournalEntry = { id: string; title: string; content: string; author: string }
 
 function rawTurnBlock(turn: HavenTurn): string {
   const parts: string[] = []
@@ -51,11 +52,34 @@ function normalizePinnedBuckets(payload: unknown): PinnedBucket[] {
   })
 }
 
+function normalizeJournals(payload: unknown): JournalEntry[] {
+  const items = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === 'object' && Array.isArray((payload as { items?: unknown }).items)
+      ? (payload as { items: unknown[] }).items
+      : []
+  return items.flatMap(raw => {
+    if (!raw || typeof raw !== 'object') return []
+    const item = raw as Record<string, unknown>
+    if (item.locked) return []
+    const id = String(item.id || '').trim()
+    const content = String(item.content || '').trim()
+    if (!id || !content) return []
+    return [{
+      id,
+      title: String(item.name || item.title || id).trim() || id,
+      content,
+      author: String(item.author || '').trim(),
+    }]
+  })
+}
+
 export function buildRollingWindowAppend(
   session: FixedWindowSource,
   turns: HavenTurn[],
   days: ConversationContextDay[],
   pinnedBuckets: PinnedBucket[],
+  journals: JournalEntry[] = [],
 ): string {
   if (session.rolling_context?.strategy !== 'daily_rolling') return ''
   const modes = session.rolling_context.day_modes || {}
@@ -64,6 +88,10 @@ export function buildRollingWindowAppend(
 
   for (const bucket of pinnedBuckets) {
     sections.push(`【实时钉选记忆｜${bucket.title}｜${bucket.id}】\n${bucket.content}`)
+  }
+  for (const journal of journals) {
+    const authorTag = journal.author ? `｜${journal.author}` : ''
+    sections.push(`【日记｜${journal.title}${authorTag}｜${journal.id}】\n${journal.content}`)
   }
   for (const day of orderedDays) {
     const mode = modes[day.day] || (day.turn_count > 0 ? 'raw' : 'omit')
@@ -98,15 +126,31 @@ export async function loadRollingWindowAppend(
     return { content: '', pinnedBucketIds: [] }
   }
   const modes = session.rolling_context.day_modes || {}
+  const selectedPinnedIds = session.rolling_context.selected_pinned_ids
+  const selectedJournalIds = session.rolling_context.selected_journal_ids
   const rawDays = days
     .filter(day => day.turn_count > 0 && (modes[day.day] || 'raw') === 'raw')
     .map(day => day.day)
-  const [turnResult, bucketPayload] = await Promise.all([
+  const [turnResult, bucketPayload, journalPayload] = await Promise.all([
     rawDays.length > 0 ? listAllTurns(sessionId, { chatDays: rawDays, includeRaw: true }) : Promise.resolve({ ok: true, turns: [], error: '' }),
     getBuckets(true),
+    selectedJournalIds !== null && selectedJournalIds !== undefined && selectedJournalIds.length > 0
+      ? getJournals()
+      : Promise.resolve([]),
   ])
   if (!turnResult.ok) throw new Error(`读取滚动窗口原文失败：${turnResult.error}`)
-  const pinnedBuckets = normalizePinnedBuckets(bucketPayload)
+  let pinnedBuckets = normalizePinnedBuckets(bucketPayload)
+  if (selectedPinnedIds != null) {
+    const idSet = new Set(selectedPinnedIds)
+    pinnedBuckets = pinnedBuckets.filter(bucket => idSet.has(bucket.id))
+  }
+  let journals = normalizeJournals(journalPayload)
+  if (selectedJournalIds != null) {
+    const idSet = new Set(selectedJournalIds)
+    journals = journals.filter(journal => idSet.has(journal.id))
+  } else {
+    journals = []
+  }
   return {
     content: buildRollingWindowAppend(
       session,
@@ -115,6 +159,7 @@ export async function loadRollingWindowAppend(
         : turnResult.turns.filter(turn => turn.id <= options.upToTurnId!),
       days,
       pinnedBuckets,
+      journals,
     ),
     pinnedBucketIds: pinnedBuckets.map(item => item.id),
   }

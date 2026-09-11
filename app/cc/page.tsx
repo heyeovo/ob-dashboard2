@@ -732,7 +732,7 @@ export default function CcChatPage() {
       onOpenSearch={openSearchFromFloat}
     >
       <div className="mx-auto flex min-w-0 max-w-[var(--chat-assistant-width)] flex-col gap-7">
-        {chat.handoffTranscript ? (
+        {chat.handoffTranscript && !chat.isRolling ? (
           <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-3.5">
             <div className="mb-2 text-[10.5px] font-medium text-[var(--color-text-disabled)]">
               换窗带入 · 最近对话
