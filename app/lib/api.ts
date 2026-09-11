@@ -52,6 +52,7 @@ export async function getBuckets(full?: boolean) {
     const url = full ? `${baseUrl}/api/buckets?full=1` : `${baseUrl}/api/buckets`;
     const res = await fetch(url, {
         headers: { 'Cookie': cookie },
+        cache: 'no-store',
     });
     if (!res.ok) throw new Error('Failed to fetch buckets');
     return res.json();

@@ -15,6 +15,7 @@ import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import { beijingRuntimeContext, sessionStaticContext } from '@/app/lib/runtimeContext'
 import { resolveAttachments, type ResolvedAttachment } from '@/app/lib/havenAttachments'
 import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
+import { loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import {
   DEFAULT_REPLY_RESERVE_TOKENS,
   resolveSelfhostSettings,
@@ -145,7 +146,11 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
   }
 
   const [sessionResult, historyResult, personaResult, upstreamResult] = await Promise.all([
-    getConversationSession(request.sessionId, { includeBucketExclusions: true, signal }),
+    getConversationSession(request.sessionId, {
+      includeBucketExclusions: true,
+      includeContextDays: true,
+      signal,
+    }),
     // selfhost 是无状态完整重放；raw_json 里的历史召回正文也属于窗口上下文，
     // 不读 raw 就会在下一轮消失，而桶又已进入排除集合、不会再次召回。
     listAllTurns(request.sessionId, { includeRaw: true, signal }),
@@ -194,17 +199,21 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     return preflightError(request.requestId, 400, 'attachment_read_failed', error instanceof Error ? error.message : '附件读取失败')
   }
 
-  // selfhost 无状态，每轮都从 Haven 读取同一份固定快照；CC 启动每条原生
-  // 线路时也读取这个字段，因此两种引擎不会各自重新筛选内容。
-  const handoffContext = handoffSnapshotContent(session?.handoff_snapshot)
+  const rolling = session
+    ? await loadRollingWindowAppend(request.sessionId, session, sessionResult.contextDays)
+    : { content: '', pinnedBucketIds: [] }
+  // selfhost 无状态：滚动模式下，选中的原文和日回顾已经完整写进 system，
+  // 不再把整窗历史重复塞进 messages；固定模式保持旧的完整重放行为。
+  const isRolling = session?.rolling_context?.strategy === 'daily_rolling'
+  const handoffContext = isRolling ? rolling.content : handoffSnapshotContent(session?.handoff_snapshot)
 
   return {
     kind: 'ready',
     request,
     persona: personaResult.persona,
     session,
-    history: historyResult.turns,
-    bucketExclusionIds: sessionResult.bucketExclusionIds,
+    history: isRolling ? [] : historyResult.turns,
+    bucketExclusionIds: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])],
     settings,
     provider,
     currentAttachments,
@@ -400,6 +409,8 @@ function sendReplay(controller: ReadableStreamDefaultController<Uint8Array>, pre
     request_id: prepared.request.requestId,
     turn_id: prepared.turn.id,
     round_id: prepared.turn.round_id,
+    user_message_id: prepared.turn.user_message_id,
+    assistant_message_id: prepared.turn.assistant_message_id,
     idempotent_replay: true,
     generated: false,
     usage: raw.usage || null,
@@ -814,6 +825,8 @@ export function createSelfhostStream(
           request_id: request.requestId,
           turn_id: persisted.turnId,
           round_id: persisted.roundId,
+          user_message_id: persisted.userMessageId,
+          assistant_message_id: persisted.assistantMessageId,
           idempotent_replay: persisted.idempotentReplay,
           generated: true,
           elapsed_ms: Date.now() - startedAt,

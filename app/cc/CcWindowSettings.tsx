@@ -14,6 +14,7 @@ import type { CcWebSettings } from './webSettings'
 import CcContextAnalysis from './CcContextAnalysis'
 import CcContextGc from './CcContextGc'
 import CcAgentWakeSettings from './CcAgentWakeSettings'
+import CcRollingContext from './CcRollingContext'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
 //
@@ -35,6 +36,7 @@ function fmtCost(usd: number) {
 
 type Props = {
   sessionId: string
+  personaId: string
   stats: CcSessionStats
   /** 界面上这一窗的总字数（消息正文加起来） */
   totalChars: number
@@ -99,6 +101,7 @@ function seg(on: boolean) {
 
 export default function CcWindowSettings({
   sessionId,
+  personaId,
   stats,
   totalChars,
   conversationText,
@@ -128,7 +131,7 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const [compactNote, setCompactNote] = useState('')
-  const [activeTab, setActiveTab] = useState<'session' | 'context' | 'gc' | 'wake'>('session')
+  const [activeTab, setActiveTab] = useState<'session' | 'rolling' | 'context' | 'gc' | 'wake'>('session')
   const models = modelsFor(upstream, pick.kind, pick.providerId)
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
@@ -186,9 +189,10 @@ export default function CcWindowSettings({
           </button>
         </div>
 
-        <div className="flex gap-2 border-b border-[var(--color-border-light)] px-5 py-2">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto border-b border-[var(--color-border-light)] px-5 py-2">
           {([
             ['session', '会话信息'],
+            ['rolling', '上下文拼接'],
             ['context', 'Context 分析'],
             ['gc', '窗口减负'],
             ['wake', '主动唤醒'],
@@ -197,7 +201,7 @@ export default function CcWindowSettings({
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`rounded-full px-3 py-1.5 text-[11.5px] transition-colors ${
+              className={`shrink-0 rounded-full px-3 py-1.5 text-[11.5px] transition-colors ${
                 activeTab === tab
                   ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary)]'
                   : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
@@ -209,7 +213,9 @@ export default function CcWindowSettings({
         </div>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {activeTab === 'context' ? (
+          {activeTab === 'rolling' ? (
+            <CcRollingContext sessionId={sessionId} personaId={personaId} busy={stats.busy} />
+          ) : activeTab === 'context' ? (
             <CcContextAnalysis
               sessionId={sessionId}
               systemPromptText={systemPromptText}

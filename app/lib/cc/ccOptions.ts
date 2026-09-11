@@ -98,6 +98,8 @@ export type TurnConfig = {
   sessionId: string
   mode: CcMode
   personaAppend: string
+  /** 手动保存滚动上下文时递增；用于切断旧 Claude resume。 */
+  contextRevision: number
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */

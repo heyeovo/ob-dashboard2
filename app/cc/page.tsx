@@ -45,6 +45,13 @@ function formatCost(usd: number) {
   return `$${usd.toFixed(2)}`
 }
 
+function visibleChatDay(message: CcMessage): string {
+  if (message.chatDay) return message.chatDay
+  return new Date(message.createdAt - 4 * 60 * 60 * 1000).toLocaleDateString('en-CA', {
+    timeZone: 'Asia/Shanghai',
+  })
+}
+
 function formatCacheLeft(ms: number) {
   if (ms <= 0) return null
   const sec = Math.round(ms / 1000)
@@ -294,6 +301,8 @@ export default function CcChatPage() {
   const [settingsFor, setSettingsFor] = useState<CcPersona | null>(null)
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const [winSetOpen, setWinSetOpen] = useState(false)
+  const [historyDateOpen, setHistoryDateOpen] = useState(false)
+  const [historyDate, setHistoryDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }))
   const [handoffOpen, setHandoffOpen] = useState<{ fromSessionId: string | null } | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchSessionId, setSearchSessionId] = useState('')
@@ -655,6 +664,15 @@ export default function CcChatPage() {
         </div>
         <button
           type="button"
+          onClick={() => setHistoryDateOpen(true)}
+          aria-label="按日期查看历史消息"
+          title="按日期查看历史消息"
+          className="cc-icon-btn"
+        >
+          历史
+        </button>
+        <button
+          type="button"
           onClick={() => setWinSetOpen(true)}
           aria-label="本窗口设置"
           title="本窗口设置：模型 / 力度 / 供应商"
@@ -749,8 +767,15 @@ export default function CcChatPage() {
             </div>
           </div>
         ) : (
-          conversationMessages.map(m => (
+          conversationMessages.map((m, index) => (
               <div key={m.id}>
+                {index === 0 || visibleChatDay(conversationMessages[index - 1]) !== visibleChatDay(m) ? (
+                  <div id={`chat-day-${visibleChatDay(m)}`} className="mb-5 flex items-center gap-3 pt-2 text-[10.5px] text-[var(--color-text-disabled)]">
+                    <span className="h-px flex-1 bg-[var(--color-border-light)]" />
+                    <span>{visibleChatDay(m)}</span>
+                    <span className="h-px flex-1 bg-[var(--color-border-light)]" />
+                  </div>
+                ) : null}
                 <CcMessageRow
                   message={m}
                   isCurrentTurn={m.id === latestAssistantId}
@@ -1117,6 +1142,7 @@ export default function CcChatPage() {
       {winSetOpen ? (
         <CcWindowSettings
           sessionId={chat.sessionId}
+          personaId={people.active.id}
           stats={displayStats}
           totalChars={totalChars}
           conversationText={conversationText}
@@ -1151,6 +1177,34 @@ export default function CcChatPage() {
             chat.setSettingsNote('')
           }}
         />
+      ) : null}
+
+      {historyDateOpen ? (
+        <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button type="button" aria-label="关闭" className="absolute inset-0" onClick={() => setHistoryDateOpen(false)} />
+          <div className="cc-modal relative w-full max-w-xs p-5" role="dialog" aria-label="查看历史消息">
+            <div className="text-[13px] font-medium text-[var(--color-text-heading)]">跳到某一天</div>
+            <div className="mt-1 text-[10.5px] text-[var(--color-text-disabled)]">仍在当前聊天页内；上下滚动可以继续进入相邻日期。</div>
+            <input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="mt-4 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-[12px]" />
+            <button
+              type="button"
+              className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-white"
+              onClick={() => {
+                void (async () => {
+                  const found = await chat.loadHistoryDay(historyDate)
+                  if (!found) {
+                    chat.setError('这一天没有聊天记录')
+                    return
+                  }
+                  setHistoryDateOpen(false)
+                  window.setTimeout(() => document.getElementById(`chat-day-${historyDate}`)?.scrollIntoView({ block: 'start' }), 50)
+                })()
+              }}
+            >
+              查看这一天
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {/* 换窗 / 新对话弹窗 */}

@@ -545,11 +545,18 @@ export function sanitizeContextAnalysis(raw: SDKControlGetContextUsageResponse):
 export async function getExactContextAnalysis(input: {
   sessionId: string
   laneId: string
+  contextRevision?: number
   force?: boolean
 }): Promise<CcContextAnalysisResult> {
   const live = registry.get(input.sessionId)
   if (!live) return { ok: false, analysis: null, cached: false, error: '当前 CC 会话不在线，请先在这个窗口发一条消息' }
-  if (live.resumeKey !== `${input.sessionId}::${input.laneId}`) {
+  const expectedResumeKey = input.contextRevision == null
+    ? `${input.sessionId}::${input.laneId}::context-`
+    : ccResumeKey(input.sessionId, input.laneId, input.contextRevision)
+  const matchesLane = input.contextRevision == null
+    ? live.resumeKey.startsWith(expectedResumeKey)
+    : live.resumeKey === expectedResumeKey
+  if (!matchesLane) {
     return { ok: false, analysis: null, cached: false, error: '当前线路不在线，请切到这条线路发一条消息后再读取' }
   }
   if (live.busy) return { ok: false, analysis: null, cached: false, error: '正在回复，等本轮结束后再读取' }
@@ -613,13 +620,18 @@ export function rememberResumePoint(resumeKey: string, ccSessionId: string) {
   if (ccSessionId) resumeHints.set(resumeKey, ccSessionId)
 }
 
+export function ccResumeKey(sessionId: string, laneId: string, contextRevision = 0): string {
+  return `${sessionId}::${laneId}::context-${Math.max(0, Math.trunc(contextRevision || 0))}`
+}
+
 /** Context GC 只能处理已落盘且空闲的线路；有回复或工具审批时严格拒绝。 */
 export function prepareSessionForContextGc(
   sessionId: string,
   laneId: string,
+  contextRevision = 0,
 ): { ok: boolean; error: string } {
   const live = registry.get(sessionId)
-  const resumeKey = `${sessionId}::${laneId}`
+  const resumeKey = ccResumeKey(sessionId, laneId, contextRevision)
   if (hasPending(sessionId)) return { ok: false, error: '还有工具操作等待批准，暂时不能减负' }
   if (!live || live.resumeKey !== resumeKey) return { ok: true, error: '' }
   if (live.busy || live.compacting) return { ok: false, error: '当前正在回复或压缩，结束后再减负' }
@@ -628,8 +640,13 @@ export function prepareSessionForContextGc(
   return { ok: true, error: '' }
 }
 
-export function activateContextGcFork(sessionId: string, laneId: string, ccSessionId: string): void {
-  rememberResumePoint(`${sessionId}::${laneId}`, ccSessionId)
+export function activateContextGcFork(
+  sessionId: string,
+  laneId: string,
+  contextRevision: number,
+  ccSessionId: string,
+): void {
+  rememberResumePoint(ccResumeKey(sessionId, laneId, contextRevision), ccSessionId)
 }
 
 /** 界面顶部要显示的会话状态。 */

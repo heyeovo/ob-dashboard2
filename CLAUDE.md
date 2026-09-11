@@ -34,7 +34,7 @@ production 必须配置以下六项：
 |-----------|------|
 | `app/page.tsx` | 主页（时间线/记忆格） |
 | `app/memory/` | 记忆库（三格切换） |
-| `app/cc/` | 聊天主页（cc / selfhost）；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
+| `app/cc/` | 聊天主页（cc / selfhost）；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
 | `app/workbench/` | 工作台 |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页及子页 |
@@ -42,7 +42,7 @@ production 必须配置以下六项：
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
-| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 只固定注入窗口 handoff（无 handoff 的历史窗口才兼容独立日回顾），每轮重读协作者提示词；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id` 增量补消息 |
+| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff，在滚动模式按 context revision + turn watermark 注入手动选定的日期原文/日回顾与实时钉选桶；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息并读写滚动上下文配置 |
 | `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 在稳定 system prompt 中提供召回背景使用规则，动态正文不重复说明 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
@@ -90,6 +90,7 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 - `localStorage` 只用于换设备后丢失也没关系的界面偏好
 - 含密钥配置只能服务端读写，浏览器只接收掩码
 - CC 只把窗口创建时选定的统一 handoff 固定在 Haven；没有 handoff 的历史窗口才读取旧独立日回顾快照，二者不同时注入。协作者基础 system、定位、提示词模块及 session 静态信息每轮按最新配置重组，不从旧 `frozen_persona_append` 恢复整串。
+- 每个已保存 user/assistant 消息使用 Haven 分配的永久 `msg_*` ID，并保存按窗口日界线计算的 `chat_day`。滚动配置、revision 和保存时的 turn watermark 均持久化在 Haven；CC 的原生 resume key 必须包含 revision，禁止新配置续接旧 revision。选为原文的可见日期只排除这些日期内已召回/新建的桶；日回顾或不带日期退出排除集合。钉选桶每轮从 Haven 读取最新正文，不冻结进 handoff。
 - Claude Pro 最近额度按 profile 在 Haven 保存全局单条快照，各窗口共用并显示上次读取时间，新值覆盖旧值
 - CC 前台用户 turn 与后台 wake 共用进程内 `SessionTurnCoordinator` 和同一个长寿命 Agent SDK iterator：前台排队优先，后台遇到生成、压缩或待审批直接 deferred；后台只恢复 Haven 中 `cc_overrides.active_cred` 对应的最后活跃 lane、固定窗口 handoff、最新热更新提示词与该 lane 的 resume id。协作者提示词或任一模型可见 MCP instructions / 工具名称 / 说明 / schema 变化都会更新 request-prefix 指纹，使旧窗口回收旧 query 后按原 Claude session resume；内置 MCP 统一登记实例与模型可见定义，后续同类功能沿用该注册表。`WebSearch` / `WebFetch` schema 在前台、后台及关闭联网开关时始终固定存在，实际联网权限按每轮状态在 `PreToolUse` 拒绝，避免模式切换产生 prompt-cache 分支；每轮只记录 prompt/tools/MCP/options hash、工具名称、lane、CC session 与 iterator 冷热状态，不记录提示词正文。固定进程内 `set_agent_wake` 工具始终存在，同轮最后一次有效决定随 assistant 原文、usage、cache refresh、活动时间和 wake event 原子写入 Haven；后台禁止联网、Bash、写文件及所有需要人工批准的 MCP。No-op wake 可在固定 marker 后带一行最多 30 字的用户可见 skip reason；该格式同时写入 MCP instructions 和始终加载的工具描述，短文本与 SDK thinking 写入 raw 历史但不生成正式助手气泡。页面显示当前协作者和可选 no-op 原因，SDK thinking 使用独立折叠区，token usage 复用普通消息右下角入口与消耗明细。`set_agent_wake` reason 最多 50 字。Cache refresh 只在成功 result 的 usage 确认 cache read/write 后，按模型请求开始时间计算。
 - 正常用户 turn 成功提交时在 Haven 事务内只采样一次 conversation silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer。新 assistant 轮次保存版本化 `display_segments`，历史仍保留一轮一条原文；页面可见且空闲时按 round 游标增量刷新后台 wake 消息。

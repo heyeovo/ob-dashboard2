@@ -15,8 +15,12 @@ function laneSessionId(lane: unknown): string {
 async function load(sessionId: string, laneId: string) {
   const loaded = await getConversationSession(sessionId)
   if (!loaded.ok || !loaded.session) throw new Error(loaded.error || '找不到这个窗口')
-  const ccSessionId = laneSessionId(loaded.session.cc_lanes?.[laneId])
+  const lane = loaded.session.cc_lanes?.[laneId]
+  const ccSessionId = laneSessionId(lane)
   if (!ccSessionId) throw new Error('这条线路还没有可减负的 Claude 会话')
+  if (Number((lane as Record<string, unknown>)?.context_revision || 0) !== (loaded.session.context_revision || 0)) {
+    throw new Error('上下文拼接刚刚改变，请先在这条线路发送一条消息，再使用窗口减负')
+  }
   return { session: loaded.session, ccSessionId }
 }
 
@@ -91,7 +95,8 @@ export async function POST(request: NextRequest) {
       : Array.isArray(body.selected_ids) ? body.selected_ids.map(String) : []
     if (selectedIds.some(id => !allowed.has(id))) throw new Error('选择内容已变化或已设为始终保留，请重新扫描')
     if (selectedIds.length === 0) throw new Error('没有选中可清理的内容')
-    const ready = prepareSessionForContextGc(sessionId, laneId)
+    const contextRevision = session.context_revision || 0
+    const ready = prepareSessionForContextGc(sessionId, laneId, contextRevision)
     if (!ready.ok) return errorResponse(new Error(ready.error), 409)
 
     const applied = await applyContextGc(ccSessionId, selectedIds)
@@ -113,7 +118,7 @@ export async function POST(request: NextRequest) {
     if (!committed.ok) {
       return errorResponse(new Error(`新副本已安全生成，但 Haven 没有切换：${committed.error || '保存失败'}`), committed.httpStatus || 409)
     }
-    activateContextGcFork(sessionId, laneId, applied.nextCcSessionId)
+    activateContextGcFork(sessionId, laneId, contextRevision, applied.nextCcSessionId)
 
     const updatedSession = committed.session
     if (updatedSession) {

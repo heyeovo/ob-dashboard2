@@ -14,11 +14,14 @@ import {
 } from '@/app/lib/cc/ccOptions'
 import type { CredMode } from '@/app/lib/ccEnv'
 import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
-import { composeWindowPersonaAppend } from '@/app/lib/cc/windowPrompt'
+import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 
 /** Restore the single last-active native CC lane without any browser state. */
 export async function loadBackgroundTurnInputs(sessionId: string) {
-  const sessionResult = await getConversationSession(sessionId, { includeBucketExclusions: true })
+  let sessionResult = await getConversationSession(sessionId, {
+    includeBucketExclusions: true,
+    includeContextDays: true,
+  })
   const session = sessionResult.session
   if (!sessionResult.ok || !session) throw new Error(sessionResult.error || 'Haven 返回空窗口')
   if (!session.frozen_persona_append_initialized) {
@@ -54,8 +57,13 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
 
   const laneId = ccLaneId(cred, providerId)
   const lane = session.cc_lanes[laneId]
-  const resumeHint = String(lane?.cc_session_id || '').trim()
-  if (!lane || !resumeHint) throw new Error(`最后活跃 CC lane 没有可恢复的 resume id：${laneId}`)
+  const laneResumeHint = String(lane?.cc_session_id || '').trim()
+  const isRolling = session.rolling_context?.strategy === 'daily_rolling'
+  const laneContextRevision = Number((lane as Record<string, unknown> | undefined)?.context_revision || 0)
+  const resumeHint = laneContextRevision === (session.context_revision || 0)
+    ? laneResumeHint
+    : ''
+  if (!lane || (!resumeHint && !isRolling)) throw new Error(`最后活跃 CC lane 没有可恢复的 resume id：${laneId}`)
 
   const [mcpConfig, permissions, readDirs, writeDirs] = await Promise.all([
     loadMcpConfig(),
@@ -69,14 +77,26 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     searchEnabled: false,
     fetchEnabled: false,
   }
+  const rolling = await loadRollingWindowAppend(
+    sessionId,
+    session,
+    sessionResult.contextDays,
+    { upToTurnId: session.context_turn_watermark || 0 },
+  )
+  sessionResult = {
+    ...sessionResult,
+    bucketExclusionIds: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])],
+  }
   const personaAppend = composeWindowPersonaAppend(
     buildPersonaAppend(persona, session.prompt_module_overrides),
     session,
     sessionId,
+    rolling.content,
   )
   const config: TurnConfig = {
     sessionId,
     mode: session.mode,
+    contextRevision: session.context_revision || 0,
     personaAppend,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({

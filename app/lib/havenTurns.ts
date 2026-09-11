@@ -26,6 +26,9 @@ export type HavenTurn = {
   id: number
   session_id: string
   round_id: number
+  user_message_id?: string
+  assistant_message_id?: string
+  chat_day?: string
   created_at: string
   user_text: string
   assistant_text: string
@@ -38,6 +41,22 @@ export type HavenTurn = {
   request_id?: string
   persona_id?: string
   attachments?: HavenAttachment[]
+}
+
+export type RollingContextConfig = {
+  strategy: 'fixed_window' | 'daily_rolling'
+  timezone: string
+  day_start_hour: number
+  day_modes: Record<string, 'raw' | 'review' | 'omit'>
+}
+
+export type ConversationContextDay = {
+  day: string
+  turn_count: number
+  raw_chars: number
+  first_turn_id: number
+  last_turn_id: number
+  review: { content: string; chars: number; updated_at: string } | null
 }
 
 export type HavenConversationSession = {
@@ -58,8 +77,12 @@ export type HavenConversationSession = {
     model?: unknown
     cc_session_id?: unknown
     seen_round_id?: unknown
+    context_revision?: unknown
   }>
   context_gc: HavenContextGcState
+  rolling_context: RollingContextConfig
+  context_revision: number
+  context_turn_watermark: number
   prompt_module_overrides: Record<string, boolean>
   mode: 'chat' | 'work'
   daily_review_enabled: boolean
@@ -127,6 +150,8 @@ export type RecordTurnResult = {
   stored: boolean
   turnId: number
   roundId: number
+  userMessageId: string
+  assistantMessageId: string
   elapsedMs: number
   error: string
   httpStatus: number | null
@@ -303,6 +328,8 @@ export async function recordTurn(input: RecordTurnInput): Promise<RecordTurnResu
     stored: false,
     turnId: 0,
     roundId: 0,
+    userMessageId: '',
+    assistantMessageId: '',
     elapsedMs: Date.now() - started,
     error,
     httpStatus,
@@ -340,6 +367,8 @@ export async function recordTurn(input: RecordTurnInput): Promise<RecordTurnResu
     stored: res.payload.stored === true,
     turnId: Number(res.payload.turn_id || 0),
     roundId: Number(res.payload.round_id || 0),
+    userMessageId: String(res.payload.user_message_id || ''),
+    assistantMessageId: String(res.payload.assistant_message_id || ''),
     elapsedMs: Date.now() - started,
     error: '',
     httpStatus: res.httpStatus,
@@ -359,6 +388,8 @@ export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<St
     stored: false,
     turnId: 0,
     roundId: 0,
+    userMessageId: '',
+    assistantMessageId: '',
     elapsedMs: Date.now() - started,
     error,
     httpStatus,
@@ -406,6 +437,8 @@ export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<St
     stored: res.payload.stored === true,
     turnId: Number(res.payload.turn_id || 0),
     roundId: Number(res.payload.round_id || 0),
+    userMessageId: String(res.payload.user_message_id || ''),
+    assistantMessageId: String(res.payload.assistant_message_id || ''),
     elapsedMs: Date.now() - started,
     error: '',
     httpStatus: res.httpStatus,
@@ -610,19 +643,21 @@ export async function getTurnByRequestId(
 /** 新会话返回 found=false；其他错误必须阻断 selfhost 发送。 */
 export async function getConversationSession(
   sessionId: string,
-  options?: { includeBucketExclusions?: boolean; signal?: AbortSignal },
+  options?: { includeBucketExclusions?: boolean; includeContextDays?: boolean; signal?: AbortSignal },
 ): Promise<{
   ok: boolean
   found: boolean
   session: HavenConversationSession | null
   bucketExclusionIds: string[]
+  contextDays: ConversationContextDay[]
   error: string
   httpStatus: number | null
 }> {
   const id = (sessionId || '').trim()
-  if (!id) return { ok: false, found: false, session: null, bucketExclusionIds: [], error: 'session_id 为空', httpStatus: null }
+  if (!id) return { ok: false, found: false, session: null, bucketExclusionIds: [], contextDays: [], error: 'session_id 为空', httpStatus: null }
   const params = new URLSearchParams({ session_id: id })
   if (options?.includeBucketExclusions) params.set('include_bucket_exclusions', '1')
+  if (options?.includeContextDays) params.set('include_context_days', '1')
   const res = await havenFetch({
     method: 'GET',
     path: `/gateway/api/conversation/session?${params.toString()}`,
@@ -630,10 +665,10 @@ export async function getConversationSession(
     signal: options?.signal,
   })
   if (!res.ok && res.httpStatus === 404) {
-    return { ok: true, found: false, session: null, bucketExclusionIds: [], error: '', httpStatus: 404 }
+    return { ok: true, found: false, session: null, bucketExclusionIds: [], contextDays: [], error: '', httpStatus: 404 }
   }
   if (!res.ok) {
-    return { ok: false, found: false, session: null, bucketExclusionIds: [], error: res.error, httpStatus: res.httpStatus }
+    return { ok: false, found: false, session: null, bucketExclusionIds: [], contextDays: [], error: res.error, httpStatus: res.httpStatus }
   }
   return {
     ok: true,
@@ -642,7 +677,40 @@ export async function getConversationSession(
     bucketExclusionIds: Array.isArray(res.payload.bucket_exclusion_ids)
       ? res.payload.bucket_exclusion_ids.map(String)
       : [],
+    contextDays: Array.isArray(res.payload.context_days)
+      ? res.payload.context_days as ConversationContextDay[]
+      : [],
     error: '',
+    httpStatus: res.httpStatus,
+  }
+}
+
+export async function patchConversationRollingContext(input: {
+  sessionId: string
+  personaId: string
+  rollingContext: RollingContextConfig
+  expectedStateVersion?: number
+}): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
+  const sessionId = input.sessionId.trim()
+  const personaId = input.personaId.trim()
+  if (!sessionId || !personaId) {
+    return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
+  }
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId,
+    body: {
+      session_id: sessionId,
+      persona_id: personaId,
+      rolling_context: input.rollingContext,
+      ...(input.expectedStateVersion == null ? {} : { expected_state_version: input.expectedStateVersion }),
+    },
+  })
+  return {
+    ok: res.ok,
+    session: res.ok ? res.payload.session as HavenConversationSession : null,
+    error: res.error,
     httpStatus: res.httpStatus,
   }
 }
@@ -691,6 +759,7 @@ export async function listTurns(
     beforeId?: number
     afterRoundId?: number
     source?: TurnSource
+    chatDays?: string[]
     includeRaw?: boolean
     signal?: AbortSignal
   },
@@ -702,6 +771,7 @@ export async function listTurns(
   if (options?.beforeId != null) params.set('before_id', String(options.beforeId))
   if (options?.afterRoundId != null) params.set('after_round_id', String(options.afterRoundId))
   if (options?.source) params.set('source', options.source)
+  if (options?.chatDays?.length) params.set('chat_days', options.chatDays.join(','))
   if (options?.includeRaw) params.set('include_raw', '1')
   const res = await havenFetch({
     method: 'GET',
@@ -723,6 +793,7 @@ export async function listAllTurns(
   options?: {
     afterRoundId?: number
     source?: TurnSource
+    chatDays?: string[]
     includeRaw?: boolean
     signal?: AbortSignal
   },
@@ -735,6 +806,7 @@ export async function listAllTurns(
       beforeId,
       afterRoundId: options?.afterRoundId,
       source: options?.source,
+      chatDays: options?.chatDays,
       includeRaw: options?.includeRaw,
       signal: options?.signal,
     })

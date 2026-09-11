@@ -137,7 +137,7 @@ export type CcTurnUsage = {
 }
 
 export type CcMessage = {
-  /** 前端本地 id，不是 Haven 的 turn_id */
+  /** 已保存消息使用 Haven 永久 ID；流式生成期间暂用前端本地 ID。 */
   id: string
   role: CcRole
   text: string
@@ -161,6 +161,8 @@ export type CcMessage = {
   /** 手动停止与 Pro 额度中断要显示不同状态；老历史缺失时按手动停止兼容。 */
   interruptedReason?: CcInterruptedReason
   createdAt: number
+  /** 按窗口设置中的时区与日界线归属的聊天日期（YYYY-MM-DD）。 */
+  chatDay?: string
   /** 来自 Haven 的历史消息（不可重发/编辑） */
   fromHistory?: boolean
   /** 5.5 换窗带过来的上一窗原文：淡色、只作衔接语境，不可重发 */

@@ -67,11 +67,17 @@ async function runDueContextGc(): Promise<void> {
         const lane = session.cc_lanes[laneId]
         const ccSessionId = String(lane?.cc_session_id || '').trim()
         if (!ccSessionId) { attempts.add(attemptKey); continue }
+        const contextRevision = session.context_revision || 0
+        const laneContextRevision = Number((lane as Record<string, unknown>)?.context_revision || 0)
+        if (laneContextRevision !== contextRevision) {
+          attempts.add(attemptKey)
+          continue
+        }
         try {
           const scan = await scanContextGc(ccSessionId, session.context_gc?.protected_keys || [])
           const selectedIds = scan.candidates.filter(item => !item.protected).map(item => item.id)
           if (selectedIds.length === 0) { attempts.add(attemptKey); continue }
-          const ready = prepareSessionForContextGc(summary.session_id, laneId)
+          const ready = prepareSessionForContextGc(summary.session_id, laneId, contextRevision)
           if (!ready.ok) continue
           const applied = await applyContextGc(ccSessionId, selectedIds)
           const committed = await patchConversationContextGc({
@@ -90,7 +96,7 @@ async function runDueContextGc(): Promise<void> {
             },
           })
           if (!committed.ok || !committed.session) throw new Error(committed.error || 'Haven commit failed')
-          activateContextGcFork(summary.session_id, laneId, applied.nextCcSessionId)
+          activateContextGcFork(summary.session_id, laneId, contextRevision, applied.nextCcSessionId)
           session = committed.session
           attempts.add(attemptKey)
         } catch (error) {

@@ -68,9 +68,12 @@ export function thinkingDuration(process: CcProcessEvent[] | undefined) {
 export type HavenTurnRow = {
   id: number
   round_id?: number
+  user_message_id?: string
+  assistant_message_id?: string
   user_text: string
   assistant_text: string
   created_at: string
+  chat_day?: string
   source: string
   turn_kind?: 'user' | 'agent_wake'
   client?: string
@@ -444,6 +447,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         compaction,
         laneId: extra.laneId || undefined,
         createdAt: compaction.at || at,
+        chatDay: t.chat_day || undefined,
         fromHistory: true,
       })
     }
@@ -458,6 +462,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
           thinkingMs: !t.assistant_text?.trim() ? thinkingDuration(extra.process) || undefined : undefined,
           usage: !t.assistant_text?.trim() ? extra.usage : undefined,
           createdAt: at,
+          chatDay: t.chat_day || undefined,
           fromHistory: true,
           roundId: t.round_id,
         }
@@ -481,20 +486,22 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
     })
     if (!wakeEvent && (t.user_text?.trim() || attachments.length > 0)) {
       out.push({
-        id: `h${t.id}u`,
+        id: t.user_message_id || `h${t.id}u`,
         role: 'user',
         text: t.user_text,
         attachments,
         createdAt: at,
+        chatDay: t.chat_day || undefined,
         fromHistory: true,
       })
     }
     if (t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit') {
       out.push({
-        id: `h${t.id}a`,
+        id: t.assistant_message_id || `h${t.id}a`,
         role: 'assistant',
         text: t.assistant_text,
         createdAt: at,
+        chatDay: t.chat_day || undefined,
         fromHistory: true,
         personaId: personaOfClient(t.client),
         thinking: extra.thinking || undefined,

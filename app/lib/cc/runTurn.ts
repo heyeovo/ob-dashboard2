@@ -30,6 +30,7 @@ import {
   CACHE_TTL_SESSION_MS,
   CACHE_TTL_SYSTEM_MS,
   acknowledgePendingCompactions,
+  ccResumeKey,
   consumeTurnInterrupted,
   dropSession,
   ensureSession,
@@ -401,7 +402,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   const attachments = inputAttachments || []
   const turnKind = input.turnKind || 'user'
   const persistTurn = input.persistTurn !== false
-  const resumeKey = `${sessionId}::${config.laneId}`
+  const resumeKey = ccResumeKey(sessionId, config.laneId, config.contextRevision)
   setTurnWebSettings(sessionId, config.webSettings)
   const state = new TurnState(sessionId)
   const startedAt = Date.now()
@@ -1007,6 +1008,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           engine: 'cc',
           pre_compactions: preCompactions.length ? preCompactions : undefined,
           context_snapshot: live.contextSnapshot || undefined,
+          rolling_context_revision: config.contextRevision || 0,
           cache_snapshot: live.lastModelCallAt ? {
             refreshedAt: live.lastModelCallAt,
             systemTtlMs: CACHE_TTL_SYSTEM_MS,
@@ -1093,6 +1095,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             stored: rec.stored,
             turn_id: rec.turnId,
             round_id: rec.roundId,
+            user_message_id: rec.userMessageId,
+            assistant_message_id: rec.assistantMessageId,
             idempotent_replay: rec.idempotentReplay,
             code: rec.code || undefined,
             http_status: rec.httpStatus,
@@ -1170,6 +1174,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       request_id: requestId,
       round_id: storedRoundId,
       turn_id: Number(storeInfo.turn_id || 0),
+      user_message_id: String(storeInfo.user_message_id || ''),
+      assistant_message_id: String(storeInfo.assistant_message_id || ''),
       idempotent_replay: storeInfo.idempotent_replay === true,
       continuity_turns: missingRouteTurns.length,
       display_segments: displaySegments,

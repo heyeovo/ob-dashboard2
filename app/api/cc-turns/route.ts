@@ -4,6 +4,7 @@ import {
   listAllTurns,
   listTurns,
   getConversationSession,
+  patchConversationRollingContext,
   patchConversationSessionState,
   permanentlyDeleteConversationSession,
   renameConversationSession,
@@ -50,14 +51,18 @@ export async function GET(request: NextRequest) {
   if (sessionId) {
     const [res, state] = await Promise.all([
       sp.get('all') === '1'
-        ? listAllTurns(sessionId, { includeRaw: sp.get('raw') === '1' })
+        ? listAllTurns(sessionId, {
+            includeRaw: sp.get('raw') === '1',
+            chatDays: sp.get('chat_days')?.split(',').map(day => day.trim()).filter(Boolean),
+          })
         : listTurns(sessionId, {
             limit: Number(sp.get('limit') || 200),
             beforeId: sp.get('before_id') ? Number(sp.get('before_id')) : undefined,
             afterRoundId: sp.get('after_round_id') ? Number(sp.get('after_round_id')) : undefined,
+            chatDays: sp.get('chat_days')?.split(',').map(day => day.trim()).filter(Boolean),
             includeRaw: sp.get('raw') === '1',
           }),
-      getConversationSession(sessionId),
+      getConversationSession(sessionId, { includeContextDays: sp.get('context_days') === '1' }),
     ])
     if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })
     if (!state.ok) return Response.json({ ok: false, error: state.error }, { status: 502 })
@@ -67,6 +72,7 @@ export async function GET(request: NextRequest) {
       count: res.turns.length,
       turns: res.turns,
       session: state.found ? state.session : null,
+      context_days: state.contextDays,
     })
   }
 
@@ -104,16 +110,33 @@ export async function PATCH(request: NextRequest) {
     local_engine_preference?: string
     prompt_module_overrides?: Record<string, boolean>
     expected_state_version?: number
+    rolling_context?: import('@/app/lib/havenTurns').RollingContextConfig
   } | null
   const sessionId = (body?.session_id || '').trim()
   const title = (body?.title || '').trim()
   const preference = body?.local_engine_preference
   const hasPromptOverrides = body?.prompt_module_overrides !== undefined
+  const hasRollingContext = body?.rolling_context !== undefined
   if (!sessionId) {
     return Response.json({ ok: false, error: 'session_id 不能为空' }, { status: 400 })
   }
   let session = null
-  if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides) {
+  if (hasRollingContext) {
+    const result = await patchConversationRollingContext({
+      sessionId,
+      personaId: String(body?.persona_id || ''),
+      rollingContext: body?.rolling_context as import('@/app/lib/havenTurns').RollingContextConfig,
+      expectedStateVersion: body?.expected_state_version,
+    })
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, session_id: sessionId, session: null, error: result.error || undefined },
+        { status: result.httpStatus || 502 },
+      )
+    }
+    session = result.session
+    if (!title) return Response.json({ ok: true, session_id: sessionId, session })
+  } else if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides) {
     const result = await patchConversationSessionState({
       sessionId,
       personaId: String(body?.persona_id || ''),

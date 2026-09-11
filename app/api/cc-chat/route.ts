@@ -32,7 +32,7 @@ import {
 import { resolveAttachments } from '@/app/lib/havenAttachments'
 import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
 import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
-import { composeWindowPersonaAppend } from '@/app/lib/cc/windowPrompt'
+import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import { runForegroundSessionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
@@ -258,6 +258,7 @@ async function loadTurnInputs(body: ChatBody) {
 
   let sessionSnapshot = await getConversationSession(body.session_id || '', {
     includeBucketExclusions: true,
+    includeContextDays: true,
   })
   if (!sessionSnapshot.ok || !sessionSnapshot.session) {
     throw new Error(`读取窗口固定背景失败：${sessionSnapshot.error || 'Haven 返回空窗口'}`)
@@ -284,6 +285,7 @@ async function loadTurnInputs(body: ChatBody) {
       // 两个请求同时首次启动时，另一个可能先写入并让 CAS 冲突；重读已冻结值即可。
       const reread = await getConversationSession(body.session_id || '', {
         includeBucketExclusions: true,
+        includeContextDays: true,
       })
       if (!reread.ok || !reread.session?.frozen_persona_append_initialized) {
         throw new Error(`保存窗口缓存前缀失败：${saved.error || reread.error || 'Haven 写入失败'}`)
@@ -293,10 +295,30 @@ async function loadTurnInputs(body: ChatBody) {
   }
   const promptSession = sessionSnapshot.session
   if (!promptSession) throw new Error('读取窗口状态失败：Haven 未返回 session')
+  const contextRevision = promptSession.context_revision || 0
+  const promptLaneState = promptSession.cc_lanes?.[laneId]
+  const laneContextRevision = Number((promptLaneState as Record<string, unknown> | undefined)?.context_revision || 0)
+  const isRolling = promptSession.rolling_context?.strategy === 'daily_rolling'
+  const canResumePersisted = laneContextRevision === contextRevision
+  const safeResumeHint = canResumePersisted
+    ? persistedResumeHint
+    : ''
+  const safeLegacyResumeHint = !isRolling && contextRevision === 0 ? legacyResumeHint : ''
+  const rolling = await loadRollingWindowAppend(
+    String(body.session_id || ''),
+    promptSession,
+    sessionSnapshot.contextDays,
+    { upToTurnId: promptSession.context_turn_watermark || 0 },
+  )
+  sessionSnapshot = {
+    ...sessionSnapshot,
+    bucketExclusionIds: [...new Set([...sessionSnapshot.bucketExclusionIds, ...rolling.pinnedBucketIds])],
+  }
   const personaAppend = composeWindowPersonaAppend(
     buildPersonaAppend(persona, promptSession.prompt_module_overrides),
     promptSession,
     String(body.session_id || ''),
+    rolling.content,
   )
 
   // 能读哪些目录：本机没配退回仓库根；production 没配只进 dashboard workspace。
@@ -317,6 +339,7 @@ async function loadTurnInputs(body: ChatBody) {
     sessionId: body.session_id || '',
     mode,
     personaAppend,
+    contextRevision,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),
@@ -344,7 +367,7 @@ async function loadTurnInputs(body: ChatBody) {
     persona,
     config,
     sessionSnapshot,
-    resumeHint: persistedResumeHint || legacyResumeHint,
+    resumeHint: safeResumeHint || safeLegacyResumeHint,
   }
 }
 

@@ -868,6 +868,33 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }
   }, [sessionId, hasEarlierHistory, historyBeforeId, earlierHistoryLoading])
 
+  const loadHistoryDay = useCallback(async (chatDay: string) => {
+    if (!sessionId || !/^\d{4}-\d{2}-\d{2}$/.test(chatDay)) return false
+    try {
+      const res = await fetch(
+        `/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&all=1&chat_days=${encodeURIComponent(chatDay)}&raw=1`,
+        { cache: 'no-store' },
+      )
+      const data = await res.json()
+      if (!res.ok || !data.ok || !Array.isArray(data.turns)) throw new Error('历史消息读取失败')
+      const turns = data.turns as HavenTurnRow[]
+      if (turns.length === 0) return false
+      setMessages(previous => {
+        const combined = [...previous, ...turnsToMessages(turns)]
+        const unique = [...new Map(combined.map(message => [message.id, message])).values()]
+        return unique.sort((a, b) => a.createdAt - b.createdAt)
+      })
+      setHistoryBeforeId(previous => {
+        const earliest = turns.reduce((value, turn) => Math.min(value, turn.id), Number.POSITIVE_INFINITY)
+        return Number.isFinite(earliest) ? Math.min(previous ?? earliest, earliest) : previous
+      })
+      return true
+    } catch {
+      setError('这一天的历史消息读取失败')
+      return false
+    }
+  }, [sessionId])
+
   const startNewSession = useCallback(() => {
     draftsRef.current.set(sessionId, draft)
     abortRef.current?.abort()
@@ -1609,6 +1636,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             const replayed = payload.idempotent_replay === true
             const continuityTurns = Number(payload.continuity_turns || 0)
             const roundId = Number(payload.round_id || 0)
+            const savedUserMessageId = String(payload.user_message_id || '')
+            const savedAssistantMessageId = String(payload.assistant_message_id || '')
             const displaySegments = normalizeDisplaySegments(payload.display_segments)
             const nextWake = payload.next_wake && typeof payload.next_wake === 'object'
               ? payload.next_wake as Record<string, unknown>
@@ -1618,6 +1647,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               const process = closeOpenThinking(m.process)
               return {
                 ...m,
+                id: savedAssistantMessageId || m.id,
                 process,
                 streaming: false,
                 usage: usage || m.usage,
@@ -1643,6 +1673,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
                     : '已保存到 Haven',
               }
             })
+            if (!retry && savedUserMessageId) {
+              setMessages(previous => previous.map(message => (
+                message.id === userMsg.id ? { ...message, id: savedUserMessageId } : message
+              )))
+            }
             if (doneStats) setStats(doneStats)
           },
           onAfter: payload => {
@@ -1816,6 +1851,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     earlierHistoryLoading,
     hasEarlierHistory,
     loadEarlierHistory,
+    loadHistoryDay,
     draft,
     setDraft,
     sending,
