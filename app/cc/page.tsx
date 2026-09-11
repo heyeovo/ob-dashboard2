@@ -20,7 +20,7 @@ import CcPersonaRail from './CcPersonaRail'
 import CcRecallDialog from './CcRecallDialog'
 import CcSessionRail from './CcSessionRail'
 import { draftPersona, type CcPersona } from './persona'
-import { useCcChat } from './useCcChat'
+import { requestedCcSessionId, useCcChat } from './useCcChat'
 import { useIsRemote } from './useIsRemote'
 import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
@@ -295,7 +295,7 @@ export default function CcChatPage() {
   const isRemote = useIsRemote()
   const people = usePersonas()
   const chat = useCcChat(people.activeId, isRemote)
-  const [railOpen, setRailOpen] = useState(false)
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
   // 协作者：左上角开列表，右上角开设置。settingsFor 为 null 就是没开设置。
   const [personaRailOpen, setPersonaRailOpen] = useState(false)
   const [settingsFor, setSettingsFor] = useState<CcPersona | null>(null)
@@ -318,6 +318,18 @@ export default function CcChatPage() {
   useEffect(() => {
     const timer = window.setInterval(() => setCacheClock(Date.now()), 15_000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (requestedCcSessionId(window.location.search)) setMobileView('chat')
+    const showList = () => {
+      setMobileView('list')
+      setActiveHistorical(null)
+      setSelectMode(false)
+      setSelectedMessageIds(new Set())
+    }
+    window.addEventListener('cc:show-list', showList)
+    return () => window.removeEventListener('cc:show-list', showList)
   }, [])
 
   const startSelecting = (messageId?: string) => {
@@ -517,10 +529,15 @@ export default function CcChatPage() {
       ) : null}
       <button
         type="button"
-        onClick={() => setRailOpen(true)}
+        onClick={() => {
+          setMobileView('list')
+          setActiveHistorical(null)
+          stopSelecting()
+        }}
+        aria-label="返回对话列表"
         className={`${selectMode ? 'hidden' : ''} rounded-[var(--radius-md)] px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] md:hidden`}
       >
-        对话
+        ←
       </button>
       {/* 左：当前协作者，点开换人 */}
       <button
@@ -985,7 +1002,7 @@ export default function CcChatPage() {
     </div>
   )
 
-  const rail = (
+  const sessionRail = (variant: 'rail' | 'mobile-page' = 'rail') => (
     <CcSessionRail
       sessions={chat.sessions}
       deletedSessions={chat.deletedSessions}
@@ -993,28 +1010,41 @@ export default function CcChatPage() {
       activeHistoricalKey={activeHistorical ? historicalKey(activeHistorical) : ''}
       loading={chat.sessionsLoading}
       onPick={id => {
-        setRailOpen(false)
+        setMobileView('chat')
         setActiveHistorical(null)
         stopSelecting()
         void chat.switchSession(id)
       }}
       onPickHistorical={conversation => {
-        setRailOpen(false)
+        setMobileView('chat')
         setActiveHistorical(conversation)
         stopSelecting()
         closeSearch()
       }}
       onNew={() => {
-        setRailOpen(false)
         setActiveHistorical(null)
         stopSelecting()
-        setHandoffOpen({ fromSessionId: null })
+        if (variant === 'mobile-page') {
+          chat.startNewSession()
+          setMobileView('chat')
+        } else {
+          setHandoffOpen({ fromSessionId: null })
+        }
       }}
       onRename={chat.renameSession}
-      onDelete={chat.deleteSession}
+      onPin={chat.pinSession}
+      onDelete={async id => {
+        const ok = await chat.deleteSession(id)
+        if (ok && variant === 'mobile-page') setMobileView('list')
+        return ok
+      }}
       onPermanentDelete={chat.permanentlyDeleteSession}
+      variant={variant}
+      notice={chat.sessionActionNote}
     />
   )
+
+  const rail = sessionRail()
 
   // 协作者列表：桌面端和手机端都是从左侧盖上来的浮层。
   // 桌面端左边那栏是会话列表，两个东西不能抢同一个位置。
@@ -1061,7 +1091,7 @@ export default function CcChatPage() {
                 key={historicalKey(activeHistorical)}
                 conversation={activeHistorical}
                 persona={people.active}
-                onOpenRail={() => setRailOpen(true)}
+                onOpenRail={() => setMobileView('list')}
                 onForward={block => { setForwardedBlock(block); setActiveHistorical(null) }}
               />
             ) : (
@@ -1075,17 +1105,17 @@ export default function CcChatPage() {
         </div>
       </div>
 
-      {/* 手机端：全屏对话，会话列表从左侧滑入 */}
+      {/* 手机端：默认对话列表，点进窗口后才显示聊天。 */}
       <div
         className="cc-page flex flex-col md:hidden"
         style={{ height: 'calc(100dvh - 76px - env(safe-area-inset-bottom, 0px))' }}
       >
-        {activeHistorical ? (
+        {mobileView === 'list' ? sessionRail('mobile-page') : activeHistorical ? (
           <CcHistoricalChat
             key={historicalKey(activeHistorical)}
             conversation={activeHistorical}
             persona={people.active}
-            onOpenRail={() => setRailOpen(true)}
+            onOpenRail={() => setMobileView('list')}
             onForward={block => { setForwardedBlock(block); setActiveHistorical(null) }}
           />
         ) : (
@@ -1096,20 +1126,6 @@ export default function CcChatPage() {
           </>
         )}
       </div>
-
-      {railOpen ? (
-        <div className="cc-mobile-overlay-clearance fixed inset-x-0 top-0 z-40 md:hidden">
-          <button
-            type="button"
-            aria-label="关闭对话列表"
-            onClick={() => setRailOpen(false)}
-            className="absolute inset-0 bg-black/20"
-          />
-          <div className="absolute left-0 top-0 h-full w-[78%] max-w-[300px] bg-[var(--color-surface)] shadow-xl">
-            {rail}
-          </div>
-        </div>
-      ) : null}
 
       {personaRail}
 

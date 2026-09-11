@@ -7,6 +7,7 @@ import {
   patchConversationRollingContext,
   patchConversationSessionState,
   permanentlyDeleteConversationSession,
+  pinConversationSession,
   renameConversationSession,
   softDeleteConversationSession,
   type TurnSource,
@@ -110,6 +111,7 @@ export async function PATCH(request: NextRequest) {
     local_engine_preference?: string
     prompt_module_overrides?: Record<string, boolean>
     expected_state_version?: number
+    pinned?: boolean
     rolling_context?: import('@/app/lib/havenTurns').RollingContextConfig
   } | null
   const sessionId = (body?.session_id || '').trim()
@@ -117,11 +119,22 @@ export async function PATCH(request: NextRequest) {
   const preference = body?.local_engine_preference
   const hasPromptOverrides = body?.prompt_module_overrides !== undefined
   const hasRollingContext = body?.rolling_context !== undefined
+  const hasPinned = body?.pinned !== undefined
   if (!sessionId) {
     return Response.json({ ok: false, error: 'session_id 不能为空' }, { status: 400 })
   }
   let session = null
-  if (hasRollingContext) {
+  if (hasPinned) {
+    const result = await pinConversationSession(
+      sessionId,
+      String(body?.persona_id || ''),
+      body?.pinned === true,
+    )
+    return Response.json(
+      { ok: result.ok, session_id: sessionId, pinned: body?.pinned === true, error: result.error || undefined },
+      { status: result.ok ? 200 : 502 },
+    )
+  } else if (hasRollingContext) {
     const result = await patchConversationRollingContext({
       sessionId,
       personaId: String(body?.persona_id || ''),

@@ -162,6 +162,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   // 读历史时数出来的轮数。进程被回收后 stats.turnCount 归零，用它兜底
   const [historyTurnCount, setHistoryTurnCount] = useState(0)
   const [error, setError] = useState('')
+  const [sessionActionNote, setSessionActionNote] = useState('')
   const [localEnginePreference, setLocalEnginePreference] = useState<CcEngine>('cc')
   const [engineSaving, setEngineSaving] = useState(false)
   const [promptModuleOverrides, setPromptModuleOverrides] = useState<Record<string, boolean>>({})
@@ -366,12 +367,39 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       setSessions(previous => previous.map(session => (
         session.session_id === targetSessionId ? { ...session, title: cleanedTitle } : session
       )))
+      setSessionActionNote('窗口名称已保存')
       return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '重命名失败')
       return false
     }
   }, [localEnginePreference, personaId])
+
+  const pinSession = useCallback(async (targetSessionId: string, pinned: boolean) => {
+    if (!targetSessionId) return false
+    setSessionActionNote('')
+    try {
+      const res = await fetch('/api/cc-turns', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: targetSessionId,
+          persona_id: personaId,
+          pinned,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(String(data.error || '置顶设置失败'))
+      await refreshSessions()
+      setSessionActionNote(pinned ? '已设为主窗' : '已取消置顶')
+      return true
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '置顶设置失败'
+      setError(message)
+      setSessionActionNote(message)
+      return false
+    }
+  }, [personaId, refreshSessions])
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refreshSessions(), 0)
@@ -934,6 +962,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   const deleteSession = useCallback(async (targetSessionId: string) => {
     if (!targetSessionId) return false
+    setSessionActionNote('')
     try {
       const res = await fetch('/api/cc-turns', {
         method: 'DELETE',
@@ -946,16 +975,17 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         method: 'DELETE',
       }).catch(() => undefined)
       draftsRef.current.delete(targetSessionId)
-      const deleted = sessions.find(session => session.session_id === targetSessionId)
-      setSessions(previous => previous.filter(session => session.session_id !== targetSessionId))
-      if (deleted) setDeletedSessions(previous => [{ ...deleted, deleted_at: new Date().toISOString() }, ...previous])
       if (targetSessionId === sessionId) startNewSession()
+      await refreshSessions()
+      setSessionActionNote('窗口已移入“已删除窗口”')
       return true
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '删除窗口失败')
+      const message = reason instanceof Error ? reason.message : '删除窗口失败'
+      setError(message)
+      setSessionActionNote(message)
       return false
     }
-  }, [sessionId, sessions, startNewSession])
+  }, [refreshSessions, sessionId, startNewSession])
 
   const permanentlyDeleteSession = useCallback(async (targetSessionId: string) => {
     if (!targetSessionId) return false
@@ -973,6 +1003,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       if (!res.ok || !data.ok) throw new Error(String(data.error || '永久删除失败'))
       setDeletedSessions(previous => previous.filter(session => session.session_id !== targetSessionId))
       draftsRef.current.delete(targetSessionId)
+      setSessionActionNote('窗口已永久删除')
       return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '永久删除失败')
@@ -1846,6 +1877,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     sessions,
     deletedSessions,
     sessionsLoading,
+    sessionActionNote,
     sessionTitle,
     activeSessionSource,
     messages,
@@ -1869,6 +1901,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     switchSession,
     startNewSession,
     renameSession,
+    pinSession,
     deleteSession,
     permanentlyDeleteSession,
     localEnginePreference,

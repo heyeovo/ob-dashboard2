@@ -54,7 +54,10 @@ export default function BottomTabBar() {
             return (
               <button
                 key={tab.slug}
-                onClick={() => router.push(tab.href)}
+                onClick={() => {
+                  if (pathname.startsWith('/cc')) window.dispatchEvent(new Event('cc:show-list'))
+                  router.push(tab.href)
+                }}
                 className="flex min-w-[64px] flex-col items-center gap-1 transition-all duration-200 active:scale-90"
               >
                 <div

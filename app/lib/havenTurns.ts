@@ -95,6 +95,7 @@ export type HavenConversationSession = {
   frozen_persona_append_initialized: boolean
   cc_seen_round_id: number
   state_version: number
+  pinned_at: string | null
   deleted_at: string | null
   updated_at: string
 }
@@ -129,6 +130,8 @@ export type HavenSession = {
   client: string
   route: string
   source: string
+  pinned_at?: string | null
+  deleted_at?: string | null
 }
 
 export type RecordTurnInput = {
@@ -835,6 +838,23 @@ export async function renameConversationSession(
     body: { session_id: id, title: cleanedTitle },
   })
   return { ok: res.ok, title: cleanedTitle, error: res.error }
+}
+
+export async function pinConversationSession(
+  sessionId: string,
+  personaId: string,
+  pinned: boolean,
+): Promise<{ ok: boolean; error: string }> {
+  const id = sessionId.trim()
+  const owner = personaId.trim()
+  if (!id || !owner) return { ok: false, error: 'session_id / persona_id 不能为空' }
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId: id,
+    body: { session_id: id, persona_id: owner, pinned },
+  })
+  return { ok: res.ok, error: res.error }
 }
 
 export async function patchConversationSessionState(input: {

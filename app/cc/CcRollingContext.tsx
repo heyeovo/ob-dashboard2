@@ -212,6 +212,11 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
 
   const save = async () => {
     if (busy) return
+    const switchingToFixed = session.rolling_context?.strategy === 'daily_rolling'
+      && draft.strategy === 'fixed_window'
+    if (switchingToFixed && !window.confirm(
+      '切回原换窗机制后，这个窗口只会使用创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。\n\n如果要保留最新衔接，请取消并先使用“换窗继续”。仍要直接切回吗？',
+    )) return
     setSaving(true)
     setNote('')
     try {
@@ -321,7 +326,15 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
           </div>
         </>
       ) : (
-        <div className="text-[10.5px] leading-relaxed text-[var(--color-text-disabled)]">继续使用当前的冻结换窗资料和原生会话续接，不改变现有行为。</div>
+        <div className={`rounded-[var(--radius-md)] px-2.5 py-2 text-[10.5px] leading-relaxed ${
+          session.rolling_context?.strategy === 'daily_rolling'
+            ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
+            : 'text-[var(--color-text-disabled)]'
+        }`}>
+          {session.rolling_context?.strategy === 'daily_rolling'
+            ? '切回后只会使用这个窗口创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。要保留最新衔接，请先使用“换窗继续”。'
+            : '继续使用当前的冻结换窗资料和原生会话续接，不改变现有行为。'}
+        </div>
       )}
 
       <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-white disabled:opacity-50">
