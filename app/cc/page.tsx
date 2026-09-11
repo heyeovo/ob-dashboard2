@@ -321,7 +321,9 @@ export default function CcChatPage() {
   }, [])
 
   useEffect(() => {
-    if (requestedCcSessionId(window.location.search)) setMobileView('chat')
+    const initialTimer = window.setTimeout(() => {
+      if (requestedCcSessionId(window.location.search)) setMobileView('chat')
+    }, 0)
     const showList = () => {
       setMobileView('list')
       setActiveHistorical(null)
@@ -329,7 +331,10 @@ export default function CcChatPage() {
       setSelectedMessageIds(new Set())
     }
     window.addEventListener('cc:show-list', showList)
-    return () => window.removeEventListener('cc:show-list', showList)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.removeEventListener('cc:show-list', showList)
+    }
   }, [])
 
   const startSelecting = (messageId?: string) => {
@@ -1006,6 +1011,8 @@ export default function CcChatPage() {
     <CcSessionRail
       sessions={chat.sessions}
       deletedSessions={chat.deletedSessions}
+      deletedSessionsTotal={chat.deletedSessionsTotal}
+      deletedSessionsLoadingMore={chat.deletedSessionsLoadingMore}
       activeSessionId={activeHistorical ? '' : chat.sessionId}
       activeHistoricalKey={activeHistorical ? historicalKey(activeHistorical) : ''}
       loading={chat.sessionsLoading}
@@ -1039,6 +1046,7 @@ export default function CcChatPage() {
         return ok
       }}
       onPermanentDelete={chat.permanentlyDeleteSession}
+      onLoadMoreDeleted={chat.loadMoreDeletedSessions}
       variant={variant}
       notice={chat.sessionActionNote}
     />

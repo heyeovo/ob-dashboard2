@@ -734,13 +734,17 @@ export async function importPolarisConversations(
 /** 会话列表。source 传 'cc' 只看新前端的，不传是全部（含 Polaris 经 Haven 写的）。 */
 export async function listSessions(options?: {
   limit?: number
+  offset?: number
   source?: TurnSource
+  personaId?: string
   deleted?: boolean
   signal?: AbortSignal
-}): Promise<{ ok: boolean; sessions: HavenSession[]; error: string }> {
+}): Promise<{ ok: boolean; sessions: HavenSession[]; total: number; error: string }> {
   const params = new URLSearchParams()
   if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
   if (options?.source) params.set('source', options.source)
+  if (options?.personaId) params.set('persona_id', options.personaId)
   if (options?.deleted) params.set('deleted', '1')
   const qs = params.toString()
   const res = await havenFetch({
@@ -748,10 +752,12 @@ export async function listSessions(options?: {
     path: `/gateway/api/conversation/sessions${qs ? `?${qs}` : ''}`,
     signal: options?.signal,
   })
-  if (!res.ok) return { ok: false, sessions: [], error: res.error }
+  if (!res.ok) return { ok: false, sessions: [], total: 0, error: res.error }
+  const sessions = Array.isArray(res.payload.sessions) ? (res.payload.sessions as HavenSession[]) : []
   return {
     ok: true,
-    sessions: Array.isArray(res.payload.sessions) ? (res.payload.sessions as HavenSession[]) : [],
+    sessions,
+    total: Number.isFinite(Number(res.payload.total)) ? Number(res.payload.total) : sessions.length,
     error: '',
   }
 }

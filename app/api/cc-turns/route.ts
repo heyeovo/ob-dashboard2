@@ -79,7 +79,9 @@ export async function GET(request: NextRequest) {
 
   const res = await listSessions({
     limit: Number(sp.get('limit') || 50),
+    offset: Number(sp.get('offset') || 0),
     source,
+    personaId: (sp.get('persona_id') || '').trim(),
     deleted: sp.get('deleted') === '1',
   })
   if (!res.ok) return Response.json({ ok: false, error: res.error }, { status: 502 })
@@ -99,6 +101,7 @@ export async function GET(request: NextRequest) {
     source: source ?? 'all',
     persona_id: personaId || null,
     count: sessions.length,
+    total: res.total,
     sessions,
   })
 }

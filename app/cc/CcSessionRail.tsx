@@ -17,6 +17,8 @@ import {
 type Props = {
   sessions: CcSessionListItem[]
   deletedSessions: CcSessionListItem[]
+  deletedSessionsTotal: number
+  deletedSessionsLoadingMore: boolean
   activeSessionId: string
   activeHistoricalKey: string
   loading: boolean
@@ -27,6 +29,7 @@ type Props = {
   onPin: (sessionId: string, pinned: boolean) => Promise<boolean>
   onDelete: (sessionId: string) => Promise<boolean>
   onPermanentDelete: (sessionId: string) => Promise<boolean>
+  onLoadMoreDeleted: () => Promise<void>
   variant?: 'rail' | 'mobile-page'
   notice?: string
 }
@@ -48,6 +51,8 @@ function relativeTime(iso: string) {
 export default function CcSessionRail({
   sessions,
   deletedSessions,
+  deletedSessionsTotal,
+  deletedSessionsLoadingMore,
   activeSessionId,
   activeHistoricalKey,
   loading,
@@ -58,6 +63,7 @@ export default function CcSessionRail({
   onPin,
   onDelete,
   onPermanentDelete,
+  onLoadMoreDeleted,
   variant = 'rail',
   notice = '',
 }: Props) {
@@ -222,6 +228,16 @@ export default function CcSessionRail({
                 </div>
               </div>
             ))}
+            {deletedSessions.length < deletedSessionsTotal ? (
+              <button
+                type="button"
+                disabled={deletedSessionsLoadingMore}
+                onClick={() => void onLoadMoreDeleted()}
+                className="w-full rounded-[var(--radius-md)] bg-[var(--color-surface)] px-3 py-2.5 text-xs text-[var(--color-primary)] disabled:opacity-50"
+              >
+                {deletedSessionsLoadingMore ? '加载中…' : `加载更多（还有 ${deletedSessionsTotal - deletedSessions.length} 个）`}
+              </button>
+            ) : null}
           </div>
         </div>
       )
@@ -250,7 +266,7 @@ export default function CcSessionRail({
               <span>历史聊天</span><span className="text-[var(--color-text-disabled)]">{historicalLoading ? '…' : historical.length} ›</span>
             </button>
             <button type="button" onClick={() => setMobileSection('deleted')} className="flex w-full items-center justify-between rounded-[var(--radius-md)] bg-[var(--color-surface)] px-3 py-3 text-left text-xs text-[var(--color-text-secondary)]">
-              <span>已删除窗口</span><span className="text-[var(--color-text-disabled)]">{deletedSessions.length} ›</span>
+              <span>已删除窗口</span><span className="text-[var(--color-text-disabled)]">{deletedSessionsTotal} ›</span>
             </button>
           </div>
         </div>
@@ -338,7 +354,7 @@ export default function CcSessionRail({
             className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
           >
             <span>已删除窗口</span>
-            <span>{deletedSessions.length} {deletedOpen ? '⌃' : '⌄'}</span>
+            <span>{deletedSessionsTotal} {deletedOpen ? '⌃' : '⌄'}</span>
           </button>
           {deletedOpen ? (
             <div className="mt-1 space-y-1">
@@ -359,6 +375,16 @@ export default function CcSessionRail({
                   </div>
                 </div>
               ))}
+              {deletedSessions.length < deletedSessionsTotal ? (
+                <button
+                  type="button"
+                  disabled={deletedSessionsLoadingMore}
+                  onClick={() => void onLoadMoreDeleted()}
+                  className="w-full rounded-[var(--radius-md)] px-2.5 py-2 text-[11px] text-[var(--color-primary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-50"
+                >
+                  {deletedSessionsLoadingMore ? '加载中…' : `加载更多（还有 ${deletedSessionsTotal - deletedSessions.length} 个）`}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

@@ -147,7 +147,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionId, setSessionId] = useState('')
   const [sessions, setSessions] = useState<CcSessionListItem[]>([])
   const [deletedSessions, setDeletedSessions] = useState<CcSessionListItem[]>([])
+  const [deletedSessionsTotal, setDeletedSessionsTotal] = useState(0)
   const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [deletedSessionsLoadingMore, setDeletedSessionsLoadingMore] = useState(false)
   const [messages, setMessages] = useState<CcMessage[]>([])
   const [handoffTranscript, setHandoffTranscript] = useState('')
   const [isRolling, setIsRolling] = useState(false)
@@ -340,13 +342,43 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         deletedResponse.json(),
       ])
       if (activeData.ok && Array.isArray(activeData.sessions)) setSessions(activeData.sessions)
-      if (deletedData.ok && Array.isArray(deletedData.sessions)) setDeletedSessions(deletedData.sessions)
+      if (deletedData.ok && Array.isArray(deletedData.sessions)) {
+        setDeletedSessions(deletedData.sessions)
+        setDeletedSessionsTotal(Number.isFinite(Number(deletedData.total)) ? Number(deletedData.total) : deletedData.sessions.length)
+      }
     } catch {
       /* 会话列表拉不到不影响聊天 */
     } finally {
       setSessionsLoading(false)
     }
   }, [personaId])
+
+  const loadMoreDeletedSessions = useCallback(async () => {
+    if (deletedSessionsLoadingMore || deletedSessions.length >= deletedSessionsTotal) return
+    setDeletedSessionsLoadingMore(true)
+    try {
+      const qs = personaId ? `&persona_id=${encodeURIComponent(personaId)}` : ''
+      const response = await fetch(
+        `/api/cc-turns?limit=60&deleted=1&offset=${deletedSessions.length}${qs}`,
+        { cache: 'no-store' },
+      )
+      const data = await response.json()
+      if (!response.ok || !data.ok || !Array.isArray(data.sessions)) {
+        throw new Error(String(data.error || '读取更多已删除窗口失败'))
+      }
+      setDeletedSessions(previous => [
+        ...previous,
+        ...data.sessions.filter((item: CcSessionListItem) => !previous.some(existing => existing.session_id === item.session_id)),
+      ])
+      setDeletedSessionsTotal(Number.isFinite(Number(data.total)) ? Number(data.total) : deletedSessionsTotal)
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '读取更多已删除窗口失败'
+      setError(message)
+      setSessionActionNote(message)
+    } finally {
+      setDeletedSessionsLoadingMore(false)
+    }
+  }, [deletedSessions.length, deletedSessionsLoadingMore, deletedSessionsTotal, personaId])
 
   const renameSession = useCallback(async (targetSessionId: string, title: string) => {
     const cleanedTitle = title.trim().replace(/\s+/g, ' ').slice(0, 120)
@@ -1001,15 +1033,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       })
       const data = await res.json()
       if (!res.ok || !data.ok) throw new Error(String(data.error || '永久删除失败'))
-      setDeletedSessions(previous => previous.filter(session => session.session_id !== targetSessionId))
       draftsRef.current.delete(targetSessionId)
+      await refreshSessions()
       setSessionActionNote('窗口已永久删除')
       return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '永久删除失败')
       return false
     }
-  }, [])
+  }, [refreshSessions])
 
   const changeEngine = useCallback(async (next: CcEngine) => {
     if (!sessionId || !personaId || next === localEnginePreference) return
@@ -1876,6 +1908,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     sessionId,
     sessions,
     deletedSessions,
+    deletedSessionsTotal,
+    deletedSessionsLoadingMore,
     sessionsLoading,
     sessionActionNote,
     sessionTitle,
@@ -1904,6 +1938,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     pinSession,
     deleteSession,
     permanentlyDeleteSession,
+    loadMoreDeletedSessions,
     localEnginePreference,
     effectiveEngine,
     engineSaving,
