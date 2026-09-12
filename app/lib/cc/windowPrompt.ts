@@ -135,6 +135,15 @@ export async function loadRollingWindowAppend(
       : Promise.resolve([]),
   ])
   if (!turnResult.ok) throw new Error(`读取滚动窗口原文失败：${turnResult.error}`)
+  const history = buildRollingWindowHistory(session, turnResult.turns, days)
+  console.info(`[cc-rolling-context ${sessionId}]`, {
+    totalDays: days.length,
+    dayModes: modes,
+    rawDays,
+    turnsFetched: turnResult.turns.length,
+    historyTurns: history.length,
+    turnChatDays: [...new Set(turnResult.turns.map(t => t.chat_day))],
+  })
   let pinnedBuckets = normalizePinnedBuckets(bucketPayload)
   if (selectedPinnedIds != null) {
     const idSet = new Set(selectedPinnedIds)

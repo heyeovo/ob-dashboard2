@@ -480,6 +480,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           fallbackModel: config.sdkModel || config.model,
         })
       : null
+    console.info(`[cc-rolling-seed ${sessionId}]`, {
+      rollingHistoryCount: rollingHistory.length,
+      shouldPrepareHistorySeed,
+      hasResumeHint: Boolean(input.resumeHint),
+      hasLive: Boolean(currentLive),
+      liveResumeKeyMatch: currentLive?.resumeKey === resumeKey,
+      seedCreated: Boolean(historySeed),
+      seedEntryCount: historySeed?.entries.length || 0,
+      contextRevision: config.contextRevision,
+    })
     live = ensureSession({
       sessionId,
       resumeKey,
