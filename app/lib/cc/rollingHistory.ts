@@ -14,6 +14,9 @@ type TranscriptSeedOptions = {
   fallbackModel: string
 }
 
+// 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.220 对应。
+const CLAUDE_CODE_VERSION = '2.1.220'
+
 function wakeInput(turn: HavenTurn): string {
   let cause = 'agent_schedule'
   let reason = ''
@@ -58,6 +61,9 @@ export function buildRollingTranscriptEntries(
       type: 'user', uuid, parentUuid, timestamp,
       sessionId: options.sessionId, cwd: options.cwd,
       isSidechain: false, userType: 'external',
+      version: CLAUDE_CODE_VERSION, gitBranch: 'HEAD',
+      permissionMode: 'default', promptSource: 'sdk', entrypoint: 'sdk-ts',
+      promptId: randomUUID(),
       message: { role: 'user', content },
     })
     parentUuid = uuid
@@ -68,14 +74,25 @@ export function buildRollingTranscriptEntries(
     entries.push({
       type: 'assistant', uuid, parentUuid, timestamp,
       sessionId: options.sessionId, cwd: options.cwd,
-      isSidechain: false,
+      isSidechain: false, userType: 'external',
+      version: CLAUDE_CODE_VERSION, gitBranch: 'HEAD',
+      requestId: `req_01${randomUUID().replace(/-/g, '')}`,
       message: {
-        id: `msg_rolling_${uuid.replace(/-/g, '')}`,
+        id: `msg_01${uuid.replace(/-/g, '')}`,
         type: 'message', role: 'assistant',
         model: model || options.fallbackModel || 'claude',
         content: [{ type: 'text', text: content }],
         stop_reason: 'end_turn', stop_sequence: null,
-        usage: { input_tokens: 0, output_tokens: 0 },
+        usage: {
+          input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          output_tokens: 0,
+          server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 },
+          service_tier: 'standard',
+          cache_creation: { ephemeral_1h_input_tokens: 0, ephemeral_5m_input_tokens: 0 },
+          inference_geo: '', iterations: [], speed: 'standard',
+        },
       },
     })
     parentUuid = uuid

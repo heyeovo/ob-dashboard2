@@ -55,6 +55,32 @@ describe('daily rolling context', () => {
     expect(seed?.entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
     expect((seed?.entries[0].message as { content: string }).content).toBe('今天的原话')
     expect((seed?.entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('今天的回应')
+    expect(seed?.entries[0]).toMatchObject({
+      type: 'user',
+      version: '2.1.220',
+      gitBranch: 'HEAD',
+      permissionMode: 'default',
+      promptSource: 'sdk',
+      entrypoint: 'sdk-ts',
+      userType: 'external',
+    })
+    expect(seed?.entries[0].promptId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(seed?.entries[1]).toMatchObject({
+      type: 'assistant',
+      version: '2.1.220',
+      gitBranch: 'HEAD',
+      userType: 'external',
+      message: {
+        usage: {
+          input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          output_tokens: 0,
+          service_tier: 'standard',
+        },
+      },
+    })
+    expect(seed?.entries[1].requestId).toMatch(/^req_01[0-9a-f]{32}$/)
     expect(await seed?.sessionStore.load({ projectKey: 'any', sessionId: seed.resumeFrom })).toEqual(seed?.entries)
     const parsed = await getSessionMessages(seed!.resumeFrom, {
       dir: 'C:/workspace',

@@ -15,6 +15,7 @@
 - 从滚动切回固定模式仍不会自动重做 handoff；设置页已增加常驻警告和保存确认。要保留滚动期间的新对话，仍需使用“换窗继续”。
 - 软删除已修正：删除清除窗口置顶和 wake 记录，已删除窗口不能再被后台或新 turn 隐式复活；Dashboard 删除后重新读取活动/已删除列表并显示结果。
 - 已删除窗口计数已改为 Haven 返回的真实 `total`，不再把首批 60 条误当总数；超过 60 条时可继续“加载更多”。协作者筛选直接在 Haven 查询执行。
+- 2026-09-12 线上诊断已确认滚动主窗能从 Haven 取回 5 个 raw 日期的 234 条历史，并创建 402 条 transcript seed；但真实模型只记得切换滚动后的消息。原因收窄到 seed JSONL 条目缺少 Claude Code 原生元数据：SDK 只负责原样落盘，不会补字段。Dashboard 本地已按固定 SDK `0.3.220` / Claude Code `2.1.220` 补齐 user/assistant 的版本、来源、请求 ID 和完整 usage 结构，相关 31 项测试与 production build 通过；尚待用户 commit/push、仅 Redeploy Dashboard 后复测旧 raw 原文连续性，Haven 不需要部署。
 
 ## 已确认的产品决定
 
