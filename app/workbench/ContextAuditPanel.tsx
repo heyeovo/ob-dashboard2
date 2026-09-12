@@ -51,6 +51,28 @@ type AuditData = {
       containsRollingWindowContext: boolean
     }>
   }
+  system_prompt: {
+    current: {
+      mode: string
+      sdk_shape: string
+      system_hash: string
+      dashboard_append: string
+      chars: number
+      modules: Array<{ id: string; name: string; enabled: boolean; chars: number }>
+    }
+    latest: {
+      available: boolean
+      source: 'stored_snapshot' | 'current_hash_match' | 'unavailable'
+      request_id: string
+      recorded_at: string
+      mode: string
+      sdk_shape: string
+      system_hash: string
+      dashboard_append: string
+      chars: number
+    }
+    hash_match: boolean
+  }
   latest: {
     turn_id: number | null
     created_at: string
@@ -208,6 +230,44 @@ export default function ContextAuditPanel() {
                     </article>
                   ))}
                 </div>
+              </div>
+            </details>
+
+            <details className="rounded-xl border border-[var(--color-border)]">
+              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium">本轮 System Prompt（Dashboard 热更新部分）</summary>
+              <div className="space-y-3 border-t border-[var(--color-border)] p-3 text-xs">
+                {data.system_prompt.latest.source === 'stored_snapshot' ? (
+                  <p className={`rounded-lg px-3 py-2 ${data.system_prompt.hash_match ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>已读取最近一次模型请求前落盘的实际快照。{data.system_prompt.hash_match ? '它与当前热更新内容一致。' : '它与当前热更新内容不同；下一轮会重建 SDK 会话并使用当前版本。'}</p>
+                ) : data.system_prompt.latest.source === 'current_hash_match' ? (
+                  <p className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-[var(--color-text-secondary)]">旧消息尚无正文快照，但最近一轮保存的 system hash 与当前正文一致，因此可确认当前正文就是该轮使用的 Dashboard 部分。再发一条消息后会产生独立落盘快照。</p>
+                ) : (
+                  <p className="rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-[var(--color-pending)]">最近一轮没有可还原的 System Prompt 正文。发一条新消息后再点“重新读取”。</p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Stat label={`最近实际 · ${data.system_prompt.latest.sdk_shape}`} value={`${number(data.system_prompt.latest.chars)} 字符`} />
+                  <Stat label={`当前/下一轮 · ${data.system_prompt.current.sdk_shape}`} value={`${number(data.system_prompt.current.chars)} 字符`} />
+                </div>
+
+                <div>
+                  <div className="mb-2 font-medium text-[var(--color-text-secondary)]">当前 Prompt 模块</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.system_prompt.current.modules.map(module => (
+                      <span key={module.id} className={`rounded-full px-2.5 py-1 text-[11px] ${module.enabled ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-archived-bg)] text-[var(--color-archived)]'}`}>{module.name} · {module.enabled ? '启用' : '关闭'} · {number(module.chars)}字</span>
+                    ))}
+                  </div>
+                </div>
+
+                <details className="rounded-lg bg-[var(--color-bg)]">
+                  <summary className="cursor-pointer px-3 py-2 font-medium text-[var(--color-text-secondary)]">查看最近一轮实际正文 · {data.system_prompt.latest.system_hash || '无 hash'}</summary>
+                  <pre className="max-h-[36rem] overflow-auto whitespace-pre-wrap break-words border-t border-[var(--color-border)] p-3 font-sans leading-5 text-[var(--color-text-secondary)]">{data.system_prompt.latest.dashboard_append || '没有可显示的快照'}</pre>
+                </details>
+                <details className="rounded-lg bg-[var(--color-bg)]">
+                  <summary className="cursor-pointer px-3 py-2 font-medium text-[var(--color-text-secondary)]">查看当前/下一轮正文 · {data.system_prompt.current.system_hash}</summary>
+                  <pre className="max-h-[36rem] overflow-auto whitespace-pre-wrap break-words border-t border-[var(--color-border)] p-3 font-sans leading-5 text-[var(--color-text-secondary)]">{data.system_prompt.current.dashboard_append || '当前没有 Dashboard 追加正文'}</pre>
+                </details>
+
+                <p className="text-[11px] leading-5 text-[var(--color-text-tertiary)]">闲聊模式的 custom 正文就是 Dashboard 提交的 system prompt。工作模式显示的是 Dashboard 追加到 Claude Code preset 后面的正文；SDK 内置 preset 的原文不由 Dashboard 提供，因此不伪造显示。</p>
               </div>
             </details>
 

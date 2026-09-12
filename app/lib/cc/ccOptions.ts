@@ -135,13 +135,18 @@ function shortHash(value: unknown): string {
   return createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex').slice(0, 16)
 }
 
+/** Dashboard 可控制的 system prompt 结构；不包含 Claude Code 内置 preset 正文。 */
+export function systemPromptContentHash(mode: CcMode, personaAppend: string): string {
+  return shortHash({ mode, personaAppend })
+}
+
 /** 只记录 hash 与名称，不把提示词、路径、MCP 配置正文写进日志。 */
 export function cacheRelevantFingerprint(config: TurnConfig) {
   const toolNames = config.mode === 'chat'
     ? [...CACHE_STABLE_WEB_TOOLS]
     : [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
   const mcpServerNames = [...Object.keys(config.sdkMcpServers), ...builtInMcpServerNames()].sort()
-  const systemPromptHash = shortHash({ mode: config.mode, personaAppend: config.personaAppend })
+  const systemPromptHash = systemPromptContentHash(config.mode, config.personaAppend)
   const toolsHash = shortHash(toolNames)
   const mcpToolsHash = shortHash({
     definition: config.mcpDefinitionKey,

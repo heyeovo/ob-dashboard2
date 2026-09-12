@@ -47,6 +47,7 @@ import {
   type CcCompactionEvent,
 } from '@/app/lib/ccSession'
 import { buildCcOptions, cacheRelevantFingerprint, isWebTool, MAX_CC_TOOL_CALLS_PER_TURN, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
+import { writeSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
@@ -683,6 +684,22 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     }
 
     modelRequestStartedAt = Date.now()
+    try {
+      await writeSystemPromptAudit(sessionId, {
+        version: 1,
+        requestId,
+        recordedAt: new Date(modelRequestStartedAt).toISOString(),
+        mode: config.mode,
+        systemHash: currentCacheDiagnostic()?.system_hash || '',
+        sdkShape: config.mode === 'chat' ? 'custom' : 'claude_code_preset_append',
+        dashboardAppend: config.personaAppend,
+      })
+    } catch (error) {
+      console.warn('[cc-system-prompt-audit] snapshot write failed', {
+        sessionId,
+        error: (error as Error).message || String(error),
+      })
+    }
     live.push(userMessage)
     // 存用户原话，不含记忆卡 —— 回退锚点要显示的是人说的话
     recordCheckpoint(sessionId, turnUuid, text)

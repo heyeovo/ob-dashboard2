@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server'
 import { getSessionStats } from '@/app/lib/ccSession'
-import { loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
+import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import { inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
 import { getConversationSession, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
+import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/lib/havenPersonas'
+import { systemPromptContentHash } from '@/app/lib/cc/ccOptions'
+import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
 
 export const runtime = 'nodejs'
 
@@ -104,6 +107,19 @@ export async function GET(request: NextRequest) {
     const transcript = transcriptSessionId
       ? await inspectRollingHistoryTranscript(transcriptSessionId)
       : null
+    const personaResult = await getPersona(session.persona_id)
+    const persona = personaResult.persona
+    const currentDashboardAppend = composeWindowPersonaAppend(
+      buildPersonaAppend(persona, session.prompt_module_overrides),
+      session,
+      sessionId,
+      rolling.content,
+    )
+    const currentSystemHash = systemPromptContentHash(session.mode, currentDashboardAppend)
+    const storedSystemPrompt = await readSystemPromptAudit(sessionId)
+    const latestSystemHash = String(storedSystemPrompt?.systemHash || latestCacheRaw?.system_hash || '')
+    const storedLatestAppend = storedSystemPrompt?.dashboardAppend || ''
+    const latestAppend = storedLatestAppend || (latestSystemHash === currentSystemHash ? currentDashboardAppend : '')
 
     return Response.json({
       ok: true,
@@ -145,6 +161,33 @@ export async function GET(request: NextRequest) {
         expected_source_messages: messages.length,
         rolling_wrapper_messages: 0,
         messages: [],
+      },
+      system_prompt: {
+        current: {
+          mode: session.mode,
+          sdk_shape: session.mode === 'chat' ? 'custom' : 'claude_code_preset_append',
+          system_hash: currentSystemHash,
+          dashboard_append: currentDashboardAppend,
+          chars: currentDashboardAppend.length,
+          modules: promptModulesForPersona(persona).map(module => ({
+            id: module.id,
+            name: module.name,
+            enabled: session.prompt_module_overrides[module.id] ?? module.enabled_by_default,
+            chars: module.content.length,
+          })),
+        },
+        latest: {
+          available: Boolean(latestAppend),
+          source: storedLatestAppend ? 'stored_snapshot' : latestAppend ? 'current_hash_match' : 'unavailable',
+          request_id: storedSystemPrompt?.requestId || '',
+          recorded_at: storedSystemPrompt?.recordedAt || '',
+          mode: String(storedSystemPrompt?.mode || session.mode),
+          sdk_shape: String(storedSystemPrompt?.sdkShape || (session.mode === 'chat' ? 'custom' : 'claude_code_preset_append')),
+          system_hash: latestSystemHash,
+          dashboard_append: latestAppend,
+          chars: latestAppend.length,
+        },
+        hash_match: Boolean(latestSystemHash && latestSystemHash === currentSystemHash),
       },
       latest: {
         turn_id: latestTurn?.id || null,

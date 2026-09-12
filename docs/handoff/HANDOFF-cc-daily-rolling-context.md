@@ -140,6 +140,7 @@
 - 审计接口复用正式聊天的 `loadRollingWindowAppend`，所以日期三态、Haven 原文和背景拼接与实际滚动请求走同一选择逻辑；审计读取本身关闭 `[cc-rolling-context]` 日志，避免把查看动作混入真实发消息日志。
 - 页面可展开核对每条被选入种子的 Haven `user/assistant` 原文及永久消息 ID，并查看日回顾/钉选桶/日记形成的完整背景正文；概览同时展示最近一轮 Haven `raw_json` 中的 SDK usage/cache iterator 和当前活会话 context snapshot。
 - “SDK transcript 落盘验证”直接读取该轮 resume ID 对应的持久 SessionStore，只返回消息角色与正文；逐条按 `role + content` 和当前 Haven 原文匹配，并单独统计正文中命中 `<rolling_window_context>` 的消息。全部匹配且包装命中为 0 时，页面显示绿色“已验证”。
+- “本轮 System Prompt”显示 Dashboard 可控制的完整 append：每次模型请求前以 `0600` 文件单独保存最近实际正文、mode、SDK shape 和 hash；审计时再从 Haven 当前协作者、Prompt 模块开关、窗口背景重建下一轮正文。两份 hash 不同即明确提示热更新尚未进入上一轮。闲聊模式为 custom 全文；工作模式只承诺展示追加到 Claude Code preset 后的 Dashboard 正文，不伪造 SDK 内置 preset。
 - 边界：这不是 Anthropic 原始 HTTP 抓包，不拦截 OAuth，不展示密钥，也不额外调用 Context 分析模型。固定窗口不会伪装成滚动原文重建结果。
 - 只改 Dashboard；不改 Haven、聊天页、日期三态、种子创建、resume 或缓存策略。验收路径：`/workbench` → “调参” → 展开“本轮上下文审计” → 对照 raw 日期和原文首尾，再发一条消息后点“重新读取”核对缓存读写。
-- Dashboard 全量测试 265 项通过、1 项跳过；涉及文件 ESLint、production build 与 `git diff --check` 通过。仍需部署 Dashboard 后在登录态页面做真实点击验收。
+- Dashboard 全量测试 266 项通过、1 项跳过；涉及文件 ESLint、production build 与 `git diff --check` 通过。仍需部署 Dashboard 后在登录态页面做真实点击验收。
