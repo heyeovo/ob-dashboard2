@@ -16,6 +16,7 @@ import CcWorkbenchPanel from './CcWorkbenchPanel'
 const TUNE_ENTRIES: Entry[] = [
   { key: 'breath', label: '模拟 Breath', desc: 'Pipeline / 即时模拟 / 评分旋钮 / 命中统计 / 检索追溯', href: '/breath-sim' },
   { key: 'inject', label: '召回透镜', desc: '逐轮查看召回、拒绝、规则解释与系统降级', href: '/recall-lens' },
+  { key: 'chat-slices', label: '聊天切片检查', desc: '按日期检查离线切片、回查原文与管理补生成任务', href: '/conversation-slices' },
 ]
 
 export default function WorkbenchPage() {
