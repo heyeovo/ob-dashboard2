@@ -324,11 +324,14 @@ async function loadTurnInputs(body: ChatBody) {
     { includeAllTurns: Boolean(rollingSourceResumeFrom) },
   )
   const previousDayModes = promptSession.rolling_context?.previous_day_modes || {}
-  const rollingRequiredFullRawDays = requireRollingSource
-    ? [...new Set(rolling.history
-      .map(turn => turn.chat_day || '')
-      .filter(day => day && (previousDayModes[day] || 'raw') === 'raw'))]
-    : []
+  const allowFixedBodyRestore = promptSession.rolling_context?.allow_fixed_body_restore === true
+  const rollingRequiredFullRawDays = [...new Set(rolling.history
+    .map(turn => turn.chat_day || '')
+    .filter(day => {
+      if (!day || !rollingRevisionChanged) return false
+      if (rollingPreviousStrategy === 'fixed_window') return !allowFixedBodyRestore
+      return (previousDayModes[day] || 'raw') === 'raw'
+    }))]
   sessionSnapshot = {
     ...sessionSnapshot,
     bucketExclusionIds: [...new Set([...sessionSnapshot.bucketExclusionIds, ...rolling.pinnedBucketIds])],
@@ -365,6 +368,7 @@ async function loadTurnInputs(body: ChatBody) {
     requireRollingSource,
     rollingPreviousStrategy,
     rollingRequiredFullRawDays,
+    allowFixedBodyRestore,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),

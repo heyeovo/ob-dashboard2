@@ -2,14 +2,19 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { SessionKey, SessionStore, SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
+import {
+  importSessionToStore,
+  type SessionKey,
+  type SessionStore,
+  type SessionStoreEntry,
+} from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
 
 export type RollingHistorySeed = {
   resumeFrom: string
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
-  source: 'new_seed' | 'revision_seed' | 'persisted'
+  source: 'new_seed' | 'revision_seed' | 'fixed_transcript_migration' | 'legacy_transcript_recovery' | 'persisted'
   diagnostic?: RollingSeedDiagnostic
 }
 
@@ -72,6 +77,25 @@ export function assertRequiredRollingRevisionSeed(
   throw new Error(sourceResumeFrom
     ? '旧滚动 transcript 持久副本不存在或无法完整对齐，已停止本轮，raw 原文没有被正文替代'
     : '无法确定旧滚动 transcript 的 session，已停止本轮，raw 原文没有被正文替代')
+}
+
+export function assertFixedMigrationSeed(
+  fixedMigration: boolean,
+  rawTurnCount: number,
+  allowBodyRestore: boolean,
+  migrationSeed: RollingHistorySeed | null,
+): void {
+  if (!fixedMigration || rawTurnCount === 0 || migrationSeed || allowBodyRestore) return
+  throw new Error('找不到固定窗口的原生 transcript，已停止首次开启滚动；如接受仅恢复 user/assistant 正文，请在设置中重新确认')
+}
+
+export function assertRollingResumeRecovered(
+  recoveryRequired: boolean,
+  persistedSeed: RollingHistorySeed | null,
+  recoveredSeed: RollingHistorySeed | null,
+): void {
+  if (!recoveryRequired || persistedSeed || recoveredSeed) return
+  throw new Error('滚动窗口的完整 transcript 存档不存在，已停止本轮，避免静默退化为仅有 user/assistant 正文')
 }
 
 // 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.220 对应。
@@ -269,6 +293,18 @@ class RollingSeedStore implements SessionStore {
       const entries = this.initialSessions.get(this.key(key))
       return entries ? [...entries] : null
     }
+  }
+}
+
+class CaptureSessionStore implements SessionStore {
+  readonly entries: SessionStoreEntry[] = []
+
+  async append(key: SessionKey, entries: SessionStoreEntry[]): Promise<void> {
+    if (!key.subpath) this.entries.push(...entries)
+  }
+
+  async load(): Promise<SessionStoreEntry[] | null> {
+    return this.entries.length ? [...this.entries] : null
   }
 }
 
@@ -533,13 +569,65 @@ export function createRollingHistorySeed(
 }
 
 export async function materializeRollingHistorySeed(seed: RollingHistorySeed | null): Promise<void> {
-  if (!seed || seed.source !== 'revision_seed') return
+  if (!seed || seed.source === 'persisted') return
   if (!(seed.sessionStore instanceof RollingSeedStore)) {
     throw new Error('滚动 transcript 使用了未知的持久 store')
   }
   await seed.sessionStore.materialize(seed.resumeFrom)
   if (!seed.sessionStore.hasPersistedSession(seed.resumeFrom)) {
     throw new Error('滚动 transcript 持久化后无法重新打开')
+  }
+}
+
+type ImportLocalSession = (
+  sessionId: string,
+  store: SessionStore,
+  options: { dir: string; includeSubagents: boolean },
+) => Promise<void>
+
+async function captureLocalTranscript(
+  sessionId: string,
+  cwd: string,
+  importLocalSession: ImportLocalSession = importSessionToStore,
+): Promise<SessionStoreEntry[] | null> {
+  const capture = new CaptureSessionStore()
+  try {
+    await importLocalSession(sessionId, capture, { dir: cwd, includeSubagents: false })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return null
+    const message = (error as Error).message || String(error)
+    if (/not found|no session|does not exist/i.test(message)) return null
+    throw error
+  }
+  return capture.entries.length ? capture.entries : null
+}
+
+/** 同一 rolling revision 重部署：专用 store 缺失时，从 SDK 默认 transcript 原样补回。 */
+export async function createRollingTranscriptRecoverySeed(
+  sourceResumeFrom: string,
+  options: {
+    cwd: string
+    storeRoot?: string
+    importLocalSession?: ImportLocalSession
+  },
+): Promise<RollingHistorySeed | null> {
+  const normalized = sourceResumeFrom.trim()
+  if (!normalized) return null
+  const entries = await captureLocalTranscript(normalized, options.cwd, options.importLocalSession)
+  if (!entries) return null
+  const envelopeCount = transcriptEnvelopes(entries).envelopes.length
+  return {
+    resumeFrom: normalized,
+    sessionStore: new RollingSeedStore(normalized, entries, options.storeRoot),
+    entries,
+    source: 'legacy_transcript_recovery',
+    diagnostic: seedDiagnostic(entries, {
+      sourceSessionId: normalized,
+      sourceEntryCount: entries.length,
+      retainedEnvelopeCount: envelopeCount,
+      bodyRestoredTurnCount: 0,
+    }),
   }
 }
 
@@ -561,6 +649,22 @@ export async function createRollingHistoryRevisionSeed(
   if (!source) return null
   const sourceEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
   if (!sourceEntries?.length) return null
+  return createRevisionSeedFromEntries(
+    sourceResumeFrom, sourceEntries, allTurns, rawTurns, options, 'revision_seed',
+  )
+}
+
+async function createRevisionSeedFromEntries(
+  sourceResumeFrom: string,
+  sourceEntries: SessionStoreEntry[],
+  allTurns: HavenTurn[],
+  rawTurns: HavenTurn[],
+  options: Omit<TranscriptSeedOptions, 'sessionId'> & {
+    storeRoot?: string
+    requiredFullRawDays?: string[]
+  },
+  sourceKind: 'revision_seed' | 'fixed_transcript_migration',
+): Promise<RollingHistorySeed | null> {
   const { prefix, envelopes } = transcriptEnvelopes(sourceEntries)
   const aligned = alignEnvelopesToTurns(envelopes, allTurns)
   const nextSessionId = randomUUID()
@@ -596,13 +700,42 @@ export async function createRollingHistoryRevisionSeed(
     resumeFrom: nextSessionId,
     sessionStore: new RollingSeedStore(nextSessionId, entries, options.storeRoot),
     entries,
-    source: 'revision_seed',
+    source: sourceKind,
     diagnostic: seedDiagnostic(entries, {
       sourceSessionId: sourceResumeFrom,
       sourceEntryCount: sourceEntries.length,
       retainedEnvelopeCount,
       bodyRestoredTurnCount,
     }),
+  }
+}
+
+/** 首次 fixed → rolling：通过 SDK 官方导入接口读取默认本地 transcript。 */
+export async function createFixedTranscriptMigrationSeed(
+  sourceResumeFrom: string,
+  allTurns: HavenTurn[],
+  rawTurns: HavenTurn[],
+  options: Omit<TranscriptSeedOptions, 'sessionId'> & {
+    storeRoot?: string
+    requiredFullRawDays?: string[]
+    importLocalSession?: ImportLocalSession
+  },
+): Promise<RollingHistorySeed | null> {
+  const normalized = sourceResumeFrom.trim()
+  if (!normalized) return null
+  const entries = await captureLocalTranscript(normalized, options.cwd, options.importLocalSession)
+  if (!entries) return null
+  try {
+    return await createRevisionSeedFromEntries(
+      normalized, entries, allTurns, rawTurns, options, 'fixed_transcript_migration',
+    )
+  } catch (error) {
+    const explicitlyAllowsBodyRestore = (options.requiredFullRawDays || []).length === 0
+    const message = (error as Error).message || String(error)
+    if (explicitlyAllowsBodyRestore && /完整轮次无法唯一对应|缺少仍为 raw 的完整轮次/.test(message)) {
+      return null
+    }
+    throw error
   }
 }
 

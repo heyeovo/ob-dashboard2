@@ -113,6 +113,8 @@ export type TurnConfig = {
   rollingPreviousStrategy?: string
   /** 上一 revision 已为 raw、这次仍为 raw 的日期；这些日期禁止正文降级。 */
   rollingRequiredFullRawDays?: string[]
+  /** 首次 fixed → rolling 找不到旧原生轮次时，用户是否明确允许正文恢复。 */
+  allowFixedBodyRestore?: boolean
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */

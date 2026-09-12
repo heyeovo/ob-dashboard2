@@ -212,8 +212,13 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
 
   const save = async () => {
     if (busy) return
+    const switchingToRolling = session.rolling_context?.strategy === 'fixed_window'
+      && draft.strategy === 'daily_rolling'
     const switchingToFixed = session.rolling_context?.strategy === 'daily_rolling'
       && draft.strategy === 'fixed_window'
+    if (switchingToRolling && !window.confirm(
+      '首次开启会优先把固定窗口的原生 transcript 完整迁入，保留工具、召回和 thinking。\n\n如果旧 transcript 已不存在，是否允许改为只恢复 Haven 中可见的用户与助手正文？取消则不保存。',
+    )) return
     if (switchingToFixed && !window.confirm(
       '切回原换窗机制后，这个窗口只会使用创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。\n\n如果要保留最新衔接，请取消并先使用“换窗继续”。仍要直接切回吗？',
     )) return
@@ -230,6 +235,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     try {
       const rollingContext = {
         ...draft,
+        allow_fixed_body_restore: switchingToRolling
+          ? true
+          : draft.allow_fixed_body_restore,
         selected_pinned_ids: [...selectedPinned],
         selected_journal_ids: [...selectedJournals],
       }

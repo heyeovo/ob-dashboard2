@@ -132,7 +132,7 @@
 - 设置页常驻说明正文恢复边界；用户把 `review/omit` 改回 `raw` 时，该日期显示“正文恢复”，保存前再次确认不会恢复旧工具与召回过程。
 - 本阶段没有改 Context GC 的扫描、fork、CAS 或清理实现。daily rolling 的 GC GET/POST 被服务端拦截、自动开关不能开启，05:30 scheduler 也无条件跳过；固定窗口 GC 保持原行为。下一阶段才接 RollingSeedStore 版 GC。
 - 自动化验证：Dashboard 全量 `270` 通过、`1` 跳过；保真/运行时/GC 门禁定向 `39` 项通过；production build 通过；Haven `tests.test_gateway_state_contracts` `36` 项通过，`gateway_state.py` 语法检查通过；两仓 `git diff --check` 通过。测试未调用模型或额外 Context 分析。
-- 仍需真实验收：先 Haven 后 Dashboard 部署，在现有 5 个 raw 日期主窗把最早 1 天改为 review/omit，发一条普通消息后用本轮上下文审计确认其余 4 天的工具链内容与顺序保持；Redeploy Dashboard 后再核对持久恢复；随后把退出日期重新设 raw，确认界面提示与 transcript 仅正文恢复。真实验收完成前不得开放 daily rolling 手动或 05:30 自动减负。
+- 本节实现后的首次真实验收曾失败，随后完成加固并通过第二次验收，完整证据见 13.1。重新加入 raw 的正文恢复提示仍需在以后实际触发该低频场景时复核；daily rolling 手动或 05:30 自动减负继续保持禁用。
 
 ### 13.1 2026-09-13 首次真实验收失败后的加固
 
@@ -140,4 +140,23 @@
 - 第二轮修复把迁移门禁改为 fail closed：只有 Haven 明确返回 `previous_strategy=fixed_window` 时允许首次正文建种；daily→daily 或缺失 `previous_strategy` 的未知 revision 都必须取得旧 RollingSeedStore，否则本轮直接失败。Haven 新增内部 `previous_day_modes`，Dashboard 据此区分 raw→raw 与 review/omit→raw；任何 raw→raw 轮次未从旧 transcript 完整命中都会报错，只有真正重新加入 raw 的日期可标记 `body_restored`。
 - 审计不再隐藏纯 `tool_use` / `tool_result` entry，并显示工具名、召回包装、正文恢复标记和各类数量。成功重建的旧/新 session、源/目标 entry 数、完整保留轮数、正文恢复轮数、工具和召回数量随首个成功 turn 写入 Haven `raw_json.rolling_seed`；工作台从最近 50 轮中读取，不再依赖易淘汰的 Coolify 首条日志。
 - 自动化验证：Dashboard 全量 `272` 通过、`1` 跳过，定向 `14` 项通过，ESLint 与 production build 通过；Haven `36` 项状态契约测试与 Python 语法检查通过。没有调用模型或额外 Context 分析。
-- 仍待第二次真实验收：必须换一个调整前已有多日 raw、召回和工具调用的窗口；部署顺序仍为 Haven→Dashboard。先截图审计统计和目标轮次，调整一日后发一句，再确认 raw→raw 日期的调用顺序与重建凭据；随后 Dashboard Redeploy 后复核。同一阶段继续硬禁 daily rolling 手动/05:30 GC。
+- 2026-09-13 第二次真实验收已通过。测试窗口先以 `new_seed=1d0bcda5-87df-4759-9702-081a451d74f9` 建立 RollingSeedStore，随后在 raw 日期内产生两次 MCP 调用（`breath`、`hold`）、对应两条 `tool_result` 和两张完整动态召回卡；把 9 月 9 日改为日回顾后，重建凭据为 `source=revision_seed`、`sourceSessionId=1d0bcda5-87df-4759-9702-081a451d74f9`、`newSessionId=2c8f57f3-8eee-4cc5-935f-5c9edda09619`、`sourceEntryCount=56`、`retainedEnvelopeCount=10`、`bodyRestoredTurnCount=0`。新 transcript 中两组工具调用/结果的 ID、正文和顺序均保持，两张召回卡正文完整，退出日期轮次不再出现。
+- 同一新 session 经 Dashboard Redeploy 后仍能从持久 RollingSeedStore 读取，SessionStore 从 49 条继续增长到 53 条；再次发言后工具、结果、召回卡和 `bodyRestored=0` 均保持。因此“同进程 daily→daily 日期调整 → 原子新 seed → Haven lane 写回 → Dashboard 重部署 → 下一轮继续”主链路真实验收通过。
+- 当时已知边界“首次 fixed→daily_rolling 只建立正文 `new_seed`”已由下方 13.2 的原生迁移实现解决。审计页当前“召回包装”按文本关键词计数，助手正文或 thinking 仅提到 `memory_card` / `<记忆召回>` 时会产生假阳性；本次显示 4 条而真实注入为 2 张，不影响 transcript 内容或本次保真结论。
+- Context GC 仍未接入 RollingSeedStore；daily rolling 的手动与 05:30 自动减负继续硬禁，固定窗口不变。后续若继续实现 GC，必须另开阶段并重新验收 fork/CAS/重部署链路。
+
+### 13.2 2026-09-13 已实现：首次 fixed → rolling 原生迁移
+
+- 首次开启按天滚动不再必然从 Haven 生成纯正文 `new_seed`。Dashboard 根据 Haven lane 的旧 `cc_session_id`，通过当前 Agent SDK 官方 `importSessionToStore()` 从默认本地 transcript 导入完整 entry，再复用同一轮次边界与 Haven 全量 turn/date 对齐，仅把当前 raw 日期的原生轮次克隆进新的 RollingSeedStore；thinking/signature、动态召回、`tool_use`、`tool_result` 和顺序均随整轮保留。
+- 新 seed 来源标为 `fixed_transcript_migration`，进入 SDK 前完成原子落盘与重新打开校验，并把源/目标 session、entry 数、完整保留轮数、正文恢复轮数及工具/召回计数写入持久重建凭据。
+- 设置页首次 fixed→rolling 保存时明确告知：系统优先完整迁移；若旧默认 transcript 已不存在，用户确认后才允许缺失轮次从 Haven 恢复正文。确认状态持久化为 `allow_fixed_body_restore`，仅用于 fixed→rolling；未确认时旧 session 缺失或任一所选 raw 日期无法完整匹配都会停止首轮，不会静默降级。后续 daily→daily 的 raw→raw 强门禁不变。
+- 自动化验证：新增固定 transcript 导入后按日期裁剪并保留召回/工具链、缺源需明确确认及显式同意后才可正文降级的回归测试；Dashboard 全量 `275` 通过、`1` 跳过，production build 与本次改动文件定向 ESLint 通过；Haven `36` 项状态契约测试和 Python 语法检查通过。未调用模型或额外 Context 分析。
+- 仍需一次真实首次开启验收：选择尚未启用 rolling、固定窗口默认 transcript 仍存在且包含工具/召回的多日窗口；保存按天滚动后发第一句，审计应显示 `source=fixed_transcript_migration`、`bodyRestoredTurnCount=0`，且 raw 日期的原工具/召回完整存在。若源确实不存在，需验证未确认时停止、确认后才出现正文恢复。该验收不改变 Context GC 仍被硬禁的状态。
+
+### 13.3 2026-09-13 已修复：同 revision 重部署不得正文降级
+
+- 真实主窗 `ob2-20260829-42ehxs` 在 Dashboard 修复期间重部署后，约 01:35 的下一轮输入从约 63.6k 降至 48.6k，旧动态召回在当前 transcript 中消失。后续 Coolify 日志确认该窗实际已是 `daily_rolling` revision 1；Haven 请求恢复 `cc_session_id=6ae6b3da-554e-4760-ac74-c2e78e312a25`，但当时 `hasUsableResumeHint=false`。旧实现会在“revision 未变、专用 RollingSeedStore 不存在”时静默执行 Haven 正文 `new_seed`，这正是丢失隐藏召回/工具过程的缺口，不是 fixed→rolling 日期裁剪误伤。
+- `new_seed` 现在也必须在 Agent SDK 启动前原子写入并重新打开确认，Haven 因此不会先得到一个尚无持久文件的 rolling session ID。
+- 同 revision 冷恢复时，若专用 RollingSeedStore 不存在，Dashboard 会先用 SDK 官方 `importSessionToStore()` 原样导入同一 `cc_session_id` 的默认 transcript，并以 `legacy_transcript_recovery` 来源落入专用 store；不按 Haven 日期重组，不删除 thinking、召回或工具链。专用 store 与默认 transcript 均不存在时本轮直接失败，禁止再次用 Haven user/assistant 正文静默降级。
+- 已经在 01:35 前从该主窗当前 transcript 消失的隐藏召回无法由 Haven 反向恢复；本修复保护现存 transcript 和后续窗口。真实复验应在部署前记录审计 entry/召回/工具数量，部署后发一轮，日志应为 `storeSource=persisted`；若触发兼容补回则为 `legacy_transcript_recovery` 且 `bodyRestoredTurnCount=0`。两份源都不存在时应明确报错，数量不得悄悄减少。
+- 自动化验证：新增 `new_seed` 预落盘、同 revision 默认 transcript 原样恢复、双源缺失 fail closed 测试；Dashboard 全量 `278` 通过、`1` 跳过，相关运行时/滚动定向 `43` 项通过，production build、定向 ESLint 与 `git diff --check` 通过。未调用模型或额外 Context 分析；daily rolling 手动和 05:30 自动 Context GC 继续硬禁，固定窗口未改。

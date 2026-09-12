@@ -15,6 +15,9 @@
 // 第 8 条（旧历史无 process 仍能正常展示）在 tests/cc-history.test.ts。
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
 import { applyRuntimeSettings, dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
@@ -274,7 +277,13 @@ function eventNames(handle: RunHandle): string[] {
   return handle.events.map(e => e.event)
 }
 
-beforeEach(() => {
+let rollingTestConfigDir = ''
+let originalClaudeConfigDir: string | undefined
+
+beforeEach(async () => {
+  originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR
+  rollingTestConfigDir = await mkdtemp(path.join(tmpdir(), 'ob2-run-turn-'))
+  process.env.CLAUDE_CONFIG_DIR = rollingTestConfigDir
   sdk.script = []
   sdk.queryCalls = 0
   sdk.promptIterators = []
@@ -352,10 +361,13 @@ beforeEach(() => {
   turns.updatePersonaFromExchange.mockResolvedValue({ ok: true, updated: true, error: '' })
 })
 
-afterEach(() => {
+afterEach(async () => {
   // ccSession 的 registry 挂在 globalThis，跨测试共享 —— 用完收掉
   dropSession('ob2-test-session')
   vi.useRealTimers()
+  if (originalClaudeConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR
+  else process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir
+  if (rollingTestConfigDir) await rm(rollingTestConfigDir, { recursive: true, force: true })
 })
 
 describe('runTurn：普通回复', () => {

@@ -5,10 +5,14 @@ import path from 'node:path'
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
 import {
+  assertFixedMigrationSeed,
+  assertRollingResumeRecovered,
   assertRequiredRollingRevisionSeed,
   buildRollingTranscriptEntries,
+  createFixedTranscriptMigrationSeed,
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
+  createRollingTranscriptRecoverySeed,
   inspectRollingHistoryTranscript,
   materializeRollingHistorySeed,
   openRollingHistoryResume,
@@ -278,6 +282,118 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('migrates a fixed-window SDK transcript with recall and tools intact', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-fixed-migration-'))
+    const oldTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-09' } as HavenTurn
+    const keptTurn = {
+      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-13',
+      user_text: '今天查一下', assistant_text: '查完了',
+    } as HavenTurn
+    const sourceSessionId = '11111111-1111-4111-8111-111111111111'
+    const oldEntries = buildRollingTranscriptEntries([oldTurn], {
+      sessionId: sourceSessionId, cwd: 'C:/workspace', fallbackModel: 'claude',
+    })
+    const sourceEntries = [...oldEntries,
+      {
+        type: 'user', uuid: 'fixed-user', parentUuid: oldEntries.at(-1)?.uuid || null,
+        sessionId: sourceSessionId,
+        message: { role: 'user', content: '<记忆召回>\n<memory_card>固定窗召回</memory_card>\n</记忆召回>\n\n今天查一下' },
+      },
+      {
+        type: 'assistant', uuid: 'fixed-tool', parentUuid: 'fixed-user', sessionId: sourceSessionId,
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_fixed', name: 'breath', input: { query: '今天' } }] },
+      },
+      {
+        type: 'user', uuid: 'fixed-result', parentUuid: 'fixed-tool', sessionId: sourceSessionId,
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_fixed', content: '固定窗完整结果' }] },
+      },
+      {
+        type: 'assistant', uuid: 'fixed-final', parentUuid: 'fixed-result', sessionId: sourceSessionId,
+        message: { role: 'assistant', content: [{ type: 'text', text: '查完了' }] },
+      },
+    ]
+    try {
+      const migrated = await createFixedTranscriptMigrationSeed(
+        sourceSessionId, [oldTurn, keptTurn], [keptTurn], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [keptTurn.chat_day],
+          importLocalSession: async (_sessionId, store) => {
+            await store.append({ projectKey: 'fixed', sessionId: sourceSessionId }, sourceEntries)
+          },
+        },
+      )
+      expect(migrated?.source).toBe('fixed_transcript_migration')
+      expect(JSON.stringify(migrated?.entries)).not.toContain(oldTurn.user_text)
+      expect(JSON.stringify(migrated?.entries)).toContain('固定窗完整结果')
+      expect(migrated?.diagnostic).toMatchObject({
+        sourceSessionId, sourceEntryCount: 6, retainedEnvelopeCount: 1,
+        bodyRestoredTurnCount: 0, toolUseCount: 1, toolResultCount: 1, memoryRecallCount: 1,
+      })
+      await materializeRollingHistorySeed(migrated)
+      expect(openRollingHistoryResume(migrated!.resumeFrom, { storeRoot })).not.toBeNull()
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('materializes a new body seed before the SDK can publish its session id', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-new-seed-materialized-'))
+    try {
+      const seed = createRollingHistorySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).toBeNull()
+      await materializeRollingHistorySeed(seed)
+      expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).not.toBeNull()
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('recovers a missing rolling store from the SDK transcript without dropping hidden entries', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-recovery-'))
+    const sessionId = '22222222-2222-4222-8222-222222222222'
+    const sourceEntries = [
+      {
+        type: 'user', uuid: 'recovery-user', parentUuid: null, sessionId,
+        message: { role: 'user', content: '<记忆召回>\n<memory_card>旧召回</memory_card>\n</记忆召回>\n\n查一下' },
+      },
+      {
+        type: 'assistant', uuid: 'recovery-tool', parentUuid: 'recovery-user', sessionId,
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_recovery', name: 'breath', input: { query: '旧召回' } }] },
+      },
+      {
+        type: 'user', uuid: 'recovery-result', parentUuid: 'recovery-tool', sessionId,
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_recovery', content: '完整旧结果' }] },
+      },
+      {
+        type: 'assistant', uuid: 'recovery-final', parentUuid: 'recovery-result', sessionId,
+        message: { role: 'assistant', content: [{ type: 'text', text: '查完了' }] },
+      },
+    ]
+    try {
+      const recovered = await createRollingTranscriptRecoverySeed(sessionId, {
+        cwd: 'C:/workspace', storeRoot,
+        importLocalSession: async (_sessionId, store) => {
+          await store.append({ projectKey: 'default', sessionId }, sourceEntries)
+        },
+      })
+      expect(recovered?.source).toBe('legacy_transcript_recovery')
+      expect(recovered?.resumeFrom).toBe(sessionId)
+      expect(recovered?.diagnostic).toMatchObject({
+        sourceSessionId: sessionId, sourceEntryCount: 4, bodyRestoredTurnCount: 0,
+        toolUseCount: 1, toolResultCount: 1, memoryRecallCount: 1,
+      })
+      await materializeRollingHistorySeed(recovered)
+      const audit = await inspectRollingHistoryTranscript(sessionId, { storeRoot })
+      expect(audit?.messages.some(message => message.containsMemoryRecall)).toBe(true)
+      expect(audit?.messages.find(message => message.blockTypes.includes('tool_result'))?.content)
+        .toContain('完整旧结果')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('keeps native Claude resume points isolated by revision', () => {
     expect(ccResumeKey('session-a', 'subscription', 7)).toBe('session-a::subscription::context-7')
     expect(ccResumeKey('session-a', 'subscription', 8)).not.toBe(ccResumeKey('session-a', 'subscription', 7))
@@ -292,6 +408,35 @@ describe('daily rolling context', () => {
       .toThrow('无法确定旧滚动 transcript')
     expect(() => assertRequiredRollingRevisionSeed(true, 4, 'old-session', null))
       .toThrow('旧滚动 transcript 持久副本不存在或无法完整对齐')
+  })
+
+  it('requires explicit body-only consent when a fixed transcript cannot be imported', () => {
+    expect(() => assertFixedMigrationSeed(true, 3, false, null))
+      .toThrow('找不到固定窗口的原生 transcript')
+    expect(() => assertFixedMigrationSeed(true, 3, true, null)).not.toThrow()
+  })
+
+  it('fails closed when neither rolling store nor SDK transcript can resume the same revision', () => {
+    expect(() => assertRollingResumeRecovered(true, null, null))
+      .toThrow('避免静默退化')
+    expect(() => assertRollingResumeRecovered(true, null, createRollingHistorySeed(turns, {
+      cwd: 'C:/workspace', fallbackModel: 'claude',
+    }))).not.toThrow()
+  })
+
+  it('returns control to the confirmed body fallback when a fixed transcript cannot align', async () => {
+    const result = await createFixedTranscriptMigrationSeed(
+      '11111111-1111-4111-8111-111111111111', turns, turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', requiredFullRawDays: [],
+        importLocalSession: async (sessionId, store) => {
+          await store.append({ projectKey: 'fixed', sessionId }, [{
+            type: 'user', uuid: 'manual-command', parentUuid: null, sessionId,
+            message: { role: 'user', content: '/compact' },
+          }])
+        },
+      },
+    )
+    expect(result).toBeNull()
   })
 
   it('resumes a rolling Claude session only while its context revision still matches', () => {

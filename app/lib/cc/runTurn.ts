@@ -20,7 +20,11 @@ import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import {
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
+  createRollingTranscriptRecoverySeed,
+  createFixedTranscriptMigrationSeed,
   assertRequiredRollingRevisionSeed,
+  assertFixedMigrationSeed,
+  assertRollingResumeRecovered,
   materializeRollingHistorySeed,
   openRollingHistoryResume,
   type RollingSeedDiagnostic,
@@ -491,8 +495,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     if ((!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
       rememberResumePoint(resumeKey, effectiveResumeHint)
     }
+    const fixedMigration = shouldPrepareHistorySeed && isRolling
+      && config.rollingPreviousStrategy === 'fixed_window'
     const revisionSeed = shouldPrepareHistorySeed && isRolling && config.rollingSourceResumeFrom
-      ? await createRollingHistoryRevisionSeed(
+      ? await (fixedMigration ? createFixedTranscriptMigrationSeed : createRollingHistoryRevisionSeed)(
         config.rollingSourceResumeFrom,
         config.rollingAllHistory || rollingHistory,
         rollingHistory,
@@ -503,6 +509,22 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         },
       )
       : null
+    const rollingResumeRecoveryRequired = shouldPrepareHistorySeed && isRolling
+      && Boolean(input.resumeHint) && !config.rollingSourceResumeFrom
+    const recoveredRollingResume = rollingResumeRecoveryRequired && !persistedRollingResume
+      ? await createRollingTranscriptRecoverySeed(input.resumeHint!, { cwd: config.cwd })
+      : null
+    assertRollingResumeRecovered(
+      rollingResumeRecoveryRequired,
+      persistedRollingResume,
+      recoveredRollingResume,
+    )
+    assertFixedMigrationSeed(
+      fixedMigration,
+      rollingHistory.length,
+      Boolean(config.allowFixedBodyRestore),
+      revisionSeed,
+    )
     if (shouldPrepareHistorySeed && isRolling) {
       assertRequiredRollingRevisionSeed(
         Boolean(config.requireRollingSource),
@@ -512,7 +534,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       )
     }
     const historySeed = shouldPrepareHistorySeed && isRolling
-      ? persistedRollingResume || revisionSeed || createRollingHistorySeed(rollingHistory, {
+      ? persistedRollingResume || revisionSeed || recoveredRollingResume || createRollingHistorySeed(rollingHistory, {
         cwd: config.cwd,
         fallbackModel: config.sdkModel || config.model,
       })
