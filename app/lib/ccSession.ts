@@ -445,7 +445,12 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
   }
   const options = input.buildOptions(resumeFrom)
   const sessionStore = seededSessionStores.get(resumeKey)
-  if (sessionStore) options.sessionStore = sessionStore
+  if (sessionStore) {
+    options.sessionStore = sessionStore
+    // Agent SDK 明确禁止 sessionStore 与文件 checkpoint 同时启用：store 只镜像
+    // transcript，不镜像 backup blobs，resume 后 rewindFiles 必然失效。
+    options.enableFileCheckpointing = false
+  }
   const q = query({ prompt: queue.iterable, options })
 
   const live: LiveSession = {

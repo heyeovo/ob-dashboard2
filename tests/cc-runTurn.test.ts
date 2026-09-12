@@ -386,6 +386,7 @@ describe('runTurn：普通回复', () => {
       const options = sdk.queryOptions.at(-1)!
       expect(options.resume).toEqual(expect.any(String))
       expect(options.sessionStore).toBeTruthy()
+      expect(options.enableFileCheckpointing).toBe(false)
       const restored = await getSessionMessages(String(options.resume), {
         dir: config.cwd,
         sessionStore: options.sessionStore as SessionStore,
