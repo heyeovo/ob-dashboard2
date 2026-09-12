@@ -109,6 +109,10 @@ export type TurnConfig = {
   rollingAllHistory?: HavenTurn[]
   /** 上一 revision 已是滚动模式时，旧持久 transcript 缺失必须失败，禁止正文降级。 */
   requireRollingSource?: boolean
+  /** Haven 记录的紧邻上一 revision 策略；缺失时按未知高风险处理。 */
+  rollingPreviousStrategy?: string
+  /** 上一 revision 已为 raw、这次仍为 raw 的日期；这些日期禁止正文降级。 */
+  rollingRequiredFullRawDays?: string[]
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */

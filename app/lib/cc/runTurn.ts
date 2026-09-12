@@ -20,8 +20,10 @@ import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import {
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
+  assertRequiredRollingRevisionSeed,
   materializeRollingHistorySeed,
   openRollingHistoryResume,
+  type RollingSeedDiagnostic,
 } from '@/app/lib/cc/rollingHistory'
 import {
   attachSend,
@@ -429,6 +431,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   let modelRequestStartedAt = 0
   let confirmedCacheRefreshAt = 0
   let cacheDiagnostic: CacheDiagnostic | undefined
+  let rollingSeedDiagnostic: (RollingSeedDiagnostic & {
+    source: string
+    newSessionId: string
+    contextRevision: number
+  }) | undefined
   const currentCacheDiagnostic = (): CacheDiagnostic | undefined => cacheDiagnostic
     ? {
         ...cacheDiagnostic,
@@ -489,14 +496,20 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         config.rollingSourceResumeFrom,
         config.rollingAllHistory || rollingHistory,
         rollingHistory,
-        { cwd: config.cwd, fallbackModel: config.sdkModel || config.model },
+        {
+          cwd: config.cwd,
+          fallbackModel: config.sdkModel || config.model,
+          requiredFullRawDays: config.rollingRequiredFullRawDays,
+        },
       )
       : null
-    if (
-      shouldPrepareHistorySeed && isRolling && config.requireRollingSource
-      && config.rollingSourceResumeFrom && rollingHistory.length > 0 && !revisionSeed
-    ) {
-      throw new Error('旧滚动 transcript 持久副本不存在，已停止更新上下文版本，避免原文退化')
+    if (shouldPrepareHistorySeed && isRolling) {
+      assertRequiredRollingRevisionSeed(
+        Boolean(config.requireRollingSource),
+        rollingHistory.length,
+        config.rollingSourceResumeFrom || '',
+        revisionSeed,
+      )
     }
     const historySeed = shouldPrepareHistorySeed && isRolling
       ? persistedRollingResume || revisionSeed || createRollingHistorySeed(rollingHistory, {
@@ -505,6 +518,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       })
       : null
     await materializeRollingHistorySeed(historySeed)
+    rollingSeedDiagnostic = historySeed?.diagnostic ? {
+      ...historySeed.diagnostic,
+      source: historySeed.source,
+      newSessionId: historySeed.resumeFrom,
+      contextRevision: config.contextRevision,
+    } : undefined
     console.info(`[cc-rolling-seed ${sessionId}]`, {
       rollingHistoryCount: rollingHistory.length,
       shouldPrepareHistorySeed,
@@ -516,6 +535,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       seedCreated: historySeed?.source === 'new_seed',
       seedResumeFrom: historySeed?.resumeFrom || '',
       seedEntryCount: historySeed?.entries.length || 0,
+      rollingSourceResumeFrom: config.rollingSourceResumeFrom || '',
+      requireRollingSource: Boolean(config.requireRollingSource),
+      previousStrategy: config.rollingPreviousStrategy || '',
+      diagnostic: rollingSeedDiagnostic,
       contextRevision: config.contextRevision,
     })
     live = ensureSession({
@@ -1086,6 +1109,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           pre_compactions: preCompactions.length ? preCompactions : undefined,
           context_snapshot: live.contextSnapshot || undefined,
           rolling_context_revision: config.contextRevision || 0,
+          rolling_seed: rollingSeedDiagnostic,
           cache_snapshot: live.lastModelCallAt ? {
             refreshedAt: live.lastModelCallAt,
             systemTtlMs: CACHE_TTL_SYSTEM_MS,

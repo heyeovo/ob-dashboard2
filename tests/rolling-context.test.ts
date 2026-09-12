@@ -5,12 +5,14 @@ import path from 'node:path'
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
 import {
+  assertRequiredRollingRevisionSeed,
   buildRollingTranscriptEntries,
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
   inspectRollingHistoryTranscript,
   materializeRollingHistorySeed,
   openRollingHistoryResume,
+  rollingRevisionRequiresSource,
 } from '@/app/lib/cc/rollingHistory'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
@@ -165,7 +167,7 @@ describe('daily rolling context', () => {
       await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
         {
           type: 'user', uuid: 'native-user-2', parentUuid: source.entries.at(-1)?.uuid || null,
-          sessionId: source.resumeFrom, message: { role: 'user', content: '第五天查一下' },
+          sessionId: source.resumeFrom, message: { role: 'user', content: '<记忆召回>\n<memory_card>完整召回卡</memory_card>\n</记忆召回>\n\n第五天查一下' },
         },
         {
           type: 'assistant', uuid: 'native-assistant-tool', parentUuid: 'native-user-2', sessionId: source.resumeFrom,
@@ -183,7 +185,10 @@ describe('daily rolling context', () => {
 
       const revised = await createRollingHistoryRevisionSeed(
         source.resumeFrom, sourceTurns, sourceTurns.slice(1),
-        { cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot },
+        {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: sourceTurns.slice(1).map(turn => turn.chat_day),
+        },
       )
       expect(revised?.source).toBe('revision_seed')
       expect(revised?.entries).toHaveLength(10)
@@ -192,8 +197,21 @@ describe('daily rolling context', () => {
         .toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'])
       expect(JSON.stringify(revised?.entries[7])).toContain(toolUseId)
       expect(JSON.stringify(revised?.entries[8])).toContain('完整工具结果')
+      expect(revised?.diagnostic).toMatchObject({
+        sourceSessionId: source.resumeFrom,
+        sourceEntryCount: 12,
+        retainedEnvelopeCount: 4,
+        bodyRestoredTurnCount: 0,
+        toolUseCount: 1,
+        toolResultCount: 1,
+        memoryRecallCount: 1,
+      })
       await materializeRollingHistorySeed(revised)
       expect(openRollingHistoryResume(revised!.resumeFrom, { storeRoot })).not.toBeNull()
+      const audit = await inspectRollingHistoryTranscript(revised!.resumeFrom, { storeRoot })
+      expect(audit?.messages.find(message => message.blockTypes.includes('tool_use'))?.toolNames).toEqual(['search_chat'])
+      expect(audit?.messages.find(message => message.blockTypes.includes('tool_result'))?.content).toContain('完整工具结果')
+      expect(audit?.messages.some(message => message.containsMemoryRecall)).toBe(true)
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }
@@ -218,7 +236,10 @@ describe('daily rolling context', () => {
       )
       const revised = await createRollingHistoryRevisionSeed(
         source.resumeFrom, [sourceTurn, restoredTurn], [sourceTurn, restoredTurn],
-        { cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot },
+        {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [sourceTurn.chat_day],
+        },
       )
       const restoredEntries = revised?.entries.filter(entry => entry.ob2HavenTurnId === 2) || []
       expect(restoredEntries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
@@ -230,9 +251,47 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('refuses to body-restore a turn from a day that stayed raw', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-required-'))
+    const retained = { ...turns[0], id: 1, chat_day: '2026-09-11' } as HavenTurn
+    const missing = {
+      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-12',
+      user_text: '持久副本里缺失的问题', assistant_text: '持久副本里缺失的回答',
+    } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [{ type: 'custom-title', title: 'source' }],
+      )
+      await expect(createRollingHistoryRevisionSeed(
+        source.resumeFrom, [retained, missing], [retained, missing],
+        {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [retained.chat_day, missing.chat_day],
+        },
+      )).rejects.toThrow('仍为 raw 的完整轮次：2026-09-12')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('keeps native Claude resume points isolated by revision', () => {
     expect(ccResumeKey('session-a', 'subscription', 7)).toBe('session-a::subscription::context-7')
     expect(ccResumeKey('session-a', 'subscription', 8)).not.toBe(ccResumeKey('session-a', 'subscription', 7))
+  })
+
+  it('fails closed for daily rolling revisions when the prior strategy or source is uncertain', () => {
+    expect(rollingRevisionRequiresSource(true, 0, 1, 'daily_rolling')).toBe(true)
+    expect(rollingRevisionRequiresSource(true, 0, 1, '')).toBe(true)
+    expect(rollingRevisionRequiresSource(true, 0, 1, 'fixed_window')).toBe(false)
+    expect(rollingRevisionRequiresSource(true, 1, 1, 'daily_rolling')).toBe(false)
+    expect(() => assertRequiredRollingRevisionSeed(true, 4, '', null))
+      .toThrow('无法确定旧滚动 transcript')
+    expect(() => assertRequiredRollingRevisionSeed(true, 4, 'old-session', null))
+      .toThrow('旧滚动 transcript 持久副本不存在或无法完整对齐')
   })
 
   it('resumes a rolling Claude session only while its context revision still matches', () => {

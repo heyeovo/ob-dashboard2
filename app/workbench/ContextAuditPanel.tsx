@@ -42,6 +42,10 @@ type AuditData = {
     matched_source_messages: number
     expected_source_messages: number
     rolling_wrapper_messages: number
+    memory_recall_messages: number
+    tool_use_messages: number
+    tool_result_messages: number
+    body_restored_messages: number
     messages: Array<{
       index: number
       uuid: string
@@ -49,8 +53,13 @@ type AuditData = {
       content: string
       chars: number
       containsRollingWindowContext: boolean
+      containsMemoryRecall: boolean
+      blockTypes: string[]
+      toolNames: string[]
+      bodyRestored: boolean
     }>
   }
+  rolling_seed: Record<string, unknown> | null
   system_prompt: {
     current: {
       mode: string
@@ -220,12 +229,16 @@ export default function ContextAuditPanel() {
                   <p className="rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-xs text-[var(--color-pending)]">需要检查：原文匹配 {data.transcript.matched_source_messages}/{data.transcript.expected_source_messages} 条，rolling_window_context 包装命中 {data.transcript.rolling_wrapper_messages} 条。</p>
                 )}
                 {data.transcript.available ? (
-                  <div className="text-[11px] text-[var(--color-text-tertiary)]">SessionStore 共 {number(data.transcript.entry_count)} 条记录，其中 {number(data.transcript.message_count)} 条是 user/assistant 消息。以下内容直接来自持久 transcript，不是按 Haven 配置推算。</div>
+                  <div className="space-y-1 text-[11px] text-[var(--color-text-tertiary)]">
+                    <div>SessionStore 共 {number(data.transcript.entry_count)} 条记录，其中 {number(data.transcript.message_count)} 条可审计消息。以下内容直接来自持久 transcript，不是按 Haven 配置推算。</div>
+                    <div>工具调用 {number(data.transcript.tool_use_messages)} 条 · 工具结果 {number(data.transcript.tool_result_messages)} 条 · 召回包装 {number(data.transcript.memory_recall_messages)} 条 · 正文恢复标记 {number(data.transcript.body_restored_messages)} 条</div>
+                    {data.rolling_seed ? <div>最近一次重建凭据：{JSON.stringify(data.rolling_seed)}</div> : <div>最近 50 轮没有找到持久化的重建凭据。</div>}
+                  </div>
                 ) : null}
                 <div className="max-h-[36rem] space-y-2 overflow-auto">
                   {data.transcript.messages.map(message => (
                     <article key={`${message.index}-${message.uuid}`} className={`rounded-lg p-3 ${message.containsRollingWindowContext ? 'bg-[var(--color-danger-bg)]' : 'bg-[var(--color-bg)]'}`}>
-                      <div className={`mb-2 text-[11px] ${message.containsRollingWindowContext ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-tertiary)]'}`}>#{message.index} · {message.role} · {number(message.chars)} 字符{message.containsRollingWindowContext ? ' · 命中 rolling_window_context' : ''}</div>
+                      <div className={`mb-2 text-[11px] ${message.containsRollingWindowContext ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-tertiary)]'}`}>#{message.index} · {message.role} · {number(message.chars)} 字符 · {message.blockTypes.join('+') || 'unknown'}{message.toolNames.length ? ` · ${message.toolNames.join(', ')}` : ''}{message.containsMemoryRecall ? ' · 记忆召回' : ''}{message.bodyRestored ? ' · 正文恢复' : ''}{message.containsRollingWindowContext ? ' · 命中 rolling_window_context' : ''}</div>
                       <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-5 text-[var(--color-text-secondary)]">{message.content}</pre>
                     </article>
                   ))}

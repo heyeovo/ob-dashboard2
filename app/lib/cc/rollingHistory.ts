@@ -10,6 +10,17 @@ export type RollingHistorySeed = {
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
   source: 'new_seed' | 'revision_seed' | 'persisted'
+  diagnostic?: RollingSeedDiagnostic
+}
+
+export type RollingSeedDiagnostic = {
+  sourceSessionId: string
+  sourceEntryCount: number
+  retainedEnvelopeCount: number
+  bodyRestoredTurnCount: number
+  toolUseCount: number
+  toolResultCount: number
+  memoryRecallCount: number
 }
 
 export type RollingTranscriptAudit = {
@@ -21,6 +32,10 @@ export type RollingTranscriptAudit = {
     content: string
     chars: number
     containsRollingWindowContext: boolean
+    containsMemoryRecall: boolean
+    blockTypes: string[]
+    toolNames: string[]
+    bodyRestored: boolean
   }>
 }
 
@@ -34,6 +49,29 @@ type TranscriptEnvelope = {
   entries: SessionStoreEntry[]
   userText: string
   assistantText: string
+}
+
+export function rollingRevisionRequiresSource(
+  isRolling: boolean,
+  laneContextRevision: number,
+  contextRevision: number,
+  previousStrategy: string,
+): boolean {
+  return isRolling
+    && laneContextRevision !== contextRevision
+    && previousStrategy !== 'fixed_window'
+}
+
+export function assertRequiredRollingRevisionSeed(
+  required: boolean,
+  rawTurnCount: number,
+  sourceResumeFrom: string,
+  revisionSeed: RollingHistorySeed | null,
+): void {
+  if (!required || rawTurnCount === 0 || revisionSeed) return
+  throw new Error(sourceResumeFrom
+    ? '旧滚动 transcript 持久副本不存在或无法完整对齐，已停止本轮，raw 原文没有被正文替代'
+    : '无法确定旧滚动 transcript 的 session，已停止本轮，raw 原文没有被正文替代')
 }
 
 // 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.220 对应。
@@ -257,6 +295,60 @@ function transcriptMessageContent(message: unknown): string {
   }).filter(Boolean).join('\n')
 }
 
+function transcriptMessageAuditContent(message: unknown): string {
+  if (!message || typeof message !== 'object') return ''
+  const content = (message as Record<string, unknown>).content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map(block => {
+    if (!block || typeof block !== 'object') return String(block || '')
+    const record = block as Record<string, unknown>
+    if (record.type === 'text' && typeof record.text === 'string') return record.text
+    if (record.type === 'tool_use') {
+      return `[tool_use ${String(record.name || '')} · ${String(record.id || '')}]\n${JSON.stringify(record.input ?? {}, null, 2)}`
+    }
+    if (record.type === 'tool_result') {
+      const result = typeof record.content === 'string'
+        ? record.content
+        : JSON.stringify(record.content ?? null, null, 2)
+      return `[tool_result · ${String(record.tool_use_id || '')}]\n${result}`
+    }
+    return JSON.stringify(record, null, 2)
+  }).filter(Boolean).join('\n')
+}
+
+function entryBlockTypes(message: Record<string, unknown> | null): string[] {
+  if (!message) return []
+  const content = message.content
+  if (typeof content === 'string') return ['text']
+  if (!Array.isArray(content)) return []
+  return content.map(block => block && typeof block === 'object'
+    ? String((block as Record<string, unknown>).type || 'unknown')
+    : 'unknown')
+}
+
+function entryToolNames(message: Record<string, unknown> | null): string[] {
+  if (!message) return []
+  return contentBlocks(message)
+    .filter(block => block.type === 'tool_use')
+    .map(block => String(block.name || ''))
+    .filter(Boolean)
+}
+
+function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<RollingSeedDiagnostic>): RollingSeedDiagnostic {
+  const messages = entries.map(entry => messageRecord(entry))
+  return {
+    sourceSessionId: '',
+    sourceEntryCount: 0,
+    retainedEnvelopeCount: 0,
+    bodyRestoredTurnCount: 0,
+    toolUseCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_use').length, 0),
+    toolResultCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_result').length, 0),
+    memoryRecallCount: messages.filter(message => /<记忆召回>|<memory_card\b/i.test(transcriptMessageContent(message))).length,
+    ...overrides,
+  }
+}
+
 function messageRecord(entry: SessionStoreEntry): Record<string, unknown> | null {
   const raw = entry as Record<string, unknown>
   return raw.message && typeof raw.message === 'object'
@@ -399,9 +491,10 @@ export async function inspectRollingHistoryTranscript(
       ? record.message as Record<string, unknown>
       : null
     if (!message) return []
-    const content = transcriptMessageContent(message)
+    const content = transcriptMessageAuditContent(message)
     const role = typeof message.role === 'string' ? message.role : String(record.type || '')
     if (!content || (role !== 'user' && role !== 'assistant')) return []
+    const blockTypes = entryBlockTypes(message)
     return [{
       index,
       uuid: typeof record.uuid === 'string' ? record.uuid : '',
@@ -409,6 +502,10 @@ export async function inspectRollingHistoryTranscript(
       content,
       chars: content.length,
       containsRollingWindowContext: /<rolling_window_context(?:\s|>)/i.test(content),
+      containsMemoryRecall: /<记忆召回>|<memory_card\b/i.test(content),
+      blockTypes,
+      toolNames: entryToolNames(message),
+      bodyRestored: record.ob2RollingFidelity === 'body_restored',
     }]
   })
   return { entryCount: entries.length, messages }
@@ -431,6 +528,7 @@ export function createRollingHistorySeed(
     sessionStore: new RollingSeedStore(resumeFrom, entries, options.storeRoot),
     entries,
     source: 'new_seed',
+    diagnostic: seedDiagnostic(entries, { bodyRestoredTurnCount: turns.length }),
   }
 }
 
@@ -454,7 +552,10 @@ export async function createRollingHistoryRevisionSeed(
   sourceResumeFrom: string,
   allTurns: HavenTurn[],
   rawTurns: HavenTurn[],
-  options: Omit<TranscriptSeedOptions, 'sessionId'> & { storeRoot?: string },
+  options: Omit<TranscriptSeedOptions, 'sessionId'> & {
+    storeRoot?: string
+    requiredFullRawDays?: string[]
+  },
 ): Promise<RollingHistorySeed | null> {
   const source = openRollingHistoryResume(sourceResumeFrom, options)
   if (!source) return null
@@ -464,11 +565,19 @@ export async function createRollingHistoryRevisionSeed(
   const aligned = alignEnvelopesToTurns(envelopes, allTurns)
   const nextSessionId = randomUUID()
   const selectedEntries: SessionStoreEntry[] = [...prefix]
+  const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
+  let retainedEnvelopeCount = 0
+  let bodyRestoredTurnCount = 0
   for (const turn of [...rawTurns].sort((a, b) => a.id - b.id)) {
     const envelope = aligned.get(turn.id)
     if (envelope) {
+      retainedEnvelopeCount += 1
       selectedEntries.push(...envelope.entries)
     } else {
+      if (requiredFullRawDays.has(turn.chat_day || '')) {
+        throw new Error(`旧滚动 transcript 缺少仍为 raw 的完整轮次：${turn.chat_day || '未知日期'}，已停止本轮`)
+      }
+      bodyRestoredTurnCount += 1
       selectedEntries.push(...buildRollingTranscriptEntries([turn], {
         sessionId: nextSessionId,
         cwd: options.cwd,
@@ -488,6 +597,12 @@ export async function createRollingHistoryRevisionSeed(
     sessionStore: new RollingSeedStore(nextSessionId, entries, options.storeRoot),
     entries,
     source: 'revision_seed',
+    diagnostic: seedDiagnostic(entries, {
+      sourceSessionId: sourceResumeFrom,
+      sourceEntryCount: sourceEntries.length,
+      retainedEnvelopeCount,
+      bodyRestoredTurnCount,
+    }),
   }
 }
 

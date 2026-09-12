@@ -54,18 +54,15 @@ function matchTranscriptMessages(
   transcript: Awaited<ReturnType<typeof inspectRollingHistoryTranscript>>,
 ): number {
   if (!transcript) return 0
-  const available = new Map<string, number>()
-  for (const message of transcript.messages) {
-    const key = `${message.role}\u0000${message.content}`
-    available.set(key, (available.get(key) || 0) + 1)
-  }
+  const available = transcript.messages.map(message => ({ ...message, used: false }))
   let matched = 0
   for (const message of source) {
-    const key = `${message.role}\u0000${message.content}`
-    const remaining = available.get(key) || 0
-    if (remaining > 0) {
+    const candidate = available.find(item => !item.used
+      && item.role === message.role
+      && item.content.includes(message.content))
+    if (candidate) {
       matched += 1
-      available.set(key, remaining - 1)
+      candidate.used = true
     }
   }
   return matched
@@ -87,10 +84,15 @@ export async function GET(request: NextRequest) {
     const session = sessionResult.session
     const [rolling, latestResult] = await Promise.all([
       loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { logDiagnostics: false }),
-      listTurns(sessionId, { limit: 1, includeRaw: true }),
+      listTurns(sessionId, { limit: 50, includeRaw: true }),
     ])
     const latestTurn = latestResult.ok ? latestResult.turns.at(-1) : undefined
     const latestRaw = rawRecord(latestTurn?.raw_json)
+    const rollingSeedRaw = latestResult.ok
+      ? [...latestResult.turns].reverse()
+        .map(turn => objectValue(rawRecord(turn.raw_json).rolling_seed))
+        .find(Boolean) || null
+      : null
     const latestCacheRaw = objectValue(latestRaw.cache_diagnostic)
     const usage = pickFields(latestRaw.usage, [
       'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens',
@@ -152,6 +154,10 @@ export async function GET(request: NextRequest) {
         matched_source_messages: matchTranscriptMessages(messages, transcript),
         expected_source_messages: messages.length,
         rolling_wrapper_messages: transcript.messages.filter(message => message.containsRollingWindowContext).length,
+        memory_recall_messages: transcript.messages.filter(message => message.containsMemoryRecall).length,
+        tool_use_messages: transcript.messages.filter(message => message.blockTypes.includes('tool_use')).length,
+        tool_result_messages: transcript.messages.filter(message => message.blockTypes.includes('tool_result')).length,
+        body_restored_messages: transcript.messages.filter(message => message.bodyRestored).length,
         messages: transcript.messages,
       } : {
         available: false,
@@ -160,8 +166,13 @@ export async function GET(request: NextRequest) {
         matched_source_messages: 0,
         expected_source_messages: messages.length,
         rolling_wrapper_messages: 0,
+        memory_recall_messages: 0,
+        tool_use_messages: 0,
+        tool_result_messages: 0,
+        body_restored_messages: 0,
         messages: [],
       },
+      rolling_seed: rollingSeedRaw,
       system_prompt: {
         current: {
           mode: session.mode,

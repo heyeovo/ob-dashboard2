@@ -133,3 +133,11 @@
 - 本阶段没有改 Context GC 的扫描、fork、CAS 或清理实现。daily rolling 的 GC GET/POST 被服务端拦截、自动开关不能开启，05:30 scheduler 也无条件跳过；固定窗口 GC 保持原行为。下一阶段才接 RollingSeedStore 版 GC。
 - 自动化验证：Dashboard 全量 `270` 通过、`1` 跳过；保真/运行时/GC 门禁定向 `39` 项通过；production build 通过；Haven `tests.test_gateway_state_contracts` `36` 项通过，`gateway_state.py` 语法检查通过；两仓 `git diff --check` 通过。测试未调用模型或额外 Context 分析。
 - 仍需真实验收：先 Haven 后 Dashboard 部署，在现有 5 个 raw 日期主窗把最早 1 天改为 review/omit，发一条普通消息后用本轮上下文审计确认其余 4 天的工具链内容与顺序保持；Redeploy Dashboard 后再核对持久恢复；随后把退出日期重新设 raw，确认界面提示与 transcript 仅正文恢复。真实验收完成前不得开放 daily rolling 手动或 05:30 自动减负。
+
+### 13.1 2026-09-13 首次真实验收失败后的加固
+
+- 真实窗口 `ob2-20260907-ivxczo` 暴露静默正文重建：调整前截图确认存在“赴约之旅”动态召回和两次 `breath`；调整后持久 transcript 的连续索引证明这些调用不在旧轮次中，只有 Haven user/assistant 正文，调整后的新召回才正常出现。该窗口已判定验收失败，不再用它重复覆盖证据。
+- 第二轮修复把迁移门禁改为 fail closed：只有 Haven 明确返回 `previous_strategy=fixed_window` 时允许首次正文建种；daily→daily 或缺失 `previous_strategy` 的未知 revision 都必须取得旧 RollingSeedStore，否则本轮直接失败。Haven 新增内部 `previous_day_modes`，Dashboard 据此区分 raw→raw 与 review/omit→raw；任何 raw→raw 轮次未从旧 transcript 完整命中都会报错，只有真正重新加入 raw 的日期可标记 `body_restored`。
+- 审计不再隐藏纯 `tool_use` / `tool_result` entry，并显示工具名、召回包装、正文恢复标记和各类数量。成功重建的旧/新 session、源/目标 entry 数、完整保留轮数、正文恢复轮数、工具和召回数量随首个成功 turn 写入 Haven `raw_json.rolling_seed`；工作台从最近 50 轮中读取，不再依赖易淘汰的 Coolify 首条日志。
+- 自动化验证：Dashboard 全量 `272` 通过、`1` 跳过，定向 `14` 项通过，ESLint 与 production build 通过；Haven `36` 项状态契约测试与 Python 语法检查通过。没有调用模型或额外 Context 分析。
+- 仍待第二次真实验收：必须换一个调整前已有多日 raw、召回和工具调用的窗口；部署顺序仍为 Haven→Dashboard。先截图审计统计和目标轮次，调整一日后发一句，再确认 raw→raw 日期的调用顺序与重建凭据；随后 Dashboard Redeploy 后复核。同一阶段继续硬禁 daily rolling 手动/05:30 GC。
