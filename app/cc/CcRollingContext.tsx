@@ -217,6 +217,14 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     if (switchingToFixed && !window.confirm(
       '切回原换窗机制后，这个窗口只会使用创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。\n\n如果要保留最新衔接，请取消并先使用“换窗继续”。仍要直接切回吗？',
     )) return
+    const restoredDays = days.filter(day => {
+      const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
+      const nextMode = draft.day_modes?.[day.day] || 'raw'
+      return savedMode !== 'raw' && nextMode === 'raw'
+    })
+    if (restoredDays.length > 0 && !window.confirm(
+      `将 ${restoredDays.length} 个旧日期重新设为“原文”时，只会恢复 Haven 中可见的用户与助手正文，不会恢复当时的工具调用、工具结果和动态召回过程。仍要保存吗？`,
+    )) return
     setSaving(true)
     setNote('')
     try {
@@ -267,6 +275,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
           <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-2.5 text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">
             这里只决定模型下一轮能看到什么，不删除聊天记录。原文日里的已召回记忆不会重复召回；改成日回顾或不带后，以后可以再次召回。
           </div>
+          <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] p-2.5 text-[10.5px] leading-relaxed text-[var(--color-pending)]">
+            已经退出“原文”的旧日期以后重新设为“原文”时，只会从 Haven 恢复可见的用户与助手正文；当时的工具调用、工具结果和动态召回过程不会恢复。
+          </div>
           <div className="mb-3 flex items-center justify-between gap-3">
             <label className="text-[11px] text-[var(--color-text-tertiary)]">一天从北京时间</label>
             <select className={SELECT} value={draft.day_start_hour} onChange={event => setDraft({ ...draft, day_start_hour: Number(event.target.value) })}>
@@ -279,10 +290,15 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
           <div className="space-y-1.5">
             {[...days].sort((a, b) => b.day.localeCompare(a.day)).map(day => {
               const mode = draft.day_modes?.[day.day] || 'raw'
+              const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
+              const bodyRestore = savedMode !== 'raw' && mode === 'raw'
               return (
                 <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11.5px] text-[var(--color-text-secondary)]">{day.day}</div>
+                    <div className="flex items-center gap-1.5 text-[11.5px] text-[var(--color-text-secondary)]">
+                      <span>{day.day}</span>
+                      {bodyRestore ? <span className="rounded-full bg-[var(--color-pending-bg)] px-1.5 py-0.5 text-[9px] text-[var(--color-pending)]">正文恢复</span> : null}
+                    </div>
                     <div className="text-[9.5px] text-[var(--color-text-disabled)]">{day.turn_count} 轮 · 原文 {day.raw_chars.toLocaleString()} 字{day.review ? ` · 回顾 ${day.review.chars.toLocaleString()} 字` : ' · 暂无日回顾'}</div>
                   </div>
                   <select

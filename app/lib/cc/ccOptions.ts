@@ -103,6 +103,12 @@ export type TurnConfig = {
   contextRevision: number
   /** 新滚动原生会话首次启动时，以真实 user/assistant 角色恢复的可见原文。 */
   rollingHistory?: HavenTurn[]
+  /** revision 变化时用于完整轮次迁移的旧 RollingSeedStore session。 */
+  rollingSourceResumeFrom?: string
+  /** 旧 transcript 轮次日期对齐所需的 Haven 全量永久轮次。 */
+  rollingAllHistory?: HavenTurn[]
+  /** 上一 revision 已是滚动模式时，旧持久 transcript 缺失必须失败，禁止正文降级。 */
+  requireRollingSource?: boolean
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { SessionKey, SessionStore, SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
@@ -9,7 +9,7 @@ export type RollingHistorySeed = {
   resumeFrom: string
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
-  source: 'new_seed' | 'persisted'
+  source: 'new_seed' | 'revision_seed' | 'persisted'
 }
 
 export type RollingTranscriptAudit = {
@@ -28,6 +28,12 @@ type TranscriptSeedOptions = {
   sessionId: string
   cwd: string
   fallbackModel: string
+}
+
+type TranscriptEnvelope = {
+  entries: SessionStoreEntry[]
+  userText: string
+  assistantText: string
 }
 
 // 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.220 对应。
@@ -169,6 +175,25 @@ class RollingSeedStore implements SessionStore {
     return existsSync(/*turbopackIgnore: true*/ this.filePath({ projectKey: '', sessionId }))
   }
 
+  async materialize(sessionId: string): Promise<void> {
+    const key = { projectKey: '', sessionId }
+    const storageKey = this.key(key)
+    if (this.hasPersistedSession(sessionId)) return
+    const entries = this.initialSessions.get(storageKey)
+    if (!entries?.length) throw new Error('滚动 transcript 没有可持久化的种子内容')
+    const file = this.filePath(key)
+    await mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true, mode: 0o700 })
+    const temp = path.join(
+      /*turbopackIgnore: true*/ path.dirname(file),
+      `.${path.basename(file)}.${randomUUID()}.tmp`,
+    )
+    await writeFile(temp, `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`, {
+      encoding: 'utf8', mode: 0o600,
+    })
+    await rename(temp, file)
+    this.initialSessions.delete(storageKey)
+  }
+
   async append(key: SessionKey, entries: SessionStoreEntry[]): Promise<void> {
     if (entries.length === 0) return
     const storageKey = this.key(key)
@@ -232,6 +257,133 @@ function transcriptMessageContent(message: unknown): string {
   }).filter(Boolean).join('\n')
 }
 
+function messageRecord(entry: SessionStoreEntry): Record<string, unknown> | null {
+  const raw = entry as Record<string, unknown>
+  return raw.message && typeof raw.message === 'object'
+    ? raw.message as Record<string, unknown>
+    : null
+}
+
+function contentBlocks(message: Record<string, unknown>): Array<Record<string, unknown>> {
+  const content = message.content
+  if (!Array.isArray(content)) return []
+  return content.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
+}
+
+function isPrimaryUserEntry(entry: SessionStoreEntry): boolean {
+  const message = messageRecord(entry)
+  if (entry.type !== 'user' || message?.role !== 'user') return false
+  const blocks = contentBlocks(message)
+  return !blocks.some(block => block.type === 'tool_result')
+}
+
+function normalized(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function transcriptEnvelopes(entries: SessionStoreEntry[]): {
+  prefix: SessionStoreEntry[]
+  envelopes: TranscriptEnvelope[]
+} {
+  const prefix: SessionStoreEntry[] = []
+  const envelopes: TranscriptEnvelope[] = []
+  let current: SessionStoreEntry[] | null = null
+  for (const entry of entries) {
+    if (isPrimaryUserEntry(entry)) {
+      if (current) envelopes.push(toEnvelope(current))
+      current = [entry]
+    } else if (current) {
+      current.push(entry)
+    } else {
+      prefix.push(entry)
+    }
+  }
+  if (current) envelopes.push(toEnvelope(current))
+  return { prefix, envelopes }
+}
+
+function toEnvelope(entries: SessionStoreEntry[]): TranscriptEnvelope {
+  const userText = entries
+    .filter(entry => isPrimaryUserEntry(entry))
+    .map(entry => transcriptMessageContent(messageRecord(entry)))
+    .filter(Boolean)
+    .join('\n')
+  const assistantText = entries
+    .filter(entry => messageRecord(entry)?.role === 'assistant')
+    .map(entry => transcriptMessageContent(messageRecord(entry)))
+    .filter(Boolean)
+    .join('\n')
+  return { entries, userText, assistantText }
+}
+
+function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
+  const actualUser = normalized(envelope.userText)
+  const actualAssistant = normalized(envelope.assistantText)
+  const expectedAssistant = normalized(turn.assistant_text)
+  const userMatches = turn.turn_kind === 'agent_wake'
+    ? actualUser.includes('<agent_wake ')
+    : Boolean(normalized(turn.user_text)) && actualUser.includes(normalized(turn.user_text))
+  return userMatches && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
+}
+
+function alignEnvelopesToTurns(
+  envelopes: TranscriptEnvelope[],
+  turns: HavenTurn[],
+): Map<number, TranscriptEnvelope> {
+  const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
+  const ways = Array.from(
+    { length: envelopes.length + 1 },
+    () => Array<number>(orderedTurns.length + 1).fill(0),
+  )
+  for (let turnIndex = 0; turnIndex <= orderedTurns.length; turnIndex += 1) {
+    ways[envelopes.length][turnIndex] = 1
+  }
+  for (let envelopeIndex = envelopes.length - 1; envelopeIndex >= 0; envelopeIndex -= 1) {
+    for (let turnIndex = orderedTurns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+      const skip = ways[envelopeIndex][turnIndex + 1]
+      const use = envelopeMatchesTurn(envelopes[envelopeIndex], orderedTurns[turnIndex])
+        ? ways[envelopeIndex + 1][turnIndex + 1]
+        : 0
+      ways[envelopeIndex][turnIndex] = Math.min(2, skip + use)
+    }
+  }
+  if (ways[0][0] !== 1) {
+    throw new Error('旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本')
+  }
+  const aligned = new Map<number, TranscriptEnvelope>()
+  let turnIndex = 0
+  for (let envelopeIndex = 0; envelopeIndex < envelopes.length; envelopeIndex += 1) {
+    while (turnIndex < orderedTurns.length) {
+      const canUse = envelopeMatchesTurn(envelopes[envelopeIndex], orderedTurns[turnIndex])
+        && ways[envelopeIndex + 1][turnIndex + 1] > 0
+      if (canUse) {
+        aligned.set(orderedTurns[turnIndex].id, envelopes[envelopeIndex])
+        turnIndex += 1
+        break
+      }
+      turnIndex += 1
+    }
+  }
+  return aligned
+}
+
+function cloneForSession(entries: SessionStoreEntry[], sessionId: string): SessionStoreEntry[] {
+  const cloned = entries.map(entry => JSON.parse(JSON.stringify(entry)) as SessionStoreEntry)
+  const uuidMap = new Map<string, string>()
+  for (const entry of cloned) {
+    if (typeof entry.uuid === 'string' && entry.uuid) uuidMap.set(entry.uuid, randomUUID())
+  }
+  let previousUuid: string | null = null
+  for (const entry of cloned) {
+    const oldUuid = typeof entry.uuid === 'string' ? entry.uuid : ''
+    if (oldUuid) entry.uuid = uuidMap.get(oldUuid)!
+    if ('sessionId' in entry) entry.sessionId = sessionId
+    if ('parentUuid' in entry) entry.parentUuid = previousUuid
+    if (typeof entry.uuid === 'string' && entry.uuid) previousUuid = entry.uuid
+  }
+  return cloned
+}
+
 /** 只读返回 SDK SessionStore 真正落盘的消息字段；不暴露 cwd、路径或其他元数据。 */
 export async function inspectRollingHistoryTranscript(
   resumeFrom: string,
@@ -281,3 +433,62 @@ export function createRollingHistorySeed(
     source: 'new_seed',
   }
 }
+
+export async function materializeRollingHistorySeed(seed: RollingHistorySeed | null): Promise<void> {
+  if (!seed || seed.source !== 'revision_seed') return
+  if (!(seed.sessionStore instanceof RollingSeedStore)) {
+    throw new Error('滚动 transcript 使用了未知的持久 store')
+  }
+  await seed.sessionStore.materialize(seed.resumeFrom)
+  if (!seed.sessionStore.hasPersistedSession(seed.resumeFrom)) {
+    throw new Error('滚动 transcript 持久化后无法重新打开')
+  }
+}
+
+/**
+ * 新 revision 只按完整 Claude 轮次包裁剪旧 transcript。仍为 raw 的轮次保留
+ * 原生 user/assistant/tool_use/tool_result 顺序；旧 transcript 中没有的 raw 轮次
+ * 才从 Haven 降级恢复可见正文。
+ */
+export async function createRollingHistoryRevisionSeed(
+  sourceResumeFrom: string,
+  allTurns: HavenTurn[],
+  rawTurns: HavenTurn[],
+  options: Omit<TranscriptSeedOptions, 'sessionId'> & { storeRoot?: string },
+): Promise<RollingHistorySeed | null> {
+  const source = openRollingHistoryResume(sourceResumeFrom, options)
+  if (!source) return null
+  const sourceEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+  if (!sourceEntries?.length) return null
+  const { prefix, envelopes } = transcriptEnvelopes(sourceEntries)
+  const aligned = alignEnvelopesToTurns(envelopes, allTurns)
+  const nextSessionId = randomUUID()
+  const selectedEntries: SessionStoreEntry[] = [...prefix]
+  for (const turn of [...rawTurns].sort((a, b) => a.id - b.id)) {
+    const envelope = aligned.get(turn.id)
+    if (envelope) {
+      selectedEntries.push(...envelope.entries)
+    } else {
+      selectedEntries.push(...buildRollingTranscriptEntries([turn], {
+        sessionId: nextSessionId,
+        cwd: options.cwd,
+        fallbackModel: options.fallbackModel,
+      }).map(entry => ({
+        ...entry,
+        ob2RollingFidelity: 'body_restored',
+        ob2HavenTurnId: turn.id,
+        ob2ChatDay: turn.chat_day || '',
+      })))
+    }
+  }
+  if (selectedEntries.length === 0) return null
+  const entries = cloneForSession(selectedEntries, nextSessionId)
+  return {
+    resumeFrom: nextSessionId,
+    sessionStore: new RollingSeedStore(nextSessionId, entries, options.storeRoot),
+    entries,
+    source: 'revision_seed',
+  }
+}
+
+export const rollingHistoryTest = { transcriptEnvelopes, alignEnvelopesToTurns }

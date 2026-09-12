@@ -60,6 +60,8 @@ async function runDueContextGc(): Promise<void> {
       const loaded = await getConversationSession(summary.session_id)
       if (!loaded.ok || !loaded.session || loaded.session.context_gc?.auto_enabled !== true) continue
       let session = loaded.session
+      // raw 保真与 RollingSeedStore fork 尚未完成真实验收前，滚动窗口硬性禁用自动减负。
+      if (session.rolling_context?.strategy === 'daily_rolling') continue
       if (session.context_gc?.last_auto_date === clock.date) continue
       for (const laneId of Object.keys(session.cc_lanes || {})) {
         const attemptKey = `${clock.date}:${summary.session_id}:${laneId}`

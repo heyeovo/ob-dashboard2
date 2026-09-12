@@ -15,6 +15,9 @@ function laneSessionId(lane: unknown): string {
 async function load(sessionId: string, laneId: string) {
   const loaded = await getConversationSession(sessionId)
   if (!loaded.ok || !loaded.session) throw new Error(loaded.error || '找不到这个窗口')
+  if (loaded.session.rolling_context?.strategy === 'daily_rolling') {
+    throw new Error('按天滚动窗口的减负正在进行 raw 保真验收，手动与自动减负暂不可用')
+  }
   const lane = loaded.session.cc_lanes?.[laneId]
   const ccSessionId = laneSessionId(lane)
   if (!ccSessionId) throw new Error('这条线路还没有可减负的 Claude 会话')
@@ -64,6 +67,9 @@ export async function PATCH(request: NextRequest) {
     const protectedKeys = Array.isArray(body.protected_keys) ? body.protected_keys.map(String) : undefined
     const autoEnabled = typeof body.auto_enabled === 'boolean' ? body.auto_enabled : undefined
     if (protectedKeys === undefined && autoEnabled === undefined) throw new Error('没有可保存的减负设置')
+    if (loaded.session.rolling_context?.strategy === 'daily_rolling' && autoEnabled !== false) {
+      throw new Error('按天滚动窗口的减负正在进行 raw 保真验收，目前只能关闭旧的自动开关')
+    }
     const saved = await patchConversationContextGc({
       sessionId,
       personaId: loaded.session.persona_id,

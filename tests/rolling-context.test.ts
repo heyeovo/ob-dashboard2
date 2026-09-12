@@ -6,8 +6,10 @@ import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
 import {
   buildRollingTranscriptEntries,
+  createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
   inspectRollingHistoryTranscript,
+  materializeRollingHistorySeed,
   openRollingHistoryResume,
 } from '@/app/lib/cc/rollingHistory'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
@@ -142,6 +144,87 @@ describe('daily rolling context', () => {
       ])
       expect(audit?.messages.every(message => !message.containsRollingWindowContext)).toBe(true)
       expect(openRollingHistoryResume('11111111-1111-4111-8111-111111111111', { storeRoot })).toBeNull()
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('drops only exited-day envelopes and preserves native tool use/result order for remaining raw days', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-revision-'))
+    const sourceTurns = Array.from({ length: 5 }, (_, index) => ({
+      ...turns[0], id: index + 1, round_id: index + 1,
+      chat_day: `2026-09-${String(index + 7).padStart(2, '0')}`,
+      user_text: index === 4 ? '第五天查一下' : `第${index + 1}天`,
+      assistant_text: index === 4 ? '第五天回复' : `第${index + 1}天回复`,
+    })) as HavenTurn[]
+    try {
+      const source = createRollingHistorySeed(sourceTurns.slice(0, 4), {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      const toolUseId = 'toolu_keep_me'
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        {
+          type: 'user', uuid: 'native-user-2', parentUuid: source.entries.at(-1)?.uuid || null,
+          sessionId: source.resumeFrom, message: { role: 'user', content: '第五天查一下' },
+        },
+        {
+          type: 'assistant', uuid: 'native-assistant-tool', parentUuid: 'native-user-2', sessionId: source.resumeFrom,
+          message: { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'search_chat', input: { query: '旧事' } }] },
+        },
+        {
+          type: 'user', uuid: 'native-tool-result', parentUuid: 'native-assistant-tool', sessionId: source.resumeFrom,
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: '完整工具结果' }] },
+        },
+        {
+          type: 'assistant', uuid: 'native-assistant-final', parentUuid: 'native-tool-result', sessionId: source.resumeFrom,
+          message: { role: 'assistant', content: [{ type: 'text', text: '第五天回复' }] },
+        },
+      ])
+
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, sourceTurns, sourceTurns.slice(1),
+        { cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot },
+      )
+      expect(revised?.source).toBe('revision_seed')
+      expect(revised?.entries).toHaveLength(10)
+      expect(JSON.stringify(revised?.entries)).not.toContain('第1天')
+      expect(revised?.entries.map(entry => (entry.message as { role: string }).role))
+        .toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'])
+      expect(JSON.stringify(revised?.entries[7])).toContain(toolUseId)
+      expect(JSON.stringify(revised?.entries[8])).toContain('完整工具结果')
+      await materializeRollingHistorySeed(revised)
+      expect(openRollingHistoryResume(revised!.resumeFrom, { storeRoot })).not.toBeNull()
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('restores a newly re-added raw day from Haven body text only and marks the downgrade', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-restore-'))
+    const sourceTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-11' } as HavenTurn
+    const restoredTurn = {
+      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-10',
+      user_text: '重新加入的旧问题', assistant_text: '重新加入的旧回答',
+    } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([sourceTurn], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [])
+      // 空 append 不会物化；追加一个无 UUID 的非消息标记，同时落下初始 transcript。
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [{ type: 'custom-title', title: 'source' }],
+      )
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [sourceTurn, restoredTurn], [sourceTurn, restoredTurn],
+        { cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot },
+      )
+      const restoredEntries = revised?.entries.filter(entry => entry.ob2HavenTurnId === 2) || []
+      expect(restoredEntries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
+      expect(restoredEntries.every(entry => entry.ob2RollingFidelity === 'body_restored')).toBe(true)
+      expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_use"')
+      expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_result"')
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }

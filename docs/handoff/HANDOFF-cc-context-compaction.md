@@ -105,3 +105,31 @@
 - 自动边界：Dashboard Node 启动时注册香港时区分钟调度，05:30–05:59 内重试；默认关闭。启用后处理窗口各 CC lane 的未保护安全候选；Haven 日回顾/周轨迹任一最新 run/execution 仍为 running、本地 Pro runner 忙、窗口回复中或有工具待批准时跳过并等待下一分钟；状态接口不可读时 fail closed。Dashboard 进程未运行则当日不会补跑。
 - 验收：部署 Haven 与 Dashboard 后，先保持自动关闭；打开一个有 OB 召回或 `search_chat` 的窗口，扫描并只选一项执行，确认窗口 ID/正文/轮次不变、下一句能继续、列表释放量合理、始终保留项不会被选中。真实结果可接受后再按窗口开启 05:30 自动减负。
 - 发布顺序：用户分别 commit + push；先更新 Haven Coolify 的 `HAVEN_RELEASE_SHA` 为完整 Haven commit SHA 并 Deploy/Restart，确认 Brain/Gateway healthy，再部署 Dashboard。未部署 Haven 前不要在 Dashboard 执行减负。
+
+## 11. 2026-09-12 下一窗口：滚动模式下的窗口减负复核
+
+- 当前 Dashboard 已完成滚动 SessionStore 跨部署持久化，以及“工作台 → 调参 → 本轮上下文审计”：可核对 Haven 原文与 SDK transcript 落盘角色、`rolling_window_context` 包装命中、背景拼接、最近实际/当前下一轮 Dashboard system prompt 和 cache/context 用量。该功能只改 Dashboard，完整测试与 production build 已通过，尚待用户提交部署后真实验收。
+- 下一窗口只讨论“按天滚动模式下，现有窗口减负到底如何运行、是否真的有效、会不会破坏持久 transcript/resume/cache”；先调查和解释，不直接修改。
+- 必查交点：Context GC 的 `forkSession`/副本改写使用哪个 SessionStore；滚动会话的持久 `RollingSeedStore` 是否能读取和承接 fork 后 session；Haven lane `cc_session_id + context_revision` CAS 切换后，Dashboard 重启能否继续恢复；revision 变化从 Haven 重建时，已减负结果是否保留或自然失效。
+- 还要区分三类内容：原文 `user/assistant` transcript、工具/召回结果、system prompt 中的日回顾/钉选桶/日记。明确窗口减负实际能扫描和改写哪一类，哪些 token 无论如何不会因此下降。
+- 讨论输出应面向非技术用户：先给现行流程图/步骤，再列真实风险与可验证日志/审计项，最后给“保持现状 / 暂停滚动窗减负 / 需要修复”的建议。没有用户再次明确说“改吧”前不动代码。
+
+## 12. 2026-09-12 已确认：滚动 revision 的 raw 保真边界
+
+- 产品定义已经确认：`raw` 不只是 Haven 中可见的 user/assistant 正文，而是该日期在 Claude 原生 transcript 中的完整上下文，包括动态召回卡、工具调用、工具结果及原有顺序。
+- 当 5 个 raw 日期中的最早 1 天改为 `review` 或 `omit` 时，只允许该日期的完整轮次退出；其余仍为 raw 的 4 天必须逐项保持原样，不能因为 `context_revision` 增加而重新降级为仅 user/assistant 正文。
+- 低频场景允许降级：一个已经退出 raw 的旧日期以后重新切回 raw 时，只需从 Haven 恢复可见 user/assistant 正文，不要求恢复当年的工具调用、工具结果和召回卡；设置界面必须明确提示这是“正文恢复”，不是“完整原生上下文恢复”。
+- 当前实现不符合上述定义：新 revision 下一轮会从 Haven 为全部 raw 日期重建仅含可见 user/assistant 的新种子，从而隐式清掉仍为 raw 日期的历史工具与召回过程。
+- 下一窗口范围：设计并实现“保留旧 transcript 中仍为 raw 日期的完整轮次，只替换退出 raw 的日期”，同时修复 Context GC 与持久 RollingSeedStore 的 fork/扫描/恢复链路；在真实验收完成前，滚动窗口的手动与 05:30 自动减负均应保持禁用。
+- 必须先解决完整轮次的日期归属与边界，保证 `tool_use` / `tool_result` 不被拆散；禁止只按单行时间戳粗暴删除。固定窗口、召回评分、手动桶、自动聊天切片和其他页面不在范围内。
+
+## 13. 2026-09-12 已实现：滚动 revision 完整轮次保真
+
+- Dashboard 新 revision 不再为全部 raw 日期从 Haven 重建纯正文。旧持久 RollingSeedStore transcript 现在按“外部 user 输入到下一外部 user 输入前”为完整轮次包；只含 `tool_result` 的 user entry 归属于上一轮，整包内的动态召回、assistant、`tool_use`、`tool_result` 与原顺序一起保留或退出。
+- 轮次日期不看 transcript 单行时间戳，而是把完整轮次的 user/assistant 可见正文与 Haven 永久 turn 做全局唯一、顺序保持的对齐，再以 Haven `turn_id/chat_day` 决定保留。无法唯一对齐时 fail closed，不更新该 revision 的 Claude 会话；上一 revision 已是滚动模式但持久 transcript 缺失时同样拒绝静默正文降级。
+- 新 revision 的 seed 在进入 SDK 前先原子写入 RollingSeedStore。仍为 raw 的旧轮次从原 transcript 克隆；已退出后重新加入 raw、因而旧 transcript 中不存在的轮次，才从 Haven 补入 user/assistant，并在内部标为 `body_restored`。
+- Haven 的 `rolling_context_json.previous_strategy` 记录紧邻上一 revision 的策略，用来区分首次从固定窗口启用滚动和必须保真迁移的滚动→滚动更新；该字段不参与用户配置等价比较，不会导致重复保存额外递增 revision。
+- 设置页常驻说明正文恢复边界；用户把 `review/omit` 改回 `raw` 时，该日期显示“正文恢复”，保存前再次确认不会恢复旧工具与召回过程。
+- 本阶段没有改 Context GC 的扫描、fork、CAS 或清理实现。daily rolling 的 GC GET/POST 被服务端拦截、自动开关不能开启，05:30 scheduler 也无条件跳过；固定窗口 GC 保持原行为。下一阶段才接 RollingSeedStore 版 GC。
+- 自动化验证：Dashboard 全量 `270` 通过、`1` 跳过；保真/运行时/GC 门禁定向 `39` 项通过；production build 通过；Haven `tests.test_gateway_state_contracts` `36` 项通过，`gateway_state.py` 语法检查通过；两仓 `git diff --check` 通过。测试未调用模型或额外 Context 分析。
+- 仍需真实验收：先 Haven 后 Dashboard 部署，在现有 5 个 raw 日期主窗把最早 1 天改为 review/omit，发一条普通消息后用本轮上下文审计确认其余 4 天的工具链内容与顺序保持；Redeploy Dashboard 后再核对持久恢复；随后把退出日期重新设 raw，确认界面提示与 transcript 仅正文恢复。真实验收完成前不得开放 daily rolling 手动或 05:30 自动减负。

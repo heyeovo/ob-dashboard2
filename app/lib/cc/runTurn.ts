@@ -17,7 +17,12 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { createRollingHistorySeed, openRollingHistoryResume } from '@/app/lib/cc/rollingHistory'
+import {
+  createRollingHistoryRevisionSeed,
+  createRollingHistorySeed,
+  materializeRollingHistorySeed,
+  openRollingHistoryResume,
+} from '@/app/lib/cc/rollingHistory'
 import {
   attachSend,
   detachSend,
@@ -479,12 +484,27 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     if ((!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
       rememberResumePoint(resumeKey, effectiveResumeHint)
     }
+    const revisionSeed = shouldPrepareHistorySeed && isRolling && config.rollingSourceResumeFrom
+      ? await createRollingHistoryRevisionSeed(
+        config.rollingSourceResumeFrom,
+        config.rollingAllHistory || rollingHistory,
+        rollingHistory,
+        { cwd: config.cwd, fallbackModel: config.sdkModel || config.model },
+      )
+      : null
+    if (
+      shouldPrepareHistorySeed && isRolling && config.requireRollingSource
+      && config.rollingSourceResumeFrom && rollingHistory.length > 0 && !revisionSeed
+    ) {
+      throw new Error('旧滚动 transcript 持久副本不存在，已停止更新上下文版本，避免原文退化')
+    }
     const historySeed = shouldPrepareHistorySeed && isRolling
-      ? persistedRollingResume || createRollingHistorySeed(rollingHistory, {
+      ? persistedRollingResume || revisionSeed || createRollingHistorySeed(rollingHistory, {
         cwd: config.cwd,
         fallbackModel: config.sdkModel || config.model,
       })
       : null
+    await materializeRollingHistorySeed(historySeed)
     console.info(`[cc-rolling-seed ${sessionId}]`, {
       rollingHistoryCount: rollingHistory.length,
       shouldPrepareHistorySeed,

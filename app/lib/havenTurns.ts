@@ -45,6 +45,8 @@ export type HavenTurn = {
 
 export type RollingContextConfig = {
   strategy: 'fixed_window' | 'daily_rolling'
+  /** Haven 写入 revision 时记录的上一策略；用于决定是否必须保留旧滚动 transcript。 */
+  previous_strategy?: 'fixed_window' | 'daily_rolling'
   timezone: string
   day_start_hour: number
   day_modes: Record<string, 'raw' | 'review' | 'omit'>

@@ -299,6 +299,11 @@ async function loadTurnInputs(body: ChatBody) {
   const promptLaneState = promptSession.cc_lanes?.[laneId]
   const laneContextRevision = Number((promptLaneState as Record<string, unknown> | undefined)?.context_revision || 0)
   const isRolling = promptSession.rolling_context?.strategy === 'daily_rolling'
+  const rollingSourceResumeFrom = isRolling && laneContextRevision !== contextRevision
+    ? String((promptLaneState as Record<string, unknown> | undefined)?.cc_session_id || '').trim()
+    : ''
+  const requireRollingSource = rollingSourceResumeFrom !== ''
+    && promptSession.rolling_context?.previous_strategy === 'daily_rolling'
   const resumeHint = ccResumeHintForContext({
     persistedHint: persistedResumeHint,
     legacyHint: legacyResumeHint,
@@ -310,6 +315,7 @@ async function loadTurnInputs(body: ChatBody) {
     String(body.session_id || ''),
     promptSession,
     sessionSnapshot.contextDays,
+    { includeAllTurns: Boolean(rollingSourceResumeFrom) },
   )
   sessionSnapshot = {
     ...sessionSnapshot,
@@ -342,6 +348,9 @@ async function loadTurnInputs(body: ChatBody) {
     personaAppend,
     contextRevision,
     rollingHistory: isRolling ? rolling.history : undefined,
+    rollingSourceResumeFrom: rollingSourceResumeFrom || undefined,
+    rollingAllHistory: rollingSourceResumeFrom ? rolling.allTurns : undefined,
+    requireRollingSource,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),
