@@ -19,7 +19,7 @@ import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
 import { applyRuntimeSettings, dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import type { TurnConfig } from '@/app/lib/cc/ccOptions'
-import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { getSessionMessages, type SDKMessage, type SDKUserMessage, type SessionStore } from '@anthropic-ai/claude-agent-sdk'
 
 /* ── mock SDK：query 按全局脚本吐消息 ── */
 
@@ -359,6 +359,48 @@ afterEach(() => {
 })
 
 describe('runTurn：普通回复', () => {
+  it('cold-starts rolling history through resume/sessionStore and streams only the new user turn', async () => {
+    const sessionId = 'ob2-test-rolling-seed'
+    const config = makeConfig({
+      sessionId,
+      contextRevision: 3,
+      rollingHistory: [
+        {
+          id: 1, session_id: sessionId, round_id: 1,
+          created_at: '2026-09-11T10:00:00Z', user_text: '之前的问题', assistant_text: '之前的回答',
+          model: 'test-model', client: 'test', route: '/test', source: 'cc', turn_kind: 'user',
+        },
+        {
+          id: 2, session_id: sessionId, round_id: 2,
+          created_at: '2026-09-11T11:00:00Z', user_text: '', assistant_text: '我主动想起一件事',
+          model: 'test-model', client: 'test', route: '/test', source: 'cc', turn_kind: 'agent_wake',
+          raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule', reason: '想起这件事' } }),
+        },
+      ],
+    })
+    try {
+      await driveTurn([initMsg('native-rolling-seed'), textDelta('新回复'), resultMsg()], {
+        sessionId, config, text: '现在继续',
+      }).promise
+
+      const options = sdk.queryOptions.at(-1)!
+      expect(options.resume).toEqual(expect.any(String))
+      expect(options.sessionStore).toBeTruthy()
+      const restored = await getSessionMessages(String(options.resume), {
+        dir: config.cwd,
+        sessionStore: options.sessionStore as SessionStore,
+      })
+      expect(restored.map(message => message.message.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+      expect((restored[2].message as { content: string }).content).toContain('<agent_wake ')
+
+      const streamed = await sdk.promptIterators.at(-1)!.next()
+      expect(streamed.value.message.role).toBe('user')
+      expect(streamed.value.message.content).toContain('现在继续')
+    } finally {
+      dropSession(sessionId)
+    }
+  })
+
   it('returns a persistent-safe cache diagnostic for cold starts and cold resumes', async () => {
     const config = makeConfig({
       personaAppend: 'private-persona-marker',

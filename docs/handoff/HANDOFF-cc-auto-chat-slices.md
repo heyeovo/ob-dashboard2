@@ -7,7 +7,7 @@
 - 当前已经有联合日回顾/切片生成、slice-only 恢复、raw 退出排队、任务状态/额度估算、人工检查 REST 与 Dashboard 页面。开发与验收没有调用真实摘要模型、没有生成 embedding、没有执行任何真实日期或历史 backfill，也没有接入召回或正式 Context。
 - 前置的 CC 按天滚动上下文、手机对话列表、每协作者唯一主窗、软删除修正、真实删除计数/分页和固定模式切换警告均已按 Haven → Dashboard 顺序部署，并完成手机点击验收。
 - 本文件是自动聊天切片摘要的唯一阶段计划与交接事实源；滚动上下文的既有事实继续维护在 `HANDOFF-cc-daily-rolling-context.md`。
-- 阶段一功能 bug 已在 Dashboard 本地修复：手机“新对话”恢复旧弹窗，滚动原文改为真实 `user/assistant` 对话流；尚未部署。该修复不修改自动切片代码。完成 Dashboard 部署与真实输入检查后，再决定阶段二部署及少量真实日期人工检查；首次历史回填仍必须先展示额度估算并获得用户明确确认。
+- 阶段一功能 bug 已在 Dashboard 本地修复：手机“新对话”恢复旧弹窗；滚动原文改为以 SDK transcript seed + resume 恢复真实 `user/assistant` 对话流，assistant-only 主动唤醒按隐藏 wake 输入 → 原 assistant 消息还原。此前 `shouldQuery=false` 推送 assistant 会触发 SDK role 错误的路径已删除；尚未部署。该修复不修改自动切片代码。完成 Dashboard 部署与真实输入检查后，再决定阶段二部署及少量真实日期人工检查；首次历史回填仍必须先展示额度估算并获得用户明确确认。
 
 ## 一、目标
 

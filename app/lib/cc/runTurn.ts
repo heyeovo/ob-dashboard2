@@ -17,7 +17,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { rollingHistoryToSdkMessages } from '@/app/lib/cc/rollingHistory'
+import { createRollingHistorySeed } from '@/app/lib/cc/rollingHistory'
 import {
   attachSend,
   detachSend,
@@ -470,10 +470,21 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       rememberResumePoint(resumeKey, input.resumeHint)
     }
 
+    const rollingHistory = config.rollingHistory || []
+    const shouldPrepareHistorySeed = !currentLive ||
+      currentLive.resumeKey !== resumeKey ||
+      currentLive.systemPromptKey !== config.systemPromptKey
+    const historySeed = shouldPrepareHistorySeed && !input.resumeHint && rollingHistory.length > 0
+      ? createRollingHistorySeed(rollingHistory, {
+          cwd: config.cwd,
+          fallbackModel: config.sdkModel || config.model,
+        })
+      : null
     live = ensureSession({
       sessionId,
       resumeKey,
       buildOptions: resumeFrom => buildCcOptions(config, resumeFrom),
+      historySeed,
       // 这几项只在**新建**会话时记下 —— 已有会话沿用它启动时那套。
       // 界面上「本窗口设置」显示的是这份，不是前端最新的选择。
       boot: { mode: config.mode, credKind: config.cred, providerId: config.providerId, providerLabel: config.providerLabel },
@@ -482,8 +493,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       thinking: config.thinking,
       systemPromptKey: config.systemPromptKey,
     })
-    const rollingHistory = config.rollingHistory || []
-    const shouldRestoreRollingHistory = currentLive !== live && !input.resumeHint && rollingHistory.length > 0
     const fingerprint = cacheRelevantFingerprint(config)
     const iterator = currentLive === live ? 'reused' : input.resumeHint ? 'cold_resumed' : 'cold_started'
     cacheDiagnostic = {
@@ -656,11 +665,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       uuid: turnUuid,
     }
 
-    if (shouldRestoreRollingHistory) {
-      for (const historyMessage of rollingHistoryToSdkMessages(rollingHistory)) {
-        live.push(historyMessage)
-      }
-    }
     modelRequestStartedAt = Date.now()
     live.push(userMessage)
     // 存用户原话，不含记忆卡 —— 回退锚点要显示的是人说的话

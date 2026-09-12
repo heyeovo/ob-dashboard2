@@ -128,6 +128,7 @@
 ## 2026-09-12 阶段一功能 bug 修复
 
 - Dashboard 本地已恢复手机端“新对话”原有 `CcHandoffDialog`；手机和桌面均先选择闲聊/工作模式、钉选桶等项目，确认后才进入新对话。没有重写弹窗。
-- 滚动原文已从 `rolling_window_context` 拆出：CC 使用 Agent SDK `shouldQuery=false` 追加真实 `user/assistant` 历史，selfhost 使用原生 messages；日回顾、钉选桶和日记仍在背景 Context。
+- 滚动原文已从 `rolling_window_context` 拆出：CC 冷启动通过 Agent SDK `SessionStore` 物化原生 transcript 后 resume，普通消息保持真实 `user/assistant`；主动唤醒在 Haven 的 assistant-only 记录恢复为隐藏 `<agent_wake/>` 输入后接原 assistant 消息，不伪装成用户发言。selfhost 使用原生 messages；日回顾、钉选桶和日记仍在背景 Context。
 - 为迁移已经使用旧包装的窗口，滚动 CC 冷启动不再 resume 持久的旧原生会话，而是从 Haven 当前可见原文重建；Dashboard 窗口和永久消息不复制、不删除。
-- 修复只改 Dashboard；Haven 持久化、固定窗口、召回、手动桶、自动切片均未修改。相关定向测试通过，production build 通过；尚未部署，部署后需按验收第 10 条做一次真实模型输入检查。
+- 首版曾尝试把历史 assistant 作为 streaming input 以 `shouldQuery=false` 推入 SDK；运行时仍强制该入口只能是 user，真实窗口报 `Expected message role 'user', got 'assistant'`。现已删除该错误路径，改用上述 transcript seed + resume，并补测普通历史、assistant-only 主动唤醒及 `resume + sessionStore` 冷启动接线。
+- 修复只改 Dashboard；Haven 持久化、固定窗口、召回、Context 注入、手动桶、自动切片均未修改。定向测试通过，production build 和涉及文件 ESLint 通过；全量测试 `49/50` 文件、`262` 项通过，唯一失败仍是已记录的 `display_segments.version` 陈旧断言。没有调用真实模型、生成切片或执行 backfill；尚未部署，部署后需按验收第 10 条在已有滚动窗口重发一条普通消息。

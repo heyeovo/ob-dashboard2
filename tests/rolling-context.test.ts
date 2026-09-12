@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
-import { rollingHistoryToSdkMessages } from '@/app/lib/cc/rollingHistory'
+import { buildRollingTranscriptEntries, createRollingHistorySeed } from '@/app/lib/cc/rollingHistory'
 import { ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
 import type { ConversationContextDay, HavenConversationSession, HavenTurn } from '@/app/lib/havenTurns'
@@ -47,13 +48,35 @@ describe('daily rolling context', () => {
     expect(text).not.toContain('2026-09-09')
   })
 
-  it('restores raw days as role-correct, non-querying SDK transcript messages', () => {
+  it('restores raw days as a native user/assistant transcript seed', async () => {
     const history = buildRollingWindowHistory(session, turns, days)
-    const messages = rollingHistoryToSdkMessages(history)
+    const seed = createRollingHistorySeed(history, { cwd: 'C:/workspace', fallbackModel: 'claude' })
     expect(history.map(turn => turn.id)).toEqual([3])
-    expect(messages.map(message => message.message.role)).toEqual(['user', 'assistant'])
-    expect(messages.map(message => message.message.content)).toEqual(['今天的原话', '今天的回应'])
-    expect(messages.every(message => message.shouldQuery === false && message.isSynthetic === true)).toBe(true)
+    expect(seed?.entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
+    expect((seed?.entries[0].message as { content: string }).content).toBe('今天的原话')
+    expect((seed?.entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('今天的回应')
+    expect(await seed?.sessionStore.load({ projectKey: 'any', sessionId: seed.resumeFrom })).toEqual(seed?.entries)
+    const parsed = await getSessionMessages(seed!.resumeFrom, {
+      dir: 'C:/workspace',
+      sessionStore: seed!.sessionStore,
+    })
+    expect(parsed.map(message => message.message.role)).toEqual(['user', 'assistant'])
+  })
+
+  it('restores an agent wake as a hidden wake trigger followed by its assistant message', () => {
+    const entries = buildRollingTranscriptEntries([{
+      ...turns[0],
+      user_text: '', assistant_text: '忽然想告诉你一件事', turn_kind: 'agent_wake',
+      raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule', reason: '想起这件事' } }),
+    }], {
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      cwd: 'C:/workspace', fallbackModel: 'claude',
+    })
+    expect(entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
+    expect((entries[0].message as { content: string }).content).toBe(
+      '<agent_wake cause="agent_schedule" reason="想起这件事"/>',
+    )
+    expect((entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('忽然想告诉你一件事')
   })
 
   it('keeps native Claude resume points isolated by revision', () => {
