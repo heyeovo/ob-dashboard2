@@ -15,7 +15,7 @@
 - 从滚动切回固定模式仍不会自动重做 handoff；设置页已增加常驻警告和保存确认。要保留滚动期间的新对话，仍需使用“换窗继续”。
 - 软删除已修正：删除清除窗口置顶和 wake 记录，已删除窗口不能再被后台或新 turn 隐式复活；Dashboard 删除后重新读取活动/已删除列表并显示结果。
 - 已删除窗口计数已改为 Haven 返回的真实 `total`，不再把首批 60 条误当总数；超过 60 条时可继续“加载更多”。协作者筛选直接在 Haven 查询执行。
-- 2026-09-12 线上诊断已确认滚动主窗能从 Haven 取回 5 个 raw 日期的 234 条历史，并创建 402 条 transcript seed；但真实模型只记得切换滚动后的消息。原因收窄到 seed JSONL 条目缺少 Claude Code 原生元数据：SDK 只负责原样落盘，不会补字段。Dashboard 本地已按固定 SDK `0.3.220` / Claude Code `2.1.220` 补齐 user/assistant 的版本、来源、请求 ID 和完整 usage 结构，相关 31 项测试与 production build 通过；尚待用户 commit/push、仅 Redeploy Dashboard 后复测旧 raw 原文连续性，Haven 不需要部署。
+- 2026-09-12 两轮线上诊断确认滚动主窗能从 Haven 取回 5 个 raw 日期的 234/236 条历史并创建 402/406 条 transcript seed；补齐固定 SDK `0.3.220` / Claude Code `2.1.220` 原生元数据后，模型仍报告只记得切换滚动后的消息。缓存同时出现静态前缀读取 `21,747` token、滚动 transcript 重写 `16,052` token；原因已定点为路由对滚动窗口无条件清空持久 resume hint，导致每次 Dashboard 重启都重建 seed。本地现改为同一 `context_revision` 恢复 Haven 保存的 Claude session、revision 变化才重建，并增加 `seedResumeFrom` 日志；35 项相关测试与 production build 通过。尚待用户 commit/push、仅 Redeploy Dashboard，保存一次滚动配置生成新 revision 后复测旧 raw 原文，再次 Redeploy 验证 transcript 缓存不再整段重写；Haven 不需要部署。
 
 ## 已确认的产品决定
 
@@ -130,7 +130,7 @@
 
 - Dashboard 本地已恢复手机端“新对话”原有 `CcHandoffDialog`；手机和桌面均先选择闲聊/工作模式、钉选桶等项目，确认后才进入新对话。没有重写弹窗。
 - 滚动原文已从 `rolling_window_context` 拆出：CC 冷启动通过 Agent SDK `SessionStore` 物化原生 transcript 后 resume，普通消息保持真实 `user/assistant`；主动唤醒在 Haven 的 assistant-only 记录恢复为隐藏 `<agent_wake/>` 输入后接原 assistant 消息，不伪装成用户发言。selfhost 使用原生 messages；日回顾、钉选桶和日记仍在背景 Context。
-- 为迁移已经使用旧包装的窗口，滚动 CC 冷启动不再 resume 持久的旧原生会话，而是从 Haven 当前可见原文重建；Dashboard 窗口和永久消息不复制、不删除。
+- 滚动 CC 只在持久 Claude session 的 lane `context_revision` 与当前 revision 一致时 resume；用户保存新的日期三态后 revision 递增，首轮从 Haven 当前可见原文重建，后续进程回收或 Dashboard 重启继续同一原生会话。Dashboard 窗口和永久消息不复制、不删除。
 - 首版曾尝试把历史 assistant 作为 streaming input 以 `shouldQuery=false` 推入 SDK；运行时仍强制该入口只能是 user，真实窗口报 `Expected message role 'user', got 'assistant'`。现已删除该错误路径，改用上述 transcript seed + resume，并补测普通历史、assistant-only 主动唤醒及 `resume + sessionStore` 冷启动接线。
 - SDK 同时拒绝 `sessionStore + enableFileCheckpointing`（backup blobs 不会被 store 镜像）；store-backed 滚动恢复现明确关闭文件 checkpoint，固定窗口仍保持开启，并有接线测试防回归。
-- 修复只改 Dashboard；Haven 持久化、固定窗口、召回、Context 注入、手动桶、自动切片均未修改。定向测试通过，production build 和涉及文件 ESLint 通过；全量测试 `49/50` 文件、`262` 项通过，唯一失败仍是已记录的 `display_segments.version` 陈旧断言。没有调用真实模型、生成切片或执行 backfill；尚未部署，部署后需按验收第 10 条在已有滚动窗口重发一条普通消息。
+- 修复只改 Dashboard；Haven 持久化、固定窗口、召回、Context 注入、手动桶、自动切片均未修改。最新恢复策略定向测试 35 项与 production build 通过；没有调用真实模型、生成切片或执行 backfill。

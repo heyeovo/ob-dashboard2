@@ -8,7 +8,7 @@ import {
   permissionRuleStrings,
 } from '@/app/lib/havenPermissions'
 import { configuredMcpModelSurface, loadMcpConfig, toSdkMcpServers, disabledMcpTools } from '@/app/lib/ccMcp'
-import { getSessionStats, dropSession } from '@/app/lib/ccSession'
+import { ccResumeHintForContext, getSessionStats, dropSession } from '@/app/lib/ccSession'
 import { resetChannel } from '@/app/lib/ccChannel'
 import { isCcMode, type CcMode } from '@/app/lib/ccModes'
 import { normalizeWebSettings } from '@/app/cc/webSettings'
@@ -299,13 +299,13 @@ async function loadTurnInputs(body: ChatBody) {
   const promptLaneState = promptSession.cc_lanes?.[laneId]
   const laneContextRevision = Number((promptLaneState as Record<string, unknown> | undefined)?.context_revision || 0)
   const isRolling = promptSession.rolling_context?.strategy === 'daily_rolling'
-  const canResumePersisted = laneContextRevision === contextRevision
-  // 滚动窗口冷启动一律从 Haven 可见原文重建真实角色流；旧原生会话可能仍含
-  // rolling_window_context 版历史，不能继续 resume。进程内活会话仍由 resumeKey 复用。
-  const safeResumeHint = !isRolling && canResumePersisted
-    ? persistedResumeHint
-    : ''
-  const safeLegacyResumeHint = !isRolling && contextRevision === 0 ? legacyResumeHint : ''
+  const resumeHint = ccResumeHintForContext({
+    persistedHint: persistedResumeHint,
+    legacyHint: legacyResumeHint,
+    laneContextRevision,
+    contextRevision,
+    isRolling,
+  })
   const rolling = await loadRollingWindowAppend(
     String(body.session_id || ''),
     promptSession,
@@ -369,7 +369,7 @@ async function loadTurnInputs(body: ChatBody) {
     persona,
     config,
     sessionSnapshot,
-    resumeHint: safeResumeHint || safeLegacyResumeHint,
+    resumeHint,
   }
 }
 

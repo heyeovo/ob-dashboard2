@@ -487,6 +487,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       hasLive: Boolean(currentLive),
       liveResumeKeyMatch: currentLive?.resumeKey === resumeKey,
       seedCreated: Boolean(historySeed),
+      seedResumeFrom: historySeed?.resumeFrom || '',
       seedEntryCount: historySeed?.entries.length || 0,
       contextRevision: config.contextRevision,
     })

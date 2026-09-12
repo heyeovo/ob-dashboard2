@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
 import { buildRollingTranscriptEntries, createRollingHistorySeed } from '@/app/lib/cc/rollingHistory'
-import { ccResumeKey } from '@/app/lib/ccSession'
+import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
 import type { ConversationContextDay, HavenConversationSession, HavenTurn } from '@/app/lib/havenTurns'
 
@@ -108,6 +108,21 @@ describe('daily rolling context', () => {
   it('keeps native Claude resume points isolated by revision', () => {
     expect(ccResumeKey('session-a', 'subscription', 7)).toBe('session-a::subscription::context-7')
     expect(ccResumeKey('session-a', 'subscription', 8)).not.toBe(ccResumeKey('session-a', 'subscription', 7))
+  })
+
+  it('resumes a rolling Claude session only while its context revision still matches', () => {
+    expect(ccResumeHintForContext({
+      persistedHint: ' native-session ', legacyHint: '',
+      laneContextRevision: 7, contextRevision: 7, isRolling: true,
+    })).toBe('native-session')
+    expect(ccResumeHintForContext({
+      persistedHint: 'native-session', legacyHint: '',
+      laneContextRevision: 7, contextRevision: 8, isRolling: true,
+    })).toBe('')
+    expect(ccResumeHintForContext({
+      persistedHint: '', legacyHint: 'legacy-session',
+      laneContextRevision: 0, contextRevision: 0, isRolling: false,
+    })).toBe('legacy-session')
   })
 
   it('uses permanent per-message ids when restoring history', () => {

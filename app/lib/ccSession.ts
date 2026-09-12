@@ -414,6 +414,25 @@ export type EnsureSessionInput = {
   systemPromptKey: string
 }
 
+/**
+ * 只有同一份 context revision 才能恢复已保存的 Claude session。
+ * 滚动窗口保存新三态后 revision 会递增，因此首轮重建 seed，后续重启则继续
+ * 使用这份 seed 建出的原生会话，避免每次部署都重写整段 transcript 缓存。
+ */
+export function ccResumeHintForContext(input: {
+  persistedHint: string
+  legacyHint: string
+  laneContextRevision: number
+  contextRevision: number
+  isRolling: boolean
+}): string {
+  const persistedHint = input.persistedHint.trim()
+  if (persistedHint && input.laneContextRevision === input.contextRevision) {
+    return persistedHint
+  }
+  return !input.isRolling && input.contextRevision === 0 ? input.legacyHint.trim() : ''
+}
+
 /** 拿到（或新建）一个活着的会话。已有的直接复用，不重付缓存。 */
 export function ensureSession(input: EnsureSessionInput): LiveSession {
   const resumeKey = input.resumeKey || input.sessionId
