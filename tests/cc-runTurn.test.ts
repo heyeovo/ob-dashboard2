@@ -508,7 +508,7 @@ describe('runTurn：普通回复', () => {
     expect(recInput.personaId).toBe('ombre')
     expect(recInput.turnKind).toBe('user')
     expect(recInput.laneId).toBe('api:default')
-    expect(recInput.raw.display_segments).toMatchObject({ version: 1 })
+    expect(recInput.raw.display_segments).toMatchObject({ version: 2 })
     expect(recInput.agentWakeUpdate).toMatchObject({
       sample_silence: true,
       silence_policy_version: 'conversation-silence-v1',
@@ -519,7 +519,7 @@ describe('runTurn：普通回复', () => {
     const done = handle.events.find(e => e.event === 'done')!
     expect(done.data.usage).toMatchObject({ inputTokens: 10, outputTokens: 20 })
     expect(done.data.interrupted).toBeUndefined()
-    expect(done.data.display_segments).toMatchObject({ version: 1 })
+    expect(done.data.display_segments).toMatchObject({ version: 2 })
   })
 
   it('does not enter the model when the incoming user message cannot cancel persisted silence state', async () => {

@@ -870,6 +870,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
       if (msg.type === 'result') {
         closeThinkingProcess(bucket, Date.now())
+        const successMsg = msg as SDKMessage & {
+          result?: string
+          api_error_status?: number | null
+        }
         resultInfo = {
           subtype: msg.subtype,
           is_error: msg.is_error,
@@ -879,6 +883,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           usage: msg.usage,
           errors: 'errors' in msg ? msg.errors : undefined,
           terminal_reason: msg.terminal_reason,
+          result: successMsg.result,
+          api_error_status: successMsg.api_error_status,
         }
         // 用户点了停止：result 可能是 error subtype 或带 aborted 标记，
         // 都不当错误处理 —— 已生成的字照常留，写库时打 interrupted 标记。
@@ -894,25 +900,29 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           const failed = msg as SDKMessage & {
             errors?: string[]
             terminal_reason?: string
+            result?: string
+            api_error_status?: number | null
           }
           const errors = Array.isArray(failed.errors)
             ? failed.errors.map(String).map(value => value.trim()).filter(Boolean)
             : []
           const terminalReason = String(failed.terminal_reason || '')
+          const apiErrorStatus = failed.api_error_status ?? null
+          const resultText = String(failed.result || '').trim()
           const failureLabel = [String(msg.subtype || 'error'), terminalReason]
             .filter(Boolean)
             .join(' / ')
-          const message = errors[0] || `模型请求失败（${failureLabel}）`
+          const message = errors[0]
+            || (resultText ? `${resultText}（${failureLabel}）` : `模型请求失败（${failureLabel}）`)
           const generatedNotSaved = Boolean(
             assistantText.trim() || thinkingText.trim() || bucket.processEvents.length,
           )
 
-          // SDK 的失败 result 是预期终态，不要再把已生成正文当 Error.message。
-          // 记录结构化元数据，下一次可以凭完整 session/request 精确查到原因；
-          // 不记录用户提示词、thinking、正文或工具输出。
           console.error(`[cc-chat ${sessionId} request=${requestId}] SDK result failed`, {
             subtype: msg.subtype,
             terminal_reason: terminalReason || null,
+            api_error_status: apiErrorStatus,
+            result_text: resultText || null,
             errors,
             num_turns: msg.num_turns,
             duration_ms: msg.duration_ms,
@@ -926,6 +936,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             request_id: requestId,
             subtype: msg.subtype,
             terminal_reason: terminalReason || undefined,
+            api_error_status: apiErrorStatus,
             errors,
             generated_not_saved: generatedNotSaved,
           })
