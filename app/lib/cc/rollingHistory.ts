@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import path from 'node:path'
 import type { SessionKey, SessionStore, SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
 
@@ -6,6 +9,7 @@ export type RollingHistorySeed = {
   resumeFrom: string
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
+  source: 'new_seed' | 'persisted'
 }
 
 type TranscriptSeedOptions = {
@@ -115,37 +119,111 @@ export function buildRollingTranscriptEntries(
   return entries
 }
 
-class RollingSeedStore implements SessionStore {
-  private readonly sessions = new Map<string, SessionStoreEntry[]>()
+function rollingStoreRoot(): string {
+  const homeDir = process.env.USERPROFILE || process.env.HOME || '.'
+  const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || `${homeDir}${path.sep}.claude`
+  return path.join(/*turbopackIgnore: true*/ claudeConfigDir, 'ob2-rolling-session-store-v1')
+}
 
-  constructor(sessionId: string, entries: SessionStoreEntry[]) {
-    this.sessions.set(this.key({ projectKey: '', sessionId }), [...entries])
+function encodedPart(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64url') || 'main'
+}
+
+class RollingSeedStore implements SessionStore {
+  private readonly initialSessions = new Map<string, SessionStoreEntry[]>()
+  private readonly pendingWrites = new Map<string, Promise<void>>()
+
+  constructor(
+    sessionId: string,
+    entries: SessionStoreEntry[],
+    private readonly storeRoot = rollingStoreRoot(),
+  ) {
+    if (entries.length > 0) {
+      this.initialSessions.set(this.key({ projectKey: '', sessionId }), [...entries])
+    }
   }
 
   private key(key: SessionKey): string {
     return `${key.sessionId}::${key.subpath || ''}`
   }
 
+  private filePath(key: SessionKey): string {
+    const sessionDir = path.join(/*turbopackIgnore: true*/ this.storeRoot, encodedPart(key.sessionId))
+    const filename = key.subpath ? `${encodedPart(key.subpath)}.jsonl` : 'main.jsonl'
+    return path.join(/*turbopackIgnore: true*/ sessionDir, filename)
+  }
+
+  hasPersistedSession(sessionId: string): boolean {
+    return existsSync(/*turbopackIgnore: true*/ this.filePath({ projectKey: '', sessionId }))
+  }
+
   async append(key: SessionKey, entries: SessionStoreEntry[]): Promise<void> {
+    if (entries.length === 0) return
     const storageKey = this.key(key)
-    const current = this.sessions.get(storageKey) || []
-    current.push(...entries)
-    this.sessions.set(storageKey, current)
+    const previous = this.pendingWrites.get(storageKey) || Promise.resolve()
+    const write = previous.then(async () => {
+      const file = this.filePath(key)
+      await mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true, mode: 0o700 })
+      const initial = existsSync(/*turbopackIgnore: true*/ file) ? [] : this.initialSessions.get(storageKey) || []
+      const batch = [...initial, ...entries]
+      await appendFile(/*turbopackIgnore: true*/ file, `${batch.map(entry => JSON.stringify(entry)).join('\n')}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+      })
+      this.initialSessions.delete(storageKey)
+    })
+    this.pendingWrites.set(storageKey, write)
+    try {
+      await write
+    } finally {
+      if (this.pendingWrites.get(storageKey) === write) this.pendingWrites.delete(storageKey)
+    }
   }
 
   async load(key: SessionKey): Promise<SessionStoreEntry[] | null> {
-    const entries = this.sessions.get(this.key(key))
-    return entries ? [...entries] : null
+    const pending = this.pendingWrites.get(this.key(key))
+    if (pending) await pending
+    try {
+      const content = await readFile(/*turbopackIgnore: true*/ this.filePath(key), 'utf8')
+      return content
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map(line => JSON.parse(line) as SessionStoreEntry)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      const entries = this.initialSessions.get(this.key(key))
+      return entries ? [...entries] : null
+    }
   }
+}
+
+export function openRollingHistoryResume(
+  resumeFrom: string,
+  options: { storeRoot?: string } = {},
+): RollingHistorySeed | null {
+  const normalized = resumeFrom.trim()
+  if (!normalized) return null
+  const sessionStore = new RollingSeedStore(normalized, [], options.storeRoot)
+  if (!sessionStore.hasPersistedSession(normalized)) return null
+  return { resumeFrom: normalized, sessionStore, entries: [], source: 'persisted' }
 }
 
 export function createRollingHistorySeed(
   turns: HavenTurn[],
-  options: Omit<TranscriptSeedOptions, 'sessionId'>,
+  options: Omit<TranscriptSeedOptions, 'sessionId'> & { storeRoot?: string },
 ): RollingHistorySeed | null {
   if (turns.length === 0) return null
   const resumeFrom = randomUUID()
-  const entries = buildRollingTranscriptEntries(turns, { ...options, sessionId: resumeFrom })
+  const entries = buildRollingTranscriptEntries(turns, {
+    cwd: options.cwd,
+    fallbackModel: options.fallbackModel,
+    sessionId: resumeFrom,
+  })
   if (entries.length === 0) return null
-  return { resumeFrom, sessionStore: new RollingSeedStore(resumeFrom, entries), entries }
+  return {
+    resumeFrom,
+    sessionStore: new RollingSeedStore(resumeFrom, entries, options.storeRoot),
+    entries,
+    source: 'new_seed',
+  }
 }

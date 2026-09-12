@@ -341,7 +341,7 @@ async function loadTurnInputs(body: ChatBody) {
     mode,
     personaAppend,
     contextRevision,
-    rollingHistory: rolling.history,
+    rollingHistory: isRolling ? rolling.history : undefined,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),

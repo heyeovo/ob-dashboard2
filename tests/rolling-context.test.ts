@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
 import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
-import { buildRollingTranscriptEntries, createRollingHistorySeed } from '@/app/lib/cc/rollingHistory'
+import {
+  buildRollingTranscriptEntries,
+  createRollingHistorySeed,
+  openRollingHistoryResume,
+} from '@/app/lib/cc/rollingHistory'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
 import type { ConversationContextDay, HavenConversationSession, HavenTurn } from '@/app/lib/havenTurns'
@@ -103,6 +110,31 @@ describe('daily rolling context', () => {
       '<agent_wake cause="agent_schedule" reason="想起这件事"/>',
     )
     expect((entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('忽然想告诉你一件事')
+  })
+
+  it('keeps a rolling transcript available after the in-memory store is replaced', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-store-'))
+    try {
+      const seed = createRollingHistorySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      const appended = buildRollingTranscriptEntries([{ ...turns[0], user_text: '部署前最后一句' }], {
+        sessionId: seed.resumeFrom, cwd: 'C:/workspace', fallbackModel: 'claude',
+      })
+      await seed.sessionStore.append(
+        { projectKey: 'any', sessionId: seed.resumeFrom },
+        appended,
+      )
+
+      const reopened = openRollingHistoryResume(seed.resumeFrom, { storeRoot })
+      expect(reopened?.source).toBe('persisted')
+      expect(await reopened?.sessionStore.load({
+        projectKey: 'another-process', sessionId: seed.resumeFrom,
+      })).toEqual([...seed.entries, ...appended])
+      expect(openRollingHistoryResume('11111111-1111-4111-8111-111111111111', { storeRoot })).toBeNull()
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
   })
 
   it('keeps native Claude resume points isolated by revision', () => {

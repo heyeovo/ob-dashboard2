@@ -17,7 +17,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { createRollingHistorySeed } from '@/app/lib/cc/rollingHistory'
+import { createRollingHistorySeed, openRollingHistoryResume } from '@/app/lib/cc/rollingHistory'
 import {
   attachSend,
   detachSend,
@@ -461,32 +461,38 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       wakeState.schedule?.agent_wake_enabled === true,
     )
 
-    // 第 5 条 resume：进程已丢（重启 / 闲置回收）而前端带来了上次的 cc session id，
-    // 就先记下这个接回点，紧接着 ensureSession 新建进程时会用它接上上下文。
-    // ⚠️ 只在没有活进程时才认前端这份 —— 有活进程时以服务端内存里那份为准，
-    // 不让一份陈旧的 hint 覆盖正在跑的会话。
     const currentLive = peekSession(sessionId)
-    if ((!currentLive || currentLive.resumeKey !== resumeKey) && input.resumeHint) {
-      rememberResumePoint(resumeKey, input.resumeHint)
-    }
-
+    const isRolling = config.rollingHistory !== undefined
     const rollingHistory = config.rollingHistory || []
     const shouldPrepareHistorySeed = !currentLive ||
       currentLive.resumeKey !== resumeKey ||
       currentLive.systemPromptKey !== config.systemPromptKey
-    const historySeed = shouldPrepareHistorySeed && !input.resumeHint && rollingHistory.length > 0
-      ? createRollingHistorySeed(rollingHistory, {
-          cwd: config.cwd,
-          fallbackModel: config.sdkModel || config.model,
-        })
+    const persistedRollingResume = shouldPrepareHistorySeed && isRolling && input.resumeHint
+      ? openRollingHistoryResume(input.resumeHint)
+      : null
+    // 旧版的内存 store 会留下一个 Haven resume id，却没有跨部署 transcript 文件。
+    // 找不到持久副本时不要把错误 id 交给 SDK，直接用 Haven 原文重建新 seed。
+    const effectiveResumeHint = isRolling
+      ? persistedRollingResume?.resumeFrom || ''
+      : input.resumeHint || ''
+    if ((!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
+      rememberResumePoint(resumeKey, effectiveResumeHint)
+    }
+    const historySeed = shouldPrepareHistorySeed && isRolling
+      ? persistedRollingResume || createRollingHistorySeed(rollingHistory, {
+        cwd: config.cwd,
+        fallbackModel: config.sdkModel || config.model,
+      })
       : null
     console.info(`[cc-rolling-seed ${sessionId}]`, {
       rollingHistoryCount: rollingHistory.length,
       shouldPrepareHistorySeed,
-      hasResumeHint: Boolean(input.resumeHint),
+      requestedResumeHint: input.resumeHint || '',
+      hasUsableResumeHint: Boolean(effectiveResumeHint),
       hasLive: Boolean(currentLive),
       liveResumeKeyMatch: currentLive?.resumeKey === resumeKey,
-      seedCreated: Boolean(historySeed),
+      storeSource: historySeed?.source || 'none',
+      seedCreated: historySeed?.source === 'new_seed',
       seedResumeFrom: historySeed?.resumeFrom || '',
       seedEntryCount: historySeed?.entries.length || 0,
       contextRevision: config.contextRevision,
@@ -505,14 +511,14 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       systemPromptKey: config.systemPromptKey,
     })
     const fingerprint = cacheRelevantFingerprint(config)
-    const iterator = currentLive === live ? 'reused' : input.resumeHint ? 'cold_resumed' : 'cold_started'
+    const iterator = currentLive === live ? 'reused' : effectiveResumeHint ? 'cold_resumed' : 'cold_started'
     cacheDiagnostic = {
       version: 1,
       dashboard_instance_id: DASHBOARD_INSTANCE_ID,
       turn_kind: turnKind,
       lane: config.laneId,
-      cc_session_id: live.ccSessionId || input.resumeHint || '',
-      resume_hint: input.resumeHint || '',
+      cc_session_id: live.ccSessionId || effectiveResumeHint,
+      resume_hint: effectiveResumeHint,
       iterator,
       iterator_created_at: new Date(live.createdAt).toISOString(),
       model_request_started_at: '',
@@ -527,8 +533,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       turnKind,
       sessionId,
       laneId: config.laneId,
-      ccSessionId: live.ccSessionId || input.resumeHint || '',
-      resumeHint: input.resumeHint || '',
+      ccSessionId: live.ccSessionId || effectiveResumeHint,
+      resumeHint: effectiveResumeHint,
       iterator,
       ...fingerprint,
     })

@@ -15,7 +15,7 @@
 - 从滚动切回固定模式仍不会自动重做 handoff；设置页已增加常驻警告和保存确认。要保留滚动期间的新对话，仍需使用“换窗继续”。
 - 软删除已修正：删除清除窗口置顶和 wake 记录，已删除窗口不能再被后台或新 turn 隐式复活；Dashboard 删除后重新读取活动/已删除列表并显示结果。
 - 已删除窗口计数已改为 Haven 返回的真实 `total`，不再把首批 60 条误当总数；超过 60 条时可继续“加载更多”。协作者筛选直接在 Haven 查询执行。
-- 2026-09-12 两轮线上诊断确认滚动主窗能从 Haven 取回 5 个 raw 日期的 234/236 条历史并创建 402/406 条 transcript seed；补齐固定 SDK `0.3.220` / Claude Code `2.1.220` 原生元数据后，模型仍报告只记得切换滚动后的消息。缓存同时出现静态前缀读取 `21,747` token、滚动 transcript 重写 `16,052` token；原因已定点为路由对滚动窗口无条件清空持久 resume hint，导致每次 Dashboard 重启都重建 seed。本地现改为同一 `context_revision` 恢复 Haven 保存的 Claude session、revision 变化才重建，并增加 `seedResumeFrom` 日志；35 项相关测试与 production build 通过。尚待用户 commit/push、仅 Redeploy Dashboard，保存一次滚动配置生成新 revision 后复测旧 raw 原文，再次 Redeploy 验证 transcript 缓存不再整段重写；Haven 不需要部署。
+- 2026-09-12 两轮线上诊断确认滚动主窗能从 Haven 取回 5 个 raw 日期的 234/236 条历史并创建 402/406 条 transcript seed；补齐固定 SDK `0.3.220` / Claude Code `2.1.220` 原生元数据后，模型仍报告只记得切换滚动后的消息。缓存同时出现静态前缀读取 `21,747` token、滚动 transcript 重写 `16,052` token。随后允许同 revision 恢复持久 ID 的首轮线上验收报 `No conversation found with session ID: 6db28a09-…`，据此确认旧 `RollingSeedStore` 只是进程内 Map，SDK 临时恢复目录也会随进程清理，Haven 保存了 ID 但 transcript 没有跨部署存在。Dashboard 本地现把滚动 transcript store 持久化到既有 `CLAUDE_CONFIG_DIR`（production 为 `/home/cc/.claude` bind mount）；同 revision 从该 store 恢复，旧 ID 缺文件时自动忽略并从 Haven 重建新 seed，revision 变化仍重建；日志保留 `seedResumeFrom/storeSource`。36 项相关测试、跨 store 实例持久化测试、`git diff --check` 与无新增警告的 production build 通过。尚待用户 commit/push、仅 Redeploy Dashboard 后复测旧 raw 原文，再次 Redeploy 验证 transcript 缓存不再整段重写；Haven 不需要部署。
 
 ## 已确认的产品决定
 
