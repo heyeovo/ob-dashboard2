@@ -201,9 +201,9 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
 
   const rolling = session
     ? await loadRollingWindowAppend(request.sessionId, session, sessionResult.contextDays)
-    : { content: '', pinnedBucketIds: [] }
-  // selfhost 无状态：滚动模式下，选中的原文和日回顾已经完整写进 system，
-  // 不再把整窗历史重复塞进 messages；固定模式保持旧的完整重放行为。
+    : { content: '', history: [], pinnedBucketIds: [] }
+  // selfhost 无状态：滚动原文以真实 user/assistant messages 重放；日回顾、
+  // 钉选桶和日记继续放在 system。固定模式保持旧的完整重放行为。
   const isRolling = session?.rolling_context?.strategy === 'daily_rolling'
   const handoffContext = isRolling ? rolling.content : handoffSnapshotContent(session?.handoff_snapshot)
 
@@ -212,7 +212,7 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
     request,
     persona: personaResult.persona,
     session,
-    history: isRolling ? [] : historyResult.turns,
+    history: isRolling ? rolling.history : historyResult.turns,
     bucketExclusionIds: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])],
     settings,
     provider,
@@ -594,7 +594,9 @@ export function createSelfhostStream(
         // 预算和实际请求必须使用同一份文本，避免隐藏时间绕过上下文上限计算。
         const currentUserText = `${request.text}\n\n${beijingRuntimeContext(new Date())}`
         const currentAttachments = prepared.currentAttachments || []
-        const history = historyWithPersistedRecall(prepared.history)
+        const history = prepared.session?.rolling_context?.strategy === 'daily_rolling'
+          ? prepared.history
+          : historyWithPersistedRecall(prepared.history)
         const replayableImageTurnIds = new Set(
           history
             .filter(turn => turn.source === 'selfhost' && (turn.attachments || []).some(item => !item.cleared && item.kind !== 'file'))

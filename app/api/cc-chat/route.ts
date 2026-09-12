@@ -300,7 +300,9 @@ async function loadTurnInputs(body: ChatBody) {
   const laneContextRevision = Number((promptLaneState as Record<string, unknown> | undefined)?.context_revision || 0)
   const isRolling = promptSession.rolling_context?.strategy === 'daily_rolling'
   const canResumePersisted = laneContextRevision === contextRevision
-  const safeResumeHint = canResumePersisted
+  // 滚动窗口冷启动一律从 Haven 可见原文重建真实角色流；旧原生会话可能仍含
+  // rolling_window_context 版历史，不能继续 resume。进程内活会话仍由 resumeKey 复用。
+  const safeResumeHint = !isRolling && canResumePersisted
     ? persistedResumeHint
     : ''
   const safeLegacyResumeHint = !isRolling && contextRevision === 0 ? legacyResumeHint : ''
@@ -308,7 +310,6 @@ async function loadTurnInputs(body: ChatBody) {
     String(body.session_id || ''),
     promptSession,
     sessionSnapshot.contextDays,
-    { upToTurnId: promptSession.context_turn_watermark || 0 },
   )
   sessionSnapshot = {
     ...sessionSnapshot,
@@ -340,6 +341,7 @@ async function loadTurnInputs(body: ChatBody) {
     mode,
     personaAppend,
     contextRevision,
+    rollingHistory: rolling.history,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),

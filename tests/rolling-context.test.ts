@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
+import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
+import { rollingHistoryToSdkMessages } from '@/app/lib/cc/rollingHistory'
 import { ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
 import type { ConversationContextDay, HavenConversationSession, HavenTurn } from '@/app/lib/havenTurns'
@@ -35,15 +36,24 @@ const turns = [{
 }] as HavenTurn[]
 
 describe('daily rolling context', () => {
-  it('only includes selected raw and review days, plus live pinned buckets', () => {
+  it('keeps reviews and pinned buckets in system context but removes raw transcript text', () => {
     const text = buildRollingWindowAppend(session, turns, days, [{ id: 'pin-1', title: '固定关系事实', content: '一直要知道的内容' }])
     expect(text).toContain('revision="7"')
     expect(text).toContain('实时钉选记忆｜固定关系事实｜pin-1')
     expect(text).toContain('【2026-09-10 日回顾】\n这天的回顾')
-    expect(text).toContain('【2026-09-11 完整对话原文】')
-    expect(text).toContain('[消息 msg_user_3｜小羊')
-    expect(text).toContain('[消息 msg_assistant_3｜言之')
+    expect(text).not.toContain('【2026-09-11 完整对话原文】')
+    expect(text).not.toContain('今天的原话')
+    expect(text).not.toContain('今天的回应')
     expect(text).not.toContain('2026-09-09')
+  })
+
+  it('restores raw days as role-correct, non-querying SDK transcript messages', () => {
+    const history = buildRollingWindowHistory(session, turns, days)
+    const messages = rollingHistoryToSdkMessages(history)
+    expect(history.map(turn => turn.id)).toEqual([3])
+    expect(messages.map(message => message.message.role)).toEqual(['user', 'assistant'])
+    expect(messages.map(message => message.message.content)).toEqual(['今天的原话', '今天的回应'])
+    expect(messages.every(message => message.shouldQuery === false && message.isSynthetic === true)).toBe(true)
   })
 
   it('keeps native Claude resume points isolated by revision', () => {

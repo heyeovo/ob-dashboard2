@@ -17,6 +17,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { rollingHistoryToSdkMessages } from '@/app/lib/cc/rollingHistory'
 import {
   attachSend,
   detachSend,
@@ -481,6 +482,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       thinking: config.thinking,
       systemPromptKey: config.systemPromptKey,
     })
+    const rollingHistory = config.rollingHistory || []
+    const shouldRestoreRollingHistory = currentLive !== live && !input.resumeHint && rollingHistory.length > 0
     const fingerprint = cacheRelevantFingerprint(config)
     const iterator = currentLive === live ? 'reused' : input.resumeHint ? 'cold_resumed' : 'cold_started'
     cacheDiagnostic = {
@@ -653,6 +656,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       uuid: turnUuid,
     }
 
+    if (shouldRestoreRollingHistory) {
+      for (const historyMessage of rollingHistoryToSdkMessages(rollingHistory)) {
+        live.push(historyMessage)
+      }
+    }
     modelRequestStartedAt = Date.now()
     live.push(userMessage)
     // 存用户原话，不含记忆卡 —— 回退锚点要显示的是人说的话

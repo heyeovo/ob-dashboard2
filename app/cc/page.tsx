@@ -1031,12 +1031,7 @@ export default function CcChatPage() {
       onNew={() => {
         setActiveHistorical(null)
         stopSelecting()
-        if (variant === 'mobile-page') {
-          chat.startNewSession()
-          setMobileView('chat')
-        } else {
-          setHandoffOpen({ fromSessionId: null })
-        }
+        setHandoffOpen({ fromSessionId: null })
       }}
       onRename={chat.renameSession}
       onPin={chat.pinSession}
@@ -1240,6 +1235,7 @@ export default function CcChatPage() {
           onConfirm={payload => {
             setHandoffOpen(null)
             chat.startWithHandoff(payload)
+            setMobileView('chat')
           }}
           onClose={() => setHandoffOpen(null)}
         />

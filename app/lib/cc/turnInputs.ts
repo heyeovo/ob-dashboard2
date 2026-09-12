@@ -60,7 +60,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   const laneResumeHint = String(lane?.cc_session_id || '').trim()
   const isRolling = session.rolling_context?.strategy === 'daily_rolling'
   const laneContextRevision = Number((lane as Record<string, unknown> | undefined)?.context_revision || 0)
-  const resumeHint = laneContextRevision === (session.context_revision || 0)
+  const resumeHint = !isRolling && laneContextRevision === (session.context_revision || 0)
     ? laneResumeHint
     : ''
   if (!lane || (!resumeHint && !isRolling)) throw new Error(`最后活跃 CC lane 没有可恢复的 resume id：${laneId}`)
@@ -81,7 +81,6 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     sessionId,
     session,
     sessionResult.contextDays,
-    { upToTurnId: session.context_turn_watermark || 0 },
   )
   sessionResult = {
     ...sessionResult,
@@ -97,6 +96,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     sessionId,
     mode: session.mode,
     contextRevision: session.context_revision || 0,
+    rollingHistory: rolling.history,
     personaAppend,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({

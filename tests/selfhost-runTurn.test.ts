@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   assembleSystem,
+  assembleMessages,
   createSelfhostStream,
   type PreparedSelfhostTurn,
   type ReplaySelfhostTurn,
@@ -100,6 +101,12 @@ describe('runSelfhostTurn stream contract', () => {
     expect(system).toContain(snapshot)
     expect(system).not.toContain('<daily_review_snapshot>')
     expect(system).not.toContain('旧兼容日回顾')
+  })
+
+  it('assembles restored rolling history as ordinary user and assistant messages', () => {
+    const messages = assembleMessages(prepared().history, '现在的问题')
+    expect(messages.map(message => message.role)).toEqual(['user', 'assistant', 'user'])
+    expect(messages.map(message => message.content)).toEqual(['之前', '回答', '现在的问题'])
   })
 
   afterEach(() => vi.restoreAllMocks())

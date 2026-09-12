@@ -31,6 +31,7 @@ import {
   toSdkMcpServers,
 } from '@/app/lib/ccMcp'
 import type { CcMode } from '@/app/lib/ccModes'
+import type { HavenTurn } from '@/app/lib/havenTurns'
 import { autoAllowEdits, recordCommand, recordFileChange, requestPermission } from '@/app/lib/ccChannel'
 import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
 import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
@@ -100,6 +101,8 @@ export type TurnConfig = {
   personaAppend: string
   /** 手动保存滚动上下文时递增；用于切断旧 Claude resume。 */
   contextRevision: number
+  /** 新滚动原生会话首次启动时，以真实 user/assistant 角色恢复的可见原文。 */
+  rollingHistory?: HavenTurn[]
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */
