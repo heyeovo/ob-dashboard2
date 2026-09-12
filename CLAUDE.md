@@ -35,7 +35,7 @@ production 必须配置以下六项：
 | `app/page.tsx` | 主页（时间线/记忆格） |
 | `app/memory/` | 记忆库（三格切换） |
 | `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
-| `app/workbench/` | 工作台 |
+| `app/workbench/` | 工作台；“调参”下提供默认收起的本轮上下文审计，按当前会话只读展示滚动原文、背景拼接、SDK SessionStore 实际落盘消息及最近一轮 token/cache 报告，不触发额外模型请求 |
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页及子页 |
@@ -43,7 +43,7 @@ production 必须配置以下六项：
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
-| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff；滚动模式把手动选定的日回顾、实时钉选桶和日记放入背景 Context，把原文日期从 Haven 永久消息重建为真正的 `user/assistant` 对话流，CC 冷启动不续接旧包装版原生会话；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，读写滚动上下文、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
+| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff；滚动模式把手动选定的日回顾、实时钉选桶和日记放入背景 Context，把原文日期从 Haven 永久消息重建为真正的 `user/assistant` 对话流，CC 冷启动不续接旧包装版原生会话；`cc-context-audit` 复用同一滚动拼接器返回当前会话选入的 Haven 原文和背景正文，并只读检查 SDK SessionStore 实际落盘消息、原文逐条匹配及包装命中，再附最近一轮白名单化 SDK 诊断，不截获 OAuth/原始 HTTP 请求；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，读写滚动上下文、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
 | `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 在稳定 system prompt 中提供召回背景使用规则，动态正文不重复说明 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |

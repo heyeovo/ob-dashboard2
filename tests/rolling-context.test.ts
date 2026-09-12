@@ -7,6 +7,7 @@ import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/c
 import {
   buildRollingTranscriptEntries,
   createRollingHistorySeed,
+  inspectRollingHistoryTranscript,
   openRollingHistoryResume,
 } from '@/app/lib/cc/rollingHistory'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
@@ -131,6 +132,15 @@ describe('daily rolling context', () => {
       expect(await reopened?.sessionStore.load({
         projectKey: 'another-process', sessionId: seed.resumeFrom,
       })).toEqual([...seed.entries, ...appended])
+      const audit = await inspectRollingHistoryTranscript(seed.resumeFrom, { storeRoot })
+      expect(audit?.entryCount).toBe(4)
+      expect(audit?.messages.map(message => [message.role, message.content])).toEqual([
+        ['user', '今天的原话'],
+        ['assistant', '今天的回应'],
+        ['user', '部署前最后一句'],
+        ['assistant', '今天的回应'],
+      ])
+      expect(audit?.messages.every(message => !message.containsRollingWindowContext)).toBe(true)
       expect(openRollingHistoryResume('11111111-1111-4111-8111-111111111111', { storeRoot })).toBeNull()
     } finally {
       await rm(storeRoot, { recursive: true, force: true })

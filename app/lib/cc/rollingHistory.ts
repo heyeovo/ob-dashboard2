@@ -12,6 +12,18 @@ export type RollingHistorySeed = {
   source: 'new_seed' | 'persisted'
 }
 
+export type RollingTranscriptAudit = {
+  entryCount: number
+  messages: Array<{
+    index: number
+    uuid: string
+    role: string
+    content: string
+    chars: number
+    containsRollingWindowContext: boolean
+  }>
+}
+
 type TranscriptSeedOptions = {
   sessionId: string
   cwd: string
@@ -206,6 +218,48 @@ export function openRollingHistoryResume(
   const sessionStore = new RollingSeedStore(normalized, [], options.storeRoot)
   if (!sessionStore.hasPersistedSession(normalized)) return null
   return { resumeFrom: normalized, sessionStore, entries: [], source: 'persisted' }
+}
+
+function transcriptMessageContent(message: unknown): string {
+  if (!message || typeof message !== 'object') return ''
+  const content = (message as Record<string, unknown>).content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map(block => {
+    if (!block || typeof block !== 'object') return ''
+    const value = (block as Record<string, unknown>).text
+    return typeof value === 'string' ? value : ''
+  }).filter(Boolean).join('\n')
+}
+
+/** 只读返回 SDK SessionStore 真正落盘的消息字段；不暴露 cwd、路径或其他元数据。 */
+export async function inspectRollingHistoryTranscript(
+  resumeFrom: string,
+  options: { storeRoot?: string } = {},
+): Promise<RollingTranscriptAudit | null> {
+  const seed = openRollingHistoryResume(resumeFrom, options)
+  if (!seed) return null
+  const entries = await seed.sessionStore.load({ projectKey: 'context-audit', sessionId: seed.resumeFrom })
+  if (!entries) return null
+  const messages = entries.flatMap((entry, index) => {
+    const record = entry as unknown as Record<string, unknown>
+    const message = record.message && typeof record.message === 'object'
+      ? record.message as Record<string, unknown>
+      : null
+    if (!message) return []
+    const content = transcriptMessageContent(message)
+    const role = typeof message.role === 'string' ? message.role : String(record.type || '')
+    if (!content || (role !== 'user' && role !== 'assistant')) return []
+    return [{
+      index,
+      uuid: typeof record.uuid === 'string' ? record.uuid : '',
+      role,
+      content,
+      chars: content.length,
+      containsRollingWindowContext: /<rolling_window_context(?:\s|>)/i.test(content),
+    }]
+  })
+  return { entryCount: entries.length, messages }
 }
 
 export function createRollingHistorySeed(

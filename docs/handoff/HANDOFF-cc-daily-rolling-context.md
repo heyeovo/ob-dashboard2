@@ -66,7 +66,6 @@
 
 - 评估“凌晨 3 点后且沉默超过 1 小时才结束当天”的动态日界线；当前仅支持可配置整点，默认北京时间 04:00。
 - 旧消息编辑、重新生成及其引发的下游消息/切片失效链。
-- 更直观的“本轮实际拼接了什么”预览，以及原文、日回顾、钉选桶分别占用多少 token。
 - 如有需要，再设计完全不共享长期记忆的隔离测试窗；当前临时窗口只隔离聊天 Context，不隔离同一协作者的记忆库。
 
 ## 回退策略
@@ -134,3 +133,13 @@
 - 首版曾尝试把历史 assistant 作为 streaming input 以 `shouldQuery=false` 推入 SDK；运行时仍强制该入口只能是 user，真实窗口报 `Expected message role 'user', got 'assistant'`。现已删除该错误路径，改用上述 transcript seed + resume，并补测普通历史、assistant-only 主动唤醒及 `resume + sessionStore` 冷启动接线。
 - SDK 同时拒绝 `sessionStore + enableFileCheckpointing`（backup blobs 不会被 store 镜像）；store-backed 滚动恢复现明确关闭文件 checkpoint，固定窗口仍保持开启，并有接线测试防回归。
 - 修复只改 Dashboard；Haven 持久化、固定窗口、召回、Context 注入、手动桶、自动切片均未修改。最新恢复策略定向测试 35 项与 production build 通过；没有调用真实模型、生成切片或执行 backfill。
+
+## 2026-09-12 本轮上下文审计
+
+- Dashboard `/workbench` 的“调参”页新增默认收起的“本轮上下文审计”；展开后按浏览器当前会话 ID 手动读取，不轮询、不触发模型请求。
+- 审计接口复用正式聊天的 `loadRollingWindowAppend`，所以日期三态、Haven 原文和背景拼接与实际滚动请求走同一选择逻辑；审计读取本身关闭 `[cc-rolling-context]` 日志，避免把查看动作混入真实发消息日志。
+- 页面可展开核对每条被选入种子的 Haven `user/assistant` 原文及永久消息 ID，并查看日回顾/钉选桶/日记形成的完整背景正文；概览同时展示最近一轮 Haven `raw_json` 中的 SDK usage/cache iterator 和当前活会话 context snapshot。
+- “SDK transcript 落盘验证”直接读取该轮 resume ID 对应的持久 SessionStore，只返回消息角色与正文；逐条按 `role + content` 和当前 Haven 原文匹配，并单独统计正文中命中 `<rolling_window_context>` 的消息。全部匹配且包装命中为 0 时，页面显示绿色“已验证”。
+- 边界：这不是 Anthropic 原始 HTTP 抓包，不拦截 OAuth，不展示密钥，也不额外调用 Context 分析模型。固定窗口不会伪装成滚动原文重建结果。
+- 只改 Dashboard；不改 Haven、聊天页、日期三态、种子创建、resume 或缓存策略。验收路径：`/workbench` → “调参” → 展开“本轮上下文审计” → 对照 raw 日期和原文首尾，再发一条消息后点“重新读取”核对缓存读写。
+- Dashboard 全量测试 265 项通过、1 项跳过；涉及文件 ESLint、production build 与 `git diff --check` 通过。仍需部署 Dashboard 后在登录态页面做真实点击验收。

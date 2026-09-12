@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import EntryGrid, { type Entry } from '../components/EntryGrid'
 import CcWorkbenchPanel from './CcWorkbenchPanel'
+import ContextAuditPanel from './ContextAuditPanel'
 
 /**
  * 工作台 + 调参（4.6 建，第 5 步填内容）。
@@ -47,7 +48,10 @@ export default function WorkbenchPage() {
         {tab === 'bench' ? (
           <CcWorkbenchPanel />
         ) : (
-          <EntryGrid entries={TUNE_ENTRIES} />
+          <div className="space-y-4">
+            <EntryGrid entries={TUNE_ENTRIES} />
+            <ContextAuditPanel />
+          </div>
         )}
       </main>
     </div>
