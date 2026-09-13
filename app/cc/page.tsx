@@ -512,7 +512,7 @@ export default function CcChatPage() {
   )
   const systemPromptText = [
     people.active.basePrompt.trim(),
-    people.active.purpose.trim() ? `你的定位：\n${people.active.purpose.trim()}` : '',
+    people.active.purpose.trim() ? `关于我：\n${people.active.purpose.trim()}` : '',
     enabledPromptModules.length
       ? enabledPromptModules.map(module => `【${module.name}】\n${module.content.trim()}`).join('\n\n')
       : '',

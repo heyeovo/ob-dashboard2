@@ -218,10 +218,10 @@ selfhost thinking：中转站若把 `<thinking>` / `<think>` 放进 `text_delta`
 
 普通窗口与历史聊天支持选择可见正文作为转发块放入输入框；桌面端右上角"选择"，手机端长按消息进入。转发原文以边界标签随 user text 保存，消息行解析成紧凑转发卡片。
 
-## Coolify 手动发布
+## Coolify 发布
 
-- VPS Dashboard 的 Coolify Application 来源为 Public GitHub `heyeovo/ob-dashboard2`、分支 `main`、`Auto deploy` 关闭
-- 发布：Coolify `Actions → Redeploy`；部署完成后检查 commit、healthcheck 和关键功能
+- VPS Dashboard 的 Coolify Application 来源为 Public GitHub `heyeovo/ob-dashboard2`、分支 `main`，已开启自动部署
+- 发布：push `main` 后由 Coolify 自动部署；完成后检查 commit、healthcheck 和关键功能，未触发或失败时再从 `Actions → Redeploy`
 - 回滚：`Git Source → Commit SHA` 填入上一 SHA，保存后 `Redeploy`
 
 ## 待办

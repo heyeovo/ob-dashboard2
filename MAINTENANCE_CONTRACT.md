@@ -80,7 +80,7 @@
 
 ## 四、跨仓库文档地图（定位用）
 
-### ob-dashboard2（前端，Vercel）
+### ob-dashboard2（前端，VPS / Coolify）
 | 文档 | 职责 |
 |---|---|
 | `CLAUDE.md` | 前端全貌：页面 / API / 导航 / 组件 / 实现细节 |

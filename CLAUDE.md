@@ -44,7 +44,7 @@ production 必须配置以下六项：
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
 | `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff；滚动模式把手动选定的日回顾、实时钉选桶和日记放入背景 Context，把原文日期从 Haven 永久消息重建为真正的 `user/assistant` 对话流，CC 冷启动不续接旧包装版原生会话；`cc-context-audit` 复用同一滚动拼接器返回当前会话选入的 Haven 原文和背景正文，只读检查 SDK SessionStore 实际落盘消息、原文逐条匹配及包装命中，并读取模型请求前单独落盘的 Dashboard system prompt 快照、当前热更新重建结果及最近一轮白名单化 SDK 诊断，不截获 OAuth/原始 HTTP 请求；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，读写滚动上下文、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
-| `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 在稳定 system prompt 中提供召回背景使用规则，动态正文不重复说明 |
+| `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 每轮按 Haven 最新配置拼装基础提示词、“关于我”和可热更新提示词模块；召回背景使用规则由提示词模块维护，动态正文不重复说明 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
 
@@ -72,7 +72,7 @@ production 必须配置以下六项：
 - 不扩散修改范围：用户说改什么只改什么
 - 排障用假设→验证，先问用户再翻代码
 - 结论导向，不贴大段代码走查
-- Git：CC 可直接 commit + push；VPS 部署需用户到 Coolify 手动触发
+- Git：CC 可直接 commit + push；`main` push 后由 Coolify 自动部署，需确认 deployment 成功
 - 换窗交接：一个窗口一个问题，换窗前更新 handoff
 
 ## Token 控制
@@ -106,7 +106,7 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 
 - 代码改动完成后按 `MAINTENANCE_CONTRACT.md` 确认需同步的文档
 - 排入后续窗口的工作写入 handoff；短期不处理的遗留写入 `TECH_DEBT.md`
-- VPS 发布需到 Coolify 手动 Redeploy，push 不等于上线
+- `main` push 后由 Coolify 自动部署；需确认最新 deployment 对应目标 commit 且健康，未触发或失败时再手动 Redeploy
 - 每次任务收尾主动告知是否需要上线
 
 > 详细实现参考 `docs/architecture.md`
