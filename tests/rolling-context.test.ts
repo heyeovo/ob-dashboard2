@@ -11,6 +11,7 @@ import {
   assertRequiredRollingRevisionSeed,
   buildRollingTranscriptEntries,
   createFixedTranscriptMigrationSeed,
+  createManualRollingBodyRecoverySeed,
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
   createRollingTranscriptRecoverySeed,
@@ -107,6 +108,17 @@ describe('daily rolling context', () => {
       sessionStore: seed!.sessionStore,
     })
     expect(parsed.map(message => message.message.role)).toEqual(['user', 'assistant'])
+  })
+
+  it('marks every entry in an explicit Haven-body recovery seed', () => {
+    const seed = createManualRollingBodyRecoverySeed(turns, {
+      cwd: 'C:/workspace', fallbackModel: 'claude',
+    })
+    expect(seed?.source).toBe('manual_body_recovery')
+    expect(seed?.entries).toHaveLength(2)
+    expect(seed?.entries.every(entry => entry.ob2RollingFidelity === 'body_restored')).toBe(true)
+    expect(seed?.entries.every(entry => entry.ob2HavenTurnId === 3)).toBe(true)
+    expect(seed?.diagnostic?.bodyRestoredTurnCount).toBe(1)
   })
 
   it('restores an agent wake as a hidden wake trigger followed by its assistant message', () => {

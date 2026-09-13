@@ -15,7 +15,7 @@ export type RollingHistorySeed = {
   resumeFrom: string
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
-  source: 'new_seed' | 'revision_seed' | 'fixed_transcript_migration' | 'legacy_transcript_recovery' | 'persisted'
+  source: 'new_seed' | 'manual_body_recovery' | 'revision_seed' | 'fixed_transcript_migration' | 'legacy_transcript_recovery' | 'persisted'
   diagnostic?: RollingSeedDiagnostic
 }
 
@@ -671,6 +671,36 @@ export function createRollingHistorySeed(
     entries,
     source: 'new_seed',
     diagnostic: seedDiagnostic(entries, { bodyRestoredTurnCount: turns.length }),
+  }
+}
+
+/** 用户明确确认舍弃旧原生细节后，从 Haven 可见正文创建全新滚动 transcript。 */
+export function createManualRollingBodyRecoverySeed(
+  turns: HavenTurn[],
+  options: Omit<TranscriptSeedOptions, 'sessionId'> & { storeRoot?: string },
+): RollingHistorySeed | null {
+  if (turns.length === 0) return null
+  const resumeFrom = randomUUID()
+  const entries = buildRollingTranscriptEntries(turns, {
+    cwd: options.cwd,
+    fallbackModel: options.fallbackModel,
+    sessionId: resumeFrom,
+  }).map(entry => ({
+    ...entry,
+    ob2RollingFidelity: 'body_restored',
+  }))
+  if (entries.length === 0) return null
+  return {
+    resumeFrom,
+    sessionStore: new RollingSeedStore(resumeFrom, entries, options.storeRoot),
+    entries,
+    source: 'manual_body_recovery',
+    diagnostic: seedDiagnostic(entries, {
+      sourceSessionId: '',
+      sourceEntryCount: 0,
+      retainedEnvelopeCount: 0,
+      bodyRestoredTurnCount: turns.length,
+    }),
   }
 }
 

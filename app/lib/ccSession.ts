@@ -721,6 +721,30 @@ export function activateContextGcFork(
   rememberResumePoint(ccResumeKey(sessionId, laneId, contextRevision), ccSessionId)
 }
 
+/** 人工正文恢复与 GC 一样，切换前必须让旧 iterator 空闲并退出。 */
+export function prepareSessionForRollingRecovery(
+  sessionId: string,
+  _laneId: string,
+  _contextRevision = 0,
+): { ok: boolean; error: string } {
+  const live = registry.get(sessionId)
+  if (!live) return { ok: true, error: '' }
+  if (live.busy || live.compacting) return { ok: false, error: '当前正在回复或处理上下文，请结束后再重建' }
+  // 显式恢复会替换当前窗口的活跃 lane；先把旧 iterator 按它自己的 key 留作失败回退。
+  rememberResumePoint(live.resumeKey, live.ccSessionId)
+  dropSession(sessionId)
+  return { ok: true, error: '' }
+}
+
+export function activateRollingRecovery(
+  sessionId: string,
+  laneId: string,
+  contextRevision: number,
+  ccSessionId: string,
+): void {
+  rememberResumePoint(ccResumeKey(sessionId, laneId, contextRevision), ccSessionId)
+}
+
 /** 界面顶部要显示的会话状态。 */
 export type SessionStats = {
   live: boolean

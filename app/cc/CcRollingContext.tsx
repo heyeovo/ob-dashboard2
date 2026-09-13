@@ -119,6 +119,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   const [draft, setDraft] = useState<RollingContextConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [recovering, setRecovering] = useState(false)
   const [note, setNote] = useState('')
   const [pinnedItems, setPinnedItems] = useState<Candidate[]>([])
   const [journalItems, setJournalItems] = useState<Candidate[]>([])
@@ -263,6 +264,36 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     }
   }
 
+  const recoverFromHavenBody = async () => {
+    if (busy || saving || recovering) return
+    if (!window.confirm(
+      '这会永久停止使用当前损坏的 Claude transcript，并用 Haven 中成功保存的用户/助手正文创建全新 transcript。\n\n旧 transcript 里的工具调用、工具结果、动态召回、图片、thinking，以及未成功写入 Haven 的失败消息和失败主动唤醒不会进入新 transcript。页面聊天历史、日回顾和窗口设置不会删除。\n\n确定继续吗？',
+    )) return
+    setRecovering(true)
+    setNote('正在生成并切换新的正文 transcript…')
+    try {
+      const response = await fetch('/api/cc-rolling-recovery', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          persona_id: personaId,
+          expected_state_version: session.state_version,
+          confirm: sessionId,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.ok || !data.session) throw new Error(data.error || '正文重建失败')
+      setSession(data.session)
+      setDraft(data.session.rolling_context)
+      setNote(`已从 Haven 正文重建 · ${Number(data.turn_count || 0).toLocaleString()} 轮、${Number(data.entry_count || 0).toLocaleString()} 条 transcript 记录。现在可以继续对话。`)
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : '正文重建失败')
+    } finally {
+      setRecovering(false)
+    }
+  }
+
   const toggleSection = (id: string) => setOpenSections(current => {
     const next = new Set(current)
     if (next.has(id)) next.delete(id)
@@ -364,6 +395,22 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
       <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-white disabled:opacity-50">
         {saving ? '保存中…' : busy ? '回复结束后可保存' : '保存上下文拼接'}
       </button>
+      {draft.strategy === 'daily_rolling' ? (
+        <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-red-50/60 p-2.5">
+          <div className="text-[10.5px] font-medium text-[var(--color-danger)]">损坏窗口恢复</div>
+          <div className="mt-1 text-[9.5px] leading-relaxed text-[var(--color-text-tertiary)]">
+            仅在旧 transcript 无法继续时使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
+          </div>
+          <button
+            type="button"
+            disabled={recovering || saving || busy}
+            onClick={() => void recoverFromHavenBody()}
+            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 bg-white px-3 py-2 text-[10.5px] text-[var(--color-danger)] disabled:opacity-50"
+          >
+            {recovering ? '正在重建…' : '舍弃损坏的原生记录，用 Haven 正文重建'}
+          </button>
+        </div>
+      ) : null}
       {note ? <div className="mt-2 text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">{note}</div> : null}
     </div>
   )

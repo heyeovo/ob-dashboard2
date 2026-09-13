@@ -964,6 +964,45 @@ export async function patchConversationContextGc(input: {
   }
 }
 
+export async function commitConversationRollingRecovery(input: {
+  sessionId: string
+  personaId: string
+  expectedStateVersion: number
+  laneId: string
+  expectedCcSessionId: string
+  nextCcSessionId: string
+  contextRevision: number
+  turnCount: number
+  entryCount: number
+}): Promise<{ ok: boolean; session: HavenConversationSession | null; error: string; httpStatus: number | null }> {
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId: input.sessionId,
+    body: {
+      session_id: input.sessionId,
+      persona_id: input.personaId,
+      expected_state_version: input.expectedStateVersion,
+      rolling_recovery_commit: {
+        lane_id: input.laneId,
+        expected_cc_session_id: input.expectedCcSessionId,
+        next_cc_session_id: input.nextCcSessionId,
+        context_revision: input.contextRevision,
+        turn_count: input.turnCount,
+        entry_count: input.entryCount,
+      },
+    },
+  })
+  return {
+    ok: res.ok,
+    session: res.ok && res.payload.session && typeof res.payload.session === 'object'
+      ? res.payload.session as HavenConversationSession
+      : null,
+    error: res.error,
+    httpStatus: res.httpStatus,
+  }
+}
+
 export function dailyReviewSystemBlock(
   snapshot: HavenConversationSession['daily_review_snapshot'] | undefined,
 ): string {
