@@ -70,6 +70,7 @@ describe('daily rolling context', () => {
     const seed = createRollingHistorySeed(history, { cwd: 'C:/workspace', fallbackModel: 'claude' })
     expect(history.map(turn => turn.id)).toEqual([3])
     expect(seed?.entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
+    expect(seed?.entries.every(entry => entry.ob2HavenTurnId === 3)).toBe(true)
     expect((seed?.entries[0].message as { content: string }).content).toBe(
       '今天的原话\n\n[北京时间 2026-09-11 20:00 周五]',
     )
@@ -422,6 +423,123 @@ describe('daily rolling context', () => {
       )
       expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_use"')
       expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_result"')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('uses legacy transcript timestamps to distinguish repeated body text', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-legacy-repeat-'))
+    const repeatedTurns = [
+      {
+        ...turns[0], id: 21, round_id: 21,
+        user_text: '重复问题', assistant_text: '重复回答',
+        created_at: '2026-09-11T12:00:00Z',
+      },
+      {
+        ...turns[0], id: 22, round_id: 22,
+        user_text: '重复问题', assistant_text: '重复回答',
+        created_at: '2026-09-11T12:05:00Z',
+      },
+    ] as HavenTurn[]
+    try {
+      const source = createRollingHistorySeed(repeatedTurns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      for (const entry of source.entries) {
+        delete entry.ob2HavenTurnId
+        delete entry.ob2ChatDay
+      }
+      const repeatedUser = source.entries[2].message as { role: string; content: unknown }
+      const repeatedUserText = repeatedUser.content as string
+      repeatedUser.content = [
+        { type: 'text', text: `<记忆召回>\n<memory_card>旧记录召回</memory_card>\n</记忆召回>\n\n${repeatedUserText}` },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'bGVnYWN5' } },
+      ]
+      const repeatedAssistant = source.entries[3].message as { role: string; content: unknown }
+      repeatedAssistant.content = [
+        { type: 'tool_use', id: 'toolu_legacy', name: 'search_chat', input: { query: '旧记录' } },
+        { type: 'text', text: '重复回答' },
+      ]
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [
+          { type: 'custom-title', title: 'legacy source' },
+          {
+            type: 'user', uuid: 'legacy-result', parentUuid: source.entries[3].uuid,
+            sessionId: source.resumeFrom,
+            message: { role: 'user', content: [{
+              type: 'tool_result', tool_use_id: 'toolu_legacy', content: '旧记录工具结果',
+            }] },
+          },
+        ],
+      )
+
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, repeatedTurns, repeatedTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: ['2026-09-11'],
+        },
+      )
+      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(2)
+      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
+      expect(revised?.diagnostic?.memoryRecallCount).toBe(1)
+      expect(revised?.diagnostic?.toolUseCount).toBe(1)
+      expect(revised?.diagnostic?.toolResultCount).toBe(1)
+      expect(JSON.stringify(revised?.entries)).toContain('"type":"image"')
+      expect(JSON.stringify(revised?.entries)).toContain('旧记录工具结果')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('uses stamped Haven turn ids when repeated turns also share a timestamp', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-id-repeat-'))
+    const repeatedTurns = [
+      { ...turns[0], id: 31, round_id: 31, user_text: '相同问题', assistant_text: '相同回答' },
+      { ...turns[0], id: 32, round_id: 32, user_text: '相同问题', assistant_text: '相同回答' },
+    ] as HavenTurn[]
+    try {
+      const source = createRollingHistorySeed(repeatedTurns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [{ type: 'custom-title', title: 'stamped source' }],
+      )
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, repeatedTurns, repeatedTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: ['2026-09-11'],
+        },
+      )
+      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(2)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('still refuses a legacy transcript that remains ambiguous after timestamp matching', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-ambiguous-repeat-'))
+    const repeatedTurns = [
+      { ...turns[0], id: 41, round_id: 41, user_text: '无法区分', assistant_text: '完全相同' },
+      { ...turns[0], id: 42, round_id: 42, user_text: '无法区分', assistant_text: '完全相同' },
+    ] as HavenTurn[]
+    try {
+      const source = createRollingHistorySeed([repeatedTurns[0]], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      for (const entry of source.entries) delete entry.ob2HavenTurnId
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [{ type: 'custom-title', title: 'ambiguous source' }],
+      )
+      await expect(createRollingHistoryRevisionSeed(
+        source.resumeFrom, repeatedTurns, repeatedTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: ['2026-09-11'],
+        },
+      )).rejects.toThrow('完整轮次无法唯一对应')
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }

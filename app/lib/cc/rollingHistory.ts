@@ -56,6 +56,8 @@ type TranscriptEnvelope = {
   entries: SessionStoreEntry[]
   userText: string
   assistantText: string
+  havenTurnId: number | null
+  timestamp: string
 }
 
 export function rollingRevisionRequiresSource(
@@ -159,10 +161,11 @@ export function buildRollingTranscriptEntries(
   const entries: SessionStoreEntry[] = []
   let parentUuid: string | null = null
 
-  const pushUser = (content: string, timestamp: string) => {
+  const pushUser = (content: string, timestamp: string, turn: HavenTurn) => {
     const uuid = randomUUID()
     entries.push({
       type: 'user', uuid, parentUuid, timestamp,
+      ob2HavenTurnId: turn.id, ob2ChatDay: turn.chat_day || '',
       sessionId: options.sessionId, cwd: options.cwd,
       isSidechain: false, userType: 'external',
       version: CLAUDE_CODE_VERSION, gitBranch: 'HEAD',
@@ -173,10 +176,11 @@ export function buildRollingTranscriptEntries(
     parentUuid = uuid
   }
 
-  const pushAssistant = (content: string, timestamp: string, model: string) => {
+  const pushAssistant = (content: string, timestamp: string, model: string, turn: HavenTurn) => {
     const uuid = randomUUID()
     entries.push({
       type: 'assistant', uuid, parentUuid, timestamp,
+      ob2HavenTurnId: turn.id, ob2ChatDay: turn.chat_day || '',
       sessionId: options.sessionId, cwd: options.cwd,
       isSidechain: false, userType: 'external',
       version: CLAUDE_CODE_VERSION, gitBranch: 'HEAD',
@@ -206,16 +210,16 @@ export function buildRollingTranscriptEntries(
     const userText = turn.user_text.trim()
     const assistantText = turn.assistant_text.trim()
     if (turn.turn_kind === 'agent_wake' && assistantText) {
-      pushUser(wakeInput(turn), turn.created_at)
-      pushAssistant(assistantText, turn.created_at, turn.model)
+      pushUser(wakeInput(turn), turn.created_at, turn)
+      pushAssistant(assistantText, turn.created_at, turn.model, turn)
       continue
     }
-    if (userText) pushUser(appendRuntimeContext(userText, turn.created_at), turn.created_at)
+    if (userText) pushUser(appendRuntimeContext(userText, turn.created_at), turn.created_at, turn)
     if (assistantText) {
       if (!userText) {
-        pushUser(appendRuntimeContext('<system_generated_turn source="restored_history"/>', turn.created_at), turn.created_at)
+        pushUser(appendRuntimeContext('<system_generated_turn source="restored_history"/>', turn.created_at), turn.created_at, turn)
       }
-      pushAssistant(assistantText, turn.created_at, turn.model)
+      pushAssistant(assistantText, turn.created_at, turn.model, turn)
     }
   }
   return entries
@@ -489,6 +493,7 @@ function transcriptEnvelopes(entries: SessionStoreEntry[]): {
 }
 
 function toEnvelope(entries: SessionStoreEntry[]): TranscriptEnvelope {
+  const primaryUser = entries.find(entry => isPrimaryUserEntry(entry))
   const userText = entries
     .filter(entry => isPrimaryUserEntry(entry))
     .map(entry => transcriptMessageContent(messageRecord(entry)))
@@ -499,7 +504,16 @@ function toEnvelope(entries: SessionStoreEntry[]): TranscriptEnvelope {
     .map(entry => transcriptMessageContent(messageRecord(entry)))
     .filter(Boolean)
     .join('\n')
-  return { entries, userText, assistantText }
+  const havenTurnIds = [...new Set(entries
+    .map(entry => Number(entry.ob2HavenTurnId))
+    .filter(id => Number.isSafeInteger(id) && id > 0))]
+  return {
+    entries,
+    userText,
+    assistantText,
+    havenTurnId: havenTurnIds.length === 1 ? havenTurnIds[0] : null,
+    timestamp: typeof primaryUser?.timestamp === 'string' ? primaryUser.timestamp : '',
+  }
 }
 
 function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
@@ -512,11 +526,31 @@ function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boo
   return userMatches && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
 }
 
+function sameTimestamp(left: string, right: string): boolean {
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime
+}
+
 function alignEnvelopesToTurns(
   envelopes: TranscriptEnvelope[],
   turns: HavenTurn[],
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
+  const candidates = envelopes.map(envelope => {
+    const textMatches = orderedTurns
+      .map((turn, index) => ({ turn, index }))
+      .filter(({ turn }) => envelopeMatchesTurn(envelope, turn))
+    if (envelope.havenTurnId !== null) {
+      return new Set(textMatches
+        .filter(({ turn }) => turn.id === envelope.havenTurnId)
+        .map(({ index }) => index))
+    }
+    const timestampMatches = textMatches
+      .filter(({ turn }) => sameTimestamp(envelope.timestamp, turn.created_at))
+    const selected = timestampMatches.length > 0 ? timestampMatches : textMatches
+    return new Set(selected.map(({ index }) => index))
+  })
   const ways = Array.from(
     { length: envelopes.length + 1 },
     () => Array<number>(orderedTurns.length + 1).fill(0),
@@ -527,7 +561,7 @@ function alignEnvelopesToTurns(
   for (let envelopeIndex = envelopes.length - 1; envelopeIndex >= 0; envelopeIndex -= 1) {
     for (let turnIndex = orderedTurns.length - 1; turnIndex >= 0; turnIndex -= 1) {
       const skip = ways[envelopeIndex][turnIndex + 1]
-      const use = envelopeMatchesTurn(envelopes[envelopeIndex], orderedTurns[turnIndex])
+      const use = candidates[envelopeIndex].has(turnIndex)
         ? ways[envelopeIndex + 1][turnIndex + 1]
         : 0
       ways[envelopeIndex][turnIndex] = Math.min(2, skip + use)
@@ -540,7 +574,7 @@ function alignEnvelopesToTurns(
   let turnIndex = 0
   for (let envelopeIndex = 0; envelopeIndex < envelopes.length; envelopeIndex += 1) {
     while (turnIndex < orderedTurns.length) {
-      const canUse = envelopeMatchesTurn(envelopes[envelopeIndex], orderedTurns[turnIndex])
+      const canUse = candidates[envelopeIndex].has(turnIndex)
         && ways[envelopeIndex + 1][turnIndex + 1] > 0
       if (canUse) {
         aligned.set(orderedTurns[turnIndex].id, envelopes[envelopeIndex])
