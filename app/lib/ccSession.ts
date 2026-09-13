@@ -346,7 +346,8 @@ export function dropSession(sessionId: string) {
     /* 关闭队列失败无所谓，进程随后自己退 */
   }
   try {
-    void live.q.interrupt?.()
+    // Query.close() 才是 SDK 保证会终止底层 Claude CLI 子进程的正式入口。
+    live.q.close()
   } catch {
     /* 同上 */
   }

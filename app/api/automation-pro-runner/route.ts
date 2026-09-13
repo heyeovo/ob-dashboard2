@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk'
 import { buildCcEnv } from '@/app/lib/ccEnv'
 import { isAutomationRunnerBusy, setAutomationRunnerBusy } from '@/app/lib/automationRunnerState'
+import { runForegroundSubscriptionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 export const runtime = 'nodejs'
 export const maxDuration = 360
@@ -175,30 +176,32 @@ export async function POST(request: Request) {
       env: buildCcEnv('subscription', { mainModel: model }),
     }
     if (taskType === 'weekly_journey') options.outputFormat = WEEKLY_JOURNEY_OUTPUT_FORMAT
-    const stream = query({
-      prompt: user,
-      options,
-    })
-    for await (const message of stream) {
-      if (message.type === 'system' && message.subtype === 'init') actualModel = message.model || model
-      if (message.type === 'assistant') {
-        for (const block of message.message.content) {
-          if (block.type === 'text') text += block.text
-        }
-      }
-      if (message.type === 'result') {
-        usage = message.usage
-        if (message.subtype !== 'success') {
-          if (message.subtype === 'error_max_structured_output_retries') {
-            throw new Error('Claude Pro structured output retries exhausted')
+    await runForegroundSubscriptionTurn(async () => {
+      const stream = query({
+        prompt: user,
+        options,
+      })
+      for await (const message of stream) {
+        if (message.type === 'system' && message.subtype === 'init') actualModel = message.model || model
+        if (message.type === 'assistant') {
+          for (const block of message.message.content) {
+            if (block.type === 'text') text += block.text
           }
-          const detail = 'errors' in message ? message.errors.join('; ') : 'Claude Pro 执行失败'
-          throw new Error(detail)
         }
-        structuredOutput = message.structured_output
-        if (!text.trim()) text = message.result
+        if (message.type === 'result') {
+          usage = message.usage
+          if (message.subtype !== 'success') {
+            if (message.subtype === 'error_max_structured_output_retries') {
+              throw new Error('Claude Pro structured output retries exhausted')
+            }
+            const detail = 'errors' in message ? message.errors.join('; ') : 'Claude Pro 执行失败'
+            throw new Error(detail)
+          }
+          structuredOutput = message.structured_output
+          if (!text.trim()) text = message.result
+        }
       }
-    }
+    })
     if (taskType === 'weekly_journey') {
       text = JSON.stringify(restoreWeeklyJourneyCandidate(structuredOutput))
     }

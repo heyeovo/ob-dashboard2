@@ -40,4 +40,37 @@ describe('SessionTurnCoordinator', () => {
     const wake = await tryRunBackgroundSessionTurn('s1', async () => 'no', () => true)
     expect(wake).toEqual({ status: 'deferred', reason: 'session_blocked' })
   })
+
+  it('serializes subscription foreground turns across different sessions', async () => {
+    const order: string[] = []
+    let releaseFirst!: () => void
+    const first = runForegroundSessionTurn('s1', async () => {
+      order.push('first:start')
+      await new Promise<void>(resolve => { releaseFirst = resolve })
+      order.push('first:end')
+    }, { subscription: true })
+    await Promise.resolve()
+    const second = runForegroundSessionTurn('s2', async () => { order.push('second') }, { subscription: true })
+    await Promise.resolve()
+    expect(order).toEqual(['first:start'])
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(order).toEqual(['first:start', 'first:end', 'second'])
+  })
+
+  it('defers a subscription wake while another subscription turn is active', async () => {
+    let release!: () => void
+    const foreground = runForegroundSessionTurn(
+      's1',
+      () => new Promise<void>(resolve => { release = resolve }),
+      { subscription: true },
+    )
+    await Promise.resolve()
+    const wake = await tryRunBackgroundSessionTurn(
+      's2', async () => 'should-not-run', undefined, { subscription: true },
+    )
+    expect(wake).toEqual({ status: 'deferred', reason: 'turn_running' })
+    release()
+    await foreground
+  })
 })

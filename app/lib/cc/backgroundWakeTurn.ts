@@ -102,6 +102,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         return { gateStatus: 'started', gateError: '', turn } as const
       },
       blocked,
+      { subscription: loaded.config.cred === 'subscription' },
     )
     if (result.status === 'deferred') return result
     if (result.value.gateStatus === 'duplicate') return { status: 'in_progress', reason: 'duplicate_callback' }
