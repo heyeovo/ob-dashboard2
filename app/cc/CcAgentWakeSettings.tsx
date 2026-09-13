@@ -106,7 +106,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
   return (
     <div className="space-y-3 text-[11px] text-[var(--color-text-secondary)]">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
-        只影响当前 CC 线路。24 小时没有用户活动会停止固定保活，但不会删除 Claude 已安排的未来 wake。
+        只影响当前 CC 线路。暂停后，下一条用户消息或 Claude 正式主动消息会恢复固定保活；24 小时没有用户活动也会自动暂停，但不会删除 Claude 已安排的未来 wake。
       </div>
 
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3">
@@ -132,7 +132,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           </div>
         ) : null}
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}>
-          <span>暂停到下次用户消息</span>
+          <span>暂停到下次对话活动</span>
           <button className={BUTTON} disabled={saving || busy || schedule.keepalive_paused_until_user} onClick={() => void save({ keepalive_paused_until_user: true })}>
             {schedule.keepalive_paused_until_user ? '已暂停' : '暂停'}
           </button>

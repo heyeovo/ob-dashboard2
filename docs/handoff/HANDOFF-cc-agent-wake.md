@@ -1,12 +1,13 @@
 # HANDOFF — CC 缓存保活与 Claude 主动唤醒
 
 > 建立时间：2026-08-31
-> 最后更新：2026-09-04
+> 最后更新：2026-09-13
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
-> 状态：阶段 1–5 已完成；Bark HTTP 400 已解决，阶段 6 尚未开始
+> 状态：阶段 1–5 已完成；缓存保活暂停恢复语义已补齐，待部署验收；阶段 6 尚未开始
 
 ## 当前完成状态
 
+- 2026-09-13 已把“暂停到下次用户消息”扩展为“暂停到下次对话活动”：下一条用户消息仍在进入模型前解除暂停；Claude 正式主动消息则在消息成功保存的同一 Haven 事务内解除。后台 no-op、失败和 deferred 不解除，`keepalive_enabled` 总开关关闭时不会被自动开启。Dashboard 设置文案已同步。
 - 产品决策与跨仓库实施方案仍以 `docs/cc-agent-wake-design.md` 为唯一事实源。
 - 2026-09-02 已完成阶段 5 Bark：Haven 新增 profile 级私密配置、持久 notification outbox 和独立 worker；只有带正式 `assistant_text` 的 agent wake 在消息同一事务内按已保存 `display_segments` 入队，no-op、普通前台回复、失败和幂等重放不重复推送。
 - Bark 首段固定 `active`、后续固定 `passive`，默认间隔 1 秒、每轮最多 8 条且两项可调；超限最后一条提示打开会话。Outbox 使用 `profile_id + turn_id + segment_index + splitter_version` 唯一键、持久 lease、固定指数退避和 8 次最终失败上限，重启后恢复，通知失败不回滚聊天。
@@ -42,6 +43,7 @@
 
 ## 验证结果
 
+- 2026-09-13 暂停恢复修复：Haven `test_gateway_state_contracts` 36 项通过，覆盖正式主动消息解除暂停与 no-op 保持暂停；Dashboard 全量 Vitest 52 个文件、281 项通过、1 项跳过，production build 通过。调度测试通过；Bark 套件在临时 Python 环境因 `httpx`/`httpx2` 包冲突有 1 项导入期错误，与本次逻辑无关。
 - 2026-09-02 阶段 5 Haven 定向：56 项通过；Haven 全量 unittest：184 项全部通过。当前本机 Haven venv 未安装 pytest，因此按项目既有 unittest discover 全量入口执行。
 - 2026-09-02 阶段 5 Dashboard 定向：8 项通过；全量 Vitest：47 个测试文件、241 项通过、1 项跳过；production build 通过并包含 `/api/cc-notifications` 与 `/settings/notifications`。
 - 2026-09-02 阶段 5 两仓库 `git diff --check` 通过；Dashboard build 首次因沙箱无法连接 Google Fonts 失败，允许联网后同一最终代码重跑通过。
@@ -72,13 +74,14 @@
 
 ## 下一步
 
-1. 用户提交并推送 Dashboard，在 Coolify 的 Dashboard Application 点击 `Redeploy`；本轮没有 Haven 改动，不部署 Haven。
-2. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、可选“这次没有发消息”原因、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
-3. 等待后续真实 no-op 样本，确认 Claude 是否主动附带 30 字内自然状态；完整功能链已经存在，不为强制出现短文本修改 prompt 或后端。
-4. 跨 UTC 日期的首次 cold resume 缓存重写暂不处理；后续若再出现，只需用本节“缓存诊断查看方法”确认是否仍是同一模式，不重复从头排查。
-5. Dashboard 部署本次 wake XML 压缩后，对比至少两条连续同类型 `cache_keepalive` 的 usage；确认相邻 transcript/cache 增量由既有约 90–95 token 降向目标 50–65 token，并确认 cache fingerprint、唤醒语义、no-op 格式和前后台工具边界未发生非预期变化。
-6. `frozen_persona_append` 边界另开窗口修复：只冻结 handoff、日回顾等窗口快照；协作者基础 system 与提示词模块人工修改后应在旧窗口下一轮生效，并允许因此发生一次预期 cache rewrite。不得把该修复并入 wake token 补丁。
-7. 下一窗口先只讨论 handoff snapshot 的 token 压缩，不改代码：区分 handoff 固定快照、跨线路 `<上次聊到这里>`、原生 CC transcript 和 `frozen_persona_append`，从真实窗口的 Context 分析或现有快照结构拆出各部分 token；逐项判断哪些重复、哪些可压缩、预计节省及上下文能力损失。不得重新讨论跨 UTC `currentDate`，也不得顺手修改 wake、iterator、scheduler、silence、coordinator、lane 状态机、后台权限或 `frozen_persona_append` 边界。
+1. 用户分别提交并推送 Dashboard 与 Haven；确认 Dashboard 新部署成功，并确认 Haven 自动部署使用最新完整 `HAVEN_RELEASE_SHA` 且 Brain/Gateway 恢复健康。
+2. 在一个开启缓存保活且已安排未来 wake 的窗口点击“暂停到下次对话活动”，等待 Claude 发出正式主动消息：Bark 应正常推送，刷新设置后应不再显示“已暂停”；no-op 样本应继续保持暂停。随后可再次暂停并由用户首条消息验证同样恢复。
+3. 手机刷新 `/cc`，查看一条已有或新产生的 no-op wake：轻量事件、可选“这次没有发消息”原因、独立 thinking 折叠区和右下角 token 应分层显示；裸 marker 不应出现空状态行。
+4. 等待后续真实 no-op 样本，确认 Claude 是否主动附带 30 字内自然状态；完整功能链已经存在，不为强制出现短文本修改 prompt 或后端。
+5. 跨 UTC 日期的首次 cold resume 缓存重写暂不处理；后续若再出现，只需用本节“缓存诊断查看方法”确认是否仍是同一模式，不重复从头排查。
+6. Dashboard 部署本次 wake XML 压缩后，对比至少两条连续同类型 `cache_keepalive` 的 usage；确认相邻 transcript/cache 增量由既有约 90–95 token 降向目标 50–65 token，并确认 cache fingerprint、唤醒语义、no-op 格式和前后台工具边界未发生非预期变化。
+7. `frozen_persona_append` 边界另开窗口修复：只冻结 handoff、日回顾等窗口快照；协作者基础 system 与提示词模块人工修改后应在旧窗口下一轮生效，并允许因此发生一次预期 cache rewrite。不得把该修复并入 wake token 补丁。
+8. 下一窗口先只讨论 handoff snapshot 的 token 压缩，不改代码：区分 handoff 固定快照、跨线路 `<上次聊到这里>`、原生 CC transcript 和 `frozen_persona_append`，从真实窗口的 Context 分析或现有快照结构拆出各部分 token；逐项判断哪些重复、哪些可压缩、预计节省及上下文能力损失。不得重新讨论跨 UTC `currentDate`，也不得顺手修改 wake、iterator、scheduler、silence、coordinator、lane 状态机、后台权限或 `frozen_persona_append` 边界。
 
 ## 缓存诊断查看方法（给后续排查窗口）
 
