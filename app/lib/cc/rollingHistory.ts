@@ -9,6 +9,7 @@ import {
   type SessionStoreEntry,
 } from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
+import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 
 export type RollingHistorySeed = {
   resumeFrom: string
@@ -23,6 +24,7 @@ export type RollingSeedDiagnostic = {
   sourceEntryCount: number
   retainedEnvelopeCount: number
   bodyRestoredTurnCount: number
+  thinkingPrunedBlockCount: number
   toolUseCount: number
   toolResultCount: number
   memoryRecallCount: number
@@ -104,6 +106,7 @@ const CLAUDE_CODE_VERSION = '2.1.220'
 function wakeInput(turn: HavenTurn): string {
   let cause = 'agent_schedule'
   let reason = ''
+  let occurredAt = turn.created_at
   if (turn.raw_json) {
     try {
       const raw = JSON.parse(turn.raw_json) as Record<string, unknown>
@@ -113,6 +116,8 @@ function wakeInput(turn: HavenTurn): string {
       if (wake) {
         cause = String(wake.cause || cause)
         reason = String(wake.reason || '')
+        const wakeAt = String(wake.at || '')
+        if (Number.isFinite(new Date(wakeAt).getTime())) occurredAt = wakeAt
       }
     } catch {
       // 旧记录没有可解析的 raw_json 时，仍保留“系统唤醒”语义。
@@ -122,7 +127,13 @@ function wakeInput(turn: HavenTurn): string {
     `cause=${JSON.stringify(cause)}`,
     reason ? `reason=${JSON.stringify(reason)}` : '',
   ].filter(Boolean)
-  return `<agent_wake ${attributes.join(' ')}/>`
+  return appendRuntimeContext(`<agent_wake ${attributes.join(' ')}/>`, occurredAt)
+}
+
+function appendRuntimeContext(content: string, timestamp: string): string {
+  const date = new Date(timestamp)
+  if (!Number.isFinite(date.getTime())) return content
+  return `${content}\n\n${beijingRuntimeContext(date)}`
 }
 
 /**
@@ -190,9 +201,11 @@ export function buildRollingTranscriptEntries(
       pushAssistant(assistantText, turn.created_at, turn.model)
       continue
     }
-    if (userText) pushUser(userText, turn.created_at)
+    if (userText) pushUser(appendRuntimeContext(userText, turn.created_at), turn.created_at)
     if (assistantText) {
-      if (!userText) pushUser('<system_generated_turn source="restored_history"/>', turn.created_at)
+      if (!userText) {
+        pushUser(appendRuntimeContext('<system_generated_turn source="restored_history"/>', turn.created_at), turn.created_at)
+      }
       pushAssistant(assistantText, turn.created_at, turn.model)
     }
   }
@@ -378,6 +391,7 @@ function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<Rolling
     sourceEntryCount: 0,
     retainedEnvelopeCount: 0,
     bodyRestoredTurnCount: 0,
+    thinkingPrunedBlockCount: 0,
     toolUseCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_use').length, 0),
     toolResultCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_result').length, 0),
     memoryRecallCount: messages.filter(message => /<记忆召回>|<memory_card\b/i.test(transcriptMessageContent(message))).length,
@@ -396,6 +410,41 @@ function contentBlocks(message: Record<string, unknown>): Array<Record<string, u
   const content = message.content
   if (!Array.isArray(content)) return []
   return content.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
+}
+
+function pruneCompletedThinking(entries: SessionStoreEntry[]): {
+  entries: SessionStoreEntry[]
+  removedBlockCount: number
+} {
+  const toolUseIds = new Set<string>()
+  const toolResultIds = new Set<string>()
+  for (const entry of entries) {
+    const message = messageRecord(entry)
+    if (!message) continue
+    for (const block of contentBlocks(message)) {
+      if (block.type === 'tool_use' && block.id) toolUseIds.add(String(block.id))
+      if (block.type === 'tool_result' && block.tool_use_id) toolResultIds.add(String(block.tool_use_id))
+    }
+  }
+  if ([...toolUseIds].some(id => !toolResultIds.has(id))) {
+    return { entries, removedBlockCount: 0 }
+  }
+
+  let removedBlockCount = 0
+  const prunedEntries = entries.flatMap(entry => {
+    const cloned = JSON.parse(JSON.stringify(entry)) as SessionStoreEntry
+    const message = messageRecord(cloned)
+    if (message?.role !== 'assistant' || !Array.isArray(message.content)) return [cloned]
+    const content = contentBlocks(message).filter(block => {
+      const shouldRemove = block.type === 'thinking' || block.type === 'redacted_thinking'
+      if (shouldRemove) removedBlockCount += 1
+      return !shouldRemove
+    })
+    if (content.length === 0) return []
+    message.content = content
+    return [cloned]
+  })
+  return { entries: prunedEntries, removedBlockCount }
 }
 
 function isPrimaryUserEntry(entry: SessionStoreEntry): boolean {
@@ -670,13 +719,23 @@ async function createRevisionSeedFromEntries(
   const nextSessionId = randomUUID()
   const selectedEntries: SessionStoreEntry[] = [...prefix]
   const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
+  const latestRawDay = [...new Set(rawTurns.map(turn => turn.chat_day || '').filter(Boolean))]
+    .sort()
+    .at(-1) || ''
   let retainedEnvelopeCount = 0
   let bodyRestoredTurnCount = 0
+  let thinkingPrunedBlockCount = 0
   for (const turn of [...rawTurns].sort((a, b) => a.id - b.id)) {
     const envelope = aligned.get(turn.id)
     if (envelope) {
       retainedEnvelopeCount += 1
-      selectedEntries.push(...envelope.entries)
+      if (turn.chat_day && turn.chat_day !== latestRawDay) {
+        const pruned = pruneCompletedThinking(envelope.entries)
+        thinkingPrunedBlockCount += pruned.removedBlockCount
+        selectedEntries.push(...pruned.entries)
+      } else {
+        selectedEntries.push(...envelope.entries)
+      }
     } else {
       if (requiredFullRawDays.has(turn.chat_day || '')) {
         throw new Error(`旧滚动 transcript 缺少仍为 raw 的完整轮次：${turn.chat_day || '未知日期'}，已停止本轮`)
@@ -706,6 +765,7 @@ async function createRevisionSeedFromEntries(
       sourceEntryCount: sourceEntries.length,
       retainedEnvelopeCount,
       bodyRestoredTurnCount,
+      thinkingPrunedBlockCount,
     }),
   }
 }

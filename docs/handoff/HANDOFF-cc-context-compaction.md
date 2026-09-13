@@ -160,3 +160,12 @@
 - 同 revision 冷恢复时，若专用 RollingSeedStore 不存在，Dashboard 会先用 SDK 官方 `importSessionToStore()` 原样导入同一 `cc_session_id` 的默认 transcript，并以 `legacy_transcript_recovery` 来源落入专用 store；不按 Haven 日期重组，不删除 thinking、召回或工具链。专用 store 与默认 transcript 均不存在时本轮直接失败，禁止再次用 Haven user/assistant 正文静默降级。
 - 已经在 01:35 前从该主窗当前 transcript 消失的隐藏召回无法由 Haven 反向恢复；本修复保护现存 transcript 和后续窗口。真实复验应在部署前记录审计 entry/召回/工具数量，部署后发一轮，日志应为 `storeSource=persisted`；若触发兼容补回则为 `legacy_transcript_recovery` 且 `bodyRestoredTurnCount=0`。两份源都不存在时应明确报错，数量不得悄悄减少。
 - 自动化验证：新增 `new_seed` 预落盘、同 revision 默认 transcript 原样恢复、双源缺失 fail closed 测试；Dashboard 全量 `278` 通过、`1` 跳过，相关运行时/滚动定向 `43` 项通过，production build、定向 ESLint 与 `git diff --check` 通过。未调用模型或额外 Context 分析；daily rolling 手动和 05:30 自动 Context GC 继续硬禁，固定窗口未改。
+
+### 13.4 2026-09-13 已实现：正文恢复时间戳与旧 thinking 精简
+
+- `body_restored` 不再只写 Haven user/assistant 正文。普通 user entry 现在复用正常实时消息的 `beijingRuntimeContext()`，把 Haven `created_at` 转成同样的 `[北京时间 YYYY-MM-DD HH:mm 周X]` 并放在正文尾部；Claude 看不到“恢复”提示，内部 `body_restored` 标记继续只供审计。
+- Haven 中 assistant-only 的 `agent_wake` 仍按隐藏 user trigger → assistant 还原；隐藏 `<agent_wake/>` 输入同样带正常尾部时间戳，优先使用 `raw_json.agent_wake.at`，缺失或无效时退回该 turn 的 `created_at`。
+- 每次 fixed→rolling 或 daily→daily 生成新 revision seed 时，只保留最新一个实际有消息的 raw `chat_day` 的 `thinking` / `redacted_thinking`。更早 raw 日期会删除已完成轮次里的 thinking，但保留 user/assistant 正文、动态召回、`tool_use`、`tool_result` 和顺序；若某轮存在没有对应 `tool_result` 的工具调用，该轮 thinking 不清理。
+- `raw_json.rolling_seed.thinkingPrunedBlockCount` 记录本次删除的 thinking block 数，工作台现有“最近一次重建凭据”可直接复核；同 revision 冷恢复不再次清理，只有用户保存产生新 revision 时执行。
+- 自动化验证：滚动定向测试 `18` 项通过，Dashboard 全量 `281` 通过、`1` 跳过，改动文件定向 ESLint、production build 与 `git diff --check` 通过。未调用模型或额外 Context 分析；固定窗口和 daily rolling Context GC 门禁均未修改。
+- 上线后真实验收：先记录一个多 raw 日期窗口的审计 thinking/tool 数，修改最早日期并发下一句；确认重建凭据的 `thinkingPrunedBlockCount` 大于零、最新 raw 日仍有 thinking、较早 raw 日无 thinking、工具调用/结果顺序不变。再把已退出日期切回 raw，确认恢复 user 消息尾部只有正常北京时间戳且没有恢复提示；含主动消息的日期还应确认隐藏 `<agent_wake/>` 后时间戳来自其 wake 时间。

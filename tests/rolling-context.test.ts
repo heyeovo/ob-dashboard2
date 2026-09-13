@@ -69,7 +69,9 @@ describe('daily rolling context', () => {
     const seed = createRollingHistorySeed(history, { cwd: 'C:/workspace', fallbackModel: 'claude' })
     expect(history.map(turn => turn.id)).toEqual([3])
     expect(seed?.entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
-    expect((seed?.entries[0].message as { content: string }).content).toBe('今天的原话')
+    expect((seed?.entries[0].message as { content: string }).content).toBe(
+      '今天的原话\n\n[北京时间 2026-09-11 20:00 周五]',
+    )
     expect((seed?.entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('今天的回应')
     expect(seed?.entries[0]).toMatchObject({
       type: 'user',
@@ -109,16 +111,30 @@ describe('daily rolling context', () => {
     const entries = buildRollingTranscriptEntries([{
       ...turns[0],
       user_text: '', assistant_text: '忽然想告诉你一件事', turn_kind: 'agent_wake',
-      raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule', reason: '想起这件事' } }),
+      raw_json: JSON.stringify({
+        agent_wake: { cause: 'agent_schedule', reason: '想起这件事', at: '2026-09-11T03:04:00Z' },
+      }),
     }], {
       sessionId: '11111111-1111-4111-8111-111111111111',
       cwd: 'C:/workspace', fallbackModel: 'claude',
     })
     expect(entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
     expect((entries[0].message as { content: string }).content).toBe(
-      '<agent_wake cause="agent_schedule" reason="想起这件事"/>',
+      '<agent_wake cause="agent_schedule" reason="想起这件事"/>\n\n[北京时间 2026-09-11 11:04 周五]',
     )
     expect((entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('忽然想告诉你一件事')
+
+    const fallbackEntries = buildRollingTranscriptEntries([{
+      ...turns[0],
+      user_text: '', assistant_text: '旧主动消息', turn_kind: 'agent_wake',
+      raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule', at: 'invalid' } }),
+    }], {
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      cwd: 'C:/workspace', fallbackModel: 'claude',
+    })
+    expect((fallbackEntries[0].message as { content: string }).content).toContain(
+      '[北京时间 2026-09-11 20:00 周五]',
+    )
   })
 
   it('keeps a rolling transcript available after the in-memory store is replaced', async () => {
@@ -143,9 +159,9 @@ describe('daily rolling context', () => {
       const audit = await inspectRollingHistoryTranscript(seed.resumeFrom, { storeRoot })
       expect(audit?.entryCount).toBe(4)
       expect(audit?.messages.map(message => [message.role, message.content])).toEqual([
-        ['user', '今天的原话'],
+        ['user', '今天的原话\n\n[北京时间 2026-09-11 20:00 周五]'],
         ['assistant', '今天的回应'],
-        ['user', '部署前最后一句'],
+        ['user', '部署前最后一句\n\n[北京时间 2026-09-11 20:00 周五]'],
         ['assistant', '今天的回应'],
       ])
       expect(audit?.messages.every(message => !message.containsRollingWindowContext)).toBe(true)
@@ -167,6 +183,13 @@ describe('daily rolling context', () => {
       const source = createRollingHistorySeed(sourceTurns.slice(0, 4), {
         cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
       })!
+      for (const [index, entry] of source.entries.entries()) {
+        const message = entry.message as { role: string; content: Array<Record<string, unknown>> }
+        if (message.role !== 'assistant' || !Array.isArray(message.content)) continue
+        message.content.unshift({
+          type: 'thinking', thinking: `较早日期 thinking ${Math.floor(index / 2) + 1}`, signature: `sig-${index}`,
+        })
+      }
       const toolUseId = 'toolu_keep_me'
       await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
         {
@@ -175,7 +198,10 @@ describe('daily rolling context', () => {
         },
         {
           type: 'assistant', uuid: 'native-assistant-tool', parentUuid: 'native-user-2', sessionId: source.resumeFrom,
-          message: { role: 'assistant', content: [{ type: 'tool_use', id: toolUseId, name: 'search_chat', input: { query: '旧事' } }] },
+          message: { role: 'assistant', content: [
+            { type: 'thinking', thinking: '最新日期 thinking', signature: 'sig-latest' },
+            { type: 'tool_use', id: toolUseId, name: 'search_chat', input: { query: '旧事' } },
+          ] },
         },
         {
           type: 'user', uuid: 'native-tool-result', parentUuid: 'native-assistant-tool', sessionId: source.resumeFrom,
@@ -183,7 +209,10 @@ describe('daily rolling context', () => {
         },
         {
           type: 'assistant', uuid: 'native-assistant-final', parentUuid: 'native-tool-result', sessionId: source.resumeFrom,
-          message: { role: 'assistant', content: [{ type: 'text', text: '第五天回复' }] },
+          message: { role: 'assistant', content: [
+            { type: 'redacted_thinking', data: '最新日期加密 thinking' },
+            { type: 'text', text: '第五天回复' },
+          ] },
         },
       ])
 
@@ -201,11 +230,17 @@ describe('daily rolling context', () => {
         .toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'])
       expect(JSON.stringify(revised?.entries[7])).toContain(toolUseId)
       expect(JSON.stringify(revised?.entries[8])).toContain('完整工具结果')
+      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 2')
+      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 3')
+      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 4')
+      expect(JSON.stringify(revised?.entries)).toContain('最新日期 thinking')
+      expect(JSON.stringify(revised?.entries)).toContain('最新日期加密 thinking')
       expect(revised?.diagnostic).toMatchObject({
         sourceSessionId: source.resumeFrom,
         sourceEntryCount: 12,
         retainedEnvelopeCount: 4,
         bodyRestoredTurnCount: 0,
+        thinkingPrunedBlockCount: 3,
         toolUseCount: 1,
         toolResultCount: 1,
         memoryRecallCount: 1,
@@ -216,6 +251,45 @@ describe('daily rolling context', () => {
       expect(audit?.messages.find(message => message.blockTypes.includes('tool_use'))?.toolNames).toEqual(['search_chat'])
       expect(audit?.messages.find(message => message.blockTypes.includes('tool_result'))?.content).toContain('完整工具结果')
       expect(audit?.messages.some(message => message.containsMemoryRecall)).toBe(true)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps thinking when an older envelope has an unmatched tool call', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unfinished-tool-'))
+    const olderTurn = {
+      ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-10',
+      user_text: '较早问题', assistant_text: '较早回答',
+    } as HavenTurn
+    const latestTurn = {
+      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-11',
+      user_text: '最新问题', assistant_text: '最新回答',
+    } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([olderTurn, latestTurn], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      const olderAssistant = source.entries[1].message as {
+        role: string
+        content: Array<Record<string, unknown>>
+      }
+      olderAssistant.content = [
+        { type: 'thinking', thinking: '不能清理的 thinking', signature: 'sig-unfinished' },
+        { type: 'tool_use', id: 'toolu_unfinished', name: 'search_chat', input: { query: '未完成' } },
+        ...olderAssistant.content,
+      ]
+      await materializeRollingHistorySeed(source)
+
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [olderTurn, latestTurn], [olderTurn, latestTurn],
+        {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [olderTurn.chat_day, latestTurn.chat_day],
+        },
+      )
+      expect(JSON.stringify(revised?.entries)).toContain('不能清理的 thinking')
+      expect(revised?.diagnostic?.thinkingPrunedBlockCount).toBe(0)
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }
@@ -248,6 +322,9 @@ describe('daily rolling context', () => {
       const restoredEntries = revised?.entries.filter(entry => entry.ob2HavenTurnId === 2) || []
       expect(restoredEntries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
       expect(restoredEntries.every(entry => entry.ob2RollingFidelity === 'body_restored')).toBe(true)
+      expect((restoredEntries[0].message as { content: string }).content).toBe(
+        '重新加入的旧问题\n\n[北京时间 2026-09-11 20:00 周五]',
+      )
       expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_use"')
       expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_result"')
     } finally {

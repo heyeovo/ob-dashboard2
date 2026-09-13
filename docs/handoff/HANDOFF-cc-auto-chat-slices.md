@@ -510,3 +510,11 @@ Dashboard：
 - 召回透镜改造。
 - 自动切片正式 Context 注入。
 - 未展示额度估算前执行历史 backfill，或超出主滚动窗口最近 14 个有聊天日的首次回填。
+
+## 十六、2026-09-13 正式日回顾解耦修复
+
+- 阶段二把正式 04:30 日回顾和页面手动生成提前接入 `ConversationSliceEngine.generate_daily_bundle()`，但 Dashboard Claude Pro runner 对 `daily_review` 仍返回普通正文；切片引擎把正文强制解析为 JSON，线上因此出现 `slice model output is not valid JSON`。
+- 用户确认自动切片尚未完成。本次 Haven 修复把定时和手动日回顾恢复为直接调用 `DailyReviewEngine.generate()`；每周轨迹及其既有结构化输出不改。
+- 切片数据库、引擎、检查页、估算、历史任务、人工重切和显式运行入口全部保留。`raw_exit` 仍可入队，但持久 scheduler 暂不自动消费 `raw_exit` / `slice_recovery`，避免未完成切片继续消耗 Claude Pro 额度或影响正式自动化。
+- 下一次继续自动切片时，只在本 handoff 范围内补齐明确的结构化输出契约、独立错误与额度控制、真实小范围验收；未经再次确认不得把切片成败重新绑定到日回顾，也不得扩散到召回或正式 Context 注入。
+- 验收：页面手动生成一个缺少切片的日期，应得到普通日回顾正文且不出现 slice JSON 错误；下一次 04:30 日回顾应独立成功；未人工点击运行时，queued 切片任务不应产生模型调用。
