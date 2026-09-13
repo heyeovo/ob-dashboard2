@@ -25,6 +25,7 @@ import {
   assertRequiredRollingRevisionSeed,
   assertFixedMigrationSeed,
   assertRollingResumeRecovered,
+  assertRollingSeedAvailable,
   materializeRollingHistorySeed,
   openRollingHistoryResume,
   type RollingSeedDiagnostic,
@@ -488,7 +489,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       ? openRollingHistoryResume(input.resumeHint)
       : null
     // 旧版的内存 store 会留下一个 Haven resume id，却没有跨部署 transcript 文件。
-    // 找不到持久副本时不要把错误 id 交给 SDK，直接用 Haven 原文重建新 seed。
+    // 找不到持久副本时只能尝试从 SDK 原生 transcript 恢复；不得静默改用 Haven 正文。
     const effectiveResumeHint = isRolling
       ? persistedRollingResume?.resumeFrom || ''
       : input.resumeHint || ''
@@ -533,12 +534,20 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         revisionSeed,
       )
     }
-    const historySeed = shouldPrepareHistorySeed && isRolling
-      ? persistedRollingResume || revisionSeed || recoveredRollingResume || createRollingHistorySeed(rollingHistory, {
-        cwd: config.cwd,
-        fallbackModel: config.sdkModel || config.model,
-      })
+    const confirmedBodySeed = shouldPrepareHistorySeed && isRolling && config.allowRollingBodySeed
+      ? createRollingHistorySeed(rollingHistory, {
+          cwd: config.cwd,
+          fallbackModel: config.sdkModel || config.model,
+        })
       : null
+    const historySeed = shouldPrepareHistorySeed && isRolling
+      ? persistedRollingResume || revisionSeed || recoveredRollingResume || confirmedBodySeed
+      : null
+    assertRollingSeedAvailable(
+      shouldPrepareHistorySeed && isRolling,
+      rollingHistory.length,
+      historySeed,
+    )
     await materializeRollingHistorySeed(historySeed)
     rollingSeedDiagnostic = historySeed?.diagnostic ? {
       ...historySeed.diagnostic,

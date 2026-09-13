@@ -82,6 +82,9 @@ export type HavenConversationSession = {
     provider_id?: unknown
     model?: unknown
     cc_session_id?: unknown
+    previous_cc_session_id?: unknown
+    previous_context_revision?: unknown
+    previous_seen_round_id?: unknown
     seen_round_id?: unknown
     context_revision?: unknown
   }>

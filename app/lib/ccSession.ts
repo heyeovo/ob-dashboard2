@@ -13,7 +13,9 @@
 // 实现方式：streaming input（prompt 传 AsyncIterable<SDKUserMessage>）。一个 query()
 // 从会话第一句活到闲置回收，中间每句话往那个 iterable 里 push 一条 user 消息。
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import {
   query,
   type Query,
@@ -165,6 +167,8 @@ type LiveSession = {
   busy: boolean
   /** 保存 MCP 时若这轮还在生成，结果边界一到回收 query，下一句话用新前缀 resume。 */
   pendingMcpRestart: boolean
+  /** 这个 subscription query 启动时使用的 OAuth 文件版本；不包含凭证正文。 */
+  credentialVersion: string
   idleTimer: ReturnType<typeof setTimeout> | null
 }
 
@@ -415,6 +419,18 @@ export type EnsureSessionInput = {
   systemPromptKey: string
 }
 
+function subscriptionCredentialVersion(): string {
+  const homeDir = process.env.USERPROFILE || process.env.HOME || '.'
+  const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(homeDir, '.claude')
+  try {
+    return createHash('sha256')
+      .update(readFileSync(path.join(configDir, '.credentials.json')))
+      .digest('hex')
+  } catch {
+    return 'missing'
+  }
+}
+
 /**
  * 只有同一份 context revision 才能恢复已保存的 Claude session。
  * 滚动窗口保存新三态后 revision 会递增，因此首轮重建 seed，后续重启则继续
@@ -437,12 +453,23 @@ export function ccResumeHintForContext(input: {
 /** 拿到（或新建）一个活着的会话。已有的直接复用，不重付缓存。 */
 export function ensureSession(input: EnsureSessionInput): LiveSession {
   const resumeKey = input.resumeKey || input.sessionId
+  const credentialVersion = input.boot.credKind === 'subscription'
+    ? subscriptionCredentialVersion()
+    : ''
   let existing = registry.get(input.sessionId)
   if (existing && existing.resumeKey !== resumeKey && !existing.busy) {
     dropSession(input.sessionId)
     existing = undefined
   }
   if (existing && existing.systemPromptKey !== input.systemPromptKey && !existing.busy) {
+    dropSession(input.sessionId)
+    existing = undefined
+  }
+  if (existing
+    && existing.boot.credKind === 'subscription'
+    && existing.credentialVersion !== credentialVersion
+    && !existing.busy) {
+    if (existing.ccSessionId) rememberResumePoint(existing.resumeKey, existing.ccSessionId)
     dropSession(input.sessionId)
     existing = undefined
   }
@@ -504,6 +531,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     pendingCompactions: [],
     busy: false,
     pendingMcpRestart: false,
+    credentialVersion,
     idleTimer: null,
   }
   registry.set(input.sessionId, live)

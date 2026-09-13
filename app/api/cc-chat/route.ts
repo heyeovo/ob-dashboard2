@@ -369,6 +369,9 @@ async function loadTurnInputs(body: ChatBody) {
     rollingPreviousStrategy,
     rollingRequiredFullRawDays,
     allowFixedBodyRestore,
+    allowRollingBodySeed: rollingRevisionChanged
+      && rollingPreviousStrategy === 'fixed_window'
+      && allowFixedBodyRestore,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),

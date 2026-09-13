@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto'
+import { open, readFile, stat, unlink, utimes } from 'node:fs/promises'
+import path from 'node:path'
+
 export type SessionTurnPriority = 'foreground' | 'background'
 
 export type BackgroundTurnDeferredReason =
@@ -33,6 +37,74 @@ const subscriptionQueue: SessionTurnQueue =
     foregroundWaiting: 0,
     tail: Promise.resolve(),
   })
+
+const SUBSCRIPTION_LOCK_FILE = 'ob2-subscription-turn.lock'
+const SUBSCRIPTION_LOCK_STALE_MS = 30 * 60 * 1000
+
+function subscriptionLockPath(): string {
+  const testRoot = process.env.OB2_TEST_SUBSCRIPTION_LOCK_DIR?.trim()
+  if (testRoot) return path.join(/*turbopackIgnore: true*/ testRoot, SUBSCRIPTION_LOCK_FILE)
+  if (process.env.NODE_ENV === 'test') return ''
+  const configRoot = process.env.CLAUDE_CONFIG_DIR?.trim()
+  return configRoot ? path.join(/*turbopackIgnore: true*/ configRoot, SUBSCRIPTION_LOCK_FILE) : ''
+}
+
+async function acquireSubscriptionFileLock(wait: boolean): Promise<(() => Promise<void>) | null> {
+  const lockPath = subscriptionLockPath()
+  if (!lockPath) return async () => undefined
+  const token = `${process.pid}:${randomUUID()}`
+
+  for (;;) {
+    try {
+      const handle = await open(/*turbopackIgnore: true*/ lockPath, 'wx', 0o600)
+      try {
+        await handle.writeFile(token, 'utf8')
+      } finally {
+        await handle.close()
+      }
+      const heartbeat = setInterval(() => {
+        const now = new Date()
+        void utimes(/*turbopackIgnore: true*/ lockPath, now, now).catch(() => undefined)
+      }, 30_000)
+      heartbeat.unref?.()
+      return async () => {
+        clearInterval(heartbeat)
+        try {
+          if ((await readFile(/*turbopackIgnore: true*/ lockPath, 'utf8')).trim() === token) {
+            await unlink(/*turbopackIgnore: true*/ lockPath)
+          }
+        } catch {
+          // 容器强制退出或锁已被清理时，无需在收尾再失败。
+        }
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST') throw error
+      try {
+        const info = await stat(/*turbopackIgnore: true*/ lockPath)
+        if (Date.now() - info.mtimeMs > SUBSCRIPTION_LOCK_STALE_MS) {
+          await unlink(/*turbopackIgnore: true*/ lockPath)
+          continue
+        }
+      } catch (staleError) {
+        if ((staleError as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw staleError
+      }
+      if (!wait) return null
+      await new Promise<void>(resolve => setTimeout(resolve, 100))
+    }
+  }
+}
+
+async function runWithSubscriptionFileLock<T>(run: () => Promise<T>): Promise<T> {
+  if (!subscriptionLockPath()) return run()
+  const release = await acquireSubscriptionFileLock(true)
+  try {
+    return await run()
+  } finally {
+    await release?.()
+  }
+}
 
 async function runForegroundQueue<T>(queue: SessionTurnQueue, run: () => Promise<T>): Promise<T> {
   queue.foregroundWaiting += 1
@@ -75,13 +147,13 @@ export async function runForegroundSessionTurn<T>(
   const queue = queueFor(sessionId)
   const runForSession = () => runForegroundQueue(queue, run).finally(() => cleanup(sessionId, queue))
   return options.subscription
-    ? runForegroundQueue(subscriptionQueue, runForSession)
+    ? runForegroundQueue(subscriptionQueue, () => runWithSubscriptionFileLock(runForSession))
     : runForSession()
 }
 
 /** Serialize a non-chat Claude Pro job with foreground chat turns. */
 export function runForegroundSubscriptionTurn<T>(run: () => Promise<T>): Promise<T> {
-  return runForegroundQueue(subscriptionQueue, run)
+  return runForegroundQueue(subscriptionQueue, () => runWithSubscriptionFileLock(run))
 }
 
 /**
@@ -95,11 +167,16 @@ export async function tryRunBackgroundSessionTurn<T>(
   options: SessionTurnOptions = {},
 ): Promise<BackgroundTurnResult<T>> {
   let releaseSubscription: () => void = () => {}
+  let releaseSubscriptionFile: (() => Promise<void>) | null = null
   if (options.subscription) {
     if (subscriptionQueue.foregroundWaiting > 0) {
       return { status: 'deferred', reason: 'foreground_waiting' }
     }
     if (subscriptionQueue.active) return { status: 'deferred', reason: 'turn_running' }
+    if (subscriptionLockPath()) {
+      releaseSubscriptionFile = await acquireSubscriptionFileLock(false)
+      if (!releaseSubscriptionFile) return { status: 'deferred', reason: 'turn_running' }
+    }
     subscriptionQueue.tail = new Promise<void>(resolve => { releaseSubscription = resolve })
     subscriptionQueue.active = true
   }
@@ -123,6 +200,7 @@ export async function tryRunBackgroundSessionTurn<T>(
     if (options.subscription) {
       subscriptionQueue.active = false
       releaseSubscription()
+      await releaseSubscriptionFile?.()
     }
   }
 }

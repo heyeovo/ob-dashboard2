@@ -100,6 +100,15 @@ export function assertRollingResumeRecovered(
   throw new Error('滚动窗口的完整 transcript 存档不存在，已停止本轮，避免静默退化为仅有 user/assistant 正文')
 }
 
+export function assertRollingSeedAvailable(
+  required: boolean,
+  rawTurnCount: number,
+  seed: RollingHistorySeed | null,
+): void {
+  if (!required || rawTurnCount === 0 || seed) return
+  throw new Error('滚动窗口没有可用的完整 transcript，已停止本轮，禁止静默改用 Haven 正文新建会话')
+}
+
 // 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.220 对应。
 const CLAUDE_CODE_VERSION = '2.1.220'
 

@@ -15,6 +15,8 @@ import {
 import type { CredMode } from '@/app/lib/ccEnv'
 import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
+import { ccResumeHintForContext } from '@/app/lib/ccSession'
+import { rollingRevisionRequiresSource } from '@/app/lib/cc/rollingHistory'
 
 /** Restore the single last-active native CC lane without any browser state. */
 export async function loadBackgroundTurnInputs(sessionId: string) {
@@ -60,9 +62,20 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   const laneResumeHint = String(lane?.cc_session_id || '').trim()
   const isRolling = session.rolling_context?.strategy === 'daily_rolling'
   const laneContextRevision = Number((lane as Record<string, unknown> | undefined)?.context_revision || 0)
-  const resumeHint = !isRolling && laneContextRevision === (session.context_revision || 0)
-    ? laneResumeHint
-    : ''
+  const contextRevision = session.context_revision || 0
+  const rollingRevisionChanged = isRolling && laneContextRevision !== contextRevision
+  const rollingSourceResumeFrom = rollingRevisionChanged ? laneResumeHint : ''
+  const rollingPreviousStrategy = String(session.rolling_context?.previous_strategy || '').trim()
+  const requireRollingSource = rollingRevisionRequiresSource(
+    isRolling, laneContextRevision, contextRevision, rollingPreviousStrategy,
+  )
+  const resumeHint = ccResumeHintForContext({
+    persistedHint: laneResumeHint,
+    legacyHint: '',
+    laneContextRevision,
+    contextRevision,
+    isRolling,
+  })
   if (!lane || (!resumeHint && !isRolling)) throw new Error(`最后活跃 CC lane 没有可恢复的 resume id：${laneId}`)
 
   const [mcpConfig, permissions, readDirs, writeDirs] = await Promise.all([
@@ -81,7 +94,17 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     sessionId,
     session,
     sessionResult.contextDays,
+    { includeAllTurns: Boolean(rollingSourceResumeFrom) },
   )
+  const previousDayModes = session.rolling_context?.previous_day_modes || {}
+  const allowFixedBodyRestore = session.rolling_context?.allow_fixed_body_restore === true
+  const rollingRequiredFullRawDays = [...new Set(rolling.history
+    .map(turn => turn.chat_day || '')
+    .filter(day => {
+      if (!day || !rollingRevisionChanged) return false
+      if (rollingPreviousStrategy === 'fixed_window') return !allowFixedBodyRestore
+      return (previousDayModes[day] || 'raw') === 'raw'
+    }))]
   sessionResult = {
     ...sessionResult,
     bucketExclusionIds: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])],
@@ -95,8 +118,17 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   const config: TurnConfig = {
     sessionId,
     mode: session.mode,
-    contextRevision: session.context_revision || 0,
+    contextRevision,
     rollingHistory: rolling.history,
+    rollingSourceResumeFrom: rollingSourceResumeFrom || undefined,
+    rollingAllHistory: rollingSourceResumeFrom ? rolling.allTurns : undefined,
+    requireRollingSource,
+    rollingPreviousStrategy,
+    rollingRequiredFullRawDays,
+    allowFixedBodyRestore,
+    allowRollingBodySeed: rollingRevisionChanged
+      && rollingPreviousStrategy === 'fixed_window'
+      && allowFixedBodyRestore,
     personaAppend,
     systemPromptKey: '',
     mcpDefinitionKey: JSON.stringify({

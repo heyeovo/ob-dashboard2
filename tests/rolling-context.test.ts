@@ -7,6 +7,7 @@ import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/c
 import {
   assertFixedMigrationSeed,
   assertRollingResumeRecovered,
+  assertRollingSeedAvailable,
   assertRequiredRollingRevisionSeed,
   buildRollingTranscriptEntries,
   createFixedTranscriptMigrationSeed,
@@ -295,6 +296,100 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('preserves recall, tools and images across two revisions and a disk reopen', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-lifecycle-'))
+    const firstTurn = {
+      ...turns[0], id: 11, round_id: 11, chat_day: '2026-09-12',
+      user_text: '第一次查询', assistant_text: '第一次完成',
+    } as HavenTurn
+    const secondTurn = {
+      ...turns[0], id: 12, round_id: 12, chat_day: '2026-09-13',
+      user_text: '看这张图', assistant_text: '第二次完成',
+    } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([firstTurn], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      const firstUser = source.entries[0].message as { role: string; content: unknown }
+      firstUser.content = '<记忆召回>\n<memory_card>第一次召回</memory_card>\n</记忆召回>\n\n第一次查询'
+      const firstAssistant = source.entries[1].message as { role: string; content: unknown }
+      firstAssistant.content = [
+        { type: 'tool_use', id: 'toolu_first', name: 'search_chat', input: { query: '第一次' } },
+        { type: 'text', text: '第一次完成' },
+      ]
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [{
+          type: 'user', uuid: 'first-result', parentUuid: source.entries[1].uuid,
+          sessionId: source.resumeFrom,
+          message: { role: 'user', content: [{
+            type: 'tool_result', tool_use_id: 'toolu_first', content: '第一次工具结果',
+          }] },
+        }],
+      )
+
+      const revisionOne = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [firstTurn], [firstTurn], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [firstTurn.chat_day],
+        },
+      )
+      await materializeRollingHistorySeed(revisionOne)
+
+      await revisionOne!.sessionStore.append(
+        { projectKey: '', sessionId: revisionOne!.resumeFrom },
+        [
+          {
+            type: 'user', uuid: 'second-user', parentUuid: revisionOne!.entries.at(-1)?.uuid || null,
+            sessionId: revisionOne!.resumeFrom,
+            message: { role: 'user', content: [
+              { type: 'text', text: '<记忆召回>\n<memory_card>第二次召回</memory_card>\n</记忆召回>\n\n看这张图' },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aW1hZ2U=' } },
+            ] },
+          },
+          {
+            type: 'assistant', uuid: 'second-tool', parentUuid: 'second-user',
+            sessionId: revisionOne!.resumeFrom,
+            message: { role: 'assistant', content: [
+              { type: 'tool_use', id: 'toolu_second', name: 'breath', input: { query: '图片' } },
+            ] },
+          },
+          {
+            type: 'user', uuid: 'second-result', parentUuid: 'second-tool',
+            sessionId: revisionOne!.resumeFrom,
+            message: { role: 'user', content: [{
+              type: 'tool_result', tool_use_id: 'toolu_second', content: '第二次工具结果',
+            }] },
+          },
+          {
+            type: 'assistant', uuid: 'second-final', parentUuid: 'second-result',
+            sessionId: revisionOne!.resumeFrom,
+            message: { role: 'assistant', content: [{ type: 'text', text: '第二次完成' }] },
+          },
+        ],
+      )
+
+      const revisionTwo = await createRollingHistoryRevisionSeed(
+        revisionOne!.resumeFrom, [firstTurn, secondTurn], [firstTurn, secondTurn], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [firstTurn.chat_day, secondTurn.chat_day],
+        },
+      )
+      await materializeRollingHistorySeed(revisionTwo)
+
+      const reopened = openRollingHistoryResume(revisionTwo!.resumeFrom, { storeRoot })
+      expect(reopened).not.toBeNull()
+      const audit = await inspectRollingHistoryTranscript(reopened!.resumeFrom, { storeRoot })
+      expect(audit?.messages.filter(message => message.containsMemoryRecall)).toHaveLength(2)
+      expect(audit?.messages.flatMap(message => message.toolNames)).toEqual(['search_chat', 'breath'])
+      expect(audit?.messages.filter(message => message.blockTypes.includes('tool_result'))).toHaveLength(2)
+      expect(audit?.messages.some(message => message.blockTypes.includes('image'))).toBe(true)
+      expect(audit?.messages.some(message => message.content.includes('第二次工具结果'))).toBe(true)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('restores a newly re-added raw day from Haven body text only and marks the downgrade', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-restore-'))
     const sourceTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-11' } as HavenTurn
@@ -499,6 +594,15 @@ describe('daily rolling context', () => {
     expect(() => assertRollingResumeRecovered(true, null, createRollingHistorySeed(turns, {
       cwd: 'C:/workspace', fallbackModel: 'claude',
     }))).not.toThrow()
+  })
+
+  it('never creates a body-only rolling seed unless the transition explicitly allows it', () => {
+    expect(() => assertRollingSeedAvailable(true, turns.length, null))
+      .toThrow('禁止静默改用 Haven 正文')
+    expect(() => assertRollingSeedAvailable(true, turns.length, createRollingHistorySeed(turns, {
+      cwd: 'C:/workspace', fallbackModel: 'claude',
+    }))).not.toThrow()
+    expect(() => assertRollingSeedAvailable(true, 0, null)).not.toThrow()
   })
 
   it('returns control to the confirmed body fallback when a fixed transcript cannot align', async () => {

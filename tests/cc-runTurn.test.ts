@@ -15,7 +15,7 @@
 // 第 8 条（旧历史无 process 仍能正常展示）在 tests/cc-history.test.ts。
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
@@ -33,6 +33,7 @@ const sdk = vi.hoisted(() => ({
   promptIterators: [] as AsyncIterator<SDKUserMessage>[],
   queryOptions: [] as Array<Record<string, unknown>>,
   usageResult: null as Record<string, unknown> | null,
+  closeCalls: 0,
 }))
 
 vi.mock('@anthropic-ai/claude-agent-sdk', async importOriginal => ({
@@ -48,6 +49,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', async importOriginal => ({
       setModel: async () => undefined,
       applyFlagSettings: async () => undefined,
       setMaxThinkingTokens: async () => undefined,
+      close: () => { sdk.closeCalls += 1 },
       usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => sdk.usageResult,
     }
   },
@@ -295,6 +297,7 @@ beforeEach(async () => {
       seven_day: { utilization: 40, resets_at: '2026-08-29T08:00:00Z' },
     },
   }
+  sdk.closeCalls = 0
   recall.run.mockReset()
   recall.run.mockResolvedValue({
     ok: false,
@@ -371,11 +374,40 @@ afterEach(async () => {
 })
 
 describe('runTurn：普通回复', () => {
+  it('recycles a stale subscription query after the OAuth credential file changes', async () => {
+    const sessionId = 'ob2-test-oauth-recycle'
+    await writeFile(path.join(rollingTestConfigDir, '.credentials.json'), '{"version":1}', 'utf8')
+    const config = makeConfig({ sessionId, cred: 'subscription', laneId: 'subscription' })
+    try {
+      await driveTurn([initMsg('subscription-native'), textDelta('第一轮'), resultMsg()], {
+        sessionId, config,
+      }).promise
+      expect(sdk.queryCalls).toBe(1)
+
+      await writeFile(path.join(rollingTestConfigDir, '.credentials.json'), '{"version":2}', 'utf8')
+      await driveTurn([initMsg('subscription-native'), textDelta('第二轮'), resultMsg()], {
+        sessionId,
+        requestId: 'request-after-credential-refresh',
+        expectedLastRoundId: 1,
+        config,
+      }).promise
+
+      expect(sdk.closeCalls).toBeGreaterThanOrEqual(1)
+      expect(sdk.queryCalls).toBe(2)
+      expect(sdk.queryOptions[1]).toMatchObject({ resume: 'subscription-native' })
+    } finally {
+      dropSession(sessionId)
+    }
+  })
+
   it('cold-starts rolling history through resume/sessionStore and streams only the new user turn', async () => {
     const sessionId = 'ob2-test-rolling-seed'
     const config = makeConfig({
       sessionId,
       contextRevision: 3,
+      rollingPreviousStrategy: 'fixed_window',
+      allowFixedBodyRestore: true,
+      allowRollingBodySeed: true,
       rollingHistory: [
         {
           id: 1, session_id: sessionId, round_id: 1,

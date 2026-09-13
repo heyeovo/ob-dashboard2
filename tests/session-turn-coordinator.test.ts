@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { access, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import {
   resetSessionTurnCoordinatorForTests,
   runForegroundSessionTurn,
   tryRunBackgroundSessionTurn,
 } from '@/app/lib/cc/sessionTurnCoordinator'
 
-afterEach(() => resetSessionTurnCoordinatorForTests())
+afterEach(() => {
+  resetSessionTurnCoordinatorForTests()
+  delete process.env.OB2_TEST_SUBSCRIPTION_LOCK_DIR
+})
 
 describe('SessionTurnCoordinator', () => {
   it('lets an already-running background turn finish, then starts the queued user turn', async () => {
@@ -72,5 +78,19 @@ describe('SessionTurnCoordinator', () => {
     expect(wake).toEqual({ status: 'deferred', reason: 'turn_running' })
     release()
     await foreground
+  })
+
+  it('holds and releases the shared subscription lock around a foreground turn', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'ob2-subscription-lock-'))
+    process.env.OB2_TEST_SUBSCRIPTION_LOCK_DIR = root
+    const lockPath = path.join(root, 'ob2-subscription-turn.lock')
+    try {
+      await runForegroundSessionTurn('s1', async () => {
+        await expect(access(lockPath)).resolves.toBeUndefined()
+      }, { subscription: true })
+      await expect(access(lockPath)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

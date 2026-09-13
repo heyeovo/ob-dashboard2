@@ -115,6 +115,8 @@ export type TurnConfig = {
   rollingRequiredFullRawDays?: string[]
   /** 首次 fixed → rolling 找不到旧原生轮次时，用户是否明确允许正文恢复。 */
   allowFixedBodyRestore?: boolean
+  /** 只有本轮确实是 fixed → rolling 且用户已确认时，才允许从 Haven 正文新建 seed。 */
+  allowRollingBodySeed?: boolean
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */
