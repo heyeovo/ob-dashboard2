@@ -450,6 +450,8 @@ describe('daily rolling context', () => {
         delete entry.ob2HavenTurnId
         delete entry.ob2ChatDay
       }
+      // 原生 transcript 记用户进入时间，Haven created_at 是回答完成后的落库时间。
+      source.entries[2].timestamp = '2026-09-11T12:04:30Z'
       const repeatedUser = source.entries[2].message as { role: string; content: unknown }
       const repeatedUserText = repeatedUser.content as string
       repeatedUser.content = [

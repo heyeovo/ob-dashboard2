@@ -526,10 +526,23 @@ function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boo
   return userMatches && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
 }
 
-function sameTimestamp(left: string, right: string): boolean {
-  const leftTime = new Date(left).getTime()
-  const rightTime = new Date(right).getTime()
-  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime
+function closestCompletedTurnIndex(
+  envelopeTimestamp: string,
+  matches: Array<{ turn: HavenTurn; index: number }>,
+): number | null {
+  const envelopeTime = new Date(envelopeTimestamp).getTime()
+  if (!Number.isFinite(envelopeTime)) return null
+  const ranked = matches
+    .map(match => ({
+      index: match.index,
+      // Haven created_at 是整轮完成落库时间；transcript timestamp 是用户进入时间。
+      delay: new Date(match.turn.created_at).getTime() - envelopeTime,
+    }))
+    .filter(match => Number.isFinite(match.delay) && match.delay >= -1000 && match.delay <= 6 * 60 * 60 * 1000)
+    .sort((a, b) => a.delay - b.delay)
+  if (ranked.length === 0) return null
+  if (ranked.length > 1 && ranked[0].delay === ranked[1].delay) return null
+  return ranked[0].index
 }
 
 function alignEnvelopesToTurns(
@@ -546,10 +559,11 @@ function alignEnvelopesToTurns(
         .filter(({ turn }) => turn.id === envelope.havenTurnId)
         .map(({ index }) => index))
     }
-    const timestampMatches = textMatches
-      .filter(({ turn }) => sameTimestamp(envelope.timestamp, turn.created_at))
-    const selected = timestampMatches.length > 0 ? timestampMatches : textMatches
-    return new Set(selected.map(({ index }) => index))
+    if (textMatches.length > 1) {
+      const closestIndex = closestCompletedTurnIndex(envelope.timestamp, textMatches)
+      if (closestIndex !== null) return new Set([closestIndex])
+    }
+    return new Set(textMatches.map(({ index }) => index))
   })
   const ways = Array.from(
     { length: envelopes.length + 1 },
