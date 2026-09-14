@@ -601,7 +601,10 @@ function alignEnvelopesToTurns(
   return aligned
 }
 
-function cloneForSession(entries: SessionStoreEntry[], sessionId: string): SessionStoreEntry[] {
+export function cloneRollingTranscriptForSession(
+  entries: SessionStoreEntry[],
+  sessionId: string,
+): SessionStoreEntry[] {
   const cloned = entries.map(entry => JSON.parse(JSON.stringify(entry)) as SessionStoreEntry)
   const uuidMap = new Map<string, string>()
   for (const entry of cloned) {
@@ -841,7 +844,7 @@ async function createRevisionSeedFromEntries(
     }
   }
   if (selectedEntries.length === 0) return null
-  const entries = cloneForSession(selectedEntries, nextSessionId)
+  const entries = cloneRollingTranscriptForSession(selectedEntries, nextSessionId)
   return {
     resumeFrom: nextSessionId,
     sessionStore: new RollingSeedStore(nextSessionId, entries, options.storeRoot),
