@@ -575,6 +575,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     live = ensureSession({
       sessionId,
       resumeKey,
+      dashboardInstanceId: DASHBOARD_INSTANCE_ID,
+      contextRevision: config.contextRevision,
+      turnKind,
+      isRolling,
       buildOptions: resumeFrom => buildCcOptions(config, resumeFrom),
       historySeed,
       // 这几项只在**新建**会话时记下 —— 已有会话沿用它启动时那套。
@@ -1035,7 +1039,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             num_turns: msg.num_turns,
             duration_ms: msg.duration_ms,
           })
-          dropSession(sessionId)
+          dropSession(sessionId, 'sdk_result_failed')
           send('error', {
             code: 'upstream_failed',
             message,
@@ -1259,7 +1263,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         // 这一轮已经进入 cc 私有上下文但没能确认写入 Haven。收掉进程，
         // “核对保存状态”若确认未保存，会从最近一轮已保存的 resume 点重新生成，
         // 不把同一句在旧私有上下文里重复追加。
-        dropSession(sessionId)
+        dropSession(sessionId, 'persistence_failed')
         stamp?.('写库失败')
         state.markFailed()
         return { ok: false, error: rec?.error || '对话保存失败', phase: state.current }
@@ -1344,12 +1348,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 下一次发言会永远等不到消息（实测踩过，9.5 测试覆盖）。下次发言会新建
     // 进程、靠 resume 接回上下文，跟原 route.ts 的 catch 行为一致。
     if (err.name === 'AbortError') {
-      dropSession(sessionId)
+      dropSession(sessionId, 'request_aborted')
       state.markCancelled()
       return { ok: false, error: err.message, phase: state.current }
     }
     // 子进程崩了 / 流坏了：这个会话的 iterator 已经不可用，收掉重来
-    dropSession(sessionId)
+    dropSession(sessionId, 'turn_exception')
     send('error', { message: err.message || String(err) })
     state.markFailed()
     return { ok: false, error: err.message || String(err), phase: state.current }

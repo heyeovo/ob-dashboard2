@@ -121,6 +121,12 @@ export type SessionBoot = {
 /** 一个会话在服务端的活体状态。 */
 type LiveSession = {
   sessionId: string
+  /** Dashboard 内用于区分同一窗口不同 query()/CLI 生命周期，不是 Claude session id。 */
+  queryInstanceId: string
+  dashboardInstanceId: string
+  contextRevision: number
+  turnKind: string
+  rollingSessionStore: boolean
   /** Pro / API provider 各自独立的 Claude 原生 session 键。 */
   resumeKey: string
   q: Query
@@ -320,16 +326,19 @@ function createMessageQueue() {
 
 function armIdleTimer(live: LiveSession) {
   if (live.idleTimer) clearTimeout(live.idleTimer)
+  logQueryLifecycle('idle_timer_armed', live, { idle_ttl_ms: IDLE_TTL_MS })
   live.idleTimer = setTimeout(() => {
+    const pendingApproval = hasPending(live.sessionId)
+    logQueryLifecycle('idle_timer_fired', live, { pending_approval: pendingApproval })
     // ⚠️ 有操作还挂着等批准就不能收 —— 那一轮正停在 canUseTool 上等人点按钮，
     // 而批准的等待窗口（30 分钟）比这个闲置时限（10 分钟）长。收掉子进程等于
     // 「你去泡杯茶回来，要批准的东西没了，那一轮也白跑了」。往后顺延接着等。
-    if (hasPending(live.sessionId)) {
+    if (pendingApproval) {
       armIdleTimer(live)
       return
     }
     // 闲置到点就收掉子进程。下次发言会重新起一个（靠 resume 接上下文）。
-    dropSession(live.sessionId)
+    dropSession(live.sessionId, 'idle_ttl')
   }, IDLE_TTL_MS)
   // 别让这个定时器拖住 node 退出
   if (typeof live.idleTimer === 'object' && 'unref' in live.idleTimer) {
@@ -337,24 +346,57 @@ function armIdleTimer(live: LiveSession) {
   }
 }
 
-export function dropSession(sessionId: string) {
+type QueryLifecycleExtra = Record<string, string | number | boolean | null>
+
+function logQueryLifecycle(event: string, live: LiveSession, extra: QueryLifecycleExtra = {}) {
+  const now = Date.now()
+  console.info('[cc-query-lifecycle]', {
+    event,
+    dashboard_instance_id: live.dashboardInstanceId || 'legacy',
+    process_id: process.pid,
+    session_id: live.sessionId,
+    query_instance_id: live.queryInstanceId || 'legacy',
+    cc_session_id: live.ccSessionId || '',
+    resume_key: live.resumeKey,
+    context_revision: Number(live.contextRevision || 0),
+    turn_kind: live.turnKind || 'unknown',
+    credential_fingerprint: String(live.credentialVersion || '').slice(0, 16),
+    cred_kind: live.boot.credKind,
+    rolling_session_store: live.rollingSessionStore === true,
+    created_at: new Date(live.createdAt).toISOString(),
+    last_active_at: new Date(live.lastActiveAt).toISOString(),
+    age_ms: Math.max(0, now - live.createdAt),
+    ...extra,
+  })
+}
+
+export function dropSession(sessionId: string, reason = 'unspecified') {
   const live = registry.get(sessionId)
   if (!live) return
   // 挂着等批准的先全拒掉，不然那些 await 永远不返回，子进程也退不干净
   cancelAllPending(sessionId, '会话已经结束了，这个操作取消。')
   registry.delete(sessionId)
   if (live.idleTimer) clearTimeout(live.idleTimer)
+  let queueClosed = false
+  let queryClosed = false
   try {
     live.close()
+    queueClosed = true
   } catch {
     /* 关闭队列失败无所谓，进程随后自己退 */
   }
   try {
     // Query.close() 才是 SDK 保证会终止底层 Claude CLI 子进程的正式入口。
     live.q.close()
+    queryClosed = true
   } catch {
     /* 同上 */
   }
+  logQueryLifecycle('query_closed', live, {
+    close_reason: reason,
+    queue_closed: queueClosed,
+    query_closed: queryClosed,
+  })
 }
 
 /* ── 用户点「停止」：优雅中断，而不是断开重来 ── */
@@ -398,7 +440,7 @@ export async function stopSession(sessionId: string): Promise<void> {
         timer = setTimeout(() => resolve(false), 15_000)
       }),
     ])
-    if (!ok) dropSession(sessionId)
+    if (!ok) dropSession(sessionId, 'interrupt_timeout')
   } finally {
     if (timer) clearTimeout(timer)
   }
@@ -407,6 +449,10 @@ export async function stopSession(sessionId: string): Promise<void> {
 export type EnsureSessionInput = {
   sessionId: string
   resumeKey?: string
+  dashboardInstanceId?: string
+  contextRevision?: number
+  turnKind?: string
+  isRolling?: boolean
   /** query() 的 options，只在**新建**会话时生效（已有会话沿用建它时的配置） */
   buildOptions: (resumeFrom: string | null) => Options
   /** 滚动窗口冷启动时预置的原生 transcript；已有 live/resume 优先。 */
@@ -458,11 +504,11 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     : ''
   let existing = registry.get(input.sessionId)
   if (existing && existing.resumeKey !== resumeKey && !existing.busy) {
-    dropSession(input.sessionId)
+    dropSession(input.sessionId, 'resume_key_changed')
     existing = undefined
   }
   if (existing && existing.systemPromptKey !== input.systemPromptKey && !existing.busy) {
-    dropSession(input.sessionId)
+    dropSession(input.sessionId, 'system_prompt_changed')
     existing = undefined
   }
   if (existing
@@ -470,11 +516,13 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     && existing.credentialVersion !== credentialVersion
     && !existing.busy) {
     if (existing.ccSessionId) rememberResumePoint(existing.resumeKey, existing.ccSessionId)
-    dropSession(input.sessionId)
+    dropSession(input.sessionId, 'credential_fingerprint_changed')
     existing = undefined
   }
   if (existing) {
     existing.lastActiveAt = Date.now()
+    existing.turnKind = input.turnKind || existing.turnKind
+    logQueryLifecycle('query_reused', existing)
     armIdleTimer(existing)
     return existing
   }
@@ -502,6 +550,11 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
 
   const live: LiveSession = {
     sessionId: input.sessionId,
+    queryInstanceId: randomUUID(),
+    dashboardInstanceId: input.dashboardInstanceId || 'unknown',
+    contextRevision: Math.max(0, Math.trunc(input.contextRevision || 0)),
+    turnKind: input.turnKind || 'unknown',
+    rollingSessionStore: Boolean(input.isRolling && sessionStore),
     resumeKey,
     q,
     push: queue.push,
@@ -535,6 +588,9 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     idleTimer: null,
   }
   registry.set(input.sessionId, live)
+  logQueryLifecycle('query_created', live, {
+    resume_source: useHistorySeed ? 'history_seed' : resumeFrom ? 'remembered_resume' : 'new',
+  })
   armIdleTimer(live)
   return live
 }
@@ -663,7 +719,7 @@ export async function applyMcpServersToLiveSessions(): Promise<CcMcpApplySummary
       summary.queued += 1
       continue
     }
-    dropSession(live.sessionId)
+    dropSession(live.sessionId, 'mcp_config_changed')
     summary.applied += 1
   }
   return summary
@@ -674,7 +730,7 @@ export async function flushPendingMcpServers(sessionId: string): Promise<void> {
   const live = registry.get(sessionId)
   if (!live?.pendingMcpRestart) return
   live.pendingMcpRestart = false
-  dropSession(sessionId)
+  dropSession(sessionId, 'mcp_restart_after_turn')
 }
 
 /** 会话被回收后，记住 claude code 的 session id，下次好 resume 接上。 */
@@ -708,7 +764,7 @@ export function prepareSessionForContextGc(
   if (!live || live.resumeKey !== resumeKey) return { ok: true, error: '' }
   if (live.busy || live.compacting) return { ok: false, error: '当前正在回复或压缩，结束后再减负' }
   rememberResumePoint(resumeKey, live.ccSessionId)
-  dropSession(sessionId)
+  dropSession(sessionId, 'context_gc_prepare')
   return { ok: true, error: '' }
 }
 
@@ -732,7 +788,7 @@ export function prepareSessionForRollingRecovery(
   if (live.busy || live.compacting) return { ok: false, error: '当前正在回复或处理上下文，请结束后再重建' }
   // 显式恢复会替换当前窗口的活跃 lane；先把旧 iterator 按它自己的 key 留作失败回退。
   rememberResumePoint(live.resumeKey, live.ccSessionId)
-  dropSession(sessionId)
+  dropSession(sessionId, 'rolling_recovery_prepare')
   return { ok: true, error: '' }
 }
 
@@ -859,7 +915,7 @@ export async function applyRuntimeSettings(
       // thinking 的新接口只在 query 启动时接受。保留原生 session id，回收空闲
       // query；下一句话按 Haven 已保存的新配置 resume，不丢该线路上下文。
       rememberResumePoint(live.resumeKey, live.ccSessionId)
-      dropSession(sessionId)
+      dropSession(sessionId, 'thinking_setting_changed')
       return { ok: true, error: '' }
     }
     if (patch.model !== undefined && patch.model !== live.model) {
@@ -1055,7 +1111,7 @@ export async function compactSession(sessionId: string): Promise<CompactSessionR
       stats: getSessionStats(sessionId),
     }
   } catch (error) {
-    dropSession(sessionId)
+    dropSession(sessionId, 'manual_compaction_failed')
     return fail((error as Error).message || '手动压缩失败')
   } finally {
     if (timer) clearTimeout(timer)

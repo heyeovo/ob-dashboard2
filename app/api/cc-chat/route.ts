@@ -544,7 +544,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('session_id') || ''
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
-  dropSession(sessionId)
+  dropSession(sessionId, 'manual_delete')
   clearRecallPrefs(sessionId)
   clearWriteDirs(sessionId)
   clearTurnBucket(sessionId)
