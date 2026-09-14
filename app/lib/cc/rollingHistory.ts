@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   importSessionToStore,
@@ -111,8 +111,8 @@ export function assertRollingSeedAvailable(
   throw new Error('滚动窗口没有可用的完整 transcript，已停止本轮，禁止静默改用 Haven 正文新建会话')
 }
 
-// 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.220 对应。
-const CLAUDE_CODE_VERSION = '2.1.220'
+// 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.222 对应。
+const CLAUDE_CODE_VERSION = '2.1.222'
 
 function wakeInput(turn: HavenTurn): string {
   let cause = 'agent_schedule'
@@ -280,6 +280,32 @@ class RollingSeedStore implements SessionStore {
     })
     await rename(temp, file)
     this.initialSessions.delete(storageKey)
+  }
+
+  async replace(sessionId: string, entries: SessionStoreEntry[]): Promise<void> {
+    if (entries.length === 0) throw new Error('滚动 transcript 同步结果为空')
+    const key = { projectKey: '', sessionId }
+    const storageKey = this.key(key)
+    const previous = this.pendingWrites.get(storageKey) || Promise.resolve()
+    const write = previous.then(async () => {
+      const file = this.filePath(key)
+      await mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true, mode: 0o700 })
+      const temp = path.join(
+        /*turbopackIgnore: true*/ path.dirname(file),
+        `.${path.basename(file)}.${randomUUID()}.tmp`,
+      )
+      await writeFile(temp, `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`, {
+        encoding: 'utf8', mode: 0o600,
+      })
+      await rename(temp, file)
+      this.initialSessions.delete(storageKey)
+    })
+    this.pendingWrites.set(storageKey, write)
+    try {
+      await write
+    } finally {
+      if (this.pendingWrites.get(storageKey) === write) this.pendingWrites.delete(storageKey)
+    }
   }
 
   async append(key: SessionKey, entries: SessionStoreEntry[]): Promise<void> {
@@ -718,6 +744,74 @@ export async function materializeRollingHistorySeed(seed: RollingHistorySeed | n
   }
 }
 
+function claudeConfigRoot(override?: string): string {
+  if (override) return override
+  const homeDir = process.env.USERPROFILE || process.env.HOME || '.'
+  return process.env.CLAUDE_CONFIG_DIR?.trim() || `${homeDir}${path.sep}.claude`
+}
+
+async function nativeClaudeSessionFile(
+  sessionId: string,
+  cwd: string,
+  claudeConfigDir?: string,
+): Promise<string> {
+  let canonicalCwd: string
+  try {
+    canonicalCwd = await realpath(cwd)
+  } catch {
+    canonicalCwd = path.resolve(cwd)
+  }
+  const projectKey = canonicalCwd.replace(/[^a-zA-Z0-9]/g, '-')
+  // Agent SDK 对超长 key 还有一层私有 hash。与其猜错目录，不如明确停下；
+  // Dashboard 的生产 cwd 很短（通常是 /app），不会命中这里。
+  if (projectKey.length > 200) throw new Error('Claude 工作目录过长，无法安全生成原生 transcript 路径')
+  return path.join(
+    /*turbopackIgnore: true*/ claudeConfigRoot(claudeConfigDir),
+    'projects',
+    projectKey,
+    `${sessionId}.jsonl`,
+  )
+}
+
+/**
+ * 把我们持久保存的滚动 transcript 放回 Claude Code 的原生会话目录。
+ * 后续 query 只使用普通 resume，因此 CLI 继续读取真实 CLAUDE_CONFIG_DIR，
+ * 不再进入 SDK 会删掉 refreshToken 的临时 SessionStore 配置目录。
+ */
+export async function materializeRollingNativeSession(
+  seed: RollingHistorySeed | null,
+  cwd: string,
+  options: { claudeConfigDir?: string } = {},
+): Promise<{ created: boolean; entryCount: number }> {
+  if (!seed) return { created: false, entryCount: 0 }
+  await materializeRollingHistorySeed(seed)
+  const file = await nativeClaudeSessionFile(seed.resumeFrom, cwd, options.claudeConfigDir)
+  const persistedEntries = seed.entries.length
+    ? seed.entries
+    : await seed.sessionStore.load({ projectKey: '', sessionId: seed.resumeFrom })
+  if (existsSync(/*turbopackIgnore: true*/ file)) {
+    // 正常情况下原生文件与持久副本一样新；若上次同步中途失败，只在持久
+    // 副本明确包含更多完整记录时修复原生文件，避免反向覆盖更新的原生会话。
+    const nativeEntryCount = (await readFile(/*turbopackIgnore: true*/ file, 'utf8'))
+      .split(/\r?\n/)
+      .filter(Boolean).length
+    if (!persistedEntries?.length || nativeEntryCount >= persistedEntries.length) {
+      return { created: false, entryCount: nativeEntryCount }
+    }
+  }
+  if (!persistedEntries?.length) throw new Error('滚动 transcript 没有可恢复到 Claude 原生会话的内容')
+  await mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true, mode: 0o700 })
+  const temp = path.join(
+    /*turbopackIgnore: true*/ path.dirname(file),
+    `.${path.basename(file)}.${randomUUID()}.tmp`,
+  )
+  await writeFile(temp, `${persistedEntries.map(entry => JSON.stringify(entry)).join('\n')}\n`, {
+    encoding: 'utf8', mode: 0o600,
+  })
+  await rename(temp, file)
+  return { created: true, entryCount: persistedEntries.length }
+}
+
 type ImportLocalSession = (
   sessionId: string,
   store: SessionStore,
@@ -740,6 +834,21 @@ async function captureLocalTranscript(
     throw error
   }
   return capture.entries.length ? capture.entries : null
+}
+
+/** 成功一轮后，把 Claude 原生 transcript 原子同步回滚动持久存档。 */
+export async function syncRollingNativeSession(
+  sessionId: string,
+  cwd: string,
+  options: { storeRoot?: string; importLocalSession?: ImportLocalSession } = {},
+): Promise<number> {
+  const normalized = sessionId.trim()
+  if (!normalized) throw new Error('滚动 transcript 同步缺少 Claude session id')
+  const entries = await captureLocalTranscript(normalized, cwd, options.importLocalSession)
+  if (!entries?.length) throw new Error('Claude 原生 transcript 不存在或为空，无法同步滚动存档')
+  const store = new RollingSeedStore(normalized, [], options.storeRoot)
+  await store.replace(normalized, entries)
+  return entries.length
 }
 
 /** 同一 rolling revision 重部署：专用 store 缺失时，从 SDK 默认 transcript 原样补回。 */

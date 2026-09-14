@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const loader = vi.hoisted(() => ({ load: vi.fn() }))
 const runner = vi.hoisted(() => ({ run: vi.fn() }))
 const live = vi.hoisted(() => ({ peek: vi.fn(), pending: vi.fn() }))
-const haven = vi.hoisted(() => ({ record: vi.fn(), getTurn: vi.fn(), begin: vi.fn() }))
+const haven = vi.hoisted(() => ({ record: vi.fn(), getTurn: vi.fn(), begin: vi.fn(), patch: vi.fn() }))
 
 vi.mock('@/app/lib/cc/turnInputs', () => ({ loadBackgroundTurnInputs: loader.load }))
 vi.mock('@/app/lib/cc/runTurn', () => ({ runTurn: runner.run }))
@@ -13,6 +13,7 @@ vi.mock('@/app/lib/havenTurns', () => ({
   recordTurnStrict: haven.record,
   getTurnByRequestId: haven.getTurn,
   beginAgentWakeRun: haven.begin,
+  patchAgentWakeSchedule: haven.patch,
 }))
 
 import { runBackgroundWake } from '@/app/lib/cc/backgroundWakeTurn'
@@ -32,6 +33,7 @@ beforeEach(() => {
   haven.record.mockResolvedValue({ ok: true, stored: true, turnId: 4, roundId: 4 })
   haven.getTurn.mockResolvedValue({ ok: true, found: false, turn: null, error: '', httpStatus: 404 })
   haven.begin.mockResolvedValue({ ok: true, status: 'started', run: {}, error: '', httpStatus: 200 })
+  haven.patch.mockResolvedValue({ ok: true, schedule: {}, error: '', httpStatus: 200 })
 })
 
 describe('Dashboard background wake runner', () => {
@@ -118,6 +120,29 @@ describe('Dashboard background wake runner', () => {
     })
     expect(result).toEqual({ status: 'deferred', reason: 'session_blocked' })
     expect(runner.run).not.toHaveBeenCalled()
+  })
+
+  it('pauses automatic wakes after an authentication failure', async () => {
+    runner.run.mockResolvedValueOnce({
+      ok: false, phase: 'failed', failureKind: 'authentication', error: 'Claude 登录态失效',
+    })
+    const result = await runBackgroundWake({
+      sessionId: 'window-1', wakeId: 'wake-auth', at: '2026-08-31T12:55:00Z', cause: 'cache_keepalive',
+    })
+
+    expect(result).toMatchObject({
+      status: 'failed', failureKind: 'authentication', retryAfterSeconds: 3600,
+    })
+    expect(haven.patch).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'window-1',
+      laneId: 'subscription',
+      changes: expect.objectContaining({
+        keepalive_paused_until_user: true,
+        next_agent_wake_at: '',
+        conversation_silence_check_at: '',
+      }),
+    }))
+    expect(haven.record).not.toHaveBeenCalled()
   })
 
   it('persists a no-op wake without creating visible assistant text', async () => {

@@ -26,8 +26,9 @@ import {
   assertFixedMigrationSeed,
   assertRollingResumeRecovered,
   assertRollingSeedAvailable,
-  materializeRollingHistorySeed,
+  materializeRollingNativeSession,
   openRollingHistoryResume,
+  syncRollingNativeSession,
   type RollingSeedDiagnostic,
 } from '@/app/lib/cc/rollingHistory'
 import {
@@ -172,6 +173,7 @@ export type CacheDiagnostic = {
 export type RunTurnResult = {
   ok: boolean
   error?: string
+  failureKind?: 'authentication'
   /** 为什么收尾的（succeeded / failed / cancelled），测试和日志断言用 */
   phase: TurnPhase
   assistantText?: string
@@ -188,6 +190,19 @@ export type RunTurnResult = {
 
 /** 同一 Node 进程内固定；变化表示 Dashboard 进程/部署实例已经切换。 */
 const DASHBOARD_INSTANCE_ID = randomUUID()
+
+const CLAUDE_AUTH_FAILURE = /authentication_failed|failed to authenticate|oauth access token has expired|re-authenticate to continue/i
+
+export function isClaudeAuthenticationFailure(input: {
+  error?: unknown
+  text?: unknown
+  apiErrorStatus?: unknown
+  errors?: unknown
+}): boolean {
+  if (Number(input.apiErrorStatus) === 401) return true
+  const errors = Array.isArray(input.errors) ? input.errors.join('\n') : String(input.errors || '')
+  return CLAUDE_AUTH_FAILURE.test([input.error, input.text, errors].map(value => String(value || '')).join('\n'))
+}
 
 /* ── 私有工具函数（原 route.ts 原样搬） ── */
 
@@ -548,7 +563,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       rollingHistory.length,
       historySeed,
     )
-    await materializeRollingHistorySeed(historySeed)
+    const nativeSeed = await materializeRollingNativeSession(historySeed, config.cwd)
+    if (historySeed?.resumeFrom) rememberResumePoint(resumeKey, historySeed.resumeFrom)
     rollingSeedDiagnostic = historySeed?.diagnostic ? {
       ...historySeed.diagnostic,
       source: historySeed.source,
@@ -566,6 +582,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       seedCreated: historySeed?.source === 'new_seed',
       seedResumeFrom: historySeed?.resumeFrom || '',
       seedEntryCount: historySeed?.entries.length || 0,
+      nativeSeedCreated: nativeSeed.created,
+      nativeSeedEntryCount: nativeSeed.entryCount,
       rollingSourceResumeFrom: config.rollingSourceResumeFrom || '',
       requireRollingSource: Boolean(config.requireRollingSource),
       previousStrategy: config.rollingPreviousStrategy || '',
@@ -580,7 +598,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       turnKind,
       isRolling,
       buildOptions: resumeFrom => buildCcOptions(config, resumeFrom),
-      historySeed,
       // 这几项只在**新建**会话时记下 —— 已有会话沿用它启动时那套。
       // 界面上「本窗口设置」显示的是这份，不是前端最新的选择。
       boot: { mode: config.mode, credKind: config.cred, providerId: config.providerId, providerLabel: config.providerLabel },
@@ -916,6 +933,28 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       }
 
       if (msg.type === 'assistant') {
+        const assistantRecord = msg as SDKMessage & { error?: unknown }
+        const assistantTextContent = msg.message.content.map(block =>
+          block.type === 'text' ? block.text : '',
+        ).filter(Boolean).join('\n')
+        if (isClaudeAuthenticationFailure({
+          error: assistantRecord.error,
+          text: assistantTextContent,
+        })) {
+          const message = 'Claude 登录态失效；已关闭旧连接。下一次请求会使用当前登录态重新连接。'
+          dropSession(sessionId, 'authentication_failed')
+          send('error', {
+            code: 'authentication_failed',
+            message,
+            stage: 'upstream',
+            retryable: true,
+            http_status: 401,
+            request_id: requestId,
+            generated_not_saved: false,
+          })
+          state.markFailed()
+          return { ok: false, error: message, failureKind: 'authentication', phase: state.current }
+        }
         for (const block of msg.message.content) {
           if (block.type === 'tool_use') {
             const startedAt = Date.now()
@@ -998,6 +1037,28 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           result: successMsg.result,
           api_error_status: successMsg.api_error_status,
         }
+        const resultErrors = 'errors' in msg && Array.isArray(msg.errors)
+          ? msg.errors.map(String).map(value => value.trim()).filter(Boolean)
+          : []
+        if (isClaudeAuthenticationFailure({
+          text: successMsg.result,
+          apiErrorStatus: successMsg.api_error_status,
+          errors: resultErrors,
+        })) {
+          const message = 'Claude 登录态失效；已关闭旧连接。下一次请求会使用当前登录态重新连接。'
+          dropSession(sessionId, 'authentication_failed')
+          send('error', {
+            code: 'authentication_failed',
+            message,
+            stage: 'upstream',
+            retryable: true,
+            http_status: 401,
+            request_id: requestId,
+            generated_not_saved: false,
+          })
+          state.markFailed()
+          return { ok: false, error: message, failureKind: 'authentication', phase: state.current }
+        }
         // 用户点了停止：result 可能是 error subtype 或带 aborted 标记，
         // 都不当错误处理 —— 已生成的字照常留，写库时打 interrupted 标记。
         if (consumeTurnInterrupted(sessionId)) {
@@ -1015,9 +1076,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             result?: string
             api_error_status?: number | null
           }
-          const errors = Array.isArray(failed.errors)
-            ? failed.errors.map(String).map(value => value.trim()).filter(Boolean)
-            : []
+          const errors = resultErrors
           const terminalReason = String(failed.terminal_reason || '')
           const apiErrorStatus = failed.api_error_status ?? null
           const resultText = String(failed.result || '').trim()
@@ -1073,6 +1132,28 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           }
         }
         break
+      }
+    }
+
+    if (isRolling && live.ccSessionId) {
+      try {
+        const syncedEntryCount = await syncRollingNativeSession(live.ccSessionId, config.cwd)
+        console.info(`[cc-rolling-sync ${sessionId}]`, {
+          resumeKey,
+          contextRevision: config.contextRevision,
+          turnKind,
+          entryCount: syncedEntryCount,
+        })
+      } catch (error) {
+        // 本轮模型已经成功，不能因为备份同步失败吞掉用户回复；但也不能继续
+        // 复用一份无法确认已落盘的 query，下一轮从原生 session 冷恢复再重试同步。
+        console.error(`[cc-rolling-sync ${sessionId}] failed`, {
+          resumeKey,
+          contextRevision: config.contextRevision,
+          turnKind,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        dropSession(sessionId, 'rolling_native_sync_failed')
       }
     }
 

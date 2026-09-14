@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
@@ -17,8 +17,10 @@ import {
   createRollingTranscriptRecoverySeed,
   inspectRollingHistoryTranscript,
   materializeRollingHistorySeed,
+  materializeRollingNativeSession,
   openRollingHistoryResume,
   rollingRevisionRequiresSource,
+  syncRollingNativeSession,
 } from '@/app/lib/cc/rollingHistory'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
@@ -78,7 +80,7 @@ describe('daily rolling context', () => {
     expect((seed?.entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('今天的回应')
     expect(seed?.entries[0]).toMatchObject({
       type: 'user',
-      version: '2.1.220',
+      version: '2.1.222',
       gitBranch: 'HEAD',
       permissionMode: 'default',
       promptSource: 'sdk',
@@ -88,7 +90,7 @@ describe('daily rolling context', () => {
     expect(seed?.entries[0].promptId).toMatch(/^[0-9a-f-]{36}$/)
     expect(seed?.entries[1]).toMatchObject({
       type: 'assistant',
-      version: '2.1.220',
+      version: '2.1.222',
       gitBranch: 'HEAD',
       userType: 'external',
       message: {
@@ -651,6 +653,38 @@ describe('daily rolling context', () => {
       expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).not.toBeNull()
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('materializes rolling history into Claude native storage and syncs it back', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-native-store-'))
+    const claudeConfigDir = await mkdtemp(path.join(tmpdir(), 'ob2-native-claude-'))
+    const cwd = await mkdtemp(path.join(tmpdir(), 'ob2-native-cwd-'))
+    try {
+      const seed = createRollingHistorySeed(turns, {
+        sessionId: 'window-native', cwd, fallbackModel: 'claude', storeRoot,
+      })!
+      const materialized = await materializeRollingNativeSession(seed, cwd, { claudeConfigDir })
+      expect(materialized).toMatchObject({ created: true, entryCount: seed.entries.length })
+      const projectKey = path.resolve(cwd).replace(/[^a-zA-Z0-9]/g, '-')
+      const nativeFile = path.join(claudeConfigDir, 'projects', projectKey, `${seed.resumeFrom}.jsonl`)
+      expect((await readFile(nativeFile, 'utf8')).trim().split(/\r?\n/)).toHaveLength(seed.entries.length)
+
+      const updated = [...seed.entries, { ...seed.entries[0], uuid: 'synced-entry' }]
+      const syncedCount = await syncRollingNativeSession(seed.resumeFrom, cwd, {
+        storeRoot,
+        importLocalSession: async (sessionId, store) => {
+          await store.append({ projectKey: '', sessionId }, updated)
+        },
+      })
+      expect(syncedCount).toBe(updated.length)
+      const reopened = openRollingHistoryResume(seed.resumeFrom, { storeRoot })
+      expect(await reopened!.sessionStore.load({ projectKey: '', sessionId: seed.resumeFrom }))
+        .toHaveLength(updated.length)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+      await rm(claudeConfigDir, { recursive: true, force: true })
+      await rm(cwd, { recursive: true, force: true })
     }
   })
 

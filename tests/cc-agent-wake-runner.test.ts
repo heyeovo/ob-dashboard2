@@ -55,4 +55,14 @@ describe('Haven agent wake callback route', () => {
       scheduleVersion: 4, cause: 'conversation_silence', silenceSourceTurnId: 9,
     }))
   })
+
+  it('returns Retry-After when authentication failure pauses background wakes', async () => {
+    wake.run.mockResolvedValueOnce({
+      status: 'failed', error: 'Claude 登录态失效', failureKind: 'authentication', retryAfterSeconds: 3600,
+    })
+    const response = await POST(request(validBody))
+    expect(response.status).toBe(503)
+    expect(response.headers.get('Retry-After')).toBe('3600')
+    expect(await response.json()).toMatchObject({ status: 'failed', failureKind: 'authentication' })
+  })
 })

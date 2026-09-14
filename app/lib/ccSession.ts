@@ -22,7 +22,6 @@ import {
   type SDKMessage,
   type SDKUserMessage,
   type Options,
-  type SessionStore,
   type SDKControlGetContextUsageResponse,
 } from '@anthropic-ai/claude-agent-sdk'
 import { cancelAllPending, hasPending } from './ccChannel'
@@ -455,8 +454,6 @@ export type EnsureSessionInput = {
   isRolling?: boolean
   /** query() 的 options，只在**新建**会话时生效（已有会话沿用建它时的配置） */
   buildOptions: (resumeFrom: string | null) => Options
-  /** 滚动窗口冷启动时预置的原生 transcript；已有 live/resume 优先。 */
-  historySeed?: { resumeFrom: string; sessionStore: SessionStore } | null
   /** 启动时定死的那几项，同样只在新建时记下 */
   boot: SessionBoot
   model: string
@@ -530,22 +527,8 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
   const queue = createMessageQueue()
   // 上一轮同名会话被回收时记下的 claude code session id，用它 resume 接回上下文
   const rememberedResume = resumeHints.get(resumeKey) || null
-  const rememberedStore = seededSessionStores.get(resumeKey)
-  // HMR 可能留下首版错误恢复路径的 resume id，却没有与之配套的种子 store。
-  // 滚动历史已传入时必须优先重建，不能又接回那份含旧包装/残缺回放的会话。
-  const useHistorySeed = Boolean(input.historySeed && (!rememberedResume || !rememberedStore))
-  const resumeFrom = useHistorySeed ? input.historySeed!.resumeFrom : rememberedResume
-  if (useHistorySeed) {
-    seededSessionStores.set(resumeKey, input.historySeed!.sessionStore)
-  }
+  const resumeFrom = rememberedResume
   const options = input.buildOptions(resumeFrom)
-  const sessionStore = seededSessionStores.get(resumeKey)
-  if (sessionStore) {
-    options.sessionStore = sessionStore
-    // Agent SDK 明确禁止 sessionStore 与文件 checkpoint 同时启用：store 只镜像
-    // transcript，不镜像 backup blobs，resume 后 rewindFiles 必然失效。
-    options.enableFileCheckpointing = false
-  }
   const q = query({ prompt: queue.iterable, options })
 
   const live: LiveSession = {
@@ -554,7 +537,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     dashboardInstanceId: input.dashboardInstanceId || 'unknown',
     contextRevision: Math.max(0, Math.trunc(input.contextRevision || 0)),
     turnKind: input.turnKind || 'unknown',
-    rollingSessionStore: Boolean(input.isRolling && sessionStore),
+    rollingSessionStore: false,
     resumeKey,
     q,
     push: queue.push,
@@ -589,7 +572,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
   }
   registry.set(input.sessionId, live)
   logQueryLifecycle('query_created', live, {
-    resume_source: useHistorySeed ? 'history_seed' : resumeFrom ? 'remembered_resume' : 'new',
+    resume_source: resumeFrom ? 'remembered_resume' : 'new',
   })
   armIdleTimer(live)
   return live
@@ -738,11 +721,6 @@ const RESUME_KEY = '__ob2_cc_resume__'
 const resumeHints: Map<string, string> =
   (globalThis as unknown as Record<string, Map<string, string>>)[RESUME_KEY] ||
   ((globalThis as unknown as Record<string, Map<string, string>>)[RESUME_KEY] = new Map())
-
-const SEEDED_STORE_KEY = '__ob2_cc_seeded_session_stores__'
-const seededSessionStores: Map<string, SessionStore> =
-  (globalThis as unknown as Record<string, Map<string, SessionStore>>)[SEEDED_STORE_KEY] ||
-  ((globalThis as unknown as Record<string, Map<string, SessionStore>>)[SEEDED_STORE_KEY] = new Map())
 
 export function rememberResumePoint(resumeKey: string, ccSessionId: string) {
   if (ccSessionId) resumeHints.set(resumeKey, ccSessionId)

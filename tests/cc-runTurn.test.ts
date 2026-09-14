@@ -22,7 +22,7 @@ import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
 import { applyRuntimeSettings, dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import type { TurnConfig } from '@/app/lib/cc/ccOptions'
-import { getSessionMessages, type SDKMessage, type SDKUserMessage, type SessionStore } from '@anthropic-ai/claude-agent-sdk'
+import { getSessionMessages, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
 /* ── mock SDK：query 按全局脚本吐消息 ── */
 
@@ -374,6 +374,33 @@ afterEach(async () => {
 })
 
 describe('runTurn：普通回复', () => {
+  it('closes a stale query immediately when Claude reports an OAuth authentication failure', async () => {
+    const sessionId = 'ob2-test-auth-failure'
+    const closeCallsBefore = sdk.closeCalls
+    const authFailure = {
+      type: 'assistant',
+      error: 'authentication_failed',
+      message: {
+        id: 'msg-auth-failed', type: 'message', role: 'assistant', model: 'claude-test',
+        content: [{ type: 'text', text: 'Failed to authenticate. API Error: 401 OAuth access token has expired.' }],
+        stop_reason: 'end_turn', stop_sequence: null,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+      parent_tool_use_id: null,
+      session_id: 'subscription-native',
+      uuid: 'assistant-auth-failed',
+    } as unknown as SDKMessage
+
+    const result = await driveTurn([initMsg('subscription-native'), authFailure], {
+      sessionId,
+      config: makeConfig({ sessionId, cred: 'subscription', laneId: 'subscription' }),
+    }).promise
+
+    expect(result).toMatchObject({ ok: false, phase: 'failed', failureKind: 'authentication' })
+    expect(sdk.closeCalls).toBe(closeCallsBefore + 1)
+    expect(turns.recordTurn).not.toHaveBeenCalled()
+  })
+
   it('recycles a stale subscription query after the OAuth credential file changes', async () => {
     const sessionId = 'ob2-test-oauth-recycle'
     await writeFile(path.join(rollingTestConfigDir, '.credentials.json'), '{"version":1}', 'utf8')
@@ -400,7 +427,7 @@ describe('runTurn：普通回复', () => {
     }
   })
 
-  it('cold-starts rolling history through resume/sessionStore and streams only the new user turn', async () => {
+  it('cold-starts rolling history through a native resume and streams only the new user turn', async () => {
     const sessionId = 'ob2-test-rolling-seed'
     const config = makeConfig({
       sessionId,
@@ -429,11 +456,9 @@ describe('runTurn：普通回复', () => {
 
       const options = sdk.queryOptions.at(-1)!
       expect(options.resume).toEqual(expect.any(String))
-      expect(options.sessionStore).toBeTruthy()
-      expect(options.enableFileCheckpointing).toBe(false)
+      expect(options.sessionStore).toBeUndefined()
       const restored = await getSessionMessages(String(options.resume), {
         dir: config.cwd,
-        sessionStore: options.sessionStore as SessionStore,
       })
       expect(restored.map(message => message.message.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
       expect((restored[2].message as { content: string }).content).toContain('<agent_wake ')

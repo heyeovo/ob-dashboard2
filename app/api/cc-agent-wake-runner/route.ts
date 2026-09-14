@@ -60,6 +60,12 @@ export async function POST(request: Request) {
   if (result.status === 'completed') {
     return Response.json({ status: 'completed', turn_id: result.turnId, replayed: result.replayed === true })
   }
+  if (result.status === 'failed' && result.failureKind === 'authentication') {
+    return Response.json(result, {
+      status: 503,
+      headers: { 'Retry-After': String(result.retryAfterSeconds || 3600) },
+    })
+  }
   if (result.status === 'failed') return Response.json(result)
   return Response.json(result)
 }

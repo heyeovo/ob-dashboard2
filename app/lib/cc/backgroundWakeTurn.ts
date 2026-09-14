@@ -3,7 +3,7 @@ import { hasPending } from '@/app/lib/ccChannel'
 import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
-import { beginAgentWakeRun, getTurnByRequestId, recordTurnStrict } from '@/app/lib/havenTurns'
+import { beginAgentWakeRun, getTurnByRequestId, patchAgentWakeSchedule, recordTurnStrict } from '@/app/lib/havenTurns'
 import { parseAgentWakeNoop } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import {
@@ -31,7 +31,7 @@ export type BackgroundWakeResult =
   | { status: 'deferred'; reason: BackgroundTurnDeferredReason }
   | { status: 'superseded'; reason: string }
   | { status: 'in_progress'; reason: string }
-  | { status: 'failed'; error: string }
+  | { status: 'failed'; error: string; failureKind?: 'authentication'; retryAfterSeconds?: number }
 
 function wakePrompt(input: BackgroundWakeInput): string {
   const attributes = [
@@ -114,7 +114,38 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
     }
     const turnResult = result.value.turn
     if (!turnResult) return { status: 'failed', error: '后台 wake 未返回 turn' }
-    if (!turnResult.ok) return { status: 'failed', error: turnResult.error || '后台 wake 失败' }
+    if (!turnResult.ok) {
+      if (turnResult.failureKind === 'authentication') {
+        // 后台不能替用户重新登录。暂停所有自动唤醒，等下一次前台消息用真实凭证
+        // 建立新 query；避免调度器每几分钟拿同一失败状态反复撞 401。
+        const paused = await patchAgentWakeSchedule({
+          sessionId,
+          laneId: loaded.laneId,
+          expectedVersion: input.scheduleVersion,
+          changes: {
+            keepalive_paused_until_user: true,
+            next_agent_wake_at: '',
+            wake_reason: '',
+            conversation_silence_check_at: '',
+          },
+          signal: input.signal,
+        })
+        if (!paused.ok) {
+          console.error('[cc-agent-wake] failed to pause after authentication failure', {
+            sessionId,
+            laneId: loaded.laneId,
+            error: paused.error,
+          })
+        }
+        return {
+          status: 'failed',
+          error: turnResult.error || 'Claude 登录态失效',
+          failureKind: 'authentication',
+          retryAfterSeconds: 60 * 60,
+        }
+      }
+      return { status: 'failed', error: turnResult.error || '后台 wake 失败' }
+    }
     const noop = parseAgentWakeNoop(turnResult.assistantText || '')
     const assistantText = noop ? '' : turnResult.assistantText || ''
     const session = loaded.sessionSnapshot.session
