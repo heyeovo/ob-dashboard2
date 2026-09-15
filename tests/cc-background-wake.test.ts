@@ -29,7 +29,9 @@ beforeEach(() => {
     resumeHint: 'native-session',
     laneId: 'subscription',
   })
-  runner.run.mockResolvedValue({ ok: true, phase: 'succeeded', assistantText: '醒了' })
+  runner.run.mockResolvedValue({
+    ok: true, phase: 'succeeded', assistantText: '醒了', nativeTurnUuid: 'native-wake-uuid',
+  })
   haven.record.mockResolvedValue({ ok: true, stored: true, turnId: 4, roundId: 4 })
   haven.getTurn.mockResolvedValue({ ok: true, found: false, turn: null, error: '', httpStatus: 404 })
   haven.begin.mockResolvedValue({ ok: true, status: 'started', run: {}, error: '', httpStatus: 200 })
@@ -49,6 +51,7 @@ describe('Dashboard background wake runner', () => {
     }))
     expect(haven.record).toHaveBeenCalledWith(expect.objectContaining({
       requestId: 'wake-1', expectedLastRoundId: 3, turnKind: 'agent_wake', laneId: 'subscription',
+      raw: expect.objectContaining({ cc_turn_uuid: 'native-wake-uuid' }),
     }))
   })
 

@@ -168,6 +168,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         engine: 'cc',
         cred_mode: loaded.config.cred,
         cc_lane_id: loaded.laneId,
+        cc_turn_uuid: turnResult.nativeTurnUuid || undefined,
         model: loaded.config.model,
         persona_id: loaded.persona.id,
         usage: turnResult.usage || undefined,

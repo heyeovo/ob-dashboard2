@@ -552,6 +552,16 @@ function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boo
   return userMatches && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
 }
 
+function havenNativeTurnUuid(turn: HavenTurn): string {
+  if (!turn.raw_json) return ''
+  try {
+    const raw = JSON.parse(turn.raw_json) as Record<string, unknown>
+    return typeof raw.cc_turn_uuid === 'string' ? raw.cc_turn_uuid.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
 function closestCompletedTurnIndex(
   envelopeTimestamp: string,
   matches: Array<{ turn: HavenTurn; index: number }>,
@@ -577,6 +587,12 @@ function alignEnvelopesToTurns(
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
   const candidates = envelopes.map(envelope => {
+    const primaryUserUuid = envelope.entries.find(entry => isPrimaryUserEntry(entry))?.uuid || ''
+    const nativeUuidMatches = primaryUserUuid
+      ? orderedTurns
+          .map((turn, index) => ({ turn, index }))
+          .filter(({ turn }) => havenNativeTurnUuid(turn) === primaryUserUuid)
+      : []
     const textMatches = orderedTurns
       .map((turn, index) => ({ turn, index }))
       .filter(({ turn }) => envelopeMatchesTurn(envelope, turn))
@@ -584,6 +600,9 @@ function alignEnvelopesToTurns(
       return new Set(textMatches
         .filter(({ turn }) => turn.id === envelope.havenTurnId)
         .map(({ index }) => index))
+    }
+    if (nativeUuidMatches.length > 0) {
+      return new Set(nativeUuidMatches.map(({ index }) => index))
     }
     if (textMatches.length > 1) {
       const closestIndex = closestCompletedTurnIndex(envelope.timestamp, textMatches)
@@ -928,12 +947,17 @@ async function createRevisionSeedFromEntries(
     const envelope = aligned.get(turn.id)
     if (envelope) {
       retainedEnvelopeCount += 1
+      const taggedEntries = envelope.entries.map(entry => ({
+        ...entry,
+        ob2HavenTurnId: turn.id,
+        ob2ChatDay: turn.chat_day || '',
+      }))
       if (turn.chat_day && turn.chat_day !== latestRawDay) {
-        const pruned = pruneCompletedThinking(envelope.entries)
+        const pruned = pruneCompletedThinking(taggedEntries)
         thinkingPrunedBlockCount += pruned.removedBlockCount
         selectedEntries.push(...pruned.entries)
       } else {
-        selectedEntries.push(...envelope.entries)
+        selectedEntries.push(...taggedEntries)
       }
     } else {
       if (requiredFullRawDays.has(turn.chat_day || '')) {

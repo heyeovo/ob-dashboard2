@@ -561,6 +561,52 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('uses the persisted native turn UUID after manual recovery instead of ambiguous text matching', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-native-uuid-'))
+    const repeatedTurns = [
+      {
+        ...turns[0], id: 61, round_id: 61,
+        user_text: '重复问题', assistant_text: '重复回答',
+        raw_json: JSON.stringify({ cc_turn_uuid: 'native-turn-61' }),
+      },
+      {
+        ...turns[0], id: 62, round_id: 62,
+        user_text: '重复问题', assistant_text: '重复回答',
+        raw_json: JSON.stringify({ cc_turn_uuid: 'native-turn-62' }),
+      },
+    ] as HavenTurn[]
+    try {
+      const source = createRollingHistorySeed([repeatedTurns[0]], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      for (const entry of source.entries) {
+        delete entry.ob2HavenTurnId
+        delete entry.ob2ChatDay
+      }
+      source.entries[0].uuid = 'native-turn-62'
+      source.entries[0].timestamp = ''
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [{ type: 'custom-title', title: 'native uuid source' }],
+      )
+
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, repeatedTurns, [repeatedTurns[1]], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [repeatedTurns[1].chat_day],
+        },
+      )
+
+      const messages = revised?.entries.filter(entry => entry.message) || []
+      expect(messages).toHaveLength(2)
+      expect(messages.every(entry => entry.ob2HavenTurnId === 62)).toBe(true)
+      expect(messages.every(entry => entry.ob2ChatDay === repeatedTurns[1].chat_day)).toBe(true)
+      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('refuses to body-restore a turn from a day that stayed raw', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-required-'))
     const retained = { ...turns[0], id: 1, chat_day: '2026-09-11' } as HavenTurn

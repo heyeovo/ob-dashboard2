@@ -577,6 +577,8 @@ describe('runTurn：普通回复', () => {
     expect(recInput.personaId).toBe('ombre')
     expect(recInput.turnKind).toBe('user')
     expect(recInput.laneId).toBe('api:default')
+    expect(recInput.raw.cc_turn_uuid).toBe(result.nativeTurnUuid)
+    expect(recInput.raw.cc_turn_uuid).toMatch(/^[0-9a-f-]{36}$/)
     expect(recInput.raw.display_segments).toMatchObject({ version: 2 })
     expect(recInput.agentWakeUpdate).toMatchObject({
       sample_silence: true,

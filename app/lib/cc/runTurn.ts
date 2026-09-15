@@ -186,6 +186,8 @@ export type RunTurnResult = {
   /** 只写入消息 raw_json 的缓存排障黑匣子，不进入模型 Context。 */
   cacheDiagnostic?: CacheDiagnostic
   displaySegments?: VersionedDisplaySegments
+  /** 本轮写入 Claude 原生 transcript 的 user UUID，用于与 Haven 成功轮次永久绑定。 */
+  nativeTurnUuid?: string
 }
 
 /** 同一 Node 进程内固定；变化表示 Dashboard 进程/部署实例已经切换。 */
@@ -1191,6 +1193,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         modelActivityAt: modelRequestStartedAt || undefined,
         cacheDiagnostic: currentCacheDiagnostic(),
         displaySegments,
+        nativeTurnUuid: turnUuid,
       }
     }
 
@@ -1235,6 +1238,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           last_compaction: live.lastCompaction || undefined,
           compaction_count: live.compactionCount || undefined,
           request_id: requestId,
+          cc_turn_uuid: turnUuid,
           attachments: attachments.map(item => ({
             id: item.id,
             filename: item.filename,
@@ -1421,6 +1425,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       modelActivityAt: modelRequestStartedAt || undefined,
       cacheDiagnostic: currentCacheDiagnostic(),
       displaySegments,
+      nativeTurnUuid: turnUuid,
     }
   } catch (e) {
     const err = e as Error
