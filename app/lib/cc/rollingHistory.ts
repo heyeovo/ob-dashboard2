@@ -769,6 +769,12 @@ export type RollingMissingRawTurn = {
   fullSourceRequired: boolean
 }
 
+function isUnrepresentedEmptyWake(turn: HavenTurn): boolean {
+  return turn.turn_kind === 'agent_wake'
+    && !turn.user_text.trim()
+    && !turn.assistant_text.trim()
+}
+
 /** 设置页只读预检：不生成新 seed、不改 Haven 指针，也不返回聊天正文。 */
 export async function inspectRollingHistoryAlignment(
   resumeFrom: string,
@@ -783,6 +789,7 @@ export async function inspectRollingHistoryAlignment(
   error: string
   issues: RollingAlignmentIssue[]
   missingRawTurns: RollingMissingRawTurn[]
+  unrepresentedEmptyWakeCount: number
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -791,7 +798,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 不存在',
       issues: [],
-      missingRawTurns: [],
+      missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -801,7 +808,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 为空',
       issues: [],
-      missingRawTurns: [],
+      missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
@@ -823,8 +830,10 @@ export async function inspectRollingHistoryAlignment(
   try {
     const matched = alignEnvelopesToTurns(envelopes, turns, true, recordNoCandidate)
     const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
-    const missingRawTurns = (options.rawTurns || [])
-      .filter(turn => !matched.has(turn.id))
+    const unmatchedRawTurns = (options.rawTurns || []).filter(turn => !matched.has(turn.id))
+    const unrepresentedEmptyWakeCount = unmatchedRawTurns.filter(isUnrepresentedEmptyWake).length
+    const missingRawTurns = unmatchedRawTurns
+      .filter(turn => !isUnrepresentedEmptyWake(turn))
       .map(turn => ({
         id: turn.id,
         day: turn.chat_day || '',
@@ -841,6 +850,7 @@ export async function inspectRollingHistoryAlignment(
       error: '',
       issues,
       missingRawTurns,
+      unrepresentedEmptyWakeCount,
     }
   } catch (error) {
     return {
@@ -848,7 +858,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: error instanceof Error ? error.message : '滚动对齐预检失败',
       issues,
-      missingRawTurns: [],
+      missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
     }
   }
 }
@@ -1167,6 +1177,9 @@ async function createRevisionSeedFromEntries(
         selectedEntries.push(...taggedEntries)
       }
     } else {
+      // Haven keeps this wake and its raw metadata; only a missing model-visible
+      // transcript envelope has nothing to preserve or body-restore here.
+      if (isUnrepresentedEmptyWake(turn)) continue
       if (requiredFullRawDays.has(turn.chat_day || '')) {
         throw new Error(`旧滚动 transcript 缺少仍为 raw 的完整轮次：${turn.chat_day || '未知日期'}，已停止本轮`)
       }

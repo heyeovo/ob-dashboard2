@@ -994,6 +994,40 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('keeps an unrepresented empty wake in Haven without blocking a raw-day revision', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-empty-wake-'))
+    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-13' } as HavenTurn
+    const emptyWake = {
+      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-13',
+      turn_kind: 'agent_wake', user_text: '', assistant_text: '',
+      raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule' }, process: [{ type: 'thinking', text: 'stored in Haven' }] }),
+    } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const rawTurns = [retained, emptyWake]
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, rawTurns, {
+        storeRoot, rawTurns, requiredFullRawDays: ['2026-09-13'],
+      })
+      expect(inspection).toMatchObject({
+        aligned: true, missingRawTurns: [], unrepresentedEmptyWakeCount: 1,
+      })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, rawTurns, rawTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: ['2026-09-13'],
+        },
+      )
+      expect(revised?.entries.map(entry => entry.message)).toEqual(source.entries.map(entry => entry.message))
+      expect(revised?.diagnostic.bodyRestoredTurnCount).toBe(0)
+      expect(emptyWake.raw_json).toContain('stored in Haven')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('migrates a fixed-window SDK transcript with recall and tools intact', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-fixed-migration-'))
     const oldTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-09' } as HavenTurn

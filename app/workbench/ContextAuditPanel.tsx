@@ -86,6 +86,7 @@ type AuditData = {
       assistantChars: number
       fullSourceRequired: boolean
     }>
+    unrepresentedEmptyWakeCount: number
   } | null
   system_prompt: {
     current: {
@@ -266,7 +267,10 @@ export default function ContextAuditPanel() {
                   <div className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.missingRawTurns.length ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]'}`}>
                     {data.rolling_alignment.missingRawTurns.length
                       ? `原文反向检查：${data.rolling_alignment.missingRawTurns.length} 个 Haven 原文轮次在旧 transcript 中缺少完整记录。以下仅列编号和时间，不含正文。`
-                      : '原文反向检查通过：当前选为原文的 Haven 轮次均有对应的旧 transcript 记录。'}
+                      : '原文反向检查通过：需要保留完整内容的 Haven 轮次均有对应的旧 transcript 记录。'}
+                    {data.rolling_alignment.unrepresentedEmptyWakeCount ? (
+                      <div className="mt-1">另有 {data.rolling_alignment.unrepresentedEmptyWakeCount} 条无用户/助手正文、且旧 transcript 没有对应轮次的空唤醒：记录保留在 Haven，不阻止重建；旧 transcript 中已有轮次的唤醒仍保留。</div>
+                    ) : null}
                     {data.rolling_alignment.missingRawTurns.length ? (
                       <div className="mt-2 max-h-48 space-y-1 overflow-auto">
                         {data.rolling_alignment.missingRawTurns.map(turn => (
