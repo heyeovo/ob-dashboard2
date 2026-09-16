@@ -109,14 +109,26 @@ export async function GET(request: NextRequest) {
     const transcript = transcriptSessionId
       ? await inspectRollingHistoryTranscript(transcriptSessionId)
       : null
+    const previousModes = session.rolling_context?.previous_day_modes || {}
+    const requiredFullRawDays = [...new Set(rolling.history
+      .map(turn => turn.chat_day || '')
+      .filter(day => {
+        if (!day) return false
+        if (session.rolling_context?.previous_strategy === 'fixed_window') {
+          return session.rolling_context.allow_fixed_body_restore !== true
+        }
+        return (previousModes[day] || 'raw') === 'raw'
+      }))]
     const alignment = session.rolling_context?.strategy === 'daily_rolling' && transcriptSessionId
       ? await listAllTurns(sessionId, { includeRaw: true }).then(result => result.ok
-        ? inspectRollingHistoryAlignment(transcriptSessionId, result.turns)
+        ? inspectRollingHistoryAlignment(transcriptSessionId, result.turns, {
+            rawTurns: rolling.history, requiredFullRawDays,
+          })
         : {
             available: false, aligned: false, envelopeCount: 0,
             matchedTurnCount: 0, isolatedIncompleteCount: 0,
             error: result.error || '无法读取 Haven 轮次',
-            issues: [],
+            issues: [], missingRawTurns: [],
           })
       : null
     const personaResult = await getPersona(session.persona_id)

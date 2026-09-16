@@ -973,6 +973,15 @@ describe('daily rolling context', () => {
         { projectKey: '', sessionId: source.resumeFrom },
         [{ type: 'custom-title', title: 'source' }],
       )
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [retained, missing], {
+        storeRoot, rawTurns: [retained, missing], requiredFullRawDays: [retained.chat_day, missing.chat_day],
+      })
+      expect(inspection).toMatchObject({ aligned: true, matchedTurnCount: 1 })
+      expect(inspection.missingRawTurns).toEqual([{
+        id: 2, day: '2026-09-12', createdAt: missing.created_at,
+        turnKind: 'user', userChars: missing.user_text.length,
+        assistantChars: missing.assistant_text.length, fullSourceRequired: true,
+      }])
       await expect(createRollingHistoryRevisionSeed(
         source.resumeFrom, [retained, missing], [retained, missing],
         {

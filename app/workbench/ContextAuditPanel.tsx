@@ -77,6 +77,15 @@ type AuditData = {
       havenUserCandidateCount: number
       havenUserCandidateIds: number[]
     }>
+    missingRawTurns: Array<{
+      id: number
+      day: string
+      createdAt: string
+      turnKind: string
+      userChars: number
+      assistantChars: number
+      fullSourceRequired: boolean
+    }>
   } | null
   system_prompt: {
     current: {
@@ -252,6 +261,22 @@ export default function ContextAuditPanel() {
                       ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败/中断的半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条。未保存设置。`
                       : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
                   </p>
+                ) : null}
+                {data.rolling_alignment?.aligned ? (
+                  <div className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.missingRawTurns.length ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]'}`}>
+                    {data.rolling_alignment.missingRawTurns.length
+                      ? `原文反向检查：${data.rolling_alignment.missingRawTurns.length} 个 Haven 原文轮次在旧 transcript 中缺少完整记录。以下仅列编号和时间，不含正文。`
+                      : '原文反向检查通过：当前选为原文的 Haven 轮次均有对应的旧 transcript 记录。'}
+                    {data.rolling_alignment.missingRawTurns.length ? (
+                      <div className="mt-2 max-h-48 space-y-1 overflow-auto">
+                        {data.rolling_alignment.missingRawTurns.map(turn => (
+                          <div key={turn.id}>
+                            Haven #{turn.id} · {turn.day || '日期未知'} · {turn.createdAt || '时间未知'} · {turn.turnKind} · 用户 {turn.userChars} 字 / 助手 {turn.assistantChars} 字 · {turn.fullSourceRequired ? '要求完整旧轮次：重建会拦截正文降级' : '允许仅从 Haven 正文恢复'}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 {data.rolling_alignment?.issues?.length ? (
                   <div className="space-y-2 text-xs">

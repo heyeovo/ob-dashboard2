@@ -759,11 +759,21 @@ export type RollingAlignmentIssue = {
   havenUserCandidateIds: number[]
 }
 
+export type RollingMissingRawTurn = {
+  id: number
+  day: string
+  createdAt: string
+  turnKind: string
+  userChars: number
+  assistantChars: number
+  fullSourceRequired: boolean
+}
+
 /** 设置页只读预检：不生成新 seed、不改 Haven 指针，也不返回聊天正文。 */
 export async function inspectRollingHistoryAlignment(
   resumeFrom: string,
   turns: HavenTurn[],
-  options: { storeRoot?: string } = {},
+  options: { storeRoot?: string; rawTurns?: HavenTurn[]; requiredFullRawDays?: string[] } = {},
 ): Promise<{
   available: boolean
   aligned: boolean
@@ -772,6 +782,7 @@ export async function inspectRollingHistoryAlignment(
   isolatedIncompleteCount: number
   error: string
   issues: RollingAlignmentIssue[]
+  missingRawTurns: RollingMissingRawTurn[]
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -780,6 +791,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 不存在',
       issues: [],
+      missingRawTurns: [],
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -789,6 +801,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 为空',
       issues: [],
+      missingRawTurns: [],
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
@@ -809,12 +822,25 @@ export async function inspectRollingHistoryAlignment(
   }
   try {
     const matched = alignEnvelopesToTurns(envelopes, turns, true, recordNoCandidate)
+    const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
+    const missingRawTurns = (options.rawTurns || [])
+      .filter(turn => !matched.has(turn.id))
+      .map(turn => ({
+        id: turn.id,
+        day: turn.chat_day || '',
+        createdAt: turn.created_at,
+        turnKind: turn.turn_kind || 'user',
+        userChars: turn.user_text.length,
+        assistantChars: turn.assistant_text.length,
+        fullSourceRequired: requiredFullRawDays.has(turn.chat_day || ''),
+      }))
     return {
       available: true, aligned: true, envelopeCount: envelopes.length,
       matchedTurnCount: matched.size,
       isolatedIncompleteCount: envelopes.length - matched.size,
       error: '',
       issues,
+      missingRawTurns,
     }
   } catch (error) {
     return {
@@ -822,6 +848,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: error instanceof Error ? error.message : '滚动对齐预检失败',
       issues,
+      missingRawTurns: [],
     }
   }
 }
