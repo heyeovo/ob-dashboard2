@@ -15,6 +15,7 @@ import {
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
   createRollingTranscriptRecoverySeed,
+  inspectRollingHistoryAlignment,
   inspectRollingHistoryTranscript,
   materializeRollingHistorySeed,
   materializeRollingNativeSession,
@@ -602,6 +603,124 @@ describe('daily rolling context', () => {
       expect(messages.every(entry => entry.ob2HavenTurnId === 62)).toBe(true)
       expect(messages.every(entry => entry.ob2ChatDay === repeatedTurns[1].chat_day)).toBe(true)
       expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a uniquely stamped turn even when its displayed assistant text differs from Haven', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-stamped-body-'))
+    try {
+      const source = createRollingHistorySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      const assistant = source.entries[1].message as { content: Array<{ type: string; text: string }> }
+      assistant.content[0].text = '原生记录中的完整回答，与 Haven 展示正文不完全一样'
+      await materializeRollingHistorySeed(source)
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, turns, turns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [turns[0].chat_day],
+        },
+      )
+      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(1)
+      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
+      expect(JSON.stringify(revised?.entries)).toContain('原生记录中的完整回答')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('isolates an unpersisted user-only failed send after manual recovery', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-failed-send-'))
+    const laterTurns = [
+      {
+        ...turns[0], id: 4, round_id: 4,
+        raw_json: JSON.stringify({ cc_turn_uuid: 'successful-native-4' }),
+      },
+      {
+        ...turns[0], id: 5, round_id: 5,
+        raw_json: JSON.stringify({ cc_turn_uuid: 'successful-native-5' }),
+      },
+    ] as HavenTurn[]
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const nativeEntries = buildRollingTranscriptEntries(laterTurns, {
+        sessionId: source.resumeFrom, cwd: 'C:/workspace', fallbackModel: 'claude',
+      })
+      for (let index = 0; index < laterTurns.length; index += 1) {
+        const user = nativeEntries[index * 2]
+        const assistant = nativeEntries[index * 2 + 1]
+        user.uuid = `successful-native-${laterTurns[index].id}`
+        assistant.parentUuid = user.uuid
+        delete user.ob2HavenTurnId
+        delete assistant.ob2HavenTurnId
+      }
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [
+          ...nativeEntries,
+          {
+            type: 'user', uuid: 'failed-send-uuid', parentUuid: nativeEntries.at(-1)?.uuid || null,
+            sessionId: source.resumeFrom,
+            message: { role: 'user', content: turns[0].user_text },
+          },
+        ],
+      )
+      const beforeInspection = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, ...laterTurns], { storeRoot })
+      expect(inspection).toMatchObject({
+        available: true, aligned: true, envelopeCount: 4,
+        matchedTurnCount: 3, isolatedIncompleteCount: 1,
+      })
+      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(beforeInspection)
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [...turns, ...laterTurns], [...turns, ...laterTurns], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [turns[0].chat_day],
+        },
+      )
+      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(3)
+      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
+      expect(JSON.stringify(revised?.entries)).not.toContain('failed-send-uuid')
+      expect(revised?.entries.filter(entry => entry.ob2HavenTurnId === 4)).toHaveLength(2)
+      expect(revised?.entries.filter(entry => entry.ob2HavenTurnId === 5)).toHaveLength(2)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not discard an unmatched envelope with assistant output', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unmatched-assistant-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [
+          {
+            type: 'user', uuid: 'unmatched-user', parentUuid: source.entries.at(-1)?.uuid || null,
+            sessionId: source.resumeFrom,
+            message: { role: 'user', content: '没有保存到 Haven 的输入' },
+          },
+          {
+            type: 'assistant', uuid: 'unmatched-assistant', parentUuid: 'unmatched-user',
+            sessionId: source.resumeFrom,
+            message: { role: 'assistant', content: [{ type: 'text', text: '已有助手内容' }] },
+          },
+        ],
+      )
+      await expect(createRollingHistoryRevisionSeed(
+        source.resumeFrom, turns, turns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [turns[0].chat_day],
+        },
+      )).rejects.toThrow('无正文候选 1 条')
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }

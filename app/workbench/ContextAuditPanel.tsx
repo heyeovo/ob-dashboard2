@@ -60,6 +60,14 @@ type AuditData = {
     }>
   }
   rolling_seed: Record<string, unknown> | null
+  rolling_alignment: {
+    available: boolean
+    aligned: boolean
+    envelopeCount: number
+    matchedTurnCount: number
+    isolatedIncompleteCount: number
+    error: string
+  } | null
   system_prompt: {
     current: {
       mode: string
@@ -228,6 +236,13 @@ export default function ContextAuditPanel() {
                 ) : (
                   <p className="rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-xs text-[var(--color-pending)]">需要检查：原文匹配 {data.transcript.matched_source_messages}/{data.transcript.expected_source_messages} 条，rolling_window_context 包装命中 {data.transcript.rolling_wrapper_messages} 条。</p>
                 )}
+                {data.rolling_alignment ? (
+                  <p className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.aligned ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
+                    {data.rolling_alignment.aligned
+                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败半截输入 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条。未保存设置。`
+                      : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
+                  </p>
+                ) : null}
                 {data.transcript.available ? (
                   <div className="space-y-1 text-[11px] text-[var(--color-text-tertiary)]">
                     <div>SessionStore 共 {number(data.transcript.entry_count)} 条记录，其中 {number(data.transcript.message_count)} 条可审计消息。以下内容直接来自持久 transcript，不是按 Haven 配置推算。</div>

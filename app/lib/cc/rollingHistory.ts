@@ -57,6 +57,7 @@ type TranscriptEnvelope = {
   userText: string
   assistantText: string
   havenTurnId: number | null
+  havenTurnIdConflict: boolean
   timestamp: string
 }
 
@@ -538,6 +539,7 @@ function toEnvelope(entries: SessionStoreEntry[]): TranscriptEnvelope {
     userText,
     assistantText,
     havenTurnId: havenTurnIds.length === 1 ? havenTurnIds[0] : null,
+    havenTurnIdConflict: havenTurnIds.length > 1,
     timestamp: typeof primaryUser?.timestamp === 'string' ? primaryUser.timestamp : '',
   }
 }
@@ -584,59 +586,102 @@ function closestCompletedTurnIndex(
 function alignEnvelopesToTurns(
   envelopes: TranscriptEnvelope[],
   turns: HavenTurn[],
+  allowIncompleteUserOnly = false,
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
-  const candidates = envelopes.map(envelope => {
+  const diagnostics = {
+    skippedIncomplete: 0,
+    missingHavenId: 0,
+    conflictingIds: 0,
+    noCandidate: 0,
+    ambiguousCandidates: 0,
+  }
+  const active: Array<{ envelope: TranscriptEnvelope; candidates: Set<number> }> = []
+  for (const envelope of envelopes) {
     const primaryUserUuid = envelope.entries.find(entry => isPrimaryUserEntry(entry))?.uuid || ''
     const nativeUuidMatches = primaryUserUuid
       ? orderedTurns
           .map((turn, index) => ({ turn, index }))
           .filter(({ turn }) => havenNativeTurnUuid(turn) === primaryUserUuid)
       : []
+    if (envelope.havenTurnIdConflict || nativeUuidMatches.length > 1) {
+      diagnostics.conflictingIds += 1
+      active.push({ envelope, candidates: new Set() })
+      continue
+    }
+    if (envelope.havenTurnId !== null) {
+      const index = orderedTurns.findIndex(turn => turn.id === envelope.havenTurnId)
+      if (index < 0) diagnostics.missingHavenId += 1
+      if (nativeUuidMatches.length === 1 && nativeUuidMatches[0].index !== index) {
+        diagnostics.conflictingIds += 1
+        active.push({ envelope, candidates: new Set() })
+      } else {
+        active.push({ envelope, candidates: index < 0 ? new Set() : new Set([index]) })
+      }
+      continue
+    }
+    if (nativeUuidMatches.length > 0) {
+      active.push({ envelope, candidates: new Set(nativeUuidMatches.map(({ index }) => index)) })
+      continue
+    }
     const textMatches = orderedTurns
       .map((turn, index) => ({ turn, index }))
       .filter(({ turn }) => envelopeMatchesTurn(envelope, turn))
-    if (envelope.havenTurnId !== null) {
-      return new Set(textMatches
-        .filter(({ turn }) => turn.id === envelope.havenTurnId)
-        .map(({ index }) => index))
-    }
-    if (nativeUuidMatches.length > 0) {
-      return new Set(nativeUuidMatches.map(({ index }) => index))
+    const hasAssistantOrTool = envelope.entries.some(entry => {
+      const message = messageRecord(entry)
+      return message?.role === 'assistant'
+        || (message ? contentBlocks(message).some(block => block.type === 'tool_use' || block.type === 'tool_result') : false)
+    })
+    // 失败发送可能只写进 Claude transcript，Haven 没有成功轮次。仅在无
+    // assistant/工具、且没有任何空 assistant 的 Haven 候选时隔离它。
+    if (allowIncompleteUserOnly && !hasAssistantOrTool && !textMatches.some(({ turn }) => !turn.assistant_text.trim())) {
+      diagnostics.skippedIncomplete += 1
+      continue
     }
     if (textMatches.length > 1) {
       const closestIndex = closestCompletedTurnIndex(envelope.timestamp, textMatches)
-      if (closestIndex !== null) return new Set([closestIndex])
+      if (closestIndex !== null) {
+        active.push({ envelope, candidates: new Set([closestIndex]) })
+        continue
+      }
     }
-    return new Set(textMatches.map(({ index }) => index))
-  })
+    if (textMatches.length === 0) diagnostics.noCandidate += 1
+    if (textMatches.length > 1) diagnostics.ambiguousCandidates += 1
+    active.push({ envelope, candidates: new Set(textMatches.map(({ index }) => index)) })
+  }
   const ways = Array.from(
-    { length: envelopes.length + 1 },
+    { length: active.length + 1 },
     () => Array<number>(orderedTurns.length + 1).fill(0),
   )
   for (let turnIndex = 0; turnIndex <= orderedTurns.length; turnIndex += 1) {
-    ways[envelopes.length][turnIndex] = 1
+    ways[active.length][turnIndex] = 1
   }
-  for (let envelopeIndex = envelopes.length - 1; envelopeIndex >= 0; envelopeIndex -= 1) {
+  for (let envelopeIndex = active.length - 1; envelopeIndex >= 0; envelopeIndex -= 1) {
     for (let turnIndex = orderedTurns.length - 1; turnIndex >= 0; turnIndex -= 1) {
       const skip = ways[envelopeIndex][turnIndex + 1]
-      const use = candidates[envelopeIndex].has(turnIndex)
+      const use = active[envelopeIndex].candidates.has(turnIndex)
         ? ways[envelopeIndex + 1][turnIndex + 1]
         : 0
       ways[envelopeIndex][turnIndex] = Math.min(2, skip + use)
     }
   }
   if (ways[0][0] !== 1) {
-    throw new Error('旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本')
+    const reason = ways[0][0] === 0 ? '缺少对应轮次或顺序冲突' : '存在多个对应方案'
+    throw new Error(
+      '旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本'
+      + `（${reason}；仅用户输入的失败半截记录已隔离 ${diagnostics.skippedIncomplete} 条；`
+      + `Haven 编号缺失 ${diagnostics.missingHavenId} 条、编号冲突 ${diagnostics.conflictingIds} 条、`
+      + `无正文候选 ${diagnostics.noCandidate} 条、重复候选 ${diagnostics.ambiguousCandidates} 条）`,
+    )
   }
   const aligned = new Map<number, TranscriptEnvelope>()
   let turnIndex = 0
-  for (let envelopeIndex = 0; envelopeIndex < envelopes.length; envelopeIndex += 1) {
+  for (let envelopeIndex = 0; envelopeIndex < active.length; envelopeIndex += 1) {
     while (turnIndex < orderedTurns.length) {
-      const canUse = candidates[envelopeIndex].has(turnIndex)
+      const canUse = active[envelopeIndex].candidates.has(turnIndex)
         && ways[envelopeIndex + 1][turnIndex + 1] > 0
       if (canUse) {
-        aligned.set(orderedTurns[turnIndex].id, envelopes[envelopeIndex])
+        aligned.set(orderedTurns[turnIndex].id, active[envelopeIndex].envelope)
         turnIndex += 1
         break
       }
@@ -644,6 +689,53 @@ function alignEnvelopesToTurns(
     }
   }
   return aligned
+}
+
+/** 设置页只读预检：不生成新 seed、不改 Haven 指针，也不返回聊天正文。 */
+export async function inspectRollingHistoryAlignment(
+  resumeFrom: string,
+  turns: HavenTurn[],
+  options: { storeRoot?: string } = {},
+): Promise<{
+  available: boolean
+  aligned: boolean
+  envelopeCount: number
+  matchedTurnCount: number
+  isolatedIncompleteCount: number
+  error: string
+}> {
+  const source = openRollingHistoryResume(resumeFrom, options)
+  if (!source) {
+    return {
+      available: false, aligned: false, envelopeCount: 0,
+      matchedTurnCount: 0, isolatedIncompleteCount: 0,
+      error: '滚动持久 transcript 不存在',
+    }
+  }
+  const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+  if (!entries?.length) {
+    return {
+      available: false, aligned: false, envelopeCount: 0,
+      matchedTurnCount: 0, isolatedIncompleteCount: 0,
+      error: '滚动持久 transcript 为空',
+    }
+  }
+  const envelopes = transcriptEnvelopes(entries).envelopes
+  try {
+    const matched = alignEnvelopesToTurns(envelopes, turns, true)
+    return {
+      available: true, aligned: true, envelopeCount: envelopes.length,
+      matchedTurnCount: matched.size,
+      isolatedIncompleteCount: envelopes.length - matched.size,
+      error: '',
+    }
+  } catch (error) {
+    return {
+      available: true, aligned: false, envelopeCount: envelopes.length,
+      matchedTurnCount: 0, isolatedIncompleteCount: 0,
+      error: error instanceof Error ? error.message : '滚动对齐预检失败',
+    }
+  }
 }
 
 export function cloneRollingTranscriptForSession(
@@ -933,7 +1025,7 @@ async function createRevisionSeedFromEntries(
   sourceKind: 'revision_seed' | 'fixed_transcript_migration',
 ): Promise<RollingHistorySeed | null> {
   const { prefix, envelopes } = transcriptEnvelopes(sourceEntries)
-  const aligned = alignEnvelopesToTurns(envelopes, allTurns)
+  const aligned = alignEnvelopesToTurns(envelopes, allTurns, sourceKind === 'revision_seed')
   const nextSessionId = randomUUID()
   const selectedEntries: SessionStoreEntry[] = [...prefix]
   const requiredFullRawDays = new Set(options.requiredFullRawDays || [])

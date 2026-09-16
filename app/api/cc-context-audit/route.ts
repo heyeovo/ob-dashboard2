@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getSessionStats } from '@/app/lib/ccSession'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
-import { inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
-import { getConversationSession, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
+import { inspectRollingHistoryAlignment, inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
+import { getConversationSession, listAllTurns, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
 import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/lib/havenPersonas'
 import { systemPromptContentHash } from '@/app/lib/cc/ccOptions'
 import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
@@ -109,6 +109,15 @@ export async function GET(request: NextRequest) {
     const transcript = transcriptSessionId
       ? await inspectRollingHistoryTranscript(transcriptSessionId)
       : null
+    const alignment = session.rolling_context?.strategy === 'daily_rolling' && transcriptSessionId
+      ? await listAllTurns(sessionId, { includeRaw: true }).then(result => result.ok
+        ? inspectRollingHistoryAlignment(transcriptSessionId, result.turns)
+        : {
+            available: false, aligned: false, envelopeCount: 0,
+            matchedTurnCount: 0, isolatedIncompleteCount: 0,
+            error: result.error || '无法读取 Haven 轮次',
+          })
+      : null
     const personaResult = await getPersona(session.persona_id)
     const persona = personaResult.persona
     const currentDashboardAppend = composeWindowPersonaAppend(
@@ -173,6 +182,7 @@ export async function GET(request: NextRequest) {
         messages: [],
       },
       rolling_seed: rollingSeedRaw,
+      rolling_alignment: alignment,
       system_prompt: {
         current: {
           mode: session.mode,
