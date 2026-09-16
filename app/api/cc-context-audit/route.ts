@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
             available: false, aligned: false, envelopeCount: 0,
             matchedTurnCount: 0, isolatedIncompleteCount: 0,
             error: result.error || '无法读取 Haven 轮次',
+            issues: [],
           })
       : null
     const personaResult = await getPersona(session.persona_id)

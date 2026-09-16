@@ -67,6 +67,16 @@ type AuditData = {
     matchedTurnCount: number
     isolatedIncompleteCount: number
     error: string
+    issues: Array<{
+      envelopeIndex: number
+      entryIndex: number
+      userUuid: string
+      timestamp: string
+      agentWake: boolean
+      reason: 'missing_haven_user' | 'assistant_mismatch'
+      havenUserCandidateCount: number
+      havenUserCandidateIds: number[]
+    }>
   } | null
   system_prompt: {
     current: {
@@ -242,6 +252,18 @@ export default function ContextAuditPanel() {
                       ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败半截输入 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条。未保存设置。`
                       : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
                   </p>
+                ) : null}
+                {data.rolling_alignment?.issues?.length ? (
+                  <div className="space-y-2 text-xs">
+                    <div className="font-medium text-[var(--color-text-secondary)]">无法对应的完整轮次（只读定位，不含聊天正文）</div>
+                    {data.rolling_alignment.issues.map(issue => (
+                      <div key={`${issue.envelopeIndex}-${issue.userUuid}`} className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-[var(--color-text-secondary)]">
+                        <div>轮次 #{issue.envelopeIndex} · transcript 消息 #{issue.entryIndex} · {issue.agentWake ? '主动唤醒标记：有' : '主动唤醒标记：无'}</div>
+                        <div>{issue.reason === 'missing_haven_user' ? 'Haven 没有相符的输入轮次' : 'Haven 有相符输入，但助手正文不一致'} · 输入候选 {issue.havenUserCandidateCount} 条{issue.havenUserCandidateIds.length ? `（Haven ID：${issue.havenUserCandidateIds.join('、')}${issue.havenUserCandidateCount > issue.havenUserCandidateIds.length ? '…' : ''}）` : ''}</div>
+                        <div className="break-all text-[var(--color-text-tertiary)]">时间：{issue.timestamp || '未记录'} · UUID：{issue.userUuid || '未记录'}</div>
+                      </div>
+                    ))}
+                  </div>
                 ) : null}
                 {data.transcript.available ? (
                   <div className="space-y-1 text-[11px] text-[var(--color-text-tertiary)]">

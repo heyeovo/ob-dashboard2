@@ -544,14 +544,18 @@ function toEnvelope(entries: SessionStoreEntry[]): TranscriptEnvelope {
   }
 }
 
-function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
+function envelopeUserMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
   const actualUser = normalized(envelope.userText)
-  const actualAssistant = normalized(envelope.assistantText)
-  const expectedAssistant = normalized(turn.assistant_text)
-  const userMatches = turn.turn_kind === 'agent_wake'
+  return turn.turn_kind === 'agent_wake'
     ? actualUser.includes('<agent_wake ')
     : Boolean(normalized(turn.user_text)) && actualUser.includes(normalized(turn.user_text))
-  return userMatches && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
+}
+
+function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
+  const actualAssistant = normalized(envelope.assistantText)
+  const expectedAssistant = normalized(turn.assistant_text)
+  return envelopeUserMatchesTurn(envelope, turn)
+    && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
 }
 
 function havenNativeTurnUuid(turn: HavenTurn): string {
@@ -587,6 +591,7 @@ function alignEnvelopesToTurns(
   envelopes: TranscriptEnvelope[],
   turns: HavenTurn[],
   allowIncompleteUserOnly = false,
+  onNoCandidate?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
   const diagnostics = {
@@ -597,7 +602,7 @@ function alignEnvelopesToTurns(
     ambiguousCandidates: 0,
   }
   const active: Array<{ envelope: TranscriptEnvelope; candidates: Set<number> }> = []
-  for (const envelope of envelopes) {
+  for (const [envelopeIndex, envelope] of envelopes.entries()) {
     const primaryUserUuid = envelope.entries.find(entry => isPrimaryUserEntry(entry))?.uuid || ''
     const nativeUuidMatches = primaryUserUuid
       ? orderedTurns
@@ -645,7 +650,10 @@ function alignEnvelopesToTurns(
         continue
       }
     }
-    if (textMatches.length === 0) diagnostics.noCandidate += 1
+    if (textMatches.length === 0) {
+      diagnostics.noCandidate += 1
+      onNoCandidate?.(envelope, envelopeIndex)
+    }
     if (textMatches.length > 1) diagnostics.ambiguousCandidates += 1
     active.push({ envelope, candidates: new Set(textMatches.map(({ index }) => index)) })
   }
@@ -691,6 +699,17 @@ function alignEnvelopesToTurns(
   return aligned
 }
 
+export type RollingAlignmentIssue = {
+  envelopeIndex: number
+  entryIndex: number
+  userUuid: string
+  timestamp: string
+  agentWake: boolean
+  reason: 'missing_haven_user' | 'assistant_mismatch'
+  havenUserCandidateCount: number
+  havenUserCandidateIds: number[]
+}
+
 /** 设置页只读预检：不生成新 seed、不改 Haven 指针，也不返回聊天正文。 */
 export async function inspectRollingHistoryAlignment(
   resumeFrom: string,
@@ -703,6 +722,7 @@ export async function inspectRollingHistoryAlignment(
   matchedTurnCount: number
   isolatedIncompleteCount: number
   error: string
+  issues: RollingAlignmentIssue[]
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -710,6 +730,7 @@ export async function inspectRollingHistoryAlignment(
       available: false, aligned: false, envelopeCount: 0,
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 不存在',
+      issues: [],
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -718,22 +739,40 @@ export async function inspectRollingHistoryAlignment(
       available: false, aligned: false, envelopeCount: 0,
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 为空',
+      issues: [],
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
+  const issues: RollingAlignmentIssue[] = []
+  const recordNoCandidate = (envelope: TranscriptEnvelope, envelopeIndex: number) => {
+    const userMatches = turns.filter(turn => envelopeUserMatchesTurn(envelope, turn))
+    const primaryUser = envelope.entries.find(entry => isPrimaryUserEntry(entry))
+    issues.push({
+      envelopeIndex: envelopeIndex + 1,
+      entryIndex: primaryUser ? entries.indexOf(primaryUser) : -1,
+      userUuid: typeof primaryUser?.uuid === 'string' ? primaryUser.uuid : '',
+      timestamp: envelope.timestamp,
+      agentWake: normalized(envelope.userText).includes('<agent_wake '),
+      reason: userMatches.length ? 'assistant_mismatch' : 'missing_haven_user',
+      havenUserCandidateCount: userMatches.length,
+      havenUserCandidateIds: userMatches.slice(0, 5).map(turn => turn.id),
+    })
+  }
   try {
-    const matched = alignEnvelopesToTurns(envelopes, turns, true)
+    const matched = alignEnvelopesToTurns(envelopes, turns, true, recordNoCandidate)
     return {
       available: true, aligned: true, envelopeCount: envelopes.length,
       matchedTurnCount: matched.size,
       isolatedIncompleteCount: envelopes.length - matched.size,
       error: '',
+      issues,
     }
   } catch (error) {
     return {
       available: true, aligned: false, envelopeCount: envelopes.length,
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: error instanceof Error ? error.message : '滚动对齐预检失败',
+      issues,
     }
   }
 }

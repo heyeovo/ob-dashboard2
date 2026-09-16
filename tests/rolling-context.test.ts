@@ -715,12 +715,58 @@ describe('daily rolling context', () => {
           },
         ],
       )
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
+      expect(inspection.aligned).toBe(false)
+      expect(inspection.issues).toMatchObject([{
+        userUuid: 'unmatched-user', agentWake: false,
+        reason: 'missing_haven_user', havenUserCandidateCount: 0,
+      }])
       await expect(createRollingHistoryRevisionSeed(
         source.resumeFrom, turns, turns, {
           cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
           requiredFullRawDays: [turns[0].chat_day],
         },
       )).rejects.toThrow('无正文候选 1 条')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('identifies a wake transcript with a mismatched Haven assistant body without exposing either body', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-audit-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append(
+        { projectKey: '', sessionId: source.resumeFrom },
+        [
+          {
+            type: 'user', uuid: 'wake-user', parentUuid: source.entries.at(-1)?.uuid || null,
+            sessionId: source.resumeFrom,
+            message: { role: 'user', content: '<agent_wake cause="agent_schedule"/>' },
+          },
+          {
+            type: 'assistant', uuid: 'wake-assistant', parentUuid: 'wake-user',
+            sessionId: source.resumeFrom,
+            message: { role: 'assistant', content: [{ type: 'text', text: 'transcript 里的回答' }] },
+          },
+        ],
+      )
+      const wakeTurn = {
+        ...turns[0], id: 4, round_id: 4, turn_kind: 'agent_wake',
+        user_text: '', assistant_text: 'Haven 里的不同回答', raw_json: '',
+      } as HavenTurn
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, wakeTurn], { storeRoot })
+      expect(inspection.aligned).toBe(false)
+      expect(inspection.issues).toMatchObject([{
+        userUuid: 'wake-user', agentWake: true,
+        reason: 'assistant_mismatch', havenUserCandidateCount: 1,
+        havenUserCandidateIds: [4],
+      }])
+      expect(JSON.stringify(inspection.issues)).not.toContain('transcript 里的回答')
+      expect(JSON.stringify(inspection.issues)).not.toContain('Haven 里的不同回答')
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }
