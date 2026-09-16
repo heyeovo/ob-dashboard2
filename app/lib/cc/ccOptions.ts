@@ -53,8 +53,8 @@ const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
 /**
  * 模型手上有哪些工具。
  *
- * 只列界面能说明和展示的工具；WebSearch / WebFetch 的 schema 在两种模式都固定存在，
- * 实际是否放行由每轮 hook 决定，其余工作工具只在工作模式存在。
+ * 闲聊和工作模式使用同一组文件、命令与 Web 工具；两种模式的系统提示词仍分别配置。
+ * WebSearch / WebFetch 的 schema 固定存在，实际是否放行由每轮 hook 决定。
  */
 const WORK_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
 export const CACHE_STABLE_WEB_TOOLS = ['WebSearch', 'WebFetch']
@@ -156,9 +156,7 @@ export function systemPromptContentHash(mode: CcMode, personaAppend: string): st
 
 /** 只记录 hash 与名称，不把提示词、路径、MCP 配置正文写进日志。 */
 export function cacheRelevantFingerprint(config: TurnConfig) {
-  const toolNames = config.mode === 'chat'
-    ? [...CACHE_STABLE_WEB_TOOLS]
-    : [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
+  const toolNames = [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
   const mcpServerNames = [...Object.keys(config.sdkMcpServers), ...builtInMcpServerNames()].sort()
   const systemPromptHash = systemPromptContentHash(config.mode, config.personaAppend)
   const toolsHash = shortHash(toolNames)
@@ -436,7 +434,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     additionalDirectories,
     // Web 工具 schema 永远保留，确保 foreground / background wake 共用同一 cache prefix。
     // 是否真的能调用由每轮 PreToolUse 读取当前开关并决定，不再靠删除工具定义实现。
-    tools: mode === 'chat' ? [...CACHE_STABLE_WEB_TOOLS] : [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS],
+    tools: [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS],
     // MCP 跟 Claude Code 内置工具是两条独立通道。strict 保证实际工具集
     // 跟 Home 管理页完全一致，
     // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
@@ -450,14 +448,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     disallowedTools: disabledTools.filter(name => !isSetAgentWakeTool(name)),
     // 本地只读和 WebSearch 自动放行。WebFetch 按域名问；Bash 走 SDK 标准规则，
     // 用户可在卡片上选仅一次 / 本次对话 / 始终允许。
-    allowedTools:
-      mode === 'chat'
-        ? ['WebSearch']
-        : [
-            ...READ_ONLY_TOOLS,
-            'Bash',
-            'WebSearch',
-          ],
+    allowedTools: [...READ_ONLY_TOOLS, 'Bash', 'WebSearch'],
     // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
     // 根本走不到 canUseTool，也就没有批准这回事了。
     permissionMode: 'default',

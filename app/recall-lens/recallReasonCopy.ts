@@ -293,8 +293,18 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     effect: 'reject',
   },
   session_hard_exclude: {
-    title: '当前会话硬排除',
-    description: '候选在当前会话中已被排除，通常用于避免同一记忆重复注入。',
+    title: '本轮排除清单',
+    description: '这个桶在检索前已被本窗口排除；没有可核对的历史召回或创建记录，可能是当前钉选的桶。',
+    effect: 'reject',
+  },
+  prior_session_recall: {
+    title: '之前有过召回记录',
+    description: 'Haven 记录显示这个桶此前在本窗口被召回，因此本轮在检索前排除。该记录不证明召回正文仍留在当前上下文。',
+    effect: 'reject',
+  },
+  prior_session_created: {
+    title: '此前在本窗口创建',
+    description: 'Haven 记录显示这个桶此前在本窗口创建，因此本轮在检索前排除。',
     effect: 'reject',
   },
   semantic_session_dedupe: {

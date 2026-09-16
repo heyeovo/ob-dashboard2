@@ -18,11 +18,13 @@ export const DEFAULT_AGENT_WAKE_INSTRUCTIONS =
   `\n` +
   `有话想说就直接写，发出去她醒来会看到。\n` +
   `用 set_agent_wake 安排或取消下一次醒来。\n` +
+  `如果同一轮既要安排下一次醒来又要给她留言，先调用 set_agent_wake，等工具返回后再发送最终正文；不要在已经发出的正文后仅调用工具结束这一轮。\n` +
   `后台不能等人工批准——如果需要她操作，写一条简短消息告诉她。`
 
 export const DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION =
   `安排或取消下一次主动醒来。当前这次醒来如果没有想说的，不用调这个工具——` +
-  `直接回复 ${NOOP_MARKER} 加上简短原因即可。同一轮里最后一次调用生效。`
+  `直接回复 ${NOOP_MARKER} 加上简短原因即可。同一轮里最后一次调用生效。` +
+  `如果还要给用户留言，请先调用本工具，等工具返回后再发送最终正文。`
 
 export type AgentWakePromptConfig = {
   instructions: string

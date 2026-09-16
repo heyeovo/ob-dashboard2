@@ -91,10 +91,11 @@ describe('cc 基础提示词渠道一致性', () => {
     const enabled = config('chat')
     const disabled = config('chat')
     disabled.webSettings = { ...DEFAULT_WEB_SETTINGS, searchEnabled: false, fetchEnabled: false }
-    expect(buildCcOptions(enabled, null).tools).toEqual(CACHE_STABLE_WEB_TOOLS)
-    expect(buildCcOptions(disabled, null).tools).toEqual(CACHE_STABLE_WEB_TOOLS)
-    expect(buildCcOptions(enabled, null).allowedTools).toEqual(['WebSearch'])
-    expect(buildCcOptions(disabled, null).allowedTools).toEqual(['WebSearch'])
+    expect(buildCcOptions(enabled, null).tools).toEqual(buildCcOptions(config('work'), null).tools)
+    expect(buildCcOptions(enabled, null).tools).toEqual(expect.arrayContaining([...CACHE_STABLE_WEB_TOOLS, 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash']))
+    expect(buildCcOptions(disabled, null).tools).toEqual(buildCcOptions(enabled, null).tools)
+    expect(buildCcOptions(enabled, null).allowedTools).toEqual(['Read', 'Grep', 'Glob', 'Bash', 'WebSearch'])
+    expect(buildCcOptions(disabled, null).allowedTools).toEqual(buildCcOptions(enabled, null).allowedTools)
     expect(cacheRelevantFingerprint(enabled)).toEqual(cacheRelevantFingerprint(disabled))
   })
 

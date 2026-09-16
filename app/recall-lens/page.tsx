@@ -71,6 +71,12 @@ type Candidate = {
   }
 }
 
+type PreexcludedBucket = {
+  bucket_id: string
+  bucket_name: string
+  exclusion_history?: Array<{ kind: 'recalled' | 'created'; chat_day: string }>
+}
+
 type ShadowUtilityStatus = 'promote' | 'neutral' | 'reject'
 
 type ShadowUtilityDebug = {
@@ -118,6 +124,8 @@ type DebugPayload = {
   query_preview?: string
   recalled_bucket_debug?: Candidate[]
   suppressed_bucket_candidates?: Candidate[]
+  preexcluded_bucket_candidates?: PreexcludedBucket[]
+  preexcluded_bucket_count?: number
   recall_necessity_debug?: RecallNecessityDebug
   recall_shadow_debug?: RecallShadowDebug
   hook_recall_debug?: {
@@ -338,6 +346,7 @@ function StatTile({ label, value, note }: { label: string; value: number; note?:
 function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selected: boolean; onSelect: () => void }) {
   const recalled = round.payload.recalled_bucket_debug?.length || 0
   const suppressed = round.payload.suppressed_bucket_candidates?.length || 0
+  const preexcluded = round.payload.preexcluded_bucket_count || 0
   const degraded = round.payload.query_planner_debug?.errors?.length || 0
   const necessity = round.payload.recall_necessity_debug?.necessity
   const reviewedCandidates = round.payload.recall_shadow_debug?.reviewed_candidate_count || 0
@@ -359,6 +368,7 @@ function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selec
         <div className="mt-2 flex flex-wrap gap-1">
           {recalled > 0 && <MiniStatus effect="allow">注入 {recalled}</MiniStatus>}
           {suppressed > 0 && <MiniStatus effect="reject">拒绝 {suppressed}</MiniStatus>}
+          {preexcluded > 0 && <MiniStatus effect="info">预排除 {preexcluded}</MiniStatus>}
           {degraded > 0 && <MiniStatus effect="degraded">系统降级</MiniStatus>}
           {necessity && <MiniStatus effect="info">{necessityLabel(necessity)}</MiniStatus>}
           {reviewedCandidates > 0 && <MiniStatus effect="score">审核 {reviewedCandidates}</MiniStatus>}
@@ -373,6 +383,7 @@ function RoundDetail({ round }: { round: DebugRound }) {
   const payload = round.payload
   const recalled = payload.recalled_bucket_debug || []
   const suppressed = payload.suppressed_bucket_candidates || []
+  const preexcluded = payload.preexcluded_bucket_candidates || []
   const errors = payload.query_planner_debug?.errors || []
   const axisTerms = payload.query_planner_debug?.recall_query_plan?.activated_axis_terms || []
   const anchorTerms = payload.query_planner_debug?.dynamic_anchor?.required_terms || []
@@ -553,6 +564,42 @@ function RoundDetail({ round }: { round: DebugRound }) {
         effectiveBucketIds={effectiveBucketIds}
         shadowBucketIds={shadowBucketIds}
       />
+      {preexcluded.length > 0 && (
+        <Card padding="lg">
+          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
+            检索前排除 · {payload.preexcluded_bucket_count ?? preexcluded.length}
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
+            这些桶在相关性审核前已被排除，不属于上面的被拒候选；历史记录不代表正文仍在当前上下文。
+          </p>
+          <div className="mt-3 space-y-3">
+            {preexcluded.map((bucket) => {
+              const history = bucket.exclusion_history || []
+              const reasons = [...new Set(history.map((entry) => entry.kind === 'recalled'
+                ? 'prior_session_recall' : 'prior_session_created'))]
+              return (
+                <div key={bucket.bucket_id} className="rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-3">
+                  <p className="text-xs font-medium text-[var(--color-text-primary)]">{bucket.bucket_name || bucket.bucket_id}</p>
+                  <p className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{bucket.bucket_id}</p>
+                  <div className="mt-2 space-y-1.5">
+                    {(reasons.length ? reasons : ['session_hard_exclude']).map((reason) => (
+                      <RuleExplanation key={reason} code={reason} compact />
+                    ))}
+                  </div>
+                  {history.length > 0 && (
+                    <p className="mt-2 text-[11px] text-[var(--color-text-tertiary)]">
+                      记录日期：{[...new Set(history.map((entry) => entry.chat_day).filter(Boolean))].sort().join(' · ')}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {(payload.preexcluded_bucket_count || 0) > preexcluded.length && (
+            <p className="mt-3 text-xs text-[var(--color-text-tertiary)]">仅展示前 {preexcluded.length} 个排除项。</p>
+          )}
+        </Card>
+      )}
     </div>
   )
 }

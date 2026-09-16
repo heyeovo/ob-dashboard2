@@ -48,6 +48,8 @@ const formalAdmissionReasons = [
   'weak_evidence_only',
   'planner_must_terms_missing',
   'session_hard_exclude',
+  'prior_session_recall',
+  'prior_session_created',
   'semantic_session_dedupe',
   'word_map_topic_evidence_missing',
   'semantic_rescue_direct_evidence',
@@ -182,5 +184,12 @@ describe('recall lens Chinese explanations', () => {
     expect(unknown.title).toContain('shadow_future_rule_v2')
     expect(unknown.description).toContain('完整内部码')
     expect(unknown.title).not.toBe('尚未收录中文说明')
+  })
+
+  it('describes historical exclusion without claiming the content is still in context', () => {
+    const recall = getRecallRuleCopy('prior_session_recall')
+    expect(recall.title).toBe('之前有过召回记录')
+    expect(recall.description).toContain('不证明召回正文仍留在当前上下文')
+    expect(getRecallRuleCopy('prior_session_created').title).toBe('此前在本窗口创建')
   })
 })
