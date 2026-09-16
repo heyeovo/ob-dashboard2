@@ -772,6 +772,95 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('keeps SDK no-visible-output continuation inside its wake turn without rewriting transcript entries', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-continuation-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const wakeEntries = [
+        { type: 'user', uuid: 'wake-trigger', message: { role: 'user', content: '<agent_wake cause="agent_schedule"/>' } },
+        { type: 'assistant', uuid: 'wake-tool', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'wake-tool-id', name: 'set_agent_wake', input: {} }] } },
+        { type: 'user', uuid: 'wake-tool-result', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'wake-tool-id', content: '已安排' }] } },
+        { type: 'user', uuid: 'sdk-no-visible', message: { role: 'user', content: '[Your previous response had no visible output. Please continue and produce a user-visible response.]' } },
+        { type: 'assistant', uuid: 'wake-noop', message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop]设置完毕' }] } },
+      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, wakeEntries)
+      const wakeTurn = {
+        ...turns[0], id: 4, round_id: 4, turn_kind: 'agent_wake',
+        user_text: '', assistant_text: '', raw_json: '',
+      } as HavenTurn
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, wakeTurn], { storeRoot })
+      expect(inspection).toMatchObject({ aligned: true, matchedTurnCount: 2, issues: [] })
+      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [...turns, wakeTurn], [...turns, wakeTurn], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [turns[0].chat_day],
+        },
+      )
+      expect(revised?.entries.map(entry => entry.message)).toEqual([...source.entries, ...wakeEntries].map(entry => entry.message))
+      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps interruption and auto-continue messages inside the original user turn', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-interrupted-continuation-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const continuedEntries = [
+        { type: 'user', uuid: 'real-user', message: { role: 'user', content: '我的真实消息' } },
+        { type: 'assistant', uuid: 'real-answer', message: { role: 'assistant', content: [{ type: 'text', text: '原本答复' }] } },
+        { type: 'user', uuid: 'interrupted-marker', message: { role: 'user', content: '[Request interrupted by user]' } },
+        { type: 'user', uuid: 'auto-continue', message: { role: 'user', content: 'Continue from where you left off.' } },
+        { type: 'assistant', uuid: 'no-response', message: { role: 'assistant', content: [{ type: 'text', text: 'No response requested.' }] } },
+      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, continuedEntries)
+      const actualTurn = {
+        ...turns[0], id: 4, round_id: 4,
+        user_text: '我的真实消息', assistant_text: '原本答复', raw_json: '',
+      } as HavenTurn
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, actualTurn], { storeRoot })
+      expect(inspection).toMatchObject({ aligned: true, matchedTurnCount: 2, issues: [] })
+      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [...turns, actualTurn], [...turns, actualTurn], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [turns[0].chat_day],
+        },
+      )
+      expect(revised?.entries.map(entry => entry.message)).toEqual([...source.entries, ...continuedEntries].map(entry => entry.message))
+      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not silently absorb a standalone auto-continue message', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unanchored-continuation-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        { type: 'user', uuid: 'unanchored-continue', sessionId: source.resumeFrom, message: { role: 'user', content: 'Continue from where you left off.' } },
+        { type: 'assistant', uuid: 'unanchored-answer', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: '没有锚点' }] } },
+      ])
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
+      expect(inspection.aligned).toBe(false)
+      expect(inspection.issues).toMatchObject([{ userUuid: 'unanchored-continue' }])
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('refuses to body-restore a turn from a day that stayed raw', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-required-'))
     const retained = { ...turns[0], id: 1, chat_day: '2026-09-11' } as HavenTurn

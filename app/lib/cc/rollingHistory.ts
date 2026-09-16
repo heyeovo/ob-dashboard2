@@ -494,6 +494,27 @@ function isPrimaryUserEntry(entry: SessionStoreEntry): boolean {
   return !blocks.some(block => block.type === 'tool_result')
 }
 
+const NO_VISIBLE_OUTPUT_CONTINUATION = '[Your previous response had no visible output. Please continue and produce a user-visible response.]'
+const INTERRUPTED_REQUEST_MARKER = '[Request interrupted by user]'
+const CONTINUE_INTERRUPTED_REQUEST = 'Continue from where you left off.'
+
+function isInternalContinuationEntry(entry: SessionStoreEntry, current: SessionStoreEntry[]): boolean {
+  if (!isPrimaryUserEntry(entry)) return false
+  const content = transcriptMessageContent(messageRecord(entry)).trim()
+  if (content === INTERRUPTED_REQUEST_MARKER) return true
+  if (content === CONTINUE_INTERRUPTED_REQUEST) {
+    return current.some(previous => transcriptMessageContent(messageRecord(previous)).trim() === INTERRUPTED_REQUEST_MARKER)
+  }
+  if (content === NO_VISIBLE_OUTPUT_CONTINUATION) {
+    return current.some(previous => {
+      const message = messageRecord(previous)
+      return message?.role === 'assistant'
+        || (message ? contentBlocks(message).some(block => block.type === 'tool_result') : false)
+    })
+  }
+  return false
+}
+
 function normalized(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
@@ -506,7 +527,7 @@ function transcriptEnvelopes(entries: SessionStoreEntry[]): {
   const envelopes: TranscriptEnvelope[] = []
   let current: SessionStoreEntry[] | null = null
   for (const entry of entries) {
-    if (isPrimaryUserEntry(entry)) {
+    if (isPrimaryUserEntry(entry) && !(current && isInternalContinuationEntry(entry, current))) {
       if (current) envelopes.push(toEnvelope(current))
       current = [entry]
     } else if (current) {
