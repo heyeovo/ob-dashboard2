@@ -579,6 +579,28 @@ function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boo
     && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
 }
 
+function isInterruptedStatusOnlyEnvelope(envelope: TranscriptEnvelope): boolean {
+  const users = envelope.entries.filter(entry => isPrimaryUserEntry(entry))
+  if (users.length !== 3) return false
+  const userContents = users.map(entry => transcriptMessageContent(messageRecord(entry)).trim())
+  if (!userContents[0]
+    || userContents[0] === INTERRUPTED_REQUEST_MARKER
+    || userContents[0] === CONTINUE_INTERRUPTED_REQUEST
+    || userContents[1] !== INTERRUPTED_REQUEST_MARKER
+    || userContents[2] !== CONTINUE_INTERRUPTED_REQUEST) return false
+  const assistants = envelope.entries
+    .map(entry => messageRecord(entry))
+    .filter(message => message?.role === 'assistant')
+  if (assistants.length === 0) return false
+  return envelope.entries.every(entry => {
+    const message = messageRecord(entry)
+    if (!message) return true
+    if (typeof message.content === 'string') return true
+    return Array.isArray(message.content) && message.content.every(block =>
+      block && typeof block === 'object' && block.type === 'text' && typeof block.text === 'string')
+  }) && assistants.every(message => normalized(transcriptMessageContent(message)) === 'No response requested.')
+}
+
 function havenNativeTurnUuid(turn: HavenTurn): string {
   if (!turn.raw_json) return ''
   try {
@@ -653,6 +675,12 @@ function alignEnvelopesToTurns(
     const textMatches = orderedTurns
       .map((turn, index) => ({ turn, index }))
       .filter(({ turn }) => envelopeMatchesTurn(envelope, turn))
+    // SDK/CLI 在失败发送后可能写入中断、自动续写和纯状态回复，Haven 却没有
+    // 保存这次尝试。旧存档保持原样；只有 revision 副本隔离这种精确形状的记录。
+    if (allowIncompleteUserOnly && textMatches.length === 0 && isInterruptedStatusOnlyEnvelope(envelope)) {
+      diagnostics.skippedIncomplete += 1
+      continue
+    }
     const hasAssistantOrTool = envelope.entries.some(entry => {
       const message = messageRecord(entry)
       return message?.role === 'assistant'
@@ -698,7 +726,7 @@ function alignEnvelopesToTurns(
     const reason = ways[0][0] === 0 ? '缺少对应轮次或顺序冲突' : '存在多个对应方案'
     throw new Error(
       '旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本'
-      + `（${reason}；仅用户输入的失败半截记录已隔离 ${diagnostics.skippedIncomplete} 条；`
+      + `（${reason}；失败/中断的半截轮次已隔离 ${diagnostics.skippedIncomplete} 条；`
       + `Haven 编号缺失 ${diagnostics.missingHavenId} 条、编号冲突 ${diagnostics.conflictingIds} 条、`
       + `无正文候选 ${diagnostics.noCandidate} 条、重复候选 ${diagnostics.ambiguousCandidates} 条）`,
     )

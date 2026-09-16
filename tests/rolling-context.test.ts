@@ -842,6 +842,103 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('isolates only a status-only failed request while retaining its successful resend', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-failed-status-retry-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const laterEntries = [
+        { type: 'user', uuid: 'failed-real-user', message: { role: 'user', content: '这条后来重新发送' } },
+        { type: 'user', uuid: 'failed-interrupted', message: { role: 'user', content: '[Request interrupted by user]' } },
+        { type: 'user', uuid: 'failed-continue', message: { role: 'user', content: 'Continue from where you left off.' } },
+        { type: 'assistant', uuid: 'failed-status', message: { role: 'assistant', content: [{ type: 'text', text: 'No response requested.' }] } },
+        { type: 'user', uuid: 'successful-retry', message: { role: 'user', content: '这条后来重新发送' } },
+        { type: 'assistant', uuid: 'successful-answer', message: { role: 'assistant', content: [{ type: 'text', text: '重新发送后成功回答' }] } },
+      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, laterEntries)
+      const successfulTurn = {
+        ...turns[0], id: 4, round_id: 4,
+        user_text: '这条后来重新发送', assistant_text: '重新发送后成功回答',
+        raw_json: JSON.stringify({ cc_turn_uuid: 'successful-retry' }),
+      } as HavenTurn
+      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, successfulTurn], { storeRoot })
+      expect(inspection).toMatchObject({
+        aligned: true, envelopeCount: 3, matchedTurnCount: 2,
+        isolatedIncompleteCount: 1, issues: [],
+      })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [...turns, successfulTurn], [...turns, successfulTurn], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [turns[0].chat_day],
+        },
+      )
+      expect(revised?.entries.map(entry => entry.message)).toEqual([
+        ...source.entries, ...laterEntries.slice(4),
+      ].map(entry => entry.message))
+      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not isolate an interrupted request containing a real assistant reply or tool call', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-interrupted-with-output-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        { type: 'user', uuid: 'real-user-with-output', sessionId: source.resumeFrom, message: { role: 'user', content: '失败前做了工具调用' } },
+        { type: 'assistant', uuid: 'tool-before-failure', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-before-failure', name: 'search', input: {} }] } },
+        { type: 'user', uuid: 'interrupted-after-tool', sessionId: source.resumeFrom, message: { role: 'user', content: '[Request interrupted by user]' } },
+        { type: 'user', uuid: 'continue-after-tool', sessionId: source.resumeFrom, message: { role: 'user', content: 'Continue from where you left off.' } },
+        { type: 'assistant', uuid: 'status-after-tool', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: 'No response requested.' }] } },
+      ])
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
+      expect(inspection.aligned).toBe(false)
+      expect(inspection.issues).toMatchObject([{ userUuid: 'real-user-with-output' }])
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not isolate an interrupted request containing an image or thinking block', async () => {
+    for (const variant of ['image', 'thinking'] as const) {
+      const storeRoot = await mkdtemp(path.join(tmpdir(), `ob2-rolling-interrupted-${variant}-`))
+      try {
+        const source = createManualRollingBodyRecoverySeed(turns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+        })!
+        await materializeRollingHistorySeed(source)
+        await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+          {
+            type: 'user', uuid: `real-user-${variant}`, sessionId: source.resumeFrom,
+            message: { role: 'user', content: variant === 'image'
+              ? [{ type: 'text', text: '含图片的失败输入' }, { type: 'image', source: { type: 'base64', data: 'image-data' } }]
+              : '含 thinking 的失败输入' },
+          },
+          { type: 'user', uuid: `interrupted-${variant}`, sessionId: source.resumeFrom, message: { role: 'user', content: '[Request interrupted by user]' } },
+          { type: 'user', uuid: `continue-${variant}`, sessionId: source.resumeFrom, message: { role: 'user', content: 'Continue from where you left off.' } },
+          {
+            type: 'assistant', uuid: `status-${variant}`, sessionId: source.resumeFrom,
+            message: { role: 'assistant', content: variant === 'thinking'
+              ? [{ type: 'thinking', thinking: 'private reasoning' }, { type: 'text', text: 'No response requested.' }]
+              : [{ type: 'text', text: 'No response requested.' }] },
+          },
+        ])
+        const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
+        expect(inspection.aligned).toBe(false)
+        expect(inspection.issues).toMatchObject([{ userUuid: `real-user-${variant}` }])
+      } finally {
+        await rm(storeRoot, { recursive: true, force: true })
+      }
+    }
+  })
+
   it('does not silently absorb a standalone auto-continue message', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unanchored-continuation-'))
     try {

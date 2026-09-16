@@ -249,7 +249,7 @@ export default function ContextAuditPanel() {
                 {data.rolling_alignment ? (
                   <p className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.aligned ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
                     {data.rolling_alignment.aligned
-                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败半截输入 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条。未保存设置。`
+                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败/中断的半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条。未保存设置。`
                       : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
                   </p>
                 ) : null}
