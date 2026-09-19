@@ -802,6 +802,99 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('isolates a plain-text wake race turn that never reached Haven', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-race-orphan-'))
+    try {
+      const retained = { ...turns[0], id: 3, round_id: 3 } as HavenTurn
+      const wakeTurn = {
+        ...retained, id: 5, round_id: 5, chat_day: '2026-09-18',
+        turn_kind: 'agent_wake', user_text: '', assistant_text: '',
+        created_at: '2026-09-18T11:35:21.000Z', raw_json: '',
+      } as HavenTurn
+      const oldDuplicate = {
+        ...retained, id: 4, round_id: 4, chat_day: '2026-09-14',
+        user_text: '噗噗噗', assistant_text: '旧回答',
+        created_at: '2026-09-14T11:35:30.000Z', raw_json: '',
+      } as HavenTurn
+      const source = createManualRollingBodyRecoverySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const raceEntries = [
+        {
+          type: 'user', uuid: 'wake-user', timestamp: '2026-09-18T11:35:00.000Z',
+          message: { role: 'user', content: '<agent_wake cause="conversation_silence"/>' },
+        },
+        {
+          type: 'assistant', uuid: 'wake-assistant', timestamp: '2026-09-18T11:35:20.000Z',
+          message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop] 不打扰。' }] },
+        },
+        {
+          type: 'user', uuid: 'orphan-user', timestamp: '2026-09-18T11:35:22.929Z',
+          message: { role: 'user', content: '噗噗噗\n\n[北京时间 2026-09-18 19:35 周五]' },
+        },
+        {
+          type: 'assistant', uuid: 'orphan-assistant', timestamp: '2026-09-18T11:35:24.000Z',
+          message: { role: 'assistant', content: [{ type: 'text', text: '什么。' }] },
+        },
+      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, raceEntries)
+      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
+      const allTurns = [retained, oldDuplicate, wakeTurn]
+      const rawTurns = [retained, wakeTurn]
+
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, allTurns, {
+        storeRoot, rawTurns, requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
+      })
+      expect(inspection).toMatchObject({
+        aligned: true,
+        matchedTurnCount: 2,
+        isolatedIncompleteCount: 0,
+        isolatedWakeRaceCount: 1,
+        issues: [],
+      })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, allTurns, rawTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
+        },
+      )
+      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('噗噗噗')
+      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('什么。')
+      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).toContain('agent_wake')
+      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('does not isolate an unmatched post-wake turn containing a tool call', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-race-tool-'))
+    try {
+      const retained = { ...turns[0], id: 3, round_id: 3 } as HavenTurn
+      const wakeTurn = {
+        ...retained, id: 4, round_id: 4, chat_day: '2026-09-18',
+        turn_kind: 'agent_wake', user_text: '', assistant_text: '', raw_json: '',
+      } as HavenTurn
+      const source = createManualRollingBodyRecoverySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        { type: 'user', uuid: 'wake-user', timestamp: '2026-09-18T11:35:00.000Z', sessionId: source.resumeFrom, message: { role: 'user', content: '<agent_wake cause="conversation_silence"/>' } },
+        { type: 'assistant', uuid: 'wake-answer', timestamp: '2026-09-18T11:35:10.000Z', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop] 不打扰。' }] } },
+        { type: 'user', uuid: 'tool-user', timestamp: '2026-09-18T11:35:12.000Z', sessionId: source.resumeFrom, message: { role: 'user', content: '执行操作' } },
+        { type: 'assistant', uuid: 'tool-answer', timestamp: '2026-09-18T11:35:13.000Z', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'important_tool', input: {} }] } },
+      ])
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [retained, wakeTurn], { storeRoot })
+      expect(inspection.aligned).toBe(false)
+      expect(inspection.isolatedWakeRaceCount).toBe(0)
+      expect(inspection.issues).toMatchObject([{ userUuid: 'tool-user' }])
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('identifies a wake transcript with a mismatched Haven assistant body without exposing either body', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-audit-'))
     try {

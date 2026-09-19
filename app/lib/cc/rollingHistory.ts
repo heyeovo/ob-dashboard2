@@ -579,6 +579,26 @@ function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boo
     && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
 }
 
+function isPlainTextPairEnvelope(envelope: TranscriptEnvelope): boolean {
+  const messages = envelope.entries
+    .map(entry => messageRecord(entry))
+    .filter((message): message is Record<string, unknown> => Boolean(message))
+  const users = messages.filter(message => message.role === 'user')
+  const assistants = messages.filter(message => message.role === 'assistant')
+  if (messages.length !== 2 || users.length !== 1 || assistants.length !== 1) return false
+  if (transcriptMessageContent(users[0]).trim().length > 200
+    || transcriptMessageContent(assistants[0]).trim().length > 200) return false
+  return messages.every(message => {
+    if (typeof message.content === 'string') return Boolean(message.content.trim())
+    if (!Array.isArray(message.content) || message.content.length === 0) return false
+    return message.content.every(block => Boolean(block)
+      && typeof block === 'object'
+      && (block as Record<string, unknown>).type === 'text'
+      && typeof (block as Record<string, unknown>).text === 'string'
+      && Boolean(String((block as Record<string, unknown>).text).trim()))
+  })
+}
+
 function isInterruptedStatusOnlyEnvelope(envelope: TranscriptEnvelope): boolean {
   const users = envelope.entries.filter(entry => isPrimaryUserEntry(entry))
   if (users.length !== 3) return false
@@ -637,6 +657,7 @@ function alignEnvelopesToTurns(
   allowIncompleteUserOnly = false,
   onNoCandidate?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
   onAssistantMismatchRecovered?: (envelope: TranscriptEnvelope, envelopeIndex: number, turn: HavenTurn) => void,
+  onWakeRaceIsolated?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
   const diagnostics = {
@@ -645,6 +666,7 @@ function alignEnvelopesToTurns(
     conflictingIds: 0,
     noCandidate: 0,
     ambiguousCandidates: 0,
+    isolatedWakeRace: 0,
   }
   const active: Array<{ envelope: TranscriptEnvelope; candidates: Set<number> }> = []
   for (const [envelopeIndex, envelope] of envelopes.entries()) {
@@ -721,6 +743,11 @@ function alignEnvelopesToTurns(
         active.push({ envelope, candidates: new Set([closestIndex]) })
         continue
       }
+      if (isPlainTextPairEnvelope(envelope)) {
+        diagnostics.isolatedWakeRace += 1
+        onWakeRaceIsolated?.(envelope, envelopeIndex)
+        continue
+      }
     }
     if (textMatches.length > 1) {
       const closestIndex = closestCompletedTurnIndex(envelope.timestamp, textMatches)
@@ -757,6 +784,7 @@ function alignEnvelopesToTurns(
     throw new Error(
       '旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本'
       + `（${reason}；失败/中断的半截轮次已隔离 ${diagnostics.skippedIncomplete} 条；`
+      + `wake 并发简单错误轮次已隔离 ${diagnostics.isolatedWakeRace} 条；`
       + `Haven 编号缺失 ${diagnostics.missingHavenId} 条、编号冲突 ${diagnostics.conflictingIds} 条、`
       + `无正文候选 ${diagnostics.noCandidate} 条、重复候选 ${diagnostics.ambiguousCandidates} 条）`,
     )
@@ -821,6 +849,7 @@ export async function inspectRollingHistoryAlignment(
   missingRawTurns: RollingMissingRawTurn[]
   unrepresentedEmptyWakeCount: number
   recoveredAssistantMismatchCount: number
+  isolatedWakeRaceCount: number
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -830,6 +859,7 @@ export async function inspectRollingHistoryAlignment(
       error: '滚动持久 transcript 不存在',
       issues: [],
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
+      isolatedWakeRaceCount: 0,
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -840,11 +870,13 @@ export async function inspectRollingHistoryAlignment(
       error: '滚动持久 transcript 为空',
       issues: [],
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
+      isolatedWakeRaceCount: 0,
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
   const issues: RollingAlignmentIssue[] = []
   let recoveredAssistantMismatchCount = 0
+  let isolatedWakeRaceCount = 0
   const recordNoCandidate = (envelope: TranscriptEnvelope, envelopeIndex: number) => {
     const userMatches = turns.filter(turn => envelopeUserMatchesTurn(envelope, turn))
     const primaryUser = envelope.entries.find(entry => isPrimaryUserEntry(entry))
@@ -866,6 +898,7 @@ export async function inspectRollingHistoryAlignment(
       true,
       recordNoCandidate,
       () => { recoveredAssistantMismatchCount += 1 },
+      () => { isolatedWakeRaceCount += 1 },
     )
     const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
     const unmatchedRawTurns = (options.rawTurns || []).filter(turn => !matched.has(turn.id))
@@ -884,12 +917,13 @@ export async function inspectRollingHistoryAlignment(
     return {
       available: true, aligned: true, envelopeCount: envelopes.length,
       matchedTurnCount: matched.size,
-      isolatedIncompleteCount: envelopes.length - matched.size,
+      isolatedIncompleteCount: envelopes.length - matched.size - isolatedWakeRaceCount,
       error: '',
       issues,
       missingRawTurns,
       unrepresentedEmptyWakeCount,
       recoveredAssistantMismatchCount,
+      isolatedWakeRaceCount,
     }
   } catch (error) {
     return {
@@ -898,6 +932,7 @@ export async function inspectRollingHistoryAlignment(
       error: error instanceof Error ? error.message : '滚动对齐预检失败',
       issues,
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
+      isolatedWakeRaceCount: 0,
     }
   }
 }

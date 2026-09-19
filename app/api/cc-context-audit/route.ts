@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
             error: result.error || '无法读取 Haven 轮次',
             issues: [], missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
             recoveredAssistantMismatchCount: 0,
+            isolatedWakeRaceCount: 0,
           })
       : null
     const personaResult = await getPersona(session.persona_id)

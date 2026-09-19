@@ -88,6 +88,7 @@ type AuditData = {
     }>
     unrepresentedEmptyWakeCount: number
     recoveredAssistantMismatchCount: number
+    isolatedWakeRaceCount: number
   } | null
   system_prompt: {
     current: {
@@ -260,7 +261,7 @@ export default function ContextAuditPanel() {
                 {data.rolling_alignment ? (
                   <p className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.aligned ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
                     {data.rolling_alignment.aligned
-                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败/中断的半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条。未保存设置。`
+                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败/中断的半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条；隔离 wake 并发简单错误轮次 ${number(data.rolling_alignment.isolatedWakeRaceCount)} 条。未保存设置。`
                       : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
                   </p>
                 ) : null}
@@ -274,6 +275,9 @@ export default function ContextAuditPanel() {
                     ) : null}
                     {data.rolling_alignment.recoveredAssistantMismatchCount ? (
                       <div className="mt-1">另有 {data.rolling_alignment.recoveredAssistantMismatchCount} 条旧并发轮次已按唯一近时间 Haven 输入恢复关联：重建保留旧 transcript 的完整原生内容，不使用 Haven 的不同助手正文覆盖。</div>
+                    ) : null}
+                    {data.rolling_alignment.isolatedWakeRaceCount ? (
+                      <div className="mt-1">另有 {data.rolling_alignment.isolatedWakeRaceCount} 条紧接 wake、未写入 Haven 且仅含一问一答短纯文字的简单错误轮次：只在新重建副本中省略，旧 transcript 不修改。</div>
                     ) : null}
                     {data.rolling_alignment.missingRawTurns.length ? (
                       <div className="mt-2 max-h-48 space-y-1 overflow-auto">
