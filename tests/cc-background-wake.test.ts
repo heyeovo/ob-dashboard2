@@ -150,6 +150,25 @@ describe('Dashboard background wake runner', () => {
     expect(haven.record).not.toHaveBeenCalled()
   })
 
+  it('does not persist a Pro session-limit notice as an agent wake message', async () => {
+    runner.run.mockResolvedValueOnce({
+      ok: true,
+      phase: 'succeeded',
+      assistantText: "You've hit your session limit · resets 9:50pm (UTC)",
+      interrupted: true,
+      interruptedReason: 'pro_limit',
+    })
+    const result = await runBackgroundWake({
+      sessionId: 'window-1', wakeId: 'wake-limit', at: '2026-09-19T20:32:59Z',
+      cause: 'conversation_silence',
+    })
+
+    expect(result).toMatchObject({
+      status: 'failed', failureKind: 'pro_limit', retryAfterSeconds: 3600,
+    })
+    expect(haven.record).not.toHaveBeenCalled()
+  })
+
   it('persists a no-op wake without creating visible assistant text', async () => {
     runner.run.mockResolvedValueOnce({
       ok: true,

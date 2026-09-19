@@ -65,4 +65,14 @@ describe('Haven agent wake callback route', () => {
     expect(response.headers.get('Retry-After')).toBe('3600')
     expect(await response.json()).toMatchObject({ status: 'failed', failureKind: 'authentication' })
   })
+
+  it('returns Retry-After when a background wake reaches the Pro session limit', async () => {
+    wake.run.mockResolvedValueOnce({
+      status: 'failed', error: 'Claude Pro 额度已用尽', failureKind: 'pro_limit', retryAfterSeconds: 3600,
+    })
+    const response = await POST(request(validBody))
+    expect(response.status).toBe(503)
+    expect(response.headers.get('Retry-After')).toBe('3600')
+    expect(await response.json()).toMatchObject({ status: 'failed', failureKind: 'pro_limit' })
+  })
 })

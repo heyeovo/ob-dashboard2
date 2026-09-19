@@ -1292,6 +1292,42 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('keeps a wake session-limit record in Haven without putting it in the rebuilt transcript', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-limit-'))
+    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-20' } as HavenTurn
+    const limitWake = {
+      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-20',
+      turn_kind: 'agent_wake', user_text: '',
+      assistant_text: "You've hit your session limit · resets 9:50pm (UTC)",
+      created_at: '2026-09-19T20:32:59.000Z', raw_json: '',
+    } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const rawTurns = [retained, limitWake]
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, rawTurns, {
+        storeRoot, rawTurns, requiredFullRawDays: ['2026-09-20'],
+      })
+      expect(inspection).toMatchObject({
+        aligned: true,
+        missingRawTurns: [],
+        excludedAgentWakeLimitCount: 1,
+      })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, rawTurns, rawTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: ['2026-09-20'],
+        },
+      )
+      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('session limit')
+      expect(limitWake.assistant_text).toContain('session limit')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('migrates a fixed-window SDK transcript with recall and tools intact', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-fixed-migration-'))
     const oldTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-09' } as HavenTurn

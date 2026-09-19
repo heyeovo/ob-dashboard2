@@ -31,7 +31,7 @@ export type BackgroundWakeResult =
   | { status: 'deferred'; reason: BackgroundTurnDeferredReason }
   | { status: 'superseded'; reason: string }
   | { status: 'in_progress'; reason: string }
-  | { status: 'failed'; error: string; failureKind?: 'authentication'; retryAfterSeconds?: number }
+  | { status: 'failed'; error: string; failureKind?: 'authentication' | 'pro_limit'; retryAfterSeconds?: number }
 
 function wakePrompt(input: BackgroundWakeInput): string {
   const attributes = [
@@ -140,6 +140,16 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
             }
           }
           return { status: 'failed', error: turnResult.error || '后台 wake 失败' }
+        }
+        if (turnResult.interruptedReason === 'pro_limit') {
+          // CLI quota notices are transport status, not model-authored wake messages.
+          // Let the scheduler retry later without creating a Haven conversation turn.
+          return {
+            status: 'failed',
+            error: 'Claude Pro 额度已用尽',
+            failureKind: 'pro_limit',
+            retryAfterSeconds: 60 * 60,
+          }
         }
         const noop = parseAgentWakeNoop(turnResult.assistantText || '')
         const assistantText = noop ? '' : turnResult.assistantText || ''

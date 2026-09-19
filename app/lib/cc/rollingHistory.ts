@@ -9,6 +9,7 @@ import {
   type SessionStoreEntry,
 } from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
+import { isClaudeSessionLimitNotice } from '@/app/lib/cc/subscriptionLimit'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 
 export type RollingHistorySeed = {
@@ -247,6 +248,7 @@ export function buildRollingTranscriptEntries(
   }
 
   for (const turn of turns) {
+    if (isAgentWakeLimitTurn(turn)) continue
     const userText = turn.user_text.trim()
     const assistantText = turn.assistant_text.trim()
     if (turn.turn_kind === 'agent_wake' && assistantText) {
@@ -872,6 +874,12 @@ function isUnrepresentedEmptyWake(turn: HavenTurn): boolean {
     && !turn.assistant_text.trim()
 }
 
+function isAgentWakeLimitTurn(turn: HavenTurn): boolean {
+  return turn.turn_kind === 'agent_wake'
+    && !turn.user_text.trim()
+    && isClaudeSessionLimitNotice(turn.assistant_text)
+}
+
 /** 设置页只读预检：不生成新 seed、不改 Haven 指针，也不返回聊天正文。 */
 export async function inspectRollingHistoryAlignment(
   resumeFrom: string,
@@ -889,6 +897,7 @@ export async function inspectRollingHistoryAlignment(
   unrepresentedEmptyWakeCount: number
   recoveredAssistantMismatchCount: number
   isolatedWakeRaceCount: number
+  excludedAgentWakeLimitCount: number
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -899,6 +908,7 @@ export async function inspectRollingHistoryAlignment(
       issues: [],
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
       isolatedWakeRaceCount: 0,
+      excludedAgentWakeLimitCount: 0,
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -910,6 +920,7 @@ export async function inspectRollingHistoryAlignment(
       issues: [],
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
       isolatedWakeRaceCount: 0,
+      excludedAgentWakeLimitCount: 0,
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
@@ -942,8 +953,9 @@ export async function inspectRollingHistoryAlignment(
     const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
     const unmatchedRawTurns = (options.rawTurns || []).filter(turn => !matched.has(turn.id))
     const unrepresentedEmptyWakeCount = unmatchedRawTurns.filter(isUnrepresentedEmptyWake).length
+    const excludedAgentWakeLimitCount = (options.rawTurns || []).filter(isAgentWakeLimitTurn).length
     const missingRawTurns = unmatchedRawTurns
-      .filter(turn => !isUnrepresentedEmptyWake(turn))
+      .filter(turn => !isUnrepresentedEmptyWake(turn) && !isAgentWakeLimitTurn(turn))
       .map(turn => ({
         id: turn.id,
         day: turn.chat_day || '',
@@ -963,6 +975,7 @@ export async function inspectRollingHistoryAlignment(
       unrepresentedEmptyWakeCount,
       recoveredAssistantMismatchCount,
       isolatedWakeRaceCount,
+      excludedAgentWakeLimitCount,
     }
   } catch (error) {
     return {
@@ -972,6 +985,7 @@ export async function inspectRollingHistoryAlignment(
       issues,
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
       isolatedWakeRaceCount: 0,
+      excludedAgentWakeLimitCount: 0,
     }
   }
 }
@@ -1316,6 +1330,7 @@ async function createRevisionSeedFromEntries(
   let bodyRestoredTurnCount = 0
   let thinkingPrunedBlockCount = 0
   for (const turn of [...rawTurns].sort((a, b) => a.id - b.id)) {
+    if (isAgentWakeLimitTurn(turn)) continue
     const envelope = aligned.get(turn.id)
     if (envelope) {
       retainedEnvelopeCount += 1

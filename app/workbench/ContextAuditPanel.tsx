@@ -95,6 +95,7 @@ type AuditData = {
     unrepresentedEmptyWakeCount: number
     recoveredAssistantMismatchCount: number
     isolatedWakeRaceCount: number
+    excludedAgentWakeLimitCount: number
   } | null
   system_prompt: {
     current: {
@@ -318,6 +319,9 @@ export default function ContextAuditPanel() {
                     ) : null}
                     {data.rolling_alignment.isolatedWakeRaceCount ? (
                       <div className="mt-1">另有 {data.rolling_alignment.isolatedWakeRaceCount} 条紧接 wake、未写入 Haven 且仅含一问一答短纯文字的简单错误轮次：只在新重建副本中省略，旧 transcript 不修改。</div>
+                    ) : null}
+                    {data.rolling_alignment.excludedAgentWakeLimitCount ? (
+                      <div className="mt-1">另有 {data.rolling_alignment.excludedAgentWakeLimitCount} 条主动唤醒额度失败记录：额度提示是 CLI/SDK 状态而非 Claude 回答，记录保留在 Haven，但不进入新 transcript，也不阻止重建。</div>
                     ) : null}
                     {data.rolling_alignment.missingRawTurns.length ? (
                       <div className="mt-2 max-h-48 space-y-1 overflow-auto">

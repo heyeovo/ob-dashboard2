@@ -154,6 +154,7 @@ export async function GET(request: NextRequest) {
             issues: [], missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
             recoveredAssistantMismatchCount: 0,
             isolatedWakeRaceCount: 0,
+            excludedAgentWakeLimitCount: 0,
           })
       : null
     const personaResult = await getPersona(session.persona_id)

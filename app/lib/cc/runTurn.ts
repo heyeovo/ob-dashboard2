@@ -88,6 +88,7 @@ import {
   type AgentWakeDecision,
 } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments, type VersionedDisplaySegments } from '@/app/lib/cc/displaySegments'
+import { isClaudeSessionLimitNotice } from '@/app/lib/cc/subscriptionLimit'
 
 function isSubscriptionLimitError(
   msg: SDKMessage & { errors?: string[] },
@@ -99,7 +100,9 @@ function isSubscriptionLimitError(
   const terminalReason = String((msg as SDKMessage & { terminal_reason?: string }).terminal_reason || '')
   if (terminalReason === 'blocking_limit' || terminalReason === 'rapid_refill_breaker') return true
   const detail = Array.isArray(msg.errors) ? msg.errors.join('\n') : ''
-  return /(?:rate|usage) limit|limit (?:has been )?reached|reached (?:your )?limit|credits_required/i.test(detail)
+  const result = String((msg as SDKMessage & { result?: string }).result || '')
+  return isClaudeSessionLimitNotice(result)
+    || /(?:rate|usage) limit|limit (?:has been )?reached|reached (?:your )?limit|credits_required/i.test(detail)
 }
 
 /* ── 这个会话的两个召回开关 ── */
@@ -198,6 +201,8 @@ export type RunTurnResult = {
   displaySegments?: VersionedDisplaySegments
   /** 本轮写入 Claude 原生 transcript 的 user UUID，用于与 Haven 成功轮次永久绑定。 */
   nativeTurnUuid?: string
+  interrupted?: boolean
+  interruptedReason?: 'user_stop' | 'pro_limit'
 }
 
 /** 同一 Node 进程内固定；变化表示 Dashboard 进程/部署实例已经切换。 */
@@ -1294,6 +1299,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         cacheDiagnostic: currentCacheDiagnostic(),
         displaySegments,
         nativeTurnUuid: turnUuid,
+        interrupted: interrupted || undefined,
+        interruptedReason: interruptedReason || undefined,
       }
     }
 
@@ -1526,6 +1533,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       cacheDiagnostic: currentCacheDiagnostic(),
       displaySegments,
       nativeTurnUuid: turnUuid,
+      interrupted: interrupted || undefined,
+      interruptedReason: interruptedReason || undefined,
     }
   } catch (e) {
     const err = e as Error

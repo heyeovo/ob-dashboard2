@@ -1199,7 +1199,9 @@ describe('runTurn：中止与失败', () => {
     ], { config: makeConfig({ cred: 'subscription' }) })
     const result = await handle.promise
 
-    expect(result).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(result).toMatchObject({
+      ok: true, phase: 'succeeded', interrupted: true, interruptedReason: 'pro_limit',
+    })
     expect(turns.recordTurn).toHaveBeenCalledTimes(1)
     expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({
       userText: '你好',
@@ -1219,7 +1221,9 @@ describe('runTurn：中止与失败', () => {
     ], { config: makeConfig({ cred: 'subscription' }) })
     const result = await handle.promise
 
-    expect(result).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(result).toMatchObject({
+      ok: true, phase: 'succeeded', interrupted: true, interruptedReason: 'pro_limit',
+    })
     expect(turns.recordTurn).toHaveBeenCalledTimes(1)
     expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({
       userText: '你好',
@@ -1239,7 +1243,9 @@ describe('runTurn：中止与失败', () => {
     ], { config: makeConfig({ cred: 'subscription' }) })
     const result = await handle.promise
 
-    expect(result).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(result).toMatchObject({
+      ok: true, phase: 'succeeded', interrupted: true, interruptedReason: 'pro_limit',
+    })
     expect(turns.recordTurn).toHaveBeenCalledTimes(1)
     expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({
       assistantText: '已经生成的半截',
