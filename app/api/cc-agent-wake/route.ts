@@ -42,6 +42,9 @@ export async function PATCH(request: NextRequest) {
       conversation_silence_check_at: '',
       silence_source_turn_id: 0,
       silence_policy_version: '',
+      followup_at: '',
+      followup_source_turn_id: 0,
+      followup_count: 0,
     }
   }
   if (Object.keys(changes).length === 0) return error('没有可保存的主动唤醒设置')

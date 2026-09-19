@@ -154,6 +154,11 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
         {schedule.next_agent_wake_at ? (
           <button className={`${BUTTON} mt-2`} disabled={saving || busy} onClick={() => void save({}, 'cancel_next')}>取消下一次 wake</button>
         ) : null}
+        {schedule.followup_at ? (
+          <div className="mt-2 pt-2 border-t border-[var(--color-border-light)]">
+            <div className="text-[10px] text-[var(--color-text-tertiary)]">Followup · {fmt(schedule.followup_at)} · 她回复后自动取消 · {schedule.followup_count ?? 0}/{schedule.followup_max_count ?? 3}</div>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-3">
@@ -182,6 +187,14 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           </span>
         </div>
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>后台 turn 上限</span><span>{schedule.background_turn_limit}/滚动 24h</span></div>
+        <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
+          <span>Followup 最短间隔</span>
+          <span><input className="w-16 rounded border border-[var(--color-border)] px-1.5 py-1 text-right" type="number" min={1} max={60} value={schedule.followup_min_minutes ?? 3} disabled={saving || busy} onChange={event => setSchedule({ ...schedule, followup_min_minutes: Number(event.target.value) })} onBlur={() => void save({ followup_min_minutes: schedule.followup_min_minutes })} /> 分钟</span>
+        </label>
+        <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
+          <span>Followup 最大追问次数</span>
+          <span><input className="w-16 rounded border border-[var(--color-border)] px-1.5 py-1 text-right" type="number" min={1} max={10} value={schedule.followup_max_count ?? 3} disabled={saving || busy} onChange={event => setSchedule({ ...schedule, followup_max_count: Number(event.target.value) })} onBlur={() => void save({ followup_max_count: schedule.followup_max_count })} /> 次</span>
+        </label>
       </div>
 
       {schedule.last_error || error ? <div className="text-[var(--color-danger)]">{error || schedule.last_error}</div> : null}

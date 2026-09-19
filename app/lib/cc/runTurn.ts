@@ -494,6 +494,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       turnKind === 'agent_wake' ? 'background' : 'foreground',
       wakeState.schedule?.agent_wake_min_minutes || 10,
       wakeState.schedule?.agent_wake_enabled === true,
+      wakeState.schedule?.followup_min_minutes || 3,
     )
 
     const currentLive = peekSession(sessionId)
@@ -1400,8 +1401,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       idempotent_replay: storeInfo.idempotent_replay === true,
       continuity_turns: missingRouteTurns.length,
       display_segments: displaySegments,
-      next_wake: wakeDecision?.action === 'schedule'
-        ? { at: wakeDecision.at, reason: wakeDecision.reason }
+      next_wake: (wakeDecision?.action === 'schedule' || wakeDecision?.action === 'followup')
+        ? { at: (wakeDecision as { at: string; reason: string }).at, reason: (wakeDecision as { at: string; reason: string }).reason, followup: wakeDecision.action === 'followup' }
         : undefined,
     })
 

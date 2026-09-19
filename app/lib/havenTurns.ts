@@ -208,6 +208,11 @@ export type AgentWakeSchedule = {
   agent_wake_min_minutes: number
   silence_min_minutes: number
   silence_max_minutes: number
+  followup_at: string
+  followup_source_turn_id: number
+  followup_min_minutes: number
+  followup_max_count: number
+  followup_count: number
   consecutive_failures: number
   last_error: string
 }

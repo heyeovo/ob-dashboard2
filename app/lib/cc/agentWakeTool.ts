@@ -10,7 +10,7 @@ export const AGENT_WAKE_NOOP_STATUS_MAX_CHARS = 30
 
 const AGENT_WAKE_MCP_VERSION = '1.0.0'
 const AGENT_WAKE_TOOL_INPUT = {
-  action: z.enum(['schedule', 'cancel']),
+  action: z.enum(['schedule', 'cancel', 'followup']),
   after_minutes: z.number().optional(),
   at: z.string().optional(),
   reason: z.string().optional(),
@@ -37,10 +37,12 @@ export type CcTurnExecutionMode = 'foreground' | 'background'
 export type AgentWakeDecision =
   | { action: 'cancel' }
   | { action: 'schedule'; at: string; reason: string }
+  | { action: 'followup'; at: string; reason: string }
 
 type AgentWakeTurnState = {
   mode: CcTurnExecutionMode
   minMinutes: number
+  followupMinMinutes: number
   scheduleEnabled: boolean
   decision: AgentWakeDecision | null
 }
@@ -55,10 +57,12 @@ export function beginAgentWakeTurn(
   mode: CcTurnExecutionMode,
   minMinutes = 10,
   scheduleEnabled = true,
+  followupMinMinutes = 3,
 ): void {
   states.set(sessionId, {
     mode,
     minMinutes: Math.max(1, Math.min(10080, Math.round(minMinutes))),
+    followupMinMinutes: Math.max(1, Math.min(60, Math.round(followupMinMinutes))),
     scheduleEnabled,
     decision: null,
   })
@@ -105,21 +109,30 @@ function scheduleAt(args: { after_minutes?: number; at?: string }, minMinutes: n
 
 export function recordAgentWakeDecision(
   sessionId: string,
-  args: { action: 'schedule' | 'cancel'; after_minutes?: number; at?: string; reason?: string },
+  args: { action: 'schedule' | 'cancel' | 'followup'; after_minutes?: number; at?: string; reason?: string },
 ): AgentWakeDecision {
   const state = states.get(sessionId)
   if (!state) throw new Error('当前没有可接收 wake 决定的 turn')
-  if (args.action === 'schedule' && !state.scheduleEnabled) {
+  if ((args.action === 'schedule' || args.action === 'followup') && !state.scheduleEnabled) {
     throw new Error('当前窗口没有开启允许主动唤醒')
   }
-  const decision: AgentWakeDecision = args.action === 'cancel'
-    ? { action: 'cancel' }
-    : {
-        action: 'schedule',
-        at: scheduleAt(args, state.minMinutes),
-        reason: String(args.reason || '').trim(),
-      }
-  if (decision.action === 'schedule' && Array.from(decision.reason).length > 50) {
+  let decision: AgentWakeDecision
+  if (args.action === 'cancel') {
+    decision = { action: 'cancel' }
+  } else if (args.action === 'followup') {
+    decision = {
+      action: 'followup',
+      at: scheduleAt(args, state.followupMinMinutes),
+      reason: String(args.reason || '').trim(),
+    }
+  } else {
+    decision = {
+      action: 'schedule',
+      at: scheduleAt(args, state.minMinutes),
+      reason: String(args.reason || '').trim(),
+    }
+  }
+  if ((decision.action === 'schedule' || decision.action === 'followup') && Array.from(decision.reason).length > 50) {
     throw new Error('reason 最多 50 个字符')
   }
   state.decision = decision
@@ -149,13 +162,16 @@ export function createAgentWakeMcpServer(sessionId: string): McpSdkServerConfigW
         async args => {
           try {
             const decision = recordAgentWakeDecision(sessionId, args)
+            let text: string
+            if (decision.action === 'cancel') {
+              text = '已记录：取消下一次 wake。'
+            } else if (decision.action === 'followup') {
+              text = `已记录 followup：${decision.at}（她回复后自动取消）${decision.reason ? `（${decision.reason}）` : ''}`
+            } else {
+              text = `已记录下一次 wake：${decision.at}${decision.reason ? `（${decision.reason}）` : ''}`
+            }
             return {
-              content: [{
-                type: 'text',
-                text: decision.action === 'cancel'
-                  ? '已记录：取消下一次 wake。'
-                  : `已记录下一次 wake：${decision.at}${decision.reason ? `（${decision.reason}）` : ''}`,
-              }],
+              content: [{ type: 'text', text }],
             }
           } catch (error) {
             return {
