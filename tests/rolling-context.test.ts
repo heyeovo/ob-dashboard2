@@ -732,6 +732,76 @@ describe('daily rolling context', () => {
     }
   })
 
+  it('recovers a legacy foreground turn that lost Haven CAS to a simultaneous wake', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-race-'))
+    try {
+      const retained = { ...turns[0], id: 3, round_id: 3 } as HavenTurn
+      const source = createManualRollingBodyRecoverySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const racedEntries = [
+        {
+          type: 'user', uuid: 'wake-user', timestamp: '2026-09-18T11:35:00.000Z',
+          message: { role: 'user', content: '<agent_wake cause="conversation_silence"/>' },
+        },
+        {
+          type: 'assistant', uuid: 'wake-assistant', timestamp: '2026-09-18T11:35:20.000Z',
+          message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop] 她在回家路上，不打扰。' }] },
+        },
+        {
+          type: 'user', uuid: 'race-user', timestamp: '2026-09-18T11:35:22.929Z',
+          message: { role: 'user', content: '噗噗噗\n\n[北京时间 2026-09-18 19:35 周五]' },
+        },
+        {
+          type: 'assistant', uuid: 'race-assistant', timestamp: '2026-09-18T11:35:24.000Z',
+          message: { role: 'assistant', content: [{ type: 'text', text: '什么。' }] },
+        },
+      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, racedEntries)
+
+      const oldDuplicate = {
+        ...retained, id: 4, round_id: 4, chat_day: '2026-09-17',
+        user_text: '噗噗噗', assistant_text: '很早以前的不同回答',
+        created_at: '2026-09-17T11:35:30.000Z', raw_json: '',
+      } as HavenTurn
+      const wakeTurn = {
+        ...retained, id: 5, round_id: 5, chat_day: '2026-09-18',
+        turn_kind: 'agent_wake', user_text: '', assistant_text: '',
+        created_at: '2026-09-18T11:35:21.000Z', raw_json: '',
+      } as HavenTurn
+      const nearbyPersisted = {
+        ...retained, id: 6, round_id: 6, chat_day: '2026-09-18',
+        user_text: '噗噗噗', assistant_text: '并发后 Haven 中的不同回答',
+        created_at: '2026-09-18T11:35:25.000Z', raw_json: '',
+      } as HavenTurn
+      const allTurns = [retained, oldDuplicate, wakeTurn, nearbyPersisted]
+      const rawTurns = [retained, wakeTurn, nearbyPersisted]
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, allTurns, {
+        storeRoot, rawTurns, requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
+      })
+      expect(inspection).toMatchObject({
+        aligned: true,
+        matchedTurnCount: 3,
+        recoveredAssistantMismatchCount: 1,
+        issues: [],
+      })
+
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, allTurns, rawTurns, {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
+        },
+      )
+      const recoveredEntries = revised?.entries.filter(entry => entry.ob2HavenTurnId === 6) || []
+      expect(recoveredEntries).toHaveLength(2)
+      expect(JSON.stringify(recoveredEntries.map(entry => entry.message))).toContain('什么。')
+      expect(JSON.stringify(recoveredEntries.map(entry => entry.message))).not.toContain('并发后 Haven 中的不同回答')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('identifies a wake transcript with a mismatched Haven assistant body without exposing either body', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-audit-'))
     try {

@@ -614,6 +614,7 @@ function havenNativeTurnUuid(turn: HavenTurn): string {
 function closestCompletedTurnIndex(
   envelopeTimestamp: string,
   matches: Array<{ turn: HavenTurn; index: number }>,
+  maxDelayMs = 6 * 60 * 60 * 1000,
 ): number | null {
   const envelopeTime = new Date(envelopeTimestamp).getTime()
   if (!Number.isFinite(envelopeTime)) return null
@@ -623,7 +624,7 @@ function closestCompletedTurnIndex(
       // Haven created_at 是整轮完成落库时间；transcript timestamp 是用户进入时间。
       delay: new Date(match.turn.created_at).getTime() - envelopeTime,
     }))
-    .filter(match => Number.isFinite(match.delay) && match.delay >= -1000 && match.delay <= 6 * 60 * 60 * 1000)
+    .filter(match => Number.isFinite(match.delay) && match.delay >= -1000 && match.delay <= maxDelayMs)
     .sort((a, b) => a.delay - b.delay)
   if (ranked.length === 0) return null
   if (ranked.length > 1 && ranked[0].delay === ranked[1].delay) return null
@@ -635,6 +636,7 @@ function alignEnvelopesToTurns(
   turns: HavenTurn[],
   allowIncompleteUserOnly = false,
   onNoCandidate?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
+  onAssistantMismatchRecovered?: (envelope: TranscriptEnvelope, envelopeIndex: number, turn: HavenTurn) => void,
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
   const diagnostics = {
@@ -691,6 +693,34 @@ function alignEnvelopesToTurns(
     if (allowIncompleteUserOnly && !hasAssistantOrTool && !textMatches.some(({ turn }) => !turn.assistant_text.trim())) {
       diagnostics.skippedIncomplete += 1
       continue
+    }
+    // Legacy race recovery: the model-visible turn was fully written to the native
+    // transcript, but a simultaneous wake won Haven's CAS. Only bind a non-wake
+    // envelope immediately following a wake when its user body has one uniquely
+    // closest completion within ten minutes. The transcript envelope remains
+    // authoritative and is retained intact.
+    const isAgentWakeEnvelope = normalized(envelope.userText).includes('<agent_wake ')
+    const previousEnvelope = envelopes[envelopeIndex - 1]
+    const envelopeTime = new Date(envelope.timestamp).getTime()
+    const previousTime = new Date(previousEnvelope?.timestamp || '').getTime()
+    const immediatelyFollowsWake = Boolean(previousEnvelope)
+      && normalized(previousEnvelope.userText).includes('<agent_wake ')
+      && Number.isFinite(envelopeTime)
+      && Number.isFinite(previousTime)
+      && envelopeTime >= previousTime - 1000
+      && envelopeTime - previousTime <= 2 * 60 * 1000
+    if (allowIncompleteUserOnly && hasAssistantOrTool && !isAgentWakeEnvelope
+      && immediatelyFollowsWake && textMatches.length === 0) {
+      const userMatches = orderedTurns
+        .map((turn, index) => ({ turn, index }))
+        .filter(({ turn }) => turn.turn_kind !== 'agent_wake' && envelopeUserMatchesTurn(envelope, turn))
+      const closestIndex = closestCompletedTurnIndex(envelope.timestamp, userMatches, 10 * 60 * 1000)
+      if (closestIndex !== null) {
+        const matchedTurn = orderedTurns[closestIndex]
+        onAssistantMismatchRecovered?.(envelope, envelopeIndex, matchedTurn)
+        active.push({ envelope, candidates: new Set([closestIndex]) })
+        continue
+      }
     }
     if (textMatches.length > 1) {
       const closestIndex = closestCompletedTurnIndex(envelope.timestamp, textMatches)
@@ -790,6 +820,7 @@ export async function inspectRollingHistoryAlignment(
   issues: RollingAlignmentIssue[]
   missingRawTurns: RollingMissingRawTurn[]
   unrepresentedEmptyWakeCount: number
+  recoveredAssistantMismatchCount: number
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -798,7 +829,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 不存在',
       issues: [],
-      missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
+      missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -808,11 +839,12 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: '滚动持久 transcript 为空',
       issues: [],
-      missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
+      missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
   const issues: RollingAlignmentIssue[] = []
+  let recoveredAssistantMismatchCount = 0
   const recordNoCandidate = (envelope: TranscriptEnvelope, envelopeIndex: number) => {
     const userMatches = turns.filter(turn => envelopeUserMatchesTurn(envelope, turn))
     const primaryUser = envelope.entries.find(entry => isPrimaryUserEntry(entry))
@@ -828,7 +860,13 @@ export async function inspectRollingHistoryAlignment(
     })
   }
   try {
-    const matched = alignEnvelopesToTurns(envelopes, turns, true, recordNoCandidate)
+    const matched = alignEnvelopesToTurns(
+      envelopes,
+      turns,
+      true,
+      recordNoCandidate,
+      () => { recoveredAssistantMismatchCount += 1 },
+    )
     const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
     const unmatchedRawTurns = (options.rawTurns || []).filter(turn => !matched.has(turn.id))
     const unrepresentedEmptyWakeCount = unmatchedRawTurns.filter(isUnrepresentedEmptyWake).length
@@ -851,6 +889,7 @@ export async function inspectRollingHistoryAlignment(
       issues,
       missingRawTurns,
       unrepresentedEmptyWakeCount,
+      recoveredAssistantMismatchCount,
     }
   } catch (error) {
     return {
@@ -858,7 +897,7 @@ export async function inspectRollingHistoryAlignment(
       matchedTurnCount: 0, isolatedIncompleteCount: 0,
       error: error instanceof Error ? error.message : '滚动对齐预检失败',
       issues,
-      missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
+      missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
     }
   }
 }

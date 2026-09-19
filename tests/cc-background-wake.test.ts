@@ -17,9 +17,11 @@ vi.mock('@/app/lib/havenTurns', () => ({
 }))
 
 import { runBackgroundWake } from '@/app/lib/cc/backgroundWakeTurn'
+import { resetSessionTurnCoordinatorForTests, runForegroundSessionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetSessionTurnCoordinatorForTests()
   live.peek.mockReturnValue(null)
   live.pending.mockReturnValue(false)
   loader.load.mockResolvedValue({
@@ -197,5 +199,26 @@ describe('Dashboard background wake runner', () => {
         wake_decision: expect.objectContaining({ action: 'schedule' }),
       }),
     }))
+  })
+
+  it('keeps the session lock until the wake is persisted to Haven', async () => {
+    let finishPersist!: (value: { ok: true; stored: true; turnId: number; roundId: number }) => void
+    haven.record.mockImplementationOnce(() => new Promise(resolve => { finishPersist = resolve }))
+
+    const wake = runBackgroundWake({
+      sessionId: 'window-1', wakeId: 'wake-race', at: '2026-09-18T11:35:00Z',
+      cause: 'conversation_silence',
+    })
+    await vi.waitFor(() => expect(haven.record).toHaveBeenCalledOnce())
+
+    const foregroundRun = vi.fn(async () => 'foreground-finished')
+    const foreground = runForegroundSessionTurn('window-1', foregroundRun)
+    await Promise.resolve()
+    expect(foregroundRun).not.toHaveBeenCalled()
+
+    finishPersist({ ok: true, stored: true, turnId: 4, roundId: 4 })
+    await expect(wake).resolves.toMatchObject({ status: 'completed', turnId: 4 })
+    await expect(foreground).resolves.toBe('foreground-finished')
+    expect(foregroundRun).toHaveBeenCalledOnce()
   })
 })

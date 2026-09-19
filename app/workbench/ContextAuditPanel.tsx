@@ -87,6 +87,7 @@ type AuditData = {
       fullSourceRequired: boolean
     }>
     unrepresentedEmptyWakeCount: number
+    recoveredAssistantMismatchCount: number
   } | null
   system_prompt: {
     current: {
@@ -270,6 +271,9 @@ export default function ContextAuditPanel() {
                       : '原文反向检查通过：需要保留完整内容的 Haven 轮次均有对应的旧 transcript 记录。'}
                     {data.rolling_alignment.unrepresentedEmptyWakeCount ? (
                       <div className="mt-1">另有 {data.rolling_alignment.unrepresentedEmptyWakeCount} 条无用户/助手正文、且旧 transcript 没有对应轮次的空唤醒：记录保留在 Haven，不阻止重建；旧 transcript 中已有轮次的唤醒仍保留。</div>
+                    ) : null}
+                    {data.rolling_alignment.recoveredAssistantMismatchCount ? (
+                      <div className="mt-1">另有 {data.rolling_alignment.recoveredAssistantMismatchCount} 条旧并发轮次已按唯一近时间 Haven 输入恢复关联：重建保留旧 transcript 的完整原生内容，不使用 Haven 的不同助手正文覆盖。</div>
                     ) : null}
                     {data.rolling_alignment.missingRawTurns.length ? (
                       <div className="mt-2 max-h-48 space-y-1 overflow-auto">
