@@ -429,6 +429,9 @@ export default function ContextAuditPanel() {
                   <div className="mt-1 text-[var(--color-text-tertiary)]">工具：{data.tooling.latest.tool_names.join('、') || '未记录'}</div>
                   <div className="text-[var(--color-text-tertiary)]">MCP：{data.tooling.latest.mcp_server_names.join('、') || '未记录'}</div>
                   <div className="text-[var(--color-text-tertiary)]">Agent Wake：v{data.tooling.latest.agent_wake_version || '未记录'} · instructions {data.tooling.latest.agent_wake_instructions_hash || '未记录'}</div>
+                  <div className="mt-1 break-all text-[var(--color-text-tertiary)]">
+                    模型表面：上一版 {text(cache?.previous_model_surface_hash) || '未记录'} · 本轮期望 {text(cache?.model_surface_hash) || '未记录'} · iterator 启动 {text(cache?.iterator_model_surface_hash) || '未记录'}
+                  </div>
                 </div>
 
                 <details className="rounded-lg bg-[var(--color-bg)]">

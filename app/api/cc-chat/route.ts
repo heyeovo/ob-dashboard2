@@ -373,6 +373,7 @@ async function loadTurnInputs(body: ChatBody) {
       && rollingPreviousStrategy === 'fixed_window'
       && allowFixedBodyRestore,
     systemPromptKey: '',
+    modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),
       builtIn: builtInMcpModelSurfaces(),
@@ -393,7 +394,9 @@ async function loadTurnInputs(body: ChatBody) {
     providerId,
     providerLabel,
   }
-  config.systemPromptKey = cacheRelevantFingerprint(config).sdkCacheRelevantOptionsHash
+  const fingerprint = cacheRelevantFingerprint(config)
+  config.systemPromptKey = fingerprint.sdkCacheRelevantOptionsHash
+  config.modelSurfaceKey = fingerprint.modelSurfaceHash
 
   return {
     persona,

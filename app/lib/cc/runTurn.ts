@@ -18,6 +18,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import {
+  createModelSurfaceRebaseSeed,
   createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
   createRollingTranscriptRecoverySeed,
@@ -48,6 +49,7 @@ import {
   consumeTurnInterrupted,
   dropSession,
   ensureSession,
+  forgetResumePoint,
   flushPendingMcpServers,
   getSessionStats,
   getPendingCompactions,
@@ -70,6 +72,7 @@ import {
   acceptUserActivityAndCancelSilence,
   getAgentWakeSchedule,
   listAllTurns,
+  listTurns,
   recordTurnStrict,
   updatePersonaFromExchange,
   type HavenTurn,
@@ -160,13 +163,17 @@ export type CacheDiagnostic = {
   lane: string
   cc_session_id: string
   resume_hint: string
-  iterator: 'reused' | 'cold_resumed' | 'cold_started'
+  iterator: 'reused' | 'cold_resumed' | 'cold_rebased' | 'cold_started'
   iterator_created_at: string
   model_request_started_at: string
   system_hash: string
   tools_hash: string
   mcp_hash: string
+  model_surface_hash: string
   options_hash: string
+  previous_model_surface_hash: string
+  iterator_model_surface_hash: string
+  iterator_options_hash: string
   tool_names: string[]
   mcp_server_names: string[]
   agent_wake_version: string
@@ -405,6 +412,45 @@ async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T
   }
 }
 
+function turnModelSurfaceHash(turn: HavenTurn): string {
+  if (!turn.raw_json) return ''
+  try {
+    const raw = JSON.parse(turn.raw_json) as Record<string, unknown>
+    const diagnostic = raw.cache_diagnostic && typeof raw.cache_diagnostic === 'object'
+      ? raw.cache_diagnostic as Record<string, unknown>
+      : null
+    // 旧记录还没有独立 model_surface_hash。用旧 options_hash 作为“不相等”哨兵，
+    // 让升级后的第一轮安全 rebase 一次。
+    return diagnostic ? String(diagnostic.model_surface_hash || diagnostic.options_hash || '') : ''
+  } catch {
+    return ''
+  }
+}
+
+async function latestModelSurfaceHashForLane(
+  sessionId: string,
+  laneId: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const result = await listTurns(sessionId, { limit: 50, includeRaw: true, signal })
+  if (!result.ok) return ''
+  for (const turn of [...result.turns].reverse()) {
+    if (!turn.raw_json) continue
+    try {
+      const raw = JSON.parse(turn.raw_json) as Record<string, unknown>
+      const diagnostic = raw.cache_diagnostic && typeof raw.cache_diagnostic === 'object'
+        ? raw.cache_diagnostic as Record<string, unknown>
+        : null
+      if (diagnostic && String(diagnostic.lane || '') === laneId) {
+        return turnModelSurfaceHash(turn)
+      }
+    } catch {
+      // 跳过旧版或损坏的 raw_json，继续向前找同 lane 最近的有效诊断。
+    }
+  }
+  return ''
+}
+
 /* ── 主入口 ── */
 
 /**
@@ -514,12 +560,42 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     const effectiveResumeHint = isRolling
       ? persistedRollingResume?.resumeFrom || ''
       : input.resumeHint || ''
-    if ((!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
+    const sourceResumeFrom = currentLive?.resumeKey === resumeKey
+      ? currentLive.ccSessionId || effectiveResumeHint || input.resumeHint || ''
+      : effectiveResumeHint || input.resumeHint || ''
+    const previousModelSurfaceHash = currentLive?.resumeKey === resumeKey
+      ? currentLive.modelSurfaceKey
+      : sourceResumeFrom
+        ? await latestModelSurfaceHashForLane(sessionId, config.laneId, signal)
+        : ''
+    const modelSurfaceChanged = Boolean(
+      sourceResumeFrom && previousModelSurfaceHash && previousModelSurfaceHash !== config.modelSurfaceKey,
+    )
+    let surfaceRebaseSeed = modelSurfaceChanged
+      ? await createModelSurfaceRebaseSeed(sourceResumeFrom, { cwd: config.cwd })
+      : null
+    if (modelSurfaceChanged && !surfaceRebaseSeed) {
+      let fallbackTurns = rollingHistory
+      if (!isRolling) {
+        const fallback = await listAllTurns(sessionId, { includeRaw: true, signal })
+        if (!fallback.ok) throw new Error(`模型表面升级时读取对话历史失败：${fallback.error}`)
+        fallbackTurns = fallback.turns
+        if (fallbackTurns.length === 0) {
+          throw new Error('模型表面升级时未找到可重建的对话历史，原始 transcript 未改动，已停止本轮')
+        }
+      }
+      surfaceRebaseSeed = createRollingHistorySeed(fallbackTurns, {
+        cwd: config.cwd,
+        fallbackModel: config.sdkModel || config.model,
+      })
+    }
+    if (modelSurfaceChanged && !surfaceRebaseSeed) forgetResumePoint(resumeKey)
+    if (!modelSurfaceChanged && (!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
       rememberResumePoint(resumeKey, effectiveResumeHint)
     }
-    const fixedMigration = shouldPrepareHistorySeed && isRolling
+    const fixedMigration = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling
       && config.rollingPreviousStrategy === 'fixed_window'
-    const revisionSeed = shouldPrepareHistorySeed && isRolling && config.rollingSourceResumeFrom
+    const revisionSeed = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling && config.rollingSourceResumeFrom
       ? await (fixedMigration ? createFixedTranscriptMigrationSeed : createRollingHistoryRevisionSeed)(
         config.rollingSourceResumeFrom,
         config.rollingAllHistory || rollingHistory,
@@ -531,7 +607,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         },
       )
       : null
-    const rollingResumeRecoveryRequired = shouldPrepareHistorySeed && isRolling
+    const rollingResumeRecoveryRequired = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling
       && Boolean(input.resumeHint) && !config.rollingSourceResumeFrom
     const recoveredRollingResume = rollingResumeRecoveryRequired && !persistedRollingResume
       ? await createRollingTranscriptRecoverySeed(input.resumeHint!, { cwd: config.cwd })
@@ -547,7 +623,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       Boolean(config.allowFixedBodyRestore),
       revisionSeed,
     )
-    if (shouldPrepareHistorySeed && isRolling) {
+    if (!modelSurfaceChanged && shouldPrepareHistorySeed && isRolling) {
       assertRequiredRollingRevisionSeed(
         Boolean(config.requireRollingSource),
         rollingHistory.length,
@@ -555,15 +631,15 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         revisionSeed,
       )
     }
-    const confirmedBodySeed = shouldPrepareHistorySeed && isRolling && config.allowRollingBodySeed
+    const confirmedBodySeed = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling && config.allowRollingBodySeed
       ? createRollingHistorySeed(rollingHistory, {
           cwd: config.cwd,
           fallbackModel: config.sdkModel || config.model,
         })
       : null
-    const historySeed = shouldPrepareHistorySeed && isRolling
+    const historySeed = surfaceRebaseSeed || (shouldPrepareHistorySeed && isRolling
       ? persistedRollingResume || revisionSeed || recoveredRollingResume || confirmedBodySeed
-      : null
+      : null)
     assertRollingSeedAvailable(
       shouldPrepareHistorySeed && isRolling,
       rollingHistory.length,
@@ -582,6 +658,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       shouldPrepareHistorySeed,
       requestedResumeHint: input.resumeHint || '',
       hasUsableResumeHint: Boolean(effectiveResumeHint),
+      modelSurfaceChanged,
+      previousModelSurfaceHash,
       hasLive: Boolean(currentLive),
       liveResumeKeyMatch: currentLive?.resumeKey === resumeKey,
       storeSource: historySeed?.source || 'none',
@@ -611,24 +689,39 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       effort: config.effort,
       thinking: config.thinking,
       systemPromptKey: config.systemPromptKey,
+      modelSurfaceKey: config.modelSurfaceKey,
     })
     const fingerprint = cacheRelevantFingerprint(config)
     const agentWakeAudit = agentWakeMcpAudit()
-    const iterator = currentLive === live ? 'reused' : effectiveResumeHint ? 'cold_resumed' : 'cold_started'
+    const reusedIterator = currentLive === live
+    const iteratorResumeHint = reusedIterator
+      ? ''
+      : historySeed?.resumeFrom || (!modelSurfaceChanged ? sourceResumeFrom : '')
+    const iterator = reusedIterator
+      ? 'reused'
+      : modelSurfaceChanged
+        ? 'cold_rebased'
+        : iteratorResumeHint
+          ? 'cold_resumed'
+          : 'cold_started'
     cacheDiagnostic = {
       version: 1,
       dashboard_instance_id: DASHBOARD_INSTANCE_ID,
       turn_kind: turnKind,
       lane: config.laneId,
-      cc_session_id: live.ccSessionId || effectiveResumeHint,
-      resume_hint: effectiveResumeHint,
+      cc_session_id: live.ccSessionId || iteratorResumeHint,
+      resume_hint: iteratorResumeHint,
       iterator,
       iterator_created_at: new Date(live.createdAt).toISOString(),
       model_request_started_at: '',
       system_hash: fingerprint.systemPromptHash,
       tools_hash: fingerprint.toolsHash,
       mcp_hash: fingerprint.mcpToolsHash,
+      model_surface_hash: fingerprint.modelSurfaceHash,
       options_hash: fingerprint.sdkCacheRelevantOptionsHash,
+      previous_model_surface_hash: previousModelSurfaceHash,
+      iterator_model_surface_hash: live.modelSurfaceKey,
+      iterator_options_hash: live.systemPromptKey,
       tool_names: fingerprint.toolNames,
       mcp_server_names: fingerprint.mcpServerNames,
       agent_wake_version: agentWakeAudit.version,

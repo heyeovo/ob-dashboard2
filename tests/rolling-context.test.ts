@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
+import { getSessionMessages, type SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
 const api = vi.hoisted(() => ({ getBuckets: vi.fn(), getJournals: vi.fn() }))
 
 vi.mock('@/app/lib/api', () => ({
@@ -29,6 +29,7 @@ import {
   openRollingHistoryResume,
   rollingRevisionRequiresSource,
   syncRollingNativeSession,
+  stripStaleSystemReminders,
 } from '@/app/lib/cc/rollingHistory'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
@@ -63,6 +64,43 @@ const turns = [{
   assistant_text: '今天的回应',
   created_at: '2026-09-11T12:00:00Z',
 }] as HavenTurn[]
+
+describe('model surface transcript rebase', () => {
+  it('removes stale SDK system reminders without losing conversation or tool history', () => {
+    const source = [
+      {
+        type: 'user', uuid: 'meta', parentUuid: null,
+        message: { role: 'user', content: '<system-reminder>旧 MCP instructions</system-reminder>' },
+      },
+      {
+        type: 'user', uuid: 'user', parentUuid: 'meta',
+        message: { role: 'user', content: [{ type: 'text', text: '<system-reminder>旧工具 schema</system-reminder>\n真实问题' }] },
+      },
+      {
+        type: 'assistant', uuid: 'tool', parentUuid: 'user',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'search', input: {} }] },
+      },
+      {
+        type: 'user', uuid: 'result', parentUuid: 'tool',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: '结果' }] },
+      },
+      {
+        type: 'assistant', uuid: 'answer', parentUuid: 'result',
+        message: { role: 'assistant', content: [{ type: 'text', text: '最终回答' }] },
+      },
+    ] as SessionStoreEntry[]
+
+    const cleaned = stripStaleSystemReminders(source)
+    expect(cleaned.removedBlockCount).toBe(2)
+    expect(cleaned.entries).toHaveLength(4)
+    expect(JSON.stringify(cleaned.entries)).not.toContain('system-reminder')
+    expect(JSON.stringify(cleaned.entries)).toContain('真实问题')
+    expect(JSON.stringify(cleaned.entries)).toContain('tool_use')
+    expect(JSON.stringify(cleaned.entries)).toContain('tool_result')
+    expect(JSON.stringify(cleaned.entries)).toContain('最终回答')
+    expect(JSON.stringify(source)).toContain('旧 MCP instructions')
+  })
+})
 
 describe('daily rolling context', () => {
   it('keeps reviews and pinned buckets in system context but removes raw transcript text', () => {

@@ -211,6 +211,7 @@ function makeConfig(overrides: Partial<TurnConfig> = {}): TurnConfig {
     mode: 'chat',
     personaAppend: '',
     systemPromptKey: '',
+    modelSurfaceKey: '',
     mcpDefinitionKey: 'test-mcp-surface',
     cwd: 'C:\\Users\\test\\repo',
     additionalDirectories: [],
@@ -521,6 +522,110 @@ describe('runTurn：普通回复', () => {
       resume_hint: 'native-cold-start',
       iterator: 'cold_resumed',
     })
+  })
+
+  it('rebases onto a clean native session when the model-visible surface changes', async () => {
+    const sessionId = 'ob2-model-surface-rebase'
+    const oldNativeSessionId = '11111111-1111-4111-8111-111111111111'
+    const newNativeSessionId = '22222222-2222-4222-8222-222222222222'
+    const oldConfig = makeConfig({ sessionId, systemPromptKey: 'options-v1', modelSurfaceKey: 'surface-v1' })
+    const nextConfig = makeConfig({ sessionId, systemPromptKey: 'options-v2', modelSurfaceKey: 'surface-v2' })
+    await driveTurn([initMsg(oldNativeSessionId), textDelta('旧回复'), resultMsg()], {
+      sessionId, config: oldConfig,
+    }).promise
+
+    turns.listAllTurns
+      .mockResolvedValueOnce({
+        ok: true,
+        turns: [{
+          id: 1, session_id: sessionId, round_id: 1, created_at: '2026-09-20T00:00:00Z',
+          user_text: '旧问题', assistant_text: '旧回复', model: 'test-model', client: 'test',
+          route: '/api/cc-chat', source: 'cc', turn_kind: 'user',
+        }],
+        error: '',
+      })
+      .mockResolvedValueOnce({ ok: true, turns: [], error: '' })
+
+    const rebased = await driveTurn([initMsg(newNativeSessionId), textDelta('新回复'), resultMsg()], {
+      sessionId,
+      requestId: 'request-surface-v2',
+      expectedLastRoundId: 1,
+      config: nextConfig,
+    }).promise
+
+    expect(rebased.error || '').toBe('')
+    expect(rebased).toMatchObject({ ok: true, phase: 'succeeded' })
+    expect(rebased.cacheDiagnostic).toMatchObject({
+      iterator: 'cold_rebased',
+      previous_model_surface_hash: 'surface-v1',
+      iterator_model_surface_hash: 'surface-v2',
+      iterator_options_hash: 'options-v2',
+      options_hash: expect.any(String),
+    })
+    expect(sdk.queryCalls).toBe(2)
+    expect(sdk.queryOptions[1].resume).toEqual(expect.any(String))
+    expect(sdk.queryOptions[1].resume).not.toBe(oldNativeSessionId)
+    dropSession(sessionId)
+  })
+
+  it('detects a stale model surface from the latest Haven turn after a process restart', async () => {
+    const sessionId = 'ob2-deployed-surface-rebase'
+    const oldNativeSessionId = '33333333-3333-4333-8333-333333333333'
+    const config = makeConfig({ sessionId, systemPromptKey: 'options-v2', modelSurfaceKey: 'surface-v2' })
+    const priorTurn = {
+      id: 7, session_id: sessionId, round_id: 7, created_at: '2026-09-20T00:00:00Z',
+      user_text: '部署前的问题', assistant_text: '部署前的回答', model: 'test-model', client: 'test',
+      route: '/api/cc-chat', source: 'cc', turn_kind: 'user',
+      raw_json: JSON.stringify({ cache_diagnostic: { lane: 'api:default', model_surface_hash: 'surface-v1', options_hash: 'options-v1' } }),
+    }
+    turns.listTurns.mockResolvedValueOnce({ ok: true, turns: [priorTurn], error: '' })
+    turns.listAllTurns
+      .mockResolvedValueOnce({ ok: true, turns: [priorTurn], error: '' })
+      .mockResolvedValueOnce({ ok: true, turns: [], error: '' })
+
+    const rebased = await driveTurn([initMsg(), textDelta('部署后继续'), resultMsg()], {
+      sessionId,
+      requestId: 'request-deployed-surface-v2',
+      expectedLastRoundId: 7,
+      resumeHint: oldNativeSessionId,
+      config,
+    }).promise
+
+    expect(rebased.error || '').toBe('')
+    expect(rebased.cacheDiagnostic).toMatchObject({
+      iterator: 'cold_rebased',
+      previous_model_surface_hash: 'surface-v1',
+      iterator_model_surface_hash: 'surface-v2',
+      iterator_options_hash: 'options-v2',
+    })
+    expect(sdk.queryOptions.at(-1)?.resume).not.toBe(oldNativeSessionId)
+    dropSession(sessionId)
+  })
+
+  it('cold-resumes without rebasing when only process options change', async () => {
+    const sessionId = 'ob2-options-only-restart'
+    const oldNativeSessionId = '44444444-4444-4444-8444-444444444444'
+    await driveTurn([initMsg(oldNativeSessionId), textDelta('旧回复'), resultMsg()], {
+      sessionId,
+      config: makeConfig({ sessionId, systemPromptKey: 'options-v1', modelSurfaceKey: 'surface-same' }),
+    }).promise
+
+    const resumed = await driveTurn([initMsg(), textDelta('继续'), resultMsg()], {
+      sessionId,
+      requestId: 'request-options-v2',
+      expectedLastRoundId: 1,
+      config: makeConfig({ sessionId, systemPromptKey: 'options-v2', modelSurfaceKey: 'surface-same' }),
+    }).promise
+
+    expect(resumed.error || '').toBe('')
+    expect(resumed.cacheDiagnostic).toMatchObject({
+      iterator: 'cold_resumed',
+      previous_model_surface_hash: 'surface-same',
+      iterator_model_surface_hash: 'surface-same',
+      iterator_options_hash: 'options-v2',
+    })
+    expect(sdk.queryOptions.at(-1)?.resume).toBe(oldNativeSessionId)
+    dropSession(sessionId)
   })
 
   it('only records a cache refresh after successful cache usage, using model request start time', async () => {

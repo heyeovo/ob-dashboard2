@@ -119,6 +119,8 @@ export type TurnConfig = {
   allowRollingBodySeed?: boolean
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
+  /** 只覆盖 system / tools / MCP 正文；变化时需要清理旧 transcript 控制提醒。 */
+  modelSurfaceKey: string
   /** 全部模型可见 MCP instructions / tools 的稳定序列化定义。 */
   mcpDefinitionKey: string
   cwd: string
@@ -178,6 +180,12 @@ export function systemPromptContentHash(mode: CcMode, personaAppend: string): st
   return shortHash({ mode, personaAppend })
 }
 
+/**
+ * 模型可见 request prefix 的格式版本。升级它会让所有旧原生会话在下一轮
+ * 做一次干净 rebase，而不是把旧 SDK system-reminder 继续 resume 回来。
+ */
+export const MODEL_SURFACE_FORMAT_VERSION = 2
+
 /** 只记录 hash 与名称，不把提示词、路径、MCP 配置正文写进日志。 */
 export function cacheRelevantFingerprint(config: TurnConfig) {
   const toolNames = [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
@@ -185,6 +193,12 @@ export function cacheRelevantFingerprint(config: TurnConfig) {
   const systemPromptHash = systemPromptContentHash(config.mode, config.personaAppend)
   const toolsHash = shortHash(toolNames)
   const mcpToolsHash = mcpToolsContentHash(config.mcpDefinitionKey, mcpServerNames, config.disabledTools)
+  const modelSurfaceHash = shortHash({
+    modelSurfaceFormatVersion: MODEL_SURFACE_FORMAT_VERSION,
+    systemPromptHash,
+    toolsHash,
+    mcpToolsHash,
+  })
   const sdkCacheRelevantOptionsHash = shortHash({
     model: config.sdkModel,
     effort: config.effort,
@@ -195,7 +209,7 @@ export function cacheRelevantFingerprint(config: TurnConfig) {
     permissionMode: 'default',
     strictMcpConfig: true,
   })
-  return { systemPromptHash, toolsHash, mcpToolsHash, sdkCacheRelevantOptionsHash, toolNames, mcpServerNames }
+  return { systemPromptHash, toolsHash, mcpToolsHash, modelSurfaceHash, sdkCacheRelevantOptionsHash, toolNames, mcpServerNames }
 }
 
 /** 这个会话能写哪些目录。同样每轮重读 —— 改完配置开新对话生效，跟提示词一致。 */

@@ -104,7 +104,9 @@ export async function GET(request: NextRequest) {
     ])
     const cacheDiagnostic = pickFields(latestCacheRaw, [
       'turn_kind', 'lane', 'iterator', 'iterator_created_at', 'model_request_started_at',
-      'system_hash', 'tools_hash', 'mcp_hash', 'options_hash', 'tool_names', 'mcp_server_names',
+      'system_hash', 'tools_hash', 'mcp_hash', 'model_surface_hash', 'options_hash',
+      'previous_model_surface_hash', 'iterator_model_surface_hash', 'iterator_options_hash',
+      'tool_names', 'mcp_server_names',
       'agent_wake_version', 'agent_wake_instructions_hash',
     ])
     const configuredMcp = configuredMcpModelSurface(mcpConfig)

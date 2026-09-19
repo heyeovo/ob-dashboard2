@@ -131,6 +131,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
       && allowFixedBodyRestore,
     personaAppend,
     systemPromptKey: '',
+    modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),
       builtIn: builtInMcpModelSurfaces(),
@@ -151,6 +152,8 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     providerId,
     providerLabel,
   }
-  config.systemPromptKey = cacheRelevantFingerprint(config).sdkCacheRelevantOptionsHash
+  const fingerprint = cacheRelevantFingerprint(config)
+  config.systemPromptKey = fingerprint.sdkCacheRelevantOptionsHash
+  config.modelSurfaceKey = fingerprint.modelSurfaceHash
   return { persona, config, sessionSnapshot: sessionResult, resumeHint, laneId }
 }

@@ -15,8 +15,47 @@ export type RollingHistorySeed = {
   resumeFrom: string
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
-  source: 'new_seed' | 'manual_body_recovery' | 'revision_seed' | 'fixed_transcript_migration' | 'legacy_transcript_recovery' | 'persisted'
+  source: 'new_seed' | 'manual_body_recovery' | 'revision_seed' | 'fixed_transcript_migration' | 'legacy_transcript_recovery' | 'model_surface_rebase' | 'persisted'
   diagnostic?: RollingSeedDiagnostic
+}
+
+const SYSTEM_REMINDER_BLOCK = /<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/gi
+
+/**
+ * 原生 transcript 里的 SDK 控制提醒属于当时的 request prefix，不是对话事实。
+ * rebase 时只从 user 文本里移除这些块；assistant、tool_use/tool_result 和其余
+ * user 正文全部保留。原 transcript 永远不原地修改。
+ */
+export function stripStaleSystemReminders(entries: SessionStoreEntry[]): {
+  entries: SessionStoreEntry[]
+  removedBlockCount: number
+} {
+  let removedBlockCount = 0
+  const stripText = (value: string) => value.replace(SYSTEM_REMINDER_BLOCK, () => {
+    removedBlockCount += 1
+    return ''
+  }).trim()
+
+  const cleaned = entries.flatMap(entry => {
+    const cloned = JSON.parse(JSON.stringify(entry)) as SessionStoreEntry
+    const message = messageRecord(cloned)
+    if (message?.role !== 'user') return [cloned]
+    if (typeof message.content === 'string') {
+      message.content = stripText(message.content)
+      return message.content ? [cloned] : []
+    }
+    if (!Array.isArray(message.content)) return [cloned]
+    const cleanedContent = message.content.flatMap(block => {
+      if (!block || typeof block !== 'object') return [block]
+      const record = block as Record<string, unknown>
+      if (record.type !== 'text' || typeof record.text !== 'string') return [block]
+      const text = stripText(record.text)
+      return text ? [{ ...record, text }] : []
+    })
+    message.content = cleanedContent
+    return cleanedContent.length ? [cloned] : []
+  })
+  return { entries: cleaned, removedBlockCount }
 }
 
 export type RollingSeedDiagnostic = {
@@ -1144,6 +1183,48 @@ async function captureLocalTranscript(
     throw error
   }
   return capture.entries.length ? capture.entries : null
+}
+
+/**
+ * 模型可见配置变化时，把旧原生 transcript 复制成一个新 session。旧 SDK
+ * system-reminder 会被剥离，当前 query 启动后由 SDK 按最新配置重新注入。
+ */
+export async function createModelSurfaceRebaseSeed(
+  sourceResumeFrom: string,
+  options: {
+    cwd: string
+    storeRoot?: string
+    importLocalSession?: ImportLocalSession
+  },
+): Promise<RollingHistorySeed | null> {
+  const normalized = sourceResumeFrom.trim()
+  if (!normalized) return null
+  let sourceEntries = await captureLocalTranscript(normalized, options.cwd, options.importLocalSession)
+  if (!sourceEntries?.length) {
+    const persisted = openRollingHistoryResume(normalized, options)
+    sourceEntries = persisted
+      ? await persisted.sessionStore.load({ projectKey: '', sessionId: persisted.resumeFrom })
+      : null
+  }
+  if (!sourceEntries?.length) return null
+  const stripped = stripStaleSystemReminders(sourceEntries)
+  if (!stripped.entries.length) return null
+  const nextSessionId = randomUUID()
+  const entries = cloneRollingTranscriptForSession(stripped.entries, nextSessionId)
+  const envelopeCount = transcriptEnvelopes(entries).envelopes.length
+  return {
+    resumeFrom: nextSessionId,
+    sessionStore: new RollingSeedStore(nextSessionId, entries, options.storeRoot),
+    entries,
+    source: 'model_surface_rebase',
+    diagnostic: seedDiagnostic(entries, {
+      sourceSessionId: normalized,
+      sourceEntryCount: sourceEntries.length,
+      retainedEnvelopeCount: envelopeCount,
+      bodyRestoredTurnCount: 0,
+      thinkingPrunedBlockCount: 0,
+    }),
+  }
 }
 
 /** 成功一轮后，把 Claude 原生 transcript 原子同步回滚动持久存档。 */

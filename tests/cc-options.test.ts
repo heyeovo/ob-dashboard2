@@ -21,6 +21,7 @@ function config(mode: TurnConfig['mode']): TurnConfig {
     mode,
     personaAppend: '统一的协作者基础提示词',
     systemPromptKey: 'prompt-key',
+    modelSurfaceKey: 'surface-key',
     mcpDefinitionKey: 'mcp-v1',
     cwd: 'C:\\workspace',
     additionalDirectories: [],
@@ -105,6 +106,18 @@ describe('cc 基础提示词渠道一致性', () => {
     after.mcpDefinitionKey = 'mcp-v2-with-new-instructions'
     expect(cacheRelevantFingerprint(before).mcpToolsHash)
       .not.toBe(cacheRelevantFingerprint(after).mcpToolsHash)
+    expect(cacheRelevantFingerprint(before).modelSurfaceHash)
+      .not.toBe(cacheRelevantFingerprint(after).modelSurfaceHash)
+    expect(cacheRelevantFingerprint(before).sdkCacheRelevantOptionsHash)
+      .not.toBe(cacheRelevantFingerprint(after).sdkCacheRelevantOptionsHash)
+  })
+
+  it('模型变化只改变进程选项指纹，不改变模型表面指纹', () => {
+    const before = config('chat')
+    const after = config('chat')
+    after.sdkModel = 'another-model'
+    expect(cacheRelevantFingerprint(before).modelSurfaceHash)
+      .toBe(cacheRelevantFingerprint(after).modelSurfaceHash)
     expect(cacheRelevantFingerprint(before).sdkCacheRelevantOptionsHash)
       .not.toBe(cacheRelevantFingerprint(after).sdkCacheRelevantOptionsHash)
   })

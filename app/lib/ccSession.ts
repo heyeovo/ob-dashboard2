@@ -142,6 +142,8 @@ type LiveSession = {
   totalCostUsd: number
   /** 协作者身份与提示词模块的组合指纹；变化时重建 query，handoff 不参与。 */
   systemPromptKey: string
+  /** 启动时实际采用的 system/tools/MCP 模型表面指纹。 */
+  modelSurfaceKey: string
   turnCount: number
   /** 最后一次真正打到模型的时间，用来算 prompt cache 还有多久过期 */
   lastModelCallAt: number
@@ -460,6 +462,7 @@ export type EnsureSessionInput = {
   effort: string
   thinking: boolean
   systemPromptKey: string
+  modelSurfaceKey: string
 }
 
 function subscriptionCredentialVersion(): string {
@@ -548,6 +551,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     lastActiveAt: Date.now(),
     totalCostUsd: 0,
     systemPromptKey: input.systemPromptKey,
+    modelSurfaceKey: input.modelSurfaceKey,
     turnCount: 0,
     lastModelCallAt: 0,
     lastModelActivityAt: 0,
@@ -724,6 +728,10 @@ const resumeHints: Map<string, string> =
 
 export function rememberResumePoint(resumeKey: string, ccSessionId: string) {
   if (ccSessionId) resumeHints.set(resumeKey, ccSessionId)
+}
+
+export function forgetResumePoint(resumeKey: string) {
+  resumeHints.delete(resumeKey)
 }
 
 export function ccResumeKey(sessionId: string, laneId: string, contextRevision = 0): string {
