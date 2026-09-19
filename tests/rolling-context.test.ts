@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk'
-import { buildRollingWindowAppend, buildRollingWindowHistory } from '@/app/lib/cc/windowPrompt'
+const api = vi.hoisted(() => ({ getBuckets: vi.fn(), getJournals: vi.fn() }))
+
+vi.mock('@/app/lib/api', () => ({
+  getBuckets: api.getBuckets,
+  getJournals: api.getJournals,
+}))
+
+import { buildRollingWindowAppend, buildRollingWindowHistory, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import {
   assertFixedMigrationSeed,
   assertRollingResumeRecovered,
@@ -67,6 +74,62 @@ describe('daily rolling context', () => {
     expect(text).not.toContain('今天的原话')
     expect(text).not.toContain('今天的回应')
     expect(text).not.toContain('2026-09-09')
+  })
+
+  it('adds selected rolling memory groups once even when a bucket appears in two groups', () => {
+    const text = buildRollingWindowAppend(
+      session,
+      turns,
+      days,
+      [{ id: 'pin-1', title: '固定关系事实', content: '一直要知道的内容' }],
+      [{ id: 'journal-1', title: '某篇日记', content: '日记正文', author: '小羊' }],
+      [{ id: 'recent-1', title: '最近记忆', content: '最近正文' }],
+      [{ id: 'feel-1', title: '最近感受', content: '感受正文' }],
+      [
+        { id: 'recent-1', title: '重复记忆', content: '不应重复' },
+        { id: 'high-1', title: '旧高重要度', content: '高重要度正文' },
+      ],
+    )
+    expect(text).toContain('【日记｜某篇日记｜小羊｜journal-1】\n日记正文')
+    expect(text).toContain('【最近记忆｜最近记忆｜recent-1】\n最近正文')
+    expect(text).toContain('【feel｜最近感受｜feel-1】\n感受正文')
+    expect(text).toContain('【随机高重要度记忆｜旧高重要度｜high-1】\n高重要度正文')
+    expect(text).not.toContain('不应重复')
+  })
+
+  it('reports saved rolling selections only after status and category filters take effect', async () => {
+    api.getBuckets.mockResolvedValue([
+      { id: 'pin-1', name: '钉选', content: '钉选正文', pinned: true },
+      { id: 'recent-1', name: '最近', content: '最近正文', created: '2026-09-20', importance: 5 },
+      { id: 'resolved-1', name: '已解决', content: '不应生效', resolved: true, importance: 9 },
+      { id: 'feel-1', name: '感受', content: '感受正文', type: 'feel' },
+      { id: 'high-1', name: '高重要度', content: '高重要度正文', importance: 8 },
+      { id: 'noise-1', name: '噪音', content: '不应生效', noise: true, importance: 10 },
+    ])
+    api.getJournals.mockResolvedValue([
+      { id: 'journal-1', name: '日记', content: '日记正文' },
+      { id: 'locked-1', name: '锁定日记', content: '不应生效', locked: true },
+    ])
+    const selectedSession = {
+      ...session,
+      rolling_context: {
+        ...session.rolling_context,
+        selected_pinned_ids: ['pin-1'],
+        selected_journal_ids: ['journal-1', 'locked-1'],
+        selected_recent_ids: ['recent-1', 'resolved-1'],
+        selected_feel_ids: ['feel-1'],
+        selected_random_high_importance_ids: ['high-1', 'noise-1'],
+      },
+    } as HavenConversationSession
+    const result = await loadRollingWindowAppend('window-1', selectedSession, [], { logDiagnostics: false })
+    expect(result).toMatchObject({
+      pinnedBucketIds: ['pin-1'],
+      journalIds: ['journal-1'],
+      recentBucketIds: ['recent-1'],
+      feelBucketIds: ['feel-1'],
+      randomHighImportanceBucketIds: ['high-1'],
+    })
+    expect(result.content).not.toContain('不应生效')
   })
 
   it('restores raw days as a native user/assistant transcript seed', async () => {

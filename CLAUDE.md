@@ -34,8 +34,8 @@ production 必须配置以下六项：
 |-----------|------|
 | `app/page.tsx` | 主页（时间线/记忆格） |
 | `app/memory/` | 记忆库（三格切换） |
-| `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接；损坏的滚动窗口可经二次确认舍弃旧原生细节并用当前 raw 日期的 Haven 正文重建 transcript，不复制窗口或页面历史；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
-| `app/workbench/` | 工作台；“调参”下提供默认收起的本轮上下文审计，按当前会话只读展示滚动原文、背景拼接、SDK SessionStore 实际落盘的文本/召回/`tool_use`/`tool_result`、正文恢复标记、最近一次持久重建凭据、最近实际与当前/下一轮 Dashboard system prompt，以及最近一轮 token/cache 报告，不触发额外模型请求 |
+| `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接和钉选桶、日记、最近普通桶、feel、随机高重要度桶长期层；损坏的滚动窗口可经二次确认舍弃旧原生细节并用当前 raw 日期的 Haven 正文重建 transcript，不复制窗口或页面历史；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
+| `app/workbench/` | 工作台；“调参”下提供默认收起的本轮上下文审计，按当前会话只读展示滚动原文、各长期层的已保存/实际生效 ID、背景拼接、SDK SessionStore 实际落盘的文本/召回/`tool_use`/`tool_result`、正文恢复标记、最近一次持久重建凭据、最近实际与当前/下一轮 Dashboard system prompt、Claude 工具名称，以及安全去密后的 MCP instructions/description/input schema 和最近实际/当前定义 hash，不触发额外模型请求 |
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页及子页 |
@@ -44,7 +44,7 @@ production 必须配置以下六项：
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
 | `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff；滚动模式把手动选定的日回顾、实时钉选桶和日记放入背景 Context，把原文日期从 Haven 永久消息重建为真正的 `user/assistant` 对话流，CC 冷启动不续接旧包装版原生会话，且非首次明确迁移时缺少完整 transcript 必须 fail closed；`cc-rolling-recovery` 只在用户精确确认当前窗口后，从当前 raw 日期的 Haven 正文先物化全新持久 transcript，再以旧 session ID + state version CAS 原子切换当前活跃 lane；`cc-context-audit` 复用同一滚动拼接器返回当前会话选入的 Haven 原文和背景正文，只读检查持久滚动 transcript、原文逐条匹配及包装命中，并读取模型请求前单独落盘的 Dashboard system prompt 快照、当前热更新重建结果及最近一轮白名单化 SDK 诊断，不截获 OAuth/原始 HTTP 请求；`cc-diagnostics/rolling-ab` 复用 wake runner Bearer，仅以目标窗口的 rolling transcript 内存副本对照普通 fresh query 与 `SessionStore + resume`，不写回正式 rolling store，也不返回凭证正文；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback，认证失败时暂停该窗口自动唤醒并返回一小时 `Retry-After`；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，读写滚动上下文、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
-| `app/api/cc-context-audit/` | 滚动窗口额外只读预检双向对齐：除隔离的失败/中断半截轮次、失败类别及无正文候选记录的序号/UUID/主动唤醒标记外，还列出当前原文中缺少旧 transcript 完整轮次的 Haven ID、日期、时间及重建是否要求完整原生轮次（不返回诊断正文）；无用户/助手正文且无旧 transcript 轮次的空唤醒另计数，不列为缺失完整轮次；紧接 wake 的旧前台并发轮次若能按十分钟内唯一最近 Haven 输入恢复关联则单独计数，同期完全未写入 Haven且双方正文各不超过 200 字的一问一答纯文字错误轮次另计隔离数；不生成新版本、不修改设置或会话指针。 |
+| `app/api/cc-context-audit/` | 滚动窗口额外只读预检双向对齐：除隔离的失败/中断半截轮次、失败类别及无正文候选记录的序号/UUID/主动唤醒标记外，还列出当前原文中缺少旧 transcript 完整轮次的 Haven ID、日期、时间及重建是否要求完整原生轮次（不返回诊断正文）；同时返回长期层已保存/实际生效 ID、Claude 工具名称、安全去密后的当前 MCP 模型表面，以及最近实际/当前工具和 MCP hash、Agent Wake 版本与 instructions hash；无用户/助手正文且无旧 transcript 轮次的空唤醒另计数，不列为缺失完整轮次；紧接 wake 的旧前台并发轮次若能按十分钟内唯一最近 Haven 输入恢复关联则单独计数，同期完全未写入 Haven且双方正文各不超过 200 字的一问一答纯文字错误轮次另计隔离数；不生成新版本、不修改设置或会话指针。 |
 | `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 每轮按 Haven 最新配置拼装基础提示词、“关于我”和可热更新提示词模块；召回背景使用规则由提示词模块维护，动态正文不重复说明 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |

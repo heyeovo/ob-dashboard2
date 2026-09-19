@@ -34,6 +34,12 @@ type AuditData = {
     background_content: string
     pinned_bucket_ids: string[]
     selected_journal_ids: string[]
+    long_term_groups: Array<{
+      id: string
+      label: string
+      saved_ids: string[] | null
+      effective_ids: string[]
+    }>
   }
   transcript: {
     available: boolean
@@ -111,6 +117,40 @@ type AuditData = {
       chars: number
     }
     hash_match: boolean
+  }
+  tooling: {
+    current: {
+      tools_hash: string
+      tools: Array<{ name: string; definition_available: boolean; note: string }>
+      mcp_hash: string
+      mcp_servers: Array<{
+        name: string
+        version?: string
+        alwaysLoad?: boolean
+        instructions?: string
+        tools: Array<{
+          name: string
+          title?: string
+          description?: string
+          alwaysLoad?: boolean
+          inputSchema?: Record<string, unknown>
+        }>
+      }>
+      disabled_mcp_tools: string[]
+      agent_wake_version: string
+      agent_wake_instructions_hash: string
+    }
+    latest: {
+      available: boolean
+      tools_hash: string
+      tool_names: string[]
+      mcp_hash: string
+      mcp_server_names: string[]
+      agent_wake_version: string
+      agent_wake_instructions_hash: string
+    }
+    tools_hash_match: boolean
+    mcp_hash_match: boolean
   }
   latest: {
     turn_id: number | null
@@ -359,12 +399,72 @@ export default function ContextAuditPanel() {
             </details>
 
             <details className="rounded-xl border border-[var(--color-border)]">
-              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium">查看背景拼接正文与工具指纹</summary>
+              <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium">查看背景拼接正文与工具 / MCP 审计</summary>
               <div className="space-y-3 border-t border-[var(--color-border)] p-3 text-xs">
-                <div className="text-[var(--color-text-tertiary)]">钉选 bucket：{data.rolling.pinned_bucket_ids.join('、') || '无'} · 日记：{data.rolling.selected_journal_ids.join('、') || '无'}</div>
+                <div>
+                  <div className="mb-2 font-medium text-[var(--color-text-secondary)]">长期层选择</div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {data.rolling.long_term_groups.map(group => (
+                      <div key={group.id} className="rounded-lg bg-[var(--color-bg)] p-2.5 text-[11px] leading-5">
+                        <div className="font-medium text-[var(--color-text-secondary)]">{group.label}</div>
+                        <div className="break-all text-[var(--color-text-tertiary)]">已保存：{group.saved_ids === null ? '未单独保存（使用兼容默认）' : group.saved_ids.join('、') || '无'}</div>
+                        <div className="break-all text-[var(--color-text-tertiary)]">本轮有效：{group.effective_ids.join('、') || '无'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-bg)] p-3 font-sans leading-5 text-[var(--color-text-secondary)]">{data.rolling.background_content || '没有滚动背景正文'}</pre>
-                <div className="text-[var(--color-text-tertiary)]">工具：{Array.isArray(cache?.tool_names) ? cache.tool_names.join('、') : '—'}</div>
-                <div className="text-[var(--color-text-tertiary)]">MCP：{Array.isArray(cache?.mcp_server_names) ? cache.mcp_server_names.join('、') : '—'}</div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className={`rounded-lg px-3 py-2 ${data.tooling.tools_hash_match ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
+                    Claude 工具 · 最近 {data.tooling.latest.tools_hash || '未记录'} · 当前 {data.tooling.current.tools_hash} · {data.tooling.tools_hash_match ? '一致' : '不一致或尚无新记录'}
+                  </div>
+                  <div className={`rounded-lg px-3 py-2 ${data.tooling.mcp_hash_match ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
+                    MCP 定义 · 最近 {data.tooling.latest.mcp_hash || '未记录'} · 当前 {data.tooling.current.mcp_hash} · {data.tooling.mcp_hash_match ? '一致' : '不一致或尚无新记录'}
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-[var(--color-bg)] p-3">
+                  <div className="font-medium text-[var(--color-text-secondary)]">最近一轮实际记录</div>
+                  <div className="mt-1 text-[var(--color-text-tertiary)]">工具：{data.tooling.latest.tool_names.join('、') || '未记录'}</div>
+                  <div className="text-[var(--color-text-tertiary)]">MCP：{data.tooling.latest.mcp_server_names.join('、') || '未记录'}</div>
+                  <div className="text-[var(--color-text-tertiary)]">Agent Wake：v{data.tooling.latest.agent_wake_version || '未记录'} · instructions {data.tooling.latest.agent_wake_instructions_hash || '未记录'}</div>
+                </div>
+
+                <details className="rounded-lg bg-[var(--color-bg)]">
+                  <summary className="cursor-pointer px-3 py-2 font-medium text-[var(--color-text-secondary)]">Claude Code 工具（{data.tooling.current.tools.length} 个）</summary>
+                  <div className="border-t border-[var(--color-border)] p-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {data.tooling.current.tools.map(tool => <span key={tool.name} className="rounded-full bg-[var(--color-surface-secondary)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">{tool.name}</span>)}
+                    </div>
+                    <p className="mt-2 text-[11px] leading-5 text-[var(--color-text-tertiary)]">这些工具的 description 和 input schema 由 Claude Code SDK preset 内部提供，Dashboard 只能确认传入的启用名称，不伪造定义。</p>
+                  </div>
+                </details>
+
+                <div className="space-y-2">
+                  <div className="font-medium text-[var(--color-text-secondary)]">当前/下一轮 MCP 模型表面（{data.tooling.current.mcp_servers.length} 个服务）</div>
+                  {data.tooling.current.mcp_servers.map(server => (
+                    <details key={server.name} className="rounded-lg bg-[var(--color-bg)]">
+                      <summary className="cursor-pointer px-3 py-2 text-[var(--color-text-secondary)]">
+                        {server.name}{server.version ? ` · v${server.version}` : ''} · {server.tools.length} 个工具
+                      </summary>
+                      <div className="space-y-3 border-t border-[var(--color-border)] p-3">
+                        <div>
+                          <div className="mb-1 text-[11px] font-medium text-[var(--color-text-secondary)]">Server instructions{server.name === 'ombre_agent_wake' ? ` · hash ${data.tooling.current.agent_wake_instructions_hash}` : ''}</div>
+                          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-surface-secondary)] p-2.5 font-sans leading-5 text-[var(--color-text-secondary)]">{server.instructions || '该 MCP 配置没有可由 Dashboard 审计的 server instructions。'}</pre>
+                        </div>
+                        {server.tools.map(tool => (
+                          <div key={tool.name} className="rounded-lg border border-[var(--color-border-light)] p-2.5">
+                            <div className="font-medium text-[var(--color-text-secondary)]">{tool.name}{tool.title ? ` · ${tool.title}` : ''}</div>
+                            <div className="mt-1 whitespace-pre-wrap text-[var(--color-text-tertiary)]">{tool.description || '没有 description'}</div>
+                            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--color-surface-secondary)] p-2 text-[10px] leading-4 text-[var(--color-text-secondary)]">{JSON.stringify(tool.inputSchema || {}, null, 2)}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                  {data.tooling.current.disabled_mcp_tools.length ? <div className="text-[11px] text-[var(--color-text-tertiary)]">当前关闭的 MCP 工具：{data.tooling.current.disabled_mcp_tools.join('、')}</div> : null}
+                </div>
               </div>
             </details>
 

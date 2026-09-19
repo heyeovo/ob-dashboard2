@@ -16,6 +16,16 @@ type FixedWindowSource = Pick<
 
 type PinnedBucket = { id: string; title: string; content: string }
 type JournalEntry = { id: string; title: string; content: string; author: string }
+type MemoryBucket = PinnedBucket & {
+  pinned: boolean
+  archived: boolean
+  noise: boolean
+  resolved: boolean
+  digested: boolean
+  feel: boolean
+  journal: boolean
+  importance: number
+}
 
 function normalizePinnedBuckets(payload: unknown): PinnedBucket[] {
   const rows = Array.isArray(payload)
@@ -39,6 +49,47 @@ function normalizePinnedBuckets(payload: unknown): PinnedBucket[] {
       content,
     }]
   })
+}
+
+function normalizeMemoryBuckets(payload: unknown): MemoryBucket[] {
+  const rows = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === 'object' && Array.isArray((payload as { buckets?: unknown }).buckets)
+      ? (payload as { buckets: unknown[] }).buckets
+      : []
+  return rows.flatMap(raw => {
+    if (!raw || typeof raw !== 'object') return []
+    const item = raw as Record<string, unknown>
+    const metadata = item.metadata && typeof item.metadata === 'object'
+      ? item.metadata as Record<string, unknown>
+      : {}
+    const id = String(item.id || '').trim()
+    const content = String(item.content || '').trim()
+    if (!id || !content) return []
+    const type = String(item.type || metadata.type || '').toLowerCase()
+    const tags = Array.isArray(item.tags || metadata.tags) ? (item.tags || metadata.tags) as unknown[] : []
+    const domains = Array.isArray(item.domain || metadata.domain) ? (item.domain || metadata.domain) as unknown[] : []
+    const hasMarker = (value: string) => tags.some(tag => String(tag).toLowerCase() === value)
+      || domains.some(domain => String(domain).toLowerCase() === value)
+    return [{
+      id,
+      title: String(item.name || item.title || metadata.name || id).trim() || id,
+      content,
+      pinned: Boolean(item.pinned ?? metadata.pinned),
+      archived: type === 'archived' || type === 'archive' || Boolean(item.archived ?? metadata.archived),
+      noise: type === 'noise' || Boolean(item.noise ?? metadata.noise) || hasMarker('noise'),
+      resolved: Boolean(item.resolved ?? metadata.resolved),
+      digested: Boolean(item.digested ?? metadata.digested),
+      feel: type === 'feel' || hasMarker('feel'),
+      journal: type === 'journal',
+      importance: Number(item.importance ?? metadata.importance ?? 0),
+    }]
+  })
+}
+
+function isEligibleRollingBucket(bucket: MemoryBucket): boolean {
+  return !bucket.pinned && !bucket.archived && !bucket.noise
+    && !bucket.resolved && !bucket.digested && !bucket.journal
 }
 
 function normalizeJournals(payload: unknown): JournalEntry[] {
@@ -69,6 +120,9 @@ export function buildRollingWindowAppend(
   days: ConversationContextDay[],
   pinnedBuckets: PinnedBucket[],
   journals: JournalEntry[] = [],
+  recentBuckets: PinnedBucket[] = [],
+  feelBuckets: PinnedBucket[] = [],
+  randomHighImportanceBuckets: PinnedBucket[] = [],
 ): string {
   if (session.rolling_context?.strategy !== 'daily_rolling') return ''
   const modes = session.rolling_context.day_modes || {}
@@ -81,6 +135,18 @@ export function buildRollingWindowAppend(
   for (const journal of journals) {
     const authorTag = journal.author ? `｜${journal.author}` : ''
     sections.push(`【日记｜${journal.title}${authorTag}｜${journal.id}】\n${journal.content}`)
+  }
+  const appendedBucketIds = new Set(pinnedBuckets.map(bucket => bucket.id))
+  for (const [label, buckets] of [
+    ['最近记忆', recentBuckets],
+    ['feel', feelBuckets],
+    ['随机高重要度记忆', randomHighImportanceBuckets],
+  ] as const) {
+    for (const bucket of buckets) {
+      if (appendedBucketIds.has(bucket.id)) continue
+      appendedBucketIds.add(bucket.id)
+      sections.push(`【${label}｜${bucket.title}｜${bucket.id}】\n${bucket.content}`)
+    }
   }
   for (const day of orderedDays) {
     const mode = modes[day.day] || (day.turn_count > 0 ? 'raw' : 'omit')
@@ -117,13 +183,28 @@ export async function loadRollingWindowAppend(
   session: FixedWindowSource,
   days: ConversationContextDay[],
   options: { upToTurnId?: number; logDiagnostics?: boolean; includeAllTurns?: boolean } = {},
-): Promise<{ content: string; history: HavenTurn[]; allTurns: HavenTurn[]; pinnedBucketIds: string[] }> {
+): Promise<{
+  content: string
+  history: HavenTurn[]
+  allTurns: HavenTurn[]
+  pinnedBucketIds: string[]
+  journalIds: string[]
+  recentBucketIds: string[]
+  feelBucketIds: string[]
+  randomHighImportanceBucketIds: string[]
+}> {
   if (session.rolling_context?.strategy !== 'daily_rolling') {
-    return { content: '', history: [], allTurns: [], pinnedBucketIds: [] }
+    return {
+      content: '', history: [], allTurns: [], pinnedBucketIds: [], journalIds: [],
+      recentBucketIds: [], feelBucketIds: [], randomHighImportanceBucketIds: [],
+    }
   }
   const modes = session.rolling_context.day_modes || {}
   const selectedPinnedIds = session.rolling_context.selected_pinned_ids
   const selectedJournalIds = session.rolling_context.selected_journal_ids
+  const selectedRecentIds = session.rolling_context.selected_recent_ids
+  const selectedFeelIds = session.rolling_context.selected_feel_ids
+  const selectedRandomHighImportanceIds = session.rolling_context.selected_random_high_importance_ids
   const rawDays = days
     .filter(day => day.turn_count > 0 && (modes[day.day] || 'raw') === 'raw')
     .map(day => day.day)
@@ -153,6 +234,18 @@ export async function loadRollingWindowAppend(
     const idSet = new Set(selectedPinnedIds)
     pinnedBuckets = pinnedBuckets.filter(bucket => idSet.has(bucket.id))
   }
+  const memoryBuckets = normalizeMemoryBuckets(bucketPayload).filter(isEligibleRollingBucket)
+  const selectBuckets = (ids: string[] | null | undefined, predicate: (bucket: MemoryBucket) => boolean) => {
+    if (!ids?.length) return []
+    const idSet = new Set(ids)
+    return memoryBuckets.filter(bucket => idSet.has(bucket.id) && predicate(bucket))
+  }
+  const recentBuckets = selectBuckets(selectedRecentIds, bucket => !bucket.feel)
+  const feelBuckets = selectBuckets(selectedFeelIds, bucket => bucket.feel)
+  const randomHighImportanceBuckets = selectBuckets(
+    selectedRandomHighImportanceIds,
+    bucket => !bucket.feel && bucket.importance >= 7,
+  )
   let journals = normalizeJournals(journalPayload)
   if (selectedJournalIds != null) {
     const idSet = new Set(selectedJournalIds)
@@ -170,10 +263,17 @@ export async function loadRollingWindowAppend(
       days,
       pinnedBuckets,
       journals,
+      recentBuckets,
+      feelBuckets,
+      randomHighImportanceBuckets,
     ),
     history: buildRollingWindowHistory(session, effectiveTurns, days),
     allTurns: effectiveTurns,
     pinnedBucketIds: pinnedBuckets.map(item => item.id),
+    journalIds: journals.map(item => item.id),
+    recentBucketIds: recentBuckets.map(item => item.id),
+    feelBucketIds: feelBuckets.map(item => item.id),
+    randomHighImportanceBucketIds: randomHighImportanceBuckets.map(item => item.id),
   }
 }
 

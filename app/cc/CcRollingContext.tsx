@@ -19,6 +19,18 @@ type Candidate = {
   title: string
   content: string
   note?: string
+  created?: string
+  importance?: number
+}
+
+type BucketCandidate = Candidate & {
+  pinned: boolean
+  archived: boolean
+  noise: boolean
+  resolved: boolean
+  digested: boolean
+  feel: boolean
+  journal: boolean
 }
 
 const SELECT = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2 py-1.5 text-[11px] text-[var(--color-text-secondary)]'
@@ -47,6 +59,32 @@ function toggleInSet(set: Set<string>, id: string): Set<string> {
   return next
 }
 
+function includeSelected(visible: Candidate[], all: Candidate[], selected: Set<string>): Candidate[] {
+  const visibleIds = new Set(visible.map(item => item.id))
+  return [...visible, ...all.filter(item => selected.has(item.id) && !visibleIds.has(item.id))]
+}
+
+function shuffled<T>(items: T[], seed: number): T[] {
+  const next = [...items]
+  let value = seed || 1
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    value = (value * 1664525 + 1013904223) >>> 0
+    const target = value % (index + 1)
+    ;[next[index], next[target]] = [next[target], next[index]]
+  }
+  return next
+}
+
+function LimitControl({ value, unit, onChange }: { value: number; unit: string; onChange: (value: number) => void }) {
+  return (
+    <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
+      展示候选
+      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)]" />
+      {unit}
+    </label>
+  )
+}
+
 function SelectionSection({
   title,
   hint,
@@ -57,6 +95,7 @@ function SelectionSection({
   onToggle,
   onAll,
   onNone,
+  control,
 }: {
   title: string
   hint: string
@@ -67,6 +106,7 @@ function SelectionSection({
   onToggle: (id: string) => void
   onAll: () => void
   onNone: () => void
+  control?: React.ReactNode
 }) {
   const selectedCount = items.filter(item => selected.has(item.id)).length
   const selectedChars = items.filter(item => selected.has(item.id)).reduce((sum, item) => sum + item.content.length, 0)
@@ -83,13 +123,16 @@ function SelectionSection({
       </button>
       {open ? (
         <div className="border-t border-[var(--color-border-light)] px-3 pb-2.5 pt-2">
-          {items.length > 0 ? (
-            <div className="mb-2 flex items-center justify-end gap-2 text-[10px]">
-              <button type="button" onClick={onAll} className="text-[var(--color-primary)]">全选</button>
-              <span className="text-[var(--color-border)]">|</span>
-              <button type="button" onClick={onNone} className="text-[var(--color-primary)]">全不选</button>
-            </div>
-          ) : null}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+            <div>{control}</div>
+            {items.length > 0 ? (
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={onAll} className="text-[var(--color-primary)]">全选当前候选</button>
+                <span className="text-[var(--color-border)]">|</span>
+                <button type="button" onClick={onNone} className="text-[var(--color-primary)]">全不选</button>
+              </div>
+            ) : null}
+          </div>
           {items.length === 0 ? (
             <div className="py-2 text-center text-[10px] text-[var(--color-text-disabled)]">暂无可选内容</div>
           ) : (
@@ -123,8 +166,19 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   const [note, setNote] = useState('')
   const [pinnedItems, setPinnedItems] = useState<Candidate[]>([])
   const [journalItems, setJournalItems] = useState<Candidate[]>([])
+  const [recentItems, setRecentItems] = useState<Candidate[]>([])
+  const [feelItems, setFeelItems] = useState<Candidate[]>([])
+  const [highImportanceItems, setHighImportanceItems] = useState<Candidate[]>([])
   const [selectedPinned, setSelectedPinned] = useState<Set<string>>(new Set())
   const [selectedJournals, setSelectedJournals] = useState<Set<string>>(new Set())
+  const [selectedRecent, setSelectedRecent] = useState<Set<string>>(new Set())
+  const [selectedFeels, setSelectedFeels] = useState<Set<string>>(new Set())
+  const [selectedRandomHighImportance, setSelectedRandomHighImportance] = useState<Set<string>>(new Set())
+  const [journalLimit, setJournalLimit] = useState(10)
+  const [recentLimit, setRecentLimit] = useState(10)
+  const [feelLimit, setFeelLimit] = useState(20)
+  const [randomHighImportanceLimit, setRandomHighImportanceLimit] = useState(10)
+  const [randomBatch, setRandomBatch] = useState(() => Date.now())
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -150,18 +204,45 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
         setDraft(rollingContext)
 
         const rawBuckets = Array.isArray(bucketsData) ? bucketsData : (bucketsData?.buckets || [])
-        const pinned: Candidate[] = rawBuckets
-          .filter((b: Record<string, unknown>) => {
-            const meta = b?.metadata as Record<string, unknown> | undefined
-            return b?.pinned ?? meta?.pinned
-          })
-          .filter((b: Record<string, unknown>) => String(b?.id || '').trim() && String(b?.content || '').trim())
-          .map((b: Record<string, unknown>): Candidate => ({
-            id: String(b.id),
-            title: String(b.name || (b.metadata as Record<string, unknown>)?.name || b.id),
-            content: String(b.content || ''),
-          }))
+        const buckets: BucketCandidate[] = rawBuckets.flatMap((b: Record<string, unknown>) => {
+          const metadata = b?.metadata && typeof b.metadata === 'object'
+            ? b.metadata as Record<string, unknown>
+            : {}
+          const id = String(b?.id || '').trim()
+          const content = String(b?.content || '').trim()
+          if (!id || !content) return []
+          const type = String(b.type || metadata.type || '').toLowerCase()
+          const tags = Array.isArray(b.tags || metadata.tags) ? (b.tags || metadata.tags) as unknown[] : []
+          const domains = Array.isArray(b.domain || metadata.domain) ? (b.domain || metadata.domain) as unknown[] : []
+          const hasMarker = (value: string) => tags.some(tag => String(tag).toLowerCase() === value)
+            || domains.some(domain => String(domain).toLowerCase() === value)
+          return [{
+            id,
+            title: String(b.name || b.title || metadata.name || id),
+            content,
+            created: String(b.event_time || b.created || metadata.event_time || metadata.created || ''),
+            importance: Number(b.importance ?? metadata.importance ?? 0),
+            pinned: Boolean(b.pinned ?? metadata.pinned),
+            archived: type === 'archived' || type === 'archive' || Boolean(b.archived ?? metadata.archived),
+            noise: type === 'noise' || Boolean(b.noise ?? metadata.noise) || hasMarker('noise'),
+            resolved: Boolean(b.resolved ?? metadata.resolved),
+            digested: Boolean(b.digested ?? metadata.digested),
+            feel: type === 'feel' || hasMarker('feel'),
+            journal: type === 'journal',
+          }]
+        })
+        const pinned: Candidate[] = buckets.filter(bucket => bucket.pinned)
         setPinnedItems(pinned)
+
+        const eligible = buckets.filter(bucket => !bucket.pinned && !bucket.archived && !bucket.noise
+          && !bucket.resolved && !bucket.digested && !bucket.journal)
+        const recent = eligible.filter(bucket => !bucket.feel)
+          .sort((a, b) => String(b.created).localeCompare(String(a.created)))
+        const feels = eligible.filter(bucket => bucket.feel)
+          .sort((a, b) => String(b.created).localeCompare(String(a.created)))
+        setRecentItems(recent)
+        setFeelItems(feels)
+        setHighImportanceItems(recent.filter(bucket => Number(bucket.importance) >= 7))
 
         const savedPinnedIds = rollingContext.selected_pinned_ids
         setSelectedPinned(
@@ -169,6 +250,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             ? new Set(savedPinnedIds)
             : new Set(pinned.map(item => item.id)),
         )
+        setSelectedRecent(new Set(rollingContext.selected_recent_ids || []))
+        setSelectedFeels(new Set(rollingContext.selected_feel_ids || []))
+        setSelectedRandomHighImportance(new Set(rollingContext.selected_random_high_importance_ids || []))
 
         const rawJournals = Array.isArray(journalData) ? journalData : (journalData?.items || [])
         const journals: Candidate[] = rawJournals
@@ -178,8 +262,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             title: String(j.name || j.title || j.id),
             content: String(j.content || ''),
             note: String(j.author || ''),
+            created: String(j.event_time || j.created || ''),
           }))
-          .sort((a: Candidate, b: Candidate) => b.title.localeCompare(a.title))
+          .sort((a: Candidate, b: Candidate) => String(b.created).localeCompare(String(a.created)))
         setJournalItems(journals)
 
         const savedJournalIds = rollingContext.selected_journal_ids
@@ -196,6 +281,43 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     if (mode === 'review') return total + (day.review?.chars || 0)
     return total
   }, 0), [days, draft])
+
+  const journalVisible = useMemo(
+    () => includeSelected(journalItems.slice(0, journalLimit), journalItems, selectedJournals),
+    [journalItems, journalLimit, selectedJournals],
+  )
+  const recentBase = useMemo(() => recentItems.slice(0, recentLimit), [recentItems, recentLimit])
+  const recentVisible = useMemo(
+    () => includeSelected(recentBase, recentItems, selectedRecent),
+    [recentBase, recentItems, selectedRecent],
+  )
+  const feelVisible = useMemo(
+    () => includeSelected(feelItems.slice(0, feelLimit), feelItems, selectedFeels),
+    [feelItems, feelLimit, selectedFeels],
+  )
+  const randomHighImportancePool = useMemo(() => {
+    const recentIds = new Set(recentBase.map(item => item.id))
+    return highImportanceItems.filter(item => !recentIds.has(item.id))
+  }, [highImportanceItems, recentBase])
+  const randomHighImportanceVisible = useMemo(() => {
+    const batch = shuffled(randomHighImportancePool, randomBatch).slice(0, randomHighImportanceLimit)
+    return includeSelected(batch, highImportanceItems, selectedRandomHighImportance)
+  }, [highImportanceItems, randomBatch, randomHighImportanceLimit, randomHighImportancePool, selectedRandomHighImportance])
+
+  const estimatedTotalTokens = useMemo(() => {
+    const selectedBuckets = new Map<string, Candidate>()
+    for (const [items, selected] of [
+      [pinnedItems, selectedPinned],
+      [recentItems, selectedRecent],
+      [feelItems, selectedFeels],
+      [highImportanceItems, selectedRandomHighImportance],
+    ] as Array<[Candidate[], Set<string>]>) {
+      for (const item of items) if (selected.has(item.id)) selectedBuckets.set(item.id, item)
+    }
+    const longTermTokens = [...selectedBuckets.values(), ...journalItems.filter(item => selectedJournals.has(item.id))]
+      .reduce((total, item) => total + estimateHandoffTokens(item.content), 0)
+    return Math.ceil(estimatedChars * 1.3) + longTermTokens
+  }, [estimatedChars, feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
 
   if (loading) return <div className="py-8 text-center text-[11px] text-[var(--color-text-disabled)]">读取上下文日期…</div>
   if (!draft || !session) return <div className="text-[11px] text-red-600">{note || '没有可用的窗口配置'}</div>
@@ -241,6 +363,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
           : draft.allow_fixed_body_restore,
         selected_pinned_ids: [...selectedPinned],
         selected_journal_ids: [...selectedJournals],
+        selected_recent_ids: [...selectedRecent],
+        selected_feel_ids: [...selectedFeels],
+        selected_random_high_importance_ids: [...selectedRandomHighImportance],
       }
       const response = await fetch('/api/cc-turns', {
         method: 'PATCH',
@@ -354,7 +479,11 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             })}
           </div>
 
-          <div className="mb-2 mt-4 text-[10.5px] text-[var(--color-text-disabled)]">长期层</div>
+          <div className={`mb-3 mt-4 rounded-[var(--radius-md)] border px-2.5 py-2 text-[10.5px] leading-relaxed ${estimatedTotalTokens >= 100000 ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+            当前日期内容与长期层已选项预估约 {estimatedTotalTokens.toLocaleString()} token（不含系统提示词和后续动态召回）。
+            {estimatedTotalTokens >= 100000 ? ' 已超过 10 万，建议精简；保存时不会自动截断。' : ''}
+          </div>
+          <div className="mb-2 text-[10.5px] text-[var(--color-text-disabled)]">长期层</div>
           <div className="space-y-1.5">
             <SelectionSection
               title="钉选桶"
@@ -369,14 +498,56 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             />
             <SelectionSection
               title="日记"
-              hint="未锁定的日记"
-              items={journalItems}
+              hint={`展示最近 ${Math.min(journalLimit, journalItems.length)} 篇未锁定日记候选`}
+              items={journalVisible}
               selected={selectedJournals}
               open={openSections.has('journal')}
               onToggleOpen={() => toggleSection('journal')}
               onToggle={id => setSelectedJournals(current => toggleInSet(current, id))}
-              onAll={() => setSelectedJournals(new Set(journalItems.map(item => item.id)))}
+              onAll={() => setSelectedJournals(new Set(journalVisible.map(item => item.id)))}
               onNone={() => setSelectedJournals(new Set())}
+              control={<LimitControl value={journalLimit} unit="篇" onChange={setJournalLimit} />}
+            />
+            <SelectionSection
+              title="最近的桶"
+              hint={`展示最近 ${Math.min(recentLimit, recentItems.length)} 个候选；排除特殊状态与 feel`}
+              items={recentVisible}
+              selected={selectedRecent}
+              open={openSections.has('recent')}
+              onToggleOpen={() => toggleSection('recent')}
+              onToggle={id => setSelectedRecent(current => toggleInSet(current, id))}
+              onAll={() => setSelectedRecent(new Set(recentVisible.map(item => item.id)))}
+              onNone={() => setSelectedRecent(new Set())}
+              control={<LimitControl value={recentLimit} unit="个桶" onChange={setRecentLimit} />}
+            />
+            <SelectionSection
+              title="feel"
+              hint={`展示最近 ${Math.min(feelLimit, feelItems.length)} 条候选；排除特殊状态`}
+              items={feelVisible}
+              selected={selectedFeels}
+              open={openSections.has('feel')}
+              onToggleOpen={() => toggleSection('feel')}
+              onToggle={id => setSelectedFeels(current => toggleInSet(current, id))}
+              onAll={() => setSelectedFeels(new Set(feelVisible.map(item => item.id)))}
+              onNone={() => setSelectedFeels(new Set())}
+              control={<LimitControl value={feelLimit} unit="条" onChange={setFeelLimit} />}
+            />
+            <SelectionSection
+              title="随机高重要度桶"
+              hint={`展示 ${Math.min(randomHighImportanceLimit, randomHighImportancePool.length)} 个候选；重要度 ≥ 7，避开最近候选`}
+              items={randomHighImportanceVisible}
+              selected={selectedRandomHighImportance}
+              open={openSections.has('random-high')}
+              onToggleOpen={() => toggleSection('random-high')}
+              onToggle={id => setSelectedRandomHighImportance(current => toggleInSet(current, id))}
+              onAll={() => setSelectedRandomHighImportance(new Set(randomHighImportanceVisible.map(item => item.id)))}
+              onNone={() => setSelectedRandomHighImportance(new Set())}
+              control={(
+                <div className="flex items-center gap-2">
+                  <LimitControl value={randomHighImportanceLimit} unit="个桶" onChange={setRandomHighImportanceLimit} />
+                  <button type="button" onClick={() => setRandomBatch(current => current + 1)} className="text-[10px] text-[var(--color-primary)] hover:underline">换一批</button>
+                </div>
+              )}
             />
           </div>
         </>

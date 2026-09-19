@@ -54,6 +54,9 @@ export type RollingContextConfig = {
   day_modes: Record<string, 'raw' | 'review' | 'omit'>
   selected_pinned_ids?: string[] | null
   selected_journal_ids?: string[] | null
+  selected_recent_ids?: string[] | null
+  selected_feel_ids?: string[] | null
+  selected_random_high_importance_ids?: string[] | null
 }
 
 export type ConversationContextDay = {

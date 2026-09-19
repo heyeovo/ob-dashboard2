@@ -149,6 +149,30 @@ function shortHash(value: unknown): string {
   return createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex').slice(0, 16)
 }
 
+export function claudeToolAudit() {
+  const toolNames = [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
+  return {
+    hash: shortHash(toolNames),
+    tools: toolNames.map(name => ({
+      name,
+      definition_available: false,
+      note: '工具定义由 Claude Code SDK preset 提供，Dashboard 只能确认启用名称。',
+    })),
+  }
+}
+
+export function mcpToolsContentHash(
+  definition: string,
+  mcpServerNames: string[],
+  disabledTools: string[],
+): string {
+  return shortHash({
+    definition,
+    mcpServerNames: [...mcpServerNames].sort(),
+    disabledTools: [...disabledTools].sort(),
+  })
+}
+
 /** Dashboard 可控制的 system prompt 结构；不包含 Claude Code 内置 preset 正文。 */
 export function systemPromptContentHash(mode: CcMode, personaAppend: string): string {
   return shortHash({ mode, personaAppend })
@@ -160,11 +184,7 @@ export function cacheRelevantFingerprint(config: TurnConfig) {
   const mcpServerNames = [...Object.keys(config.sdkMcpServers), ...builtInMcpServerNames()].sort()
   const systemPromptHash = systemPromptContentHash(config.mode, config.personaAppend)
   const toolsHash = shortHash(toolNames)
-  const mcpToolsHash = shortHash({
-    definition: config.mcpDefinitionKey,
-    mcpServerNames,
-    disabledTools: [...config.disabledTools].sort(),
-  })
+  const mcpToolsHash = mcpToolsContentHash(config.mcpDefinitionKey, mcpServerNames, config.disabledTools)
   const sdkCacheRelevantOptionsHash = shortHash({
     model: config.sdkModel,
     effort: config.effort,

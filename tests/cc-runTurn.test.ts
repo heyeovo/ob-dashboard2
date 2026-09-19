@@ -489,6 +489,8 @@ describe('runTurn：普通回复', () => {
       tools_hash: expect.any(String),
       mcp_hash: expect.any(String),
       options_hash: expect.any(String),
+      agent_wake_version: '1.1.0',
+      agent_wake_instructions_hash: expect.any(String),
       model_request_started_at: expect.any(String),
     })
     expect(JSON.stringify(coldStarted.cacheDiagnostic)).not.toContain('private-persona-marker')

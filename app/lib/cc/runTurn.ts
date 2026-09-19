@@ -79,6 +79,7 @@ import type { HavenPersona } from '@/app/lib/havenPersonas'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 import type { ResolvedAttachment } from '@/app/lib/havenAttachments'
 import {
+  agentWakeMcpAudit,
   beginAgentWakeTurn,
   endAgentWakeTurn,
   type AgentWakeDecision,
@@ -168,6 +169,8 @@ export type CacheDiagnostic = {
   options_hash: string
   tool_names: string[]
   mcp_server_names: string[]
+  agent_wake_version: string
+  agent_wake_instructions_hash: string
 }
 
 export type RunTurnResult = {
@@ -610,6 +613,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       systemPromptKey: config.systemPromptKey,
     })
     const fingerprint = cacheRelevantFingerprint(config)
+    const agentWakeAudit = agentWakeMcpAudit()
     const iterator = currentLive === live ? 'reused' : effectiveResumeHint ? 'cold_resumed' : 'cold_started'
     cacheDiagnostic = {
       version: 1,
@@ -627,6 +631,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       options_hash: fingerprint.sdkCacheRelevantOptionsHash,
       tool_names: fingerprint.toolNames,
       mcp_server_names: fingerprint.mcpServerNames,
+      agent_wake_version: agentWakeAudit.version,
+      agent_wake_instructions_hash: agentWakeAudit.instructionsHash,
     }
     console.info('[cc-cache-fingerprint]', {
       turnKind,

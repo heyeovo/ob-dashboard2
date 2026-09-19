@@ -4,8 +4,11 @@ import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/c
 import { inspectRollingHistoryAlignment, inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
 import { getConversationSession, listAllTurns, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
 import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/lib/havenPersonas'
-import { systemPromptContentHash } from '@/app/lib/cc/ccOptions'
+import { claudeToolAudit, mcpToolsContentHash, systemPromptContentHash } from '@/app/lib/cc/ccOptions'
 import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
+import { configuredMcpModelSurface, disabledMcpTools, loadMcpConfig } from '@/app/lib/ccMcp'
+import { builtInMcpModelSurfaces, builtInMcpServerNames } from '@/app/lib/cc/builtInMcp'
+import { agentWakeMcpAudit } from '@/app/lib/cc/agentWakeTool'
 
 export const runtime = 'nodejs'
 
@@ -82,9 +85,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = sessionResult.session
-    const [rolling, latestResult] = await Promise.all([
+    const [rolling, latestResult, mcpConfig] = await Promise.all([
       loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { logDiagnostics: false }),
       listTurns(sessionId, { limit: 50, includeRaw: true }),
+      loadMcpConfig(),
     ])
     const latestTurn = latestResult.ok ? latestResult.turns.at(-1) : undefined
     const latestRaw = rawRecord(latestTurn?.raw_json)
@@ -101,7 +105,24 @@ export async function GET(request: NextRequest) {
     const cacheDiagnostic = pickFields(latestCacheRaw, [
       'turn_kind', 'lane', 'iterator', 'iterator_created_at', 'model_request_started_at',
       'system_hash', 'tools_hash', 'mcp_hash', 'options_hash', 'tool_names', 'mcp_server_names',
+      'agent_wake_version', 'agent_wake_instructions_hash',
     ])
+    const configuredMcp = configuredMcpModelSurface(mcpConfig)
+    const builtInMcp = builtInMcpModelSurfaces()
+    const currentMcpServers = [...configuredMcp, ...builtInMcp]
+    const currentMcpServerNames = [
+      ...configuredMcp.map(server => server.name),
+      ...builtInMcpServerNames(),
+    ].sort()
+    const currentDisabledMcpTools = disabledMcpTools(mcpConfig)
+    const currentMcpDefinitionKey = JSON.stringify({ configured: configuredMcp, builtIn: builtInMcp })
+    const currentMcpHash = mcpToolsContentHash(
+      currentMcpDefinitionKey,
+      currentMcpServerNames,
+      currentDisabledMcpTools,
+    )
+    const currentTools = claudeToolAudit()
+    const currentAgentWake = agentWakeMcpAudit()
     const modes = session.rolling_context?.day_modes || {}
     const messages = auditMessages(rolling.history)
     const stats = getSessionStats(sessionId)
@@ -170,6 +191,33 @@ export async function GET(request: NextRequest) {
         background_content: rolling.content,
         pinned_bucket_ids: rolling.pinnedBucketIds,
         selected_journal_ids: session.rolling_context?.selected_journal_ids || [],
+        long_term_groups: [
+          {
+            id: 'pinned', label: '钉选桶',
+            saved_ids: session.rolling_context?.selected_pinned_ids ?? null,
+            effective_ids: rolling.pinnedBucketIds,
+          },
+          {
+            id: 'journal', label: '日记',
+            saved_ids: session.rolling_context?.selected_journal_ids ?? null,
+            effective_ids: rolling.journalIds,
+          },
+          {
+            id: 'recent', label: '最近的桶',
+            saved_ids: session.rolling_context?.selected_recent_ids ?? null,
+            effective_ids: rolling.recentBucketIds,
+          },
+          {
+            id: 'feel', label: 'feel',
+            saved_ids: session.rolling_context?.selected_feel_ids ?? null,
+            effective_ids: rolling.feelBucketIds,
+          },
+          {
+            id: 'random_high', label: '随机高重要度桶',
+            saved_ids: session.rolling_context?.selected_random_high_importance_ids ?? null,
+            effective_ids: rolling.randomHighImportanceBucketIds,
+          },
+        ],
       },
       transcript: transcript ? {
         available: true,
@@ -224,6 +272,28 @@ export async function GET(request: NextRequest) {
           chars: latestAppend.length,
         },
         hash_match: Boolean(latestSystemHash && latestSystemHash === currentSystemHash),
+      },
+      tooling: {
+        current: {
+          tools_hash: currentTools.hash,
+          tools: currentTools.tools,
+          mcp_hash: currentMcpHash,
+          mcp_servers: currentMcpServers,
+          disabled_mcp_tools: currentDisabledMcpTools,
+          agent_wake_version: currentAgentWake.version,
+          agent_wake_instructions_hash: currentAgentWake.instructionsHash,
+        },
+        latest: {
+          available: Boolean(latestCacheRaw),
+          tools_hash: String(latestCacheRaw?.tools_hash || ''),
+          tool_names: Array.isArray(latestCacheRaw?.tool_names) ? latestCacheRaw.tool_names : [],
+          mcp_hash: String(latestCacheRaw?.mcp_hash || ''),
+          mcp_server_names: Array.isArray(latestCacheRaw?.mcp_server_names) ? latestCacheRaw.mcp_server_names : [],
+          agent_wake_version: String(latestCacheRaw?.agent_wake_version || ''),
+          agent_wake_instructions_hash: String(latestCacheRaw?.agent_wake_instructions_hash || ''),
+        },
+        tools_hash_match: Boolean(latestCacheRaw?.tools_hash && latestCacheRaw.tools_hash === currentTools.hash),
+        mcp_hash_match: Boolean(latestCacheRaw?.mcp_hash && latestCacheRaw.mcp_hash === currentMcpHash),
       },
       latest: {
         turn_id: latestTurn?.id || null,
