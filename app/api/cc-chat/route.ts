@@ -376,7 +376,7 @@ async function loadTurnInputs(body: ChatBody) {
     modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),
-      builtIn: builtInMcpModelSurfaces(mcpConfig.builtIns),
+      builtIn: builtInMcpModelSurfaces(mcpConfig.builtIns, mode),
     }),
     builtInMcpStates: mcpConfig.builtIns,
     cwd,

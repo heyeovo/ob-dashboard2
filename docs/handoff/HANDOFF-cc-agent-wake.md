@@ -1,12 +1,15 @@
 # HANDOFF — CC 缓存保活与 Claude 主动唤醒
 
 > 建立时间：2026-08-31
-> 最后更新：2026-09-13
+> 最后更新：2026-09-20
 > 仓库：`ob-dashboard2`、`Ombre-Brain-Haven`
-> 状态：阶段 1–5 已完成；缓存保活暂停恢复语义已补齐，待部署验收；阶段 6 尚未开始
+> 状态：阶段 1–5 已完成；Agent Wake 已改为可开关内置 MCP 顶层工具，提交 `312c369` 已推送，待与闲聊/工作模式工具边界修复合并部署验收；阶段 6 尚未开始
 
 ## 当前完成状态
 
+- 2026-09-20 Dashboard `312c369` 已把 `ombre_agent_wake` 改为“工具 · MCP”页面可开关的 Dashboard 内置 MCP（无 URL）。v1.2.0 不再提供 MCP server instructions；完整 Wake 行为说明与调用规则合并进始终加载的 `set_agent_wake` 顶层工具 description。开关持久化在 Haven 现有 MCP JSON 中，说明或开关变化只重启 iterator 并 resume 原 Claude session，不再因普通定义变化复制 transcript。
+- 本次把 transcript 控制迁移版本升到 v3：旧窗口部署后首次发言只执行一次 `cold_rebased`，移除 SDK system 控制记录和 user 文本中的旧 `<system-reminder>`；用户/助手正文、thinking、`tool_use`/`tool_result` 保留。之后修改工具说明应为 `cold_resumed`，再下一轮 `reused`。
+- 用户决定暂不在目标旧窗口发消息：需先另窗排查“闲聊模式仍被注入工作模式工具说明”，修完后合并部署并只付一次预期全量 cache write。该独立任务见 `docs/handoff/HANDOFF-cc-chat-mode-tooling.md`。
 - 2026-09-13 已把“暂停到下次用户消息”扩展为“暂停到下次对话活动”：下一条用户消息仍在进入模型前解除暂停；Claude 正式主动消息则在消息成功保存的同一 Haven 事务内解除。后台 no-op、失败和 deferred 不解除，`keepalive_enabled` 总开关关闭时不会被自动开启。Dashboard 设置文案已同步。
 - 产品决策与跨仓库实施方案仍以 `docs/cc-agent-wake-design.md` 为唯一事实源。
 - 2026-09-02 已完成阶段 5 Bark：Haven 新增 profile 级私密配置、持久 notification outbox 和独立 worker；只有带正式 `assistant_text` 的 agent wake 在消息同一事务内按已保存 `display_segments` 入队，no-op、普通前台回复、失败和幂等重放不重复推送。
@@ -16,8 +19,8 @@
 - 2026-09-02 Bark 首次线上测试曾返回 `HTTP 400`，用户已解决；该问题不再是当前阻塞项，不继续排查。
 - Dashboard 通知设置页已在本地补充固定底部 Tab 与 iPhone safe area 留白，解决手机端“保存设置”按钮被 Tab 遮挡；`git diff --check` 与 `npm run build` 已通过，等待用户提交、推送并重新部署 Dashboard。
 - 2026-09-02 已完成线上缓存异常修复：前台开启 WebSearch/WebFetch、后台 wake 删除两项工具定义，曾导致 A/B cache prefix 分叉。现在两项 schema 始终固定，前台关闭开关或后台 wake 均在运行时 hook 拒绝；cache fingerprint 日志可直接对照 system/tools/MCP/options hash、lane、CC session 和 iterator 冷热状态。
-- No-op wake 允许在 `[agent_wake_noop]` 后带最多 30 字用户可见 skip reason；它不是 `set_agent_wake` 参数。解析、写库和历史映射链已存在，本轮进一步把精确格式与示例同时写进 MCP instructions 和始终加载的工具描述，避免 Claude 只看 schedule/cancel 参数而不知道 marker 后可附带文字。wake UI 将可选原因显示为“这次没有发消息”，SDK thinking 独立折叠并明确标注为 Claude 的真实思考，token usage 位于整组右下角并独立展开。`set_agent_wake` reason 上限为 50 字。
-- 本轮修改了始终加载的 agent wake MCP instructions/工具描述，因此 Dashboard 部署后的第一轮会建立一次新的稳定缓存前缀；该次 cache miss 属于预期。缓存异常调查必须比较同一部署版本建立新前缀之后的连续轮次，不得拿部署前后的 tools/MCP hash 直接判定为再次失效。
+- No-op wake 允许在 `[agent_wake_noop]` 后带最多 30 字用户可见 skip reason；它不是 `set_agent_wake` 参数。解析、写库和历史映射链已存在，精确格式与示例现在只位于始终加载的 `set_agent_wake` 顶层工具 description，不再通过 MCP server instructions 注入。wake UI 将可选原因显示为“这次没有发消息”，SDK thinking 独立折叠并明确标注为 Claude 的真实思考，token usage 位于整组右下角并独立展开。`set_agent_wake` reason 上限为 50 字。
+- Agent Wake 顶层工具定义与一次性 v3 控制迁移会让 Dashboard 合并部署后的目标旧窗口首轮建立新缓存前缀；该次 cache miss 属于预期。必须等闲聊/工作模式工具边界修完后再合并验收，避免为了两个前缀问题重复付 cache write。
 - 2026-09-02 第二次缓存异常已定点到 `ob2-20260901-c7s6jz` round 71：round 70（07:24:50）读 35,354 / 写 95，round 71（08:19:58）读 18,272 / 写 17,267，间隔仅 55 分 08 秒；三轮均为 subscription lane、Opus 4.6、`cache_keepalive`、输入 3 / 输出 11 的 no-op。失去的是约 17k 的后半段 1h session/transcript prefix，前 18,272 的 system/tools prefix 仍命中，5m 写入为 0；下一轮已恢复。历史 raw 未保存当时 iterator/hash/CC session，旧 Coolify 日志也已消失，因此只能把原因收窄到 cold resume 后 transcript 漂移或 Anthropic 单次 cache unavailable，不能事后强行二选一。
 - Dashboard 已为后续轮次增加持久 `raw_json.cache_diagnostic` 黑匣子：保存 Dashboard 进程实例、模型请求开始时间、lane、CC session、resume hint、iterator 的 `reused/cold_resumed/cold_started`、system/tools/MCP/options hash 及工具/MCP 名称。该对象不含 prompt 正文、密钥，不进入 Claude Context，也不改变前端展示；foreground 与 background wake 都保存，不需要依赖 Coolify 历史日志。
 - 2026-09-03 黑匣子捕获到同类异常：session `ob2-20260901-c7s6jz` round 175 在 23:49:16 UTC 读 67,384 / 写 92；round 176 在跨日后的 00:44:25 UTC 读 18,309 / 写 49,262；round 177 在 01:25:27 UTC 又恢复为读 67,571 / 写 120。round 175→176 仅 55 分 08 秒，且 Dashboard 进程实例、subscription lane、CC session、resume hint、`cold_resumed` iterator、system/tools/MCP/options 四组 hash 及工具/MCP 名称全部相同，排除了 Dashboard 重启、稳定配置漂移和正常 1h TTL 到期。

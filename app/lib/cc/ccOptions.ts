@@ -53,11 +53,17 @@ const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
 /**
  * 模型手上有哪些工具。
  *
- * 闲聊和工作模式使用同一组文件、命令与 Web 工具；两种模式的系统提示词仍分别配置。
+ * 闲聊模式只保留 Web 工具；文件与命令工具只在工作模式中注入。
  * WebSearch / WebFetch 的 schema 固定存在，实际是否放行由每轮 hook 决定。
  */
 const WORK_TOOLS = [...READ_ONLY_TOOLS, ...WRITE_TOOLS, 'Bash']
 export const CACHE_STABLE_WEB_TOOLS = ['WebSearch', 'WebFetch']
+
+function toolNamesForMode(mode: CcMode): string[] {
+  return mode === 'work'
+    ? [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
+    : [...CACHE_STABLE_WEB_TOOLS]
+}
 
 /**
  * API 中转站要求收到自己的模型 ID，但 Claude Code 需要认识模型身份才能采用正确上下文。
@@ -153,8 +159,8 @@ function shortHash(value: unknown): string {
   return createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex').slice(0, 16)
 }
 
-export function claudeToolAudit() {
-  const toolNames = [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
+export function claudeToolAudit(mode: CcMode) {
+  const toolNames = toolNamesForMode(mode)
   return {
     hash: shortHash(toolNames),
     tools: toolNames.map(name => ({
@@ -190,10 +196,10 @@ export const MODEL_SURFACE_FORMAT_VERSION = 3
 
 /** 只记录 hash 与名称，不把提示词、路径、MCP 配置正文写进日志。 */
 export function cacheRelevantFingerprint(config: TurnConfig) {
-  const toolNames = [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS]
+  const toolNames = toolNamesForMode(config.mode)
   const mcpServerNames = [
     ...Object.keys(config.sdkMcpServers),
-    ...builtInMcpServerNames(config.builtInMcpStates),
+    ...builtInMcpServerNames(config.builtInMcpStates, config.mode),
   ].sort()
   const systemPromptHash = systemPromptContentHash(config.mode, config.personaAppend)
   const toolsHash = shortHash(toolNames)
@@ -468,13 +474,13 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     additionalDirectories,
     // Web 工具 schema 永远保留，确保 foreground / background wake 共用同一 cache prefix。
     // 是否真的能调用由每轮 PreToolUse 读取当前开关并决定，不再靠删除工具定义实现。
-    tools: [...WORK_TOOLS, ...CACHE_STABLE_WEB_TOOLS],
+    tools: toolNamesForMode(mode),
     // MCP 跟 Claude Code 内置工具是两条独立通道。strict 保证实际工具集
     // 跟 Home 管理页完全一致，
     // 不暗中混入 ~/.claude 或项目 .mcp.json 的其它服务。
     mcpServers: {
       ...sdkMcpServers,
-      ...builtInMcpServers(sessionId, config.builtInMcpStates),
+      ...builtInMcpServers(sessionId, config.builtInMcpStates, mode),
     },
     strictMcpConfig: true,
     // 关闭的工具连名称/说明/参数结构都从模型上下文移除；开启的 MCP 服务
@@ -482,7 +488,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     disallowedTools: disabledTools.filter(name => !isSetAgentWakeTool(name)),
     // 本地只读和 WebSearch 自动放行。WebFetch 按域名问；Bash 走 SDK 标准规则，
     // 用户可在卡片上选仅一次 / 本次对话 / 始终允许。
-    allowedTools: [...READ_ONLY_TOOLS, 'Bash', 'WebSearch'],
+    allowedTools: mode === 'work' ? [...READ_ONLY_TOOLS, 'Bash', 'WebSearch'] : ['WebSearch'],
     // 'default' 而不是第 4 步那个 'dontAsk' —— dontAsk 会把没预批的直接拒掉，
     // 根本走不到 canUseTool，也就没有批准这回事了。
     permissionMode: 'default',

@@ -4,6 +4,7 @@ import {
   buildCcOptions,
   cacheRelevantFingerprint,
   CACHE_STABLE_WEB_TOOLS,
+  claudeToolAudit,
   sdkModelForProvider,
   setTurnWebSettings,
   thinkingConfigForModel,
@@ -88,14 +89,34 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(options.mcpServers).toHaveProperty(AGENT_WAKE_SERVER_NAME)
   })
 
-  it('联网开关不改变 cache-relevant 工具定义或 fingerprint', () => {
+  it("yanzhi's files 只注入闲聊模式，工作模式不重复加载", () => {
+    expect(buildCcOptions(config('chat'), null).mcpServers).toHaveProperty('yanzhi')
+    expect(buildCcOptions(config('work'), null).mcpServers).not.toHaveProperty('yanzhi')
+  })
+
+  it('闲聊模式不注入文件和命令工具，工作模式保持完整工具', () => {
+    const chat = config('chat')
+    const work = config('work')
+    expect(buildCcOptions(chat, null).tools).toEqual(CACHE_STABLE_WEB_TOOLS)
+    expect(buildCcOptions(chat, null).allowedTools).toEqual(['WebSearch'])
+    expect(claudeToolAudit('chat').tools.map(tool => tool.name)).toEqual(CACHE_STABLE_WEB_TOOLS)
+    expect(buildCcOptions(work, null).tools).toEqual(expect.arrayContaining([
+      ...CACHE_STABLE_WEB_TOOLS, 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash',
+    ]))
+    expect(claudeToolAudit('work').tools.map(tool => tool.name)).toEqual(buildCcOptions(work, null).tools)
+    expect(cacheRelevantFingerprint(chat).toolsHash)
+      .not.toBe(cacheRelevantFingerprint(work).toolsHash)
+    expect(cacheRelevantFingerprint(chat).modelSurfaceHash)
+      .toBe(cacheRelevantFingerprint(work).modelSurfaceHash)
+  })
+
+  it('联网开关不改变同一模式的 cache-relevant 工具定义或 fingerprint', () => {
     const enabled = config('chat')
     const disabled = config('chat')
     disabled.webSettings = { ...DEFAULT_WEB_SETTINGS, searchEnabled: false, fetchEnabled: false }
-    expect(buildCcOptions(enabled, null).tools).toEqual(buildCcOptions(config('work'), null).tools)
-    expect(buildCcOptions(enabled, null).tools).toEqual(expect.arrayContaining([...CACHE_STABLE_WEB_TOOLS, 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash']))
+    expect(buildCcOptions(enabled, null).tools).toEqual(CACHE_STABLE_WEB_TOOLS)
     expect(buildCcOptions(disabled, null).tools).toEqual(buildCcOptions(enabled, null).tools)
-    expect(buildCcOptions(enabled, null).allowedTools).toEqual(['Read', 'Grep', 'Glob', 'Bash', 'WebSearch'])
+    expect(buildCcOptions(enabled, null).allowedTools).toEqual(['WebSearch'])
     expect(buildCcOptions(disabled, null).allowedTools).toEqual(buildCcOptions(enabled, null).allowedTools)
     expect(cacheRelevantFingerprint(enabled)).toEqual(cacheRelevantFingerprint(disabled))
   })

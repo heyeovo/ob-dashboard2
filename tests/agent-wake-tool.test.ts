@@ -22,8 +22,9 @@ describe('set_agent_wake turn-local decision', () => {
   })
 
   it('removes the complete built-in MCP surface when disabled', () => {
-    expect(builtInMcpServerNames({ ombre_agent_wake: false })).toEqual([])
-    expect(builtInMcpModelSurfaces({ ombre_agent_wake: false })).toEqual([])
+    expect(builtInMcpServerNames({ ombre_agent_wake: false })).not.toContain('ombre_agent_wake')
+    expect(builtInMcpModelSurfaces({ ombre_agent_wake: false }))
+      .not.toContainEqual(expect.objectContaining({ name: 'ombre_agent_wake' }))
   })
 
   it('keeps only the last valid call in one turn', () => {

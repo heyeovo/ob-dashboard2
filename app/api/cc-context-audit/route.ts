@@ -110,11 +110,12 @@ export async function GET(request: NextRequest) {
       'agent_wake_version', 'agent_wake_instructions_hash',
     ])
     const configuredMcp = configuredMcpModelSurface(mcpConfig)
-    const builtInMcp = builtInMcpModelSurfaces(mcpConfig.builtIns)
+    const currentMode = session.mode === 'chat' ? 'chat' : 'work'
+    const builtInMcp = builtInMcpModelSurfaces(mcpConfig.builtIns, currentMode)
     const currentMcpServers = [...configuredMcp, ...builtInMcp]
     const currentMcpServerNames = [
       ...configuredMcp.map(server => server.name),
-      ...builtInMcpServerNames(mcpConfig.builtIns),
+      ...builtInMcpServerNames(mcpConfig.builtIns, currentMode),
     ].sort()
     const currentDisabledMcpTools = disabledMcpTools(mcpConfig)
     const currentMcpDefinitionKey = JSON.stringify({ configured: configuredMcp, builtIn: builtInMcp })
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
       currentMcpServerNames,
       currentDisabledMcpTools,
     )
-    const currentTools = claudeToolAudit()
+    const currentTools = claudeToolAudit(currentMode)
     const currentAgentWake = agentWakeMcpAudit()
     const modes = session.rolling_context?.day_modes || {}
     const messages = auditMessages(rolling.history)

@@ -134,7 +134,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({
       configured: configuredMcpModelSurface(mcpConfig),
-      builtIn: builtInMcpModelSurfaces(mcpConfig.builtIns),
+      builtIn: builtInMcpModelSurfaces(mcpConfig.builtIns, session.mode),
     }),
     builtInMcpStates: mcpConfig.builtIns,
     cwd: readDirs.cwd,
