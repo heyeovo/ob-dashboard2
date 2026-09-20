@@ -105,7 +105,7 @@ const isJourney = (b: Bucket) => (b.domain ?? []).includes('journey')
 function matchesQuickFilter(b: Bucket, f: QuickFilter): boolean {
   switch (f) {
     case 'all': return true
-    case 'pinned': return b.pinned
+    case 'pinned': return b.pinned && !isFeel(b)
     case 'important': return Number(b.importance) >= 7 && !b.pinned
     case 'feel': return isFeel(b)
     case 'digested': return !!b.digested
@@ -973,7 +973,7 @@ function HomeClient() {
     const list = searchResults ?? buckets
     return {
       all: list.length,
-      pinned: list.filter(b => b.pinned).length,
+      pinned: list.filter(b => b.pinned && !isFeel(b)).length,
       important: list.filter(b => Number(b.importance) >= 7 && !b.pinned).length,
       feel: list.filter(b => isFeel(b)).length,
       digested: list.filter(b => !!b.digested).length,

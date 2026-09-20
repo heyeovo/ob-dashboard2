@@ -31,6 +31,7 @@ type Candidate = {
   content: string
   created: string
   note?: string
+  pinned?: boolean
 }
 
 function formatMessageTime(iso: string) {
@@ -203,6 +204,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
         setRecent(recentItems)
         setFeels(feelItems)
         setSelectedPinned(new Set(pinnedItems.map((item: Candidate) => item.id)))
+        setSelectedFeels(new Set(feelItems.filter((item: Candidate) => item.pinned).map((item: Candidate) => item.id)))
 
         const journalItems = (Array.isArray(payloads[1]) ? payloads[1] : (payloads[1]?.items || []))
           .filter((item: any) => !item?.locked && String(item?.content || '').trim())
@@ -227,7 +229,11 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   }, [fromSessionId, personaId])
 
   const recentVisible = recent.slice(0, recentLimit)
-  const feelVisible = feels.slice(0, feelLimit)
+  const pinnedFeelIds = new Set(feels.filter(item => item.pinned).map(item => item.id))
+  const feelVisible = [
+    ...feels.filter(item => item.pinned),
+    ...feels.slice(0, feelLimit).filter(item => !pinnedFeelIds.has(item.id)),
+  ]
   const journalVisible = journals.slice(0, journalLimit)
   const dailyReviewVisible = dailyReviews.slice(0, dailyReviewLimit)
   const turnVisible = turnLimit > 0 ? turns.slice(-turnLimit) : []

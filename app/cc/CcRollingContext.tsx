@@ -298,7 +298,10 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             : new Set(pinned.map(item => item.id)),
         )
         setSelectedRecent(new Set(rollingContext.selected_recent_ids || []))
-        setSelectedFeels(new Set(rollingContext.selected_feel_ids || []))
+        setSelectedFeels(new Set([
+          ...(rollingContext.selected_feel_ids || []),
+          ...feels.filter(item => item.pinned).map(item => item.id),
+        ]))
         setSelectedRandomHighImportance(new Set(rollingContext.selected_random_high_importance_ids || []))
 
         const rawJournals = Array.isArray(journalData) ? journalData : (journalData?.items || [])
