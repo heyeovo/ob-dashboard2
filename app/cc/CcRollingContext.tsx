@@ -21,6 +21,7 @@ type Candidate = {
   note?: string
   created?: string
   importance?: number
+  badge?: string
 }
 
 type BucketCandidate = Candidate & {
@@ -141,9 +142,13 @@ function SelectionSection({
                 <label key={item.id} className={`flex cursor-pointer items-start gap-2 rounded-[var(--radius-md)] border px-2.5 py-1.5 transition-colors ${selected.has(item.id) ? 'border-[var(--color-primary)]/50 bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'}`}>
                   <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggle(item.id)} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px] text-[var(--color-text-secondary)]">{item.title}</span>
-                    <span className="mt-0.5 block text-[9px] text-[var(--color-text-disabled)]">
-                      {item.note ? `${item.note} · ` : ''}{item.content.length.toLocaleString()} 字
+                    <span className="flex items-center gap-1.5">
+                      {item.badge ? <span className="shrink-0 rounded-full bg-[var(--color-primary-muted)] px-1.5 py-0.5 text-[8.5px] text-[var(--color-primary)]">{item.badge}</span> : null}
+                      <span className="block truncate text-[11px] text-[var(--color-text-secondary)]">{item.title}</span>
+                    </span>
+                    <span className="mt-0.5 flex items-center justify-between text-[9px] text-[var(--color-text-disabled)]">
+                      <span>{item.note ? `${item.note} · ` : ''}{item.content.length.toLocaleString()} 字</span>
+                      {item.created ? <span className="shrink-0 pl-2">{item.created.slice(0, 10)}</span> : null}
                     </span>
                   </span>
                 </label>
