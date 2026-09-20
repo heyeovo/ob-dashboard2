@@ -69,7 +69,11 @@ describe('model surface transcript rebase', () => {
   it('removes stale SDK system reminders without losing conversation or tool history', () => {
     const source = [
       {
-        type: 'user', uuid: 'meta', parentUuid: null,
+        type: 'system', subtype: 'init', uuid: 'init', parentUuid: null,
+        instructions: '旧 MCP server instructions',
+      },
+      {
+        type: 'user', uuid: 'meta', parentUuid: 'init',
         message: { role: 'user', content: '<system-reminder>旧 MCP instructions</system-reminder>' },
       },
       {
@@ -94,6 +98,7 @@ describe('model surface transcript rebase', () => {
     expect(cleaned.removedBlockCount).toBe(2)
     expect(cleaned.entries).toHaveLength(4)
     expect(JSON.stringify(cleaned.entries)).not.toContain('system-reminder')
+    expect(JSON.stringify(cleaned.entries)).not.toContain('旧 MCP server instructions')
     expect(JSON.stringify(cleaned.entries)).toContain('真实问题')
     expect(JSON.stringify(cleaned.entries)).toContain('tool_use')
     expect(JSON.stringify(cleaned.entries)).toContain('tool_result')

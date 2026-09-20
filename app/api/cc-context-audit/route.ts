@@ -110,11 +110,11 @@ export async function GET(request: NextRequest) {
       'agent_wake_version', 'agent_wake_instructions_hash',
     ])
     const configuredMcp = configuredMcpModelSurface(mcpConfig)
-    const builtInMcp = builtInMcpModelSurfaces()
+    const builtInMcp = builtInMcpModelSurfaces(mcpConfig.builtIns)
     const currentMcpServers = [...configuredMcp, ...builtInMcp]
     const currentMcpServerNames = [
       ...configuredMcp.map(server => server.name),
-      ...builtInMcpServerNames(),
+      ...builtInMcpServerNames(mcpConfig.builtIns),
     ].sort()
     const currentDisabledMcpTools = disabledMcpTools(mcpConfig)
     const currentMcpDefinitionKey = JSON.stringify({ configured: configuredMcp, builtIn: builtInMcp })

@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   beginAgentWakeTurn,
   endAgentWakeTurn,
+  agentWakeMcpModelSurface,
   parseAgentWakeNoop,
   recordAgentWakeDecision,
 } from '@/app/lib/cc/agentWakeTool'
+import { builtInMcpModelSurfaces, builtInMcpServerNames } from '@/app/lib/cc/builtInMcp'
 
 afterEach(() => {
   endAgentWakeTurn('s1')
@@ -12,6 +14,18 @@ afterEach(() => {
 })
 
 describe('set_agent_wake turn-local decision', () => {
+  it('keeps all wake guidance in the top-level tool description', () => {
+    const surface = agentWakeMcpModelSurface()
+    expect(surface).not.toHaveProperty('instructions')
+    expect(surface.tools[0].description).toContain('收到 <agent_wake .../>')
+    expect(surface.tools[0].description).toContain('action: schedule')
+  })
+
+  it('removes the complete built-in MCP surface when disabled', () => {
+    expect(builtInMcpServerNames({ ombre_agent_wake: false })).toEqual([])
+    expect(builtInMcpModelSurfaces({ ombre_agent_wake: false })).toEqual([])
+  })
+
   it('keeps only the last valid call in one turn', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-31T12:00:00Z'))

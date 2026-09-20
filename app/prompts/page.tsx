@@ -326,7 +326,7 @@ function AgentWakePromptSection() {
       setConfig(data.config)
       setInstructions(data.config.instructions)
       setToolDesc(data.config.tool_description)
-      setMessage({ type: 'ok', text: '已保存，下一次唤醒生效' })
+      setMessage({ type: 'ok', text: '已保存；空闲窗口下一句话会用新的顶层工具说明继续原会话' })
     } catch (e) {
       setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -363,7 +363,7 @@ function AgentWakePromptSection() {
     <div className="mt-10 border-t border-[var(--color-border)] pt-8">
       <div className="mb-4">
         <h2 className="text-lg sm:text-2xl font-bold tracking-tight text-[var(--color-text-heading)]">CC 引擎提示词</h2>
-        <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm mt-1">Dashboard 本地存储 · 保存后下次唤醒生效</p>
+        <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm mt-1">Dashboard 本地存储 · 保存后重载顶层工具定义</p>
       </div>
       <Card variant="outline" padding="none" className="overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-4">
@@ -376,7 +376,7 @@ function AgentWakePromptSection() {
               </span>
               {dirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
             </div>
-            <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">醒来时的 MCP 指引和工具描述，影响唤醒行为和 thinking 语言</p>
+            <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">两段内容会合并为 set_agent_wake 唯一的顶层工具 description，不再注入对话流</p>
             {config.updated_at && <p className="text-[10px] text-[var(--color-text-disabled)] mt-1">更新于 {config.updated_at}</p>}
           </button>
           <div className="flex gap-2 flex-wrap items-center">
@@ -389,8 +389,8 @@ function AgentWakePromptSection() {
         {message && <div className={`px-4 sm:px-6 pb-3 text-xs ${message.type === 'error' ? 'text-red-500' : 'text-[var(--color-digested)]'}`}>{message.text}</div>}
         {!collapsed && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
           <div className="mt-4 mb-2">
-            <div className="text-xs font-medium text-[var(--color-text-primary)]">MCP 指引</div>
-            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">醒来时注入的行为引导，用中文写能让 thinking 也保持中文</div>
+            <div className="text-xs font-medium text-[var(--color-text-primary)]">Wake 行为说明</div>
+            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">作为 set_agent_wake 顶层工具 description 的主体，始终位于固定工具前缀</div>
           </div>
           <textarea value={instructions} onChange={e => setInstructions(e.target.value)}
             rows={Math.max(6, instructions.split('\n').length + 2)}
@@ -398,8 +398,8 @@ function AgentWakePromptSection() {
           <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{instructions.length} 字符</div>
 
           <div className="mt-4 mb-2">
-            <div className="text-xs font-medium text-[var(--color-text-primary)]">工具描述</div>
-            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">set_agent_wake 工具的说明文字</div>
+            <div className="text-xs font-medium text-[var(--color-text-primary)]">调用规则补充</div>
+            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">接在同一个 set_agent_wake description 尾部，不会生成 server instructions</div>
           </div>
           <textarea value={toolDesc} onChange={e => setToolDesc(e.target.value)}
             rows={Math.max(3, toolDesc.split('\n').length + 1)}

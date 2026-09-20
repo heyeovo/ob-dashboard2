@@ -58,7 +58,10 @@ export function getAgentWakeInstructions(): string {
 }
 
 export function getAgentWakeToolDescription(): string {
-  return loadSync()?.tool_description || DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION
+  const config = loadSync()
+  const instructions = config?.instructions || DEFAULT_AGENT_WAKE_INSTRUCTIONS
+  const toolDescription = config?.tool_description || DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION
+  return `${instructions}\n\n${toolDescription}`
 }
 
 export function getAgentWakePromptConfig(): {

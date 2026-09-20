@@ -26,6 +26,7 @@ const HAVEN_MCP_PATH = '/gateway/api/cc/mcp'
 // production 不读取这个 localhost fallback，缺失配置时保持 MCP 空清单。
 const DEVELOPMENT_DEFAULT_CONFIG: CcMcpConfig = {
   version: 1,
+  builtIns: { ombre_agent_wake: true },
   servers: [
     {
       name: 'ombre_brain',
@@ -58,8 +59,17 @@ function cloneConfig(config: CcMcpConfig): CcMcpConfig {
 
 export function fallbackMcpConfig(): CcMcpConfig {
   return isProductionEnvironment()
-    ? { version: 1, servers: [] }
+    ? { version: 1, builtIns: { ombre_agent_wake: true }, servers: [] }
     : cloneConfig(DEVELOPMENT_DEFAULT_CONFIG)
+}
+
+function cleanBuiltIns(value: unknown): Record<string, boolean> {
+  const out: Record<string, boolean> = { ombre_agent_wake: true }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out
+  for (const [name, enabled] of Object.entries(value as Record<string, unknown>)) {
+    if (/^[a-z][a-z0-9_]{0,63}$/.test(name) && typeof enabled === 'boolean') out[name] = enabled
+  }
+  return out
 }
 
 function cleanRecord(value: unknown): Record<string, string> {
@@ -217,7 +227,7 @@ export function validateMcpConfig(value: unknown): CcMcpConfig {
     }
   }
 
-  return { version: 1, servers }
+  return { version: 1, builtIns: cleanBuiltIns(raw.builtIns), servers }
 }
 
 function mergeMaskedRecord(
@@ -238,6 +248,7 @@ function mergeMaskedSecrets(config: CcMcpConfig, previous: CcMcpConfig): CcMcpCo
   const oldByName = new Map(previous.servers.map(server => [server.name, server]))
   return {
     version: 1,
+    builtIns: config.builtIns,
     servers: config.servers.map(server => {
       const old = oldByName.get(server.name)
       return {
@@ -258,6 +269,7 @@ function maskedRecord(value: Record<string, string> | undefined): Record<string,
 export function publicMcpConfig(config: CcMcpConfig): CcMcpConfig {
   return {
     version: 1,
+    builtIns: config.builtIns,
     servers: config.servers.map(server => ({
       ...server,
       env: maskedRecord(server.env),
@@ -367,7 +379,13 @@ export async function loadMcpConfig(): Promise<CcMcpConfig> {
 
 export async function saveMcpConfig(value: unknown): Promise<CcMcpConfig> {
   const previous = await loadMcpConfig()
-  const clean = mergeMaskedSecrets(validateMcpConfig(value), previous)
+  const hasBuiltIns = Boolean(
+    value && typeof value === 'object' && !Array.isArray(value)
+      && Object.prototype.hasOwnProperty.call(value, 'builtIns'),
+  )
+  const validated = validateMcpConfig(value)
+  if (!hasBuiltIns) validated.builtIns = previous.builtIns
+  const clean = mergeMaskedSecrets(validated, previous)
   const saved = await havenMcpFetch('POST', clean)
   if (!saved.ok) throw new Error(`MCP 配置保存到 Haven 失败：${saved.error}`)
   state.config = validateMcpConfig(saved.payload.config)

@@ -6,6 +6,7 @@ import {
 } from '@/app/lib/ccMcp'
 import { discoverMcpServer } from '@/app/lib/ccMcpDiscovery'
 import { applyMcpServersToLiveSessions } from '@/app/lib/ccSession'
+import { builtInMcpCatalog } from '@/app/lib/cc/builtInMcp'
 import type { CcMcpConfig, CcMcpServerStatus } from '@/app/lib/ccMcpTypes'
 import { redactHavenSecrets } from '@/app/lib/havenConfig'
 
@@ -15,7 +16,11 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const config = await loadMcpConfig()
-    return Response.json({ ok: true, config: publicMcpConfig(config) })
+    return Response.json({
+      ok: true,
+      config: publicMcpConfig(config),
+      builtIn: builtInMcpCatalog(config.builtIns),
+    })
   } catch (error) {
     return Response.json(
       { ok: false, error: redactHavenSecrets((error as Error).message || String(error)) },
@@ -35,6 +40,7 @@ async function refreshCatalog(
   const syncedAt = new Date().toISOString()
   const next: CcMcpConfig = {
     version: 1,
+    builtIns: config.builtIns,
     servers: config.servers.map(server => {
       const status = byName.get(server.name)
       if (!status || status.status !== 'connected') return server
@@ -49,6 +55,7 @@ export async function PUT(request: NextRequest) {
     const body = (await request.json()) as Record<string, unknown>
     let config = await saveMcpConfig({
       version: 1,
+      builtIns: body.builtIns,
       servers: Array.isArray(body.servers) ? body.servers : [],
     })
     const discover = Array.isArray(body.discover)
@@ -61,7 +68,13 @@ export async function PUT(request: NextRequest) {
       status = { servers: refreshed.servers }
     }
     const apply = await applyMcpServersToLiveSessions()
-    return Response.json({ ok: true, config: publicMcpConfig(config), apply, status })
+    return Response.json({
+      ok: true,
+      config: publicMcpConfig(config),
+      builtIn: builtInMcpCatalog(config.builtIns),
+      apply,
+      status,
+    })
   } catch (error) {
     return Response.json(
       { ok: false, error: redactHavenSecrets((error as Error).message || String(error)) },
@@ -79,6 +92,7 @@ export async function POST() {
     return Response.json({
       ok: true,
       config: publicMcpConfig(refreshed.config),
+      builtIn: builtInMcpCatalog(refreshed.config.builtIns),
       status: { servers: refreshed.servers },
       apply,
     })

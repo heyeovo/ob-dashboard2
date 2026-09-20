@@ -432,7 +432,7 @@ export default function ContextAuditPanel() {
                   <div className="font-medium text-[var(--color-text-secondary)]">最近一轮实际记录</div>
                   <div className="mt-1 text-[var(--color-text-tertiary)]">工具：{data.tooling.latest.tool_names.join('、') || '未记录'}</div>
                   <div className="text-[var(--color-text-tertiary)]">MCP：{data.tooling.latest.mcp_server_names.join('、') || '未记录'}</div>
-                  <div className="text-[var(--color-text-tertiary)]">Agent Wake：v{data.tooling.latest.agent_wake_version || '未记录'} · instructions {data.tooling.latest.agent_wake_instructions_hash || '未记录'}</div>
+                  <div className="text-[var(--color-text-tertiary)]">Agent Wake：v{data.tooling.latest.agent_wake_version || '未记录'} · tool description {data.tooling.latest.agent_wake_instructions_hash || '未记录'}</div>
                   <div className="mt-1 break-all text-[var(--color-text-tertiary)]">
                     模型表面：上一版 {text(cache?.previous_model_surface_hash) || '未记录'} · 本轮期望 {text(cache?.model_surface_hash) || '未记录'} · iterator 启动 {text(cache?.iterator_model_surface_hash) || '未记录'}
                   </div>
@@ -457,12 +457,12 @@ export default function ContextAuditPanel() {
                       </summary>
                       <div className="space-y-3 border-t border-[var(--color-border)] p-3">
                         <div>
-                          <div className="mb-1 text-[11px] font-medium text-[var(--color-text-secondary)]">Server instructions{server.name === 'ombre_agent_wake' ? ` · hash ${data.tooling.current.agent_wake_instructions_hash}` : ''}</div>
+                          <div className="mb-1 text-[11px] font-medium text-[var(--color-text-secondary)]">Server instructions</div>
                           <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-surface-secondary)] p-2.5 font-sans leading-5 text-[var(--color-text-secondary)]">{server.instructions || '该 MCP 配置没有可由 Dashboard 审计的 server instructions。'}</pre>
                         </div>
                         {server.tools.map(tool => (
                           <div key={tool.name} className="rounded-lg border border-[var(--color-border-light)] p-2.5">
-                            <div className="font-medium text-[var(--color-text-secondary)]">{tool.name}{tool.title ? ` · ${tool.title}` : ''}</div>
+                            <div className="font-medium text-[var(--color-text-secondary)]">{tool.name}{tool.title ? ` · ${tool.title}` : ''}{server.name === 'ombre_agent_wake' ? ` · description hash ${data.tooling.current.agent_wake_instructions_hash}` : ''}</div>
                             <div className="mt-1 whitespace-pre-wrap text-[var(--color-text-tertiary)]">{tool.description || '没有 description'}</div>
                             <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--color-surface-secondary)] p-2 text-[10px] leading-4 text-[var(--color-text-secondary)]">{JSON.stringify(tool.inputSchema || {}, null, 2)}</pre>
                           </div>

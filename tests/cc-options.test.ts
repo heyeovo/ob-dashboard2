@@ -100,14 +100,14 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(cacheRelevantFingerprint(enabled)).toEqual(cacheRelevantFingerprint(disabled))
   })
 
-  it('模型可见 MCP 定义变化会改变 request-prefix fingerprint', () => {
+  it('模型可见 MCP 定义变化只改变 request-prefix，不触发 transcript 迁移', () => {
     const before = config('chat')
     const after = config('chat')
     after.mcpDefinitionKey = 'mcp-v2-with-new-instructions'
     expect(cacheRelevantFingerprint(before).mcpToolsHash)
       .not.toBe(cacheRelevantFingerprint(after).mcpToolsHash)
     expect(cacheRelevantFingerprint(before).modelSurfaceHash)
-      .not.toBe(cacheRelevantFingerprint(after).modelSurfaceHash)
+      .toBe(cacheRelevantFingerprint(after).modelSurfaceHash)
     expect(cacheRelevantFingerprint(before).sdkCacheRelevantOptionsHash)
       .not.toBe(cacheRelevantFingerprint(after).sdkCacheRelevantOptionsHash)
   })

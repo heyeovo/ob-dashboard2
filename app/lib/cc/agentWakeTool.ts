@@ -1,7 +1,7 @@
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import { getAgentWakeInstructions, getAgentWakeToolDescription } from './agentWakePrompt'
+import { getAgentWakeToolDescription } from './agentWakePrompt'
 
 export const AGENT_WAKE_SERVER_NAME = 'ombre_agent_wake'
 export const AGENT_WAKE_TOOL_NAME = 'set_agent_wake'
@@ -9,7 +9,7 @@ export const AGENT_WAKE_SDK_TOOL_NAME = `mcp__${AGENT_WAKE_SERVER_NAME}__${AGENT
 export const AGENT_WAKE_NOOP_MARKER = '[agent_wake_noop]'
 export const AGENT_WAKE_NOOP_STATUS_MAX_CHARS = 30
 
-export const AGENT_WAKE_MCP_VERSION = '1.1.0'
+export const AGENT_WAKE_MCP_VERSION = '1.2.0'
 const AGENT_WAKE_TOOL_INPUT = {
   action: z.enum(['schedule', 'cancel', 'followup']),
   after_minutes: z.number().optional(),
@@ -23,7 +23,6 @@ export function agentWakeMcpModelSurface() {
     name: AGENT_WAKE_SERVER_NAME,
     version: AGENT_WAKE_MCP_VERSION,
     alwaysLoad: true,
-    instructions: getAgentWakeInstructions(),
     tools: [{
       name: AGENT_WAKE_TOOL_NAME,
       description: getAgentWakeToolDescription(),
@@ -37,7 +36,7 @@ export function agentWakeMcpAudit() {
   const surface = agentWakeMcpModelSurface()
   return {
     version: AGENT_WAKE_MCP_VERSION,
-    instructionsHash: createHash('sha256').update(surface.instructions).digest('hex').slice(0, 16),
+    instructionsHash: createHash('sha256').update(surface.tools[0].description).digest('hex').slice(0, 16),
   }
 }
 
@@ -162,7 +161,6 @@ export function createAgentWakeMcpServer(sessionId: string): McpSdkServerConfigW
     name: AGENT_WAKE_SERVER_NAME,
     version: AGENT_WAKE_MCP_VERSION,
     alwaysLoad: true,
-    instructions: getAgentWakeInstructions(),
     tools: [
       tool(
         AGENT_WAKE_TOOL_NAME,

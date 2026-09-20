@@ -36,7 +36,16 @@ describe('MCP production address boundary', () => {
 
   it('uses an empty, disabled fallback in production', () => {
     vi.stubEnv('NODE_ENV', 'production')
-    expect(fallbackMcpConfig()).toEqual({ version: 1, servers: [] })
+    expect(fallbackMcpConfig()).toEqual({
+      version: 1,
+      builtIns: { ombre_agent_wake: true },
+      servers: [],
+    })
+  })
+
+  it('keeps built-in MCP switches in the persisted config', () => {
+    const config = validateMcpConfig({ version: 1, builtIns: { ombre_agent_wake: false }, servers: [] })
+    expect(config.builtIns).toEqual({ ombre_agent_wake: false })
   })
 
   it('accepts a production HTTPS MCP URL and preserves the SDK path', () => {

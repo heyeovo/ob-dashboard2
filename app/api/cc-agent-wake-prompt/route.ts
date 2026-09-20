@@ -4,6 +4,7 @@ import {
   saveAgentWakePromptConfig,
   resetAgentWakePromptConfig,
 } from '@/app/lib/cc/agentWakePrompt'
+import { applyMcpServersToLiveSessions } from '@/app/lib/ccSession'
 
 export const runtime = 'nodejs'
 
@@ -23,7 +24,8 @@ export async function POST(request: NextRequest) {
     if (!instructions) return error('instructions 不能为空')
     if (!toolDescription) return error('tool_description 不能为空')
     const config = saveAgentWakePromptConfig(instructions, toolDescription)
-    return NextResponse.json({ ok: true, config: { ...getAgentWakePromptConfig(), ...config } })
+    const apply = await applyMcpServersToLiveSessions()
+    return NextResponse.json({ ok: true, config: { ...getAgentWakePromptConfig(), ...config }, apply })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
@@ -31,5 +33,6 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   resetAgentWakePromptConfig()
-  return NextResponse.json({ ok: true, config: getAgentWakePromptConfig() })
+  const apply = await applyMcpServersToLiveSessions()
+  return NextResponse.json({ ok: true, config: getAgentWakePromptConfig(), apply })
 }

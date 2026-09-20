@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
+  CcBuiltInMcpServer,
   CcMcpApplySummary,
   CcMcpConfig,
   CcMcpPermission,
@@ -21,6 +22,7 @@ type ApiPayload = {
   config?: CcMcpConfig
   apply?: CcMcpApplySummary
   status?: { servers: CcMcpServerStatus[] }
+  builtIn?: CcBuiltInMcpServer[]
 }
 
 type Draft = {
@@ -136,7 +138,12 @@ function toolDisplayDescription(tool: { name: string; description?: string }) {
 }
 
 export default function McpManager() {
-  const [config, setConfig] = useState<CcMcpConfig>({ version: 1, servers: [] })
+  const [config, setConfig] = useState<CcMcpConfig>({
+    version: 1,
+    builtIns: { ombre_agent_wake: true },
+    servers: [],
+  })
+  const [builtIn, setBuiltIn] = useState<CcBuiltInMcpServer[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -153,7 +160,10 @@ export default function McpManager() {
         if (!response.ok || !data.ok || !data.config) {
           throw new Error(data.error || 'MCP 配置读取失败')
         }
-        if (alive) setConfig(data.config)
+        if (alive) {
+          setConfig(data.config)
+          setBuiltIn(data.builtIn || [])
+        }
       })
       .catch(reason => {
         if (alive) setError((reason as Error).message)
@@ -170,7 +180,19 @@ export default function McpManager() {
     () => new Map(statuses.map(status => [status.name, status])),
     [statuses],
   )
-  const totalMcpTokens = useMemo(() => estimateMcpConfigTokens(config), [config])
+  const builtInTokens = useMemo(
+    () => builtIn.reduce(
+      (sum, server) => sum + (server.enabled
+        ? server.tools.filter(tool => tool.enabled).reduce((toolSum, tool) => toolSum + estimateMcpToolTokens(tool), 0)
+        : 0),
+      0,
+    ),
+    [builtIn],
+  )
+  const totalMcpTokens = useMemo(
+    () => estimateMcpConfigTokens(config) + builtInTokens,
+    [builtInTokens, config],
+  )
   const missingSchemaCount = useMemo(
     () => config.servers.reduce(
       (count, server) => count + (server.tools || []).filter(tool => !tool.inputSchema).length,
@@ -191,13 +213,14 @@ export default function McpManager() {
       const response = await fetch('/api/cc-mcp', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ servers, discover }),
+        body: JSON.stringify({ servers, builtIns: config.builtIns, discover }),
       })
       const data = (await response.json()) as ApiPayload
       if (!response.ok || !data.ok || !data.config) {
         throw new Error(data.error || '保存失败')
       }
       setConfig(data.config)
+      setBuiltIn(data.builtIn || [])
       if (data.status) setStatuses(data.status.servers)
       const applied = data.apply?.applied || 0
       const queued = data.apply?.queued || 0
@@ -215,7 +238,37 @@ export default function McpManager() {
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [config.builtIns])
+
+  const toggleBuiltIn = async (name: string, enabled: boolean) => {
+    const previous = config
+    const builtIns = { ...(config.builtIns || {}), [name]: enabled }
+    setConfig({ ...config, builtIns })
+    setBuiltIn(current => current.map(server => server.name === name ? { ...server, enabled } : server))
+    setSaving(true)
+    setError('')
+    setNote('')
+    try {
+      const response = await fetch('/api/cc-mcp', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servers: config.servers, builtIns }),
+      })
+      const data = (await response.json()) as ApiPayload
+      if (!response.ok || !data.ok || !data.config) throw new Error(data.error || '保存失败')
+      setConfig(data.config)
+      setBuiltIn(data.builtIn || [])
+      setNote(enabled
+        ? '内置 MCP 已启用；空闲窗口下一句话会加载顶层工具定义并继续原会话。'
+        : '内置 MCP 已停用；空闲窗口下一句话会移除工具定义并继续原会话。')
+    } catch (reason) {
+      setConfig(previous)
+      setBuiltIn(current => current.map(server => server.name === name ? { ...server, enabled: !enabled } : server))
+      setError((reason as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const saveDraft = async () => {
     if (!draft) return
@@ -265,11 +318,11 @@ export default function McpManager() {
     const next = config.servers.map(server =>
       server.name === name ? { ...server, enabled } : server,
     )
-    setConfig({ version: 1, servers: next })
+    setConfig({ version: 1, builtIns: config.builtIns, servers: next })
     try {
       await persist(next, enabled ? 'MCP 已启用。' : 'MCP 已停用。')
     } catch {
-      setConfig({ version: 1, servers: previous })
+      setConfig({ version: 1, builtIns: config.builtIns, servers: previous })
     }
   }
 
@@ -342,7 +395,7 @@ export default function McpManager() {
           }
         : server,
     )
-    setConfig({ version: 1, servers: next })
+    setConfig({ version: 1, builtIns: config.builtIns, servers: next })
     try {
       await persist(
         next,
@@ -351,7 +404,7 @@ export default function McpManager() {
           : '工具已关闭，说明与参数会从下一句话开始移出上下文。',
       )
     } catch {
-      setConfig({ version: 1, servers: previous })
+      setConfig({ version: 1, builtIns: config.builtIns, servers: previous })
     }
   }
 
@@ -610,11 +663,65 @@ export default function McpManager() {
         </p>
       )}
 
+      {builtIn.length > 0 && (
+        <section className="mb-5 space-y-3">
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">Dashboard 内置 MCP</h4>
+            <p className="mt-1 text-[10px] text-[var(--color-text-disabled)]">由 Dashboard 进程直接提供，不需要 URL 或启动命令。</p>
+          </div>
+          {builtIn.map(server => {
+            const tokens = server.enabled
+              ? server.tools.reduce((sum, tool) => sum + estimateMcpToolTokens(tool), 0)
+              : 0
+            return (
+              <article key={server.name} className="rounded-2xl border border-[var(--color-border)] bg-white/80 p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <label className="mt-0.5 flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={server.enabled}
+                      disabled={saving}
+                      onChange={event => void toggleBuiltIn(server.name, event.target.checked)}
+                      aria-label={`${server.enabled ? '停用' : '启用'} ${server.label}`}
+                    />
+                  </label>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-semibold text-[var(--color-text-heading)]">{server.label}</h4>
+                      <span className="font-mono text-[10px] text-[var(--color-text-disabled)]">{server.name}</span>
+                      <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">内置 · 无链接</span>
+                      <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] text-[var(--color-primary)]">自动允许</span>
+                    </div>
+                    <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                      v{server.version} · {server.tools.length} 个工具 · {server.enabled ? `预估 ${tokens.toLocaleString()} token` : `开启后约 ${server.tools.reduce((sum, tool) => sum + estimateMcpToolTokens(tool), 0).toLocaleString()} token`}
+                    </p>
+                  </div>
+                </div>
+                <details className="group mt-3 border-t border-[var(--color-border-light)] pt-3">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] [&::-webkit-details-marker]:hidden">
+                    顶层工具定义
+                    <span aria-hidden="true" className="text-xs transition-transform group-open:rotate-180">⌄</span>
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {server.tools.map(tool => (
+                      <div key={tool.name} className="rounded-xl bg-[var(--color-surface-secondary)] px-3 py-2.5">
+                        <div className="font-mono text-[11px] font-medium text-[var(--color-text-secondary)]">{shortToolName(tool.name)}</div>
+                        <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">{toolDisplayDescription(tool)}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </article>
+            )
+          })}
+        </section>
+      )}
+
       <div className="space-y-3">
         {config.servers.length === 0 && (
           <div className="rounded-2xl border border-dashed border-[var(--color-border)] px-5 py-10 text-center">
-            <p className="text-sm text-[var(--color-text-secondary)]">还没有 MCP 服务</p>
-            <p className="mt-1 text-xs text-[var(--color-text-disabled)]">新增后会立即同步到正在运行的聊天窗口。</p>
+            <p className="text-sm text-[var(--color-text-secondary)]">还没有外部 MCP 服务</p>
+            <p className="mt-1 text-xs text-[var(--color-text-disabled)]">内置 MCP 可直接使用；外部服务新增后会同步到正在运行的聊天窗口。</p>
           </div>
         )}
 

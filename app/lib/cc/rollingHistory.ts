@@ -24,8 +24,8 @@ const SYSTEM_REMINDER_BLOCK = /<system-reminder\b[^>]*>[\s\S]*?<\/system-reminde
 
 /**
  * 原生 transcript 里的 SDK 控制提醒属于当时的 request prefix，不是对话事实。
- * rebase 时只从 user 文本里移除这些块；assistant、tool_use/tool_result 和其余
- * user 正文全部保留。原 transcript 永远不原地修改。
+ * rebase 时移除 SDK system 控制记录，并从 user 文本剥离 reminder 块；assistant、
+ * thinking、tool_use/tool_result 和其余 user 正文全部保留。原 transcript 永远不原地修改。
  */
 export function stripStaleSystemReminders(entries: SessionStoreEntry[]): {
   entries: SessionStoreEntry[]
@@ -39,6 +39,7 @@ export function stripStaleSystemReminders(entries: SessionStoreEntry[]): {
 
   const cleaned = entries.flatMap(entry => {
     const cloned = JSON.parse(JSON.stringify(entry)) as SessionStoreEntry
+    if ((cloned as unknown as Record<string, unknown>).type === 'system') return []
     const message = messageRecord(cloned)
     if (message?.role !== 'user') return [cloned]
     if (typeof message.content === 'string') {

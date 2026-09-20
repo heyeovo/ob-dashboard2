@@ -41,6 +41,16 @@ export type CcMcpServer = {
 export type CcMcpConfig = {
   version: 1
   servers: CcMcpServer[]
+  /** Dashboard 进程内提供的 MCP；false 时整个服务及工具定义都不进入模型上下文。 */
+  builtIns?: Record<string, boolean>
+}
+
+export type CcBuiltInMcpServer = {
+  name: string
+  label: string
+  enabled: boolean
+  version: string
+  tools: CcMcpToolConfig[]
 }
 
 export type CcMcpApplySummary = {
