@@ -12,12 +12,14 @@ import {
 } from './havenConfig'
 import {
   MCP_SECRET_MASK,
+  type CcBuiltInMcpPermission,
   type CcMcpConfig,
   type CcMcpPermission,
   type CcMcpServer,
   type CcMcpToolConfig,
   type CcMcpTransport,
 } from './ccMcpTypes'
+import { builtInMcpPermissionForTool } from './cc/builtInMcp'
 
 const LEGACY_CONFIG_PATH = path.join(process.cwd(), '.data', 'cc-mcp.json')
 const HAVEN_MCP_PATH = '/gateway/api/cc/mcp'
@@ -27,6 +29,7 @@ const HAVEN_MCP_PATH = '/gateway/api/cc/mcp'
 const DEVELOPMENT_DEFAULT_CONFIG: CcMcpConfig = {
   version: 1,
   builtIns: { ombre_agent_wake: true },
+  builtInPermissions: { yanzhi: 'allow' },
   servers: [
     {
       name: 'ombre_brain',
@@ -59,7 +62,7 @@ function cloneConfig(config: CcMcpConfig): CcMcpConfig {
 
 export function fallbackMcpConfig(): CcMcpConfig {
   return isProductionEnvironment()
-    ? { version: 1, builtIns: { ombre_agent_wake: true }, servers: [] }
+    ? { version: 1, builtIns: { ombre_agent_wake: true }, builtInPermissions: { yanzhi: 'allow' }, servers: [] }
     : cloneConfig(DEVELOPMENT_DEFAULT_CONFIG)
 }
 
@@ -68,6 +71,17 @@ function cleanBuiltIns(value: unknown): Record<string, boolean> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return out
   for (const [name, enabled] of Object.entries(value as Record<string, unknown>)) {
     if (/^[a-z][a-z0-9_]{0,63}$/.test(name) && typeof enabled === 'boolean') out[name] = enabled
+  }
+  return out
+}
+
+function cleanBuiltInPermissions(value: unknown): Record<string, CcBuiltInMcpPermission> {
+  const out: Record<string, CcBuiltInMcpPermission> = { yanzhi: 'allow' }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out
+  for (const [name, permission] of Object.entries(value as Record<string, unknown>)) {
+    if (/^[a-z][a-z0-9_]{0,63}$/.test(name) && (permission === 'allow' || permission === 'ask')) {
+      out[name] = permission
+    }
   }
   return out
 }
@@ -227,7 +241,12 @@ export function validateMcpConfig(value: unknown): CcMcpConfig {
     }
   }
 
-  return { version: 1, builtIns: cleanBuiltIns(raw.builtIns), servers }
+  return {
+    version: 1,
+    builtIns: cleanBuiltIns(raw.builtIns),
+    builtInPermissions: cleanBuiltInPermissions(raw.builtInPermissions),
+    servers,
+  }
 }
 
 function mergeMaskedRecord(
@@ -249,6 +268,7 @@ function mergeMaskedSecrets(config: CcMcpConfig, previous: CcMcpConfig): CcMcpCo
   return {
     version: 1,
     builtIns: config.builtIns,
+    builtInPermissions: config.builtInPermissions,
     servers: config.servers.map(server => {
       const old = oldByName.get(server.name)
       return {
@@ -270,6 +290,7 @@ export function publicMcpConfig(config: CcMcpConfig): CcMcpConfig {
   return {
     version: 1,
     builtIns: config.builtIns,
+    builtInPermissions: config.builtInPermissions,
     servers: config.servers.map(server => ({
       ...server,
       env: maskedRecord(server.env),
@@ -383,8 +404,13 @@ export async function saveMcpConfig(value: unknown): Promise<CcMcpConfig> {
     value && typeof value === 'object' && !Array.isArray(value)
       && Object.prototype.hasOwnProperty.call(value, 'builtIns'),
   )
+  const hasBuiltInPermissions = Boolean(
+    value && typeof value === 'object' && !Array.isArray(value)
+      && Object.prototype.hasOwnProperty.call(value, 'builtInPermissions'),
+  )
   const validated = validateMcpConfig(value)
   if (!hasBuiltIns) validated.builtIns = previous.builtIns
+  if (!hasBuiltInPermissions) validated.builtInPermissions = previous.builtInPermissions
   const clean = mergeMaskedSecrets(validated, previous)
   const saved = await havenMcpFetch('POST', clean)
   if (!saved.ok) throw new Error(`MCP 配置保存到 Haven 失败：${saved.error}`)
@@ -464,6 +490,12 @@ export function isMcpTool(toolName: string): boolean {
 }
 
 export function mcpPermissionForTool(toolName: string): CcMcpPermission {
+  const builtInPermission = builtInMcpPermissionForTool(
+    toolName,
+    state.config?.builtIns,
+    state.config?.builtInPermissions,
+  )
+  if (builtInPermission) return builtInPermission
   const server = serverForTool(toolName)
   const tool = server?.tools?.find(item => item.name === toolName)
   if (tool && !tool.enabled) return 'deny'

@@ -94,6 +94,19 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(buildCcOptions(config('work'), null).mcpServers).not.toHaveProperty('yanzhi')
   })
 
+  it("yanzhi's files 默认自动允许，不弹批准卡", async () => {
+    const options = buildCcOptions(config('chat'), null)
+    const preTool = options.hooks?.PreToolUse?.[0]?.hooks?.[0]
+    const decision = await preTool!(
+      { hook_event_name: 'PreToolUse', tool_name: 'mcp__yanzhi__files', tool_input: { action: 'list' } } as never,
+      undefined,
+      { signal: new AbortController().signal },
+    )
+    expect(decision).toMatchObject({
+      hookSpecificOutput: { permissionDecision: 'allow' },
+    })
+  })
+
   it('闲聊模式不注入文件和命令工具，工作模式保持完整工具', () => {
     const chat = config('chat')
     const work = config('work')

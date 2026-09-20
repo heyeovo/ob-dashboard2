@@ -19,7 +19,7 @@ export async function GET() {
     return Response.json({
       ok: true,
       config: publicMcpConfig(config),
-      builtIn: builtInMcpCatalog(config.builtIns),
+      builtIn: builtInMcpCatalog(config.builtIns, config.builtInPermissions),
     })
   } catch (error) {
     return Response.json(
@@ -41,6 +41,7 @@ async function refreshCatalog(
   const next: CcMcpConfig = {
     version: 1,
     builtIns: config.builtIns,
+    builtInPermissions: config.builtInPermissions,
     servers: config.servers.map(server => {
       const status = byName.get(server.name)
       if (!status || status.status !== 'connected') return server
@@ -56,6 +57,7 @@ export async function PUT(request: NextRequest) {
     let config = await saveMcpConfig({
       version: 1,
       builtIns: body.builtIns,
+      builtInPermissions: body.builtInPermissions,
       servers: Array.isArray(body.servers) ? body.servers : [],
     })
     const discover = Array.isArray(body.discover)
@@ -71,7 +73,7 @@ export async function PUT(request: NextRequest) {
     return Response.json({
       ok: true,
       config: publicMcpConfig(config),
-      builtIn: builtInMcpCatalog(config.builtIns),
+      builtIn: builtInMcpCatalog(config.builtIns, config.builtInPermissions),
       apply,
       status,
     })
@@ -92,7 +94,7 @@ export async function POST() {
     return Response.json({
       ok: true,
       config: publicMcpConfig(refreshed.config),
-      builtIn: builtInMcpCatalog(refreshed.config.builtIns),
+      builtIn: builtInMcpCatalog(refreshed.config.builtIns, refreshed.config.builtInPermissions),
       status: { servers: refreshed.servers },
       apply,
     })

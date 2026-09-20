@@ -9,6 +9,7 @@ import {
 import {
   builtInMcpCatalog,
   builtInMcpModelSurfaces,
+  builtInMcpPermissionForTool,
   builtInMcpServerNames,
 } from '@/app/lib/cc/builtInMcp'
 
@@ -36,7 +37,11 @@ describe("yanzhi's files built-in MCP", () => {
     expect(builtInMcpCatalog().find(item => item.name === 'yanzhi')).toMatchObject({
       label: "yanzhi's files",
       enabled: true,
+      permission: 'allow',
+      permissionConfigurable: true,
     })
+    expect(builtInMcpCatalog({}, { yanzhi: 'ask' }).find(item => item.name === 'yanzhi'))
+      .toMatchObject({ permission: 'ask' })
   })
 
   it('is injected only in chat mode and can be completely disabled', () => {
@@ -44,6 +49,14 @@ describe("yanzhi's files built-in MCP", () => {
     expect(builtInMcpServerNames({}, 'work')).not.toContain('yanzhi')
     expect(builtInMcpModelSurfaces({ yanzhi: false }, 'chat'))
       .not.toContainEqual(expect.objectContaining({ name: 'yanzhi' }))
+  })
+
+  it('applies configurable runtime permission without changing Agent Wake policy', () => {
+    expect(builtInMcpPermissionForTool('mcp__yanzhi__files')).toBe('allow')
+    expect(builtInMcpPermissionForTool('mcp__yanzhi__files', {}, { yanzhi: 'ask' })).toBe('ask')
+    expect(builtInMcpPermissionForTool('mcp__yanzhi__files', { yanzhi: false })).toBe('deny')
+    expect(builtInMcpPermissionForTool('mcp__ombre_agent_wake__set_agent_wake', {}, { ombre_agent_wake: 'ask' }))
+      .toBe('allow')
   })
 
   it('creates folders, writes, lists, searches, and reads by line range', async () => {

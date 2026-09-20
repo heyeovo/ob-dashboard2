@@ -2,7 +2,7 @@
 
 > 建立时间：2026-09-20
 > 仓库：`ob-dashboard2`
-> 状态：工具边界修复与闲聊受限文件 MCP 已完成并通过验证；尚未提交/部署，待 Coolify 持久目录挂载后合并上线
+> 状态：工具边界修复与闲聊受限文件 MCP 已于 commit `9c44bdd` 部署；挂载权限与内置批准策略修复已完成，等待上线验收
 
 ## 背景与当前状态
 
@@ -16,13 +16,15 @@
 - 已新增 chat-only 内置 MCP：内部 ID `yanzhi`，管理页显示 `yanzhi's files`，Claude 工具名为 `mcp__yanzhi__files`，默认开启且可手动关闭；只有一个 `files` 工具，无 server instructions，支持受限 `list` / `search` / `read` / `write` / `mkdir`。
 - 文件根目录固定为容器内 `/data/cc-chat-files`。部署前必须在 Coolify 将 VPS 宿主机持久目录挂载到该路径；未挂载时工具 fail closed，不会静默写入容器临时目录。
 - 安全边界：只接受相对路径，拒绝绝对路径、`..` 和符号链接越界；不提供删除、移动或命令；覆盖既有文件必须显式 `overwrite=true`；列表、搜索、读取与写入均有体积上限。
-- 最终验证已通过：相关 CC / Agent Wake / MCP 定向测试 8 个文件、46 项全通过，`npm run build` 通过。
+- 首次上线实测发现宿主机 `/srv/ob-data/yanzhi-files` 为 `root:root 755`，容器 `cc` 用户（UID/GID `10001:10001`）只能读、不能写。已在宿主机改为 `10001:10001 750`，无需再改挂载或协作者目录设置。
+- 首次实测还发现页面把所有内置 MCP 固定标为“自动允许”，但运行时只特判 Agent Wake，`mcp__yanzhi__files` 回落为每次询问。已改为 Agent Wake 固定自动允许，`yanzhi's files` 默认自动允许并可切换为每次询问；权限写入 Haven MCP JSON 的 `builtInPermissions`，不参与模型表面 hash。
+- 最终验证已通过：相关 CC / Agent Wake / MCP 定向测试 8 个文件、48 项全通过，`npm run build` 通过。
 
 ## 下一步范围
 
-1. 用户在 Coolify 为 Dashboard 容器添加持久挂载：宿主机专用目录 → 容器 `/data/cc-chat-files`，并确认容器运行用户可读写。
-2. 提交时与用户已有的 `HANDOFF-cc-agent-wake.md` 本地修改一起精确 add，明确排除 `.claude/`。
-3. 与已推送的 Agent Wake 只部署一次，再按下方方法一次性验收，避免重复 cache write。
+1. 部署内置 MCP 批准策略修复；该变化不改工具 description/schema/server 清单或 system prompt，不得升级 transcript 控制版本。
+2. 同一旧闲聊窗口重新执行 `mkdir` / `write` / `list` / `search` / `read`：默认自动允许时不得弹批准卡，切换为每次询问后应弹卡。
+3. 通过上下文审计补验工具/MCP hash 与迁移状态；批准策略部署后不应再出现 `cold_rebased`。
 4. 不修改 Agent Wake 的新承载结构，不触碰用户既有 thinking 删除逻辑、上下文拼接内容、Haven transcript 同步、scheduler、silence、coordinator 或 lane 状态机。
 
 ## 合并验收方法

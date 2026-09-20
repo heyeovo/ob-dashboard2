@@ -105,6 +105,7 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 - 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 单行引用为“召回内容已清理：title（bucket_id）”，工具结果单行以“已清理：…”标识，原工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭。固定窗口保持原行为；按天滚动窗口在 RollingSeedStore 版 GC 完成并通过真实验收前，服务端硬性禁止手动减负且自动 runner 无条件跳过。
 
 - CC 闲聊模式使用纯自定义 persona system prompt，不加载 `Read` / `Grep` / `Glob` / `Write` / `Edit` / `Bash` 及 Claude Code preset；工作模式保持完整 Claude Code preset 与文件/命令工具。闲聊可通过 chat-only 内置 MCP `yanzhi`（管理页显示名 `yanzhi's files`）在固定挂载点 `/data/cc-chat-files` 下执行受限 `list` / `search` / `read` / `write` / `mkdir`；无 server instructions，管理页关闭后整个定义不进入上下文，且工具拒绝绝对路径、`..`、符号链接越界、删除、移动和命令执行。模式或工具定义变化只回收 iterator 并 resume 原会话，不触发 transcript rebase。
+- 内置 MCP 权限以 Haven MCP JSON 中的 `builtInPermissions` 持久化，不进入模型表面 hash：Agent Wake 固定自动允许；`yanzhi's files` 默认自动允许，可在 MCP 页切换为每次询问。要完全禁止时直接关闭服务，避免保留无法使用的工具定义。
 
 ## 文档与部署
 

@@ -39,13 +39,20 @@ describe('MCP production address boundary', () => {
     expect(fallbackMcpConfig()).toEqual({
       version: 1,
       builtIns: { ombre_agent_wake: true },
+      builtInPermissions: { yanzhi: 'allow' },
       servers: [],
     })
   })
 
   it('keeps built-in MCP switches in the persisted config', () => {
-    const config = validateMcpConfig({ version: 1, builtIns: { ombre_agent_wake: false }, servers: [] })
+    const config = validateMcpConfig({
+      version: 1,
+      builtIns: { ombre_agent_wake: false },
+      builtInPermissions: { yanzhi: 'ask', ignored: 'deny' },
+      servers: [],
+    })
     expect(config.builtIns).toEqual({ ombre_agent_wake: false })
+    expect(config.builtInPermissions).toEqual({ yanzhi: 'ask' })
   })
 
   it('accepts a production HTTPS MCP URL and preserves the SDK path', () => {

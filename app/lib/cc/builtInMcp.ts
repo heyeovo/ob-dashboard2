@@ -1,6 +1,6 @@
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
 import type { CcMode } from '@/app/lib/ccModes'
-import type { CcBuiltInMcpServer } from '@/app/lib/ccMcpTypes'
+import type { CcBuiltInMcpPermission, CcBuiltInMcpServer, CcMcpPermission } from '@/app/lib/ccMcpTypes'
 import {
   AGENT_WAKE_SERVER_NAME,
   AGENT_WAKE_MCP_VERSION,
@@ -19,6 +19,8 @@ type BuiltInMcpRegistration = {
   label: string
   version: string
   modes?: CcMode[]
+  defaultPermission: CcBuiltInMcpPermission
+  permissionConfigurable?: boolean
   modelSurface: () => unknown
   create: (sessionId: string) => McpServerConfig
 }
@@ -32,6 +34,7 @@ const BUILT_IN_MCP: BuiltInMcpRegistration[] = [
     name: AGENT_WAKE_SERVER_NAME,
     label: 'Agent Wake',
     version: AGENT_WAKE_MCP_VERSION,
+    defaultPermission: 'allow',
     modelSurface: agentWakeMcpModelSurface,
     create: createAgentWakeMcpServer,
   },
@@ -40,6 +43,8 @@ const BUILT_IN_MCP: BuiltInMcpRegistration[] = [
     label: "yanzhi's files",
     version: YANZHI_FILES_MCP_VERSION,
     modes: ['chat'],
+    defaultPermission: 'allow',
+    permissionConfigurable: true,
     modelSurface: yanzhiFilesMcpModelSurface,
     create: createYanzhiFilesMcpServer,
   },
@@ -77,7 +82,21 @@ export function builtInMcpServerNames(states: Record<string, boolean> = {}, mode
     .map(item => item.name)
 }
 
-export function builtInMcpCatalog(states: Record<string, boolean> = {}): CcBuiltInMcpServer[] {
+export function builtInMcpPermissionForTool(
+  toolName: string,
+  states: Record<string, boolean> = {},
+  permissions: Record<string, CcBuiltInMcpPermission> = {},
+): CcMcpPermission | null {
+  const item = BUILT_IN_MCP.find(candidate => toolName.startsWith(`mcp__${candidate.name}__`))
+  if (!item) return null
+  if (!enabled(item, states)) return 'deny'
+  return item.permissionConfigurable ? permissions[item.name] || item.defaultPermission : item.defaultPermission
+}
+
+export function builtInMcpCatalog(
+  states: Record<string, boolean> = {},
+  permissions: Record<string, CcBuiltInMcpPermission> = {},
+): CcBuiltInMcpServer[] {
   return BUILT_IN_MCP.map(item => {
     const surface = item.modelSurface() as {
       tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }>
@@ -87,6 +106,8 @@ export function builtInMcpCatalog(states: Record<string, boolean> = {}): CcBuilt
       label: item.label,
       enabled: enabled(item, states),
       version: item.version,
+      permission: item.permissionConfigurable ? permissions[item.name] || item.defaultPermission : item.defaultPermission,
+      permissionConfigurable: item.permissionConfigurable === true,
       tools: (surface.tools || []).map(tool => ({
         name: `mcp__${item.name}__${tool.name}`,
         description: tool.description || '',

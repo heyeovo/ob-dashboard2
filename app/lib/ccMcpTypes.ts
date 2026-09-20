@@ -2,6 +2,7 @@ export const MCP_SECRET_MASK = '********'
 
 export type CcMcpTransport = 'stdio' | 'http' | 'sse'
 export type CcMcpPermission = 'allow' | 'ask' | 'deny'
+export type CcBuiltInMcpPermission = Exclude<CcMcpPermission, 'deny'>
 
 export type CcMcpToolConfig = {
   /** Agent SDK 看到的完整名称：mcp__server__tool。 */
@@ -43,6 +44,8 @@ export type CcMcpConfig = {
   servers: CcMcpServer[]
   /** Dashboard 进程内提供的 MCP；false 时整个服务及工具定义都不进入模型上下文。 */
   builtIns?: Record<string, boolean>
+  /** 可调内置 MCP 的运行时批准策略；不改变模型可见工具定义。 */
+  builtInPermissions?: Record<string, CcBuiltInMcpPermission>
 }
 
 export type CcBuiltInMcpServer = {
@@ -50,6 +53,8 @@ export type CcBuiltInMcpServer = {
   label: string
   enabled: boolean
   version: string
+  permission: CcBuiltInMcpPermission
+  permissionConfigurable: boolean
   tools: CcMcpToolConfig[]
 }
 

@@ -141,6 +141,7 @@ export default function McpManager() {
   const [config, setConfig] = useState<CcMcpConfig>({
     version: 1,
     builtIns: { ombre_agent_wake: true },
+    builtInPermissions: { yanzhi: 'allow' },
     servers: [],
   })
   const [builtIn, setBuiltIn] = useState<CcBuiltInMcpServer[]>([])
@@ -213,7 +214,12 @@ export default function McpManager() {
       const response = await fetch('/api/cc-mcp', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ servers, builtIns: config.builtIns, discover }),
+        body: JSON.stringify({
+          servers,
+          builtIns: config.builtIns,
+          builtInPermissions: config.builtInPermissions,
+          discover,
+        }),
       })
       const data = (await response.json()) as ApiPayload
       if (!response.ok || !data.ok || !data.config) {
@@ -238,7 +244,7 @@ export default function McpManager() {
     } finally {
       setSaving(false)
     }
-  }, [config.builtIns])
+  }, [config.builtInPermissions, config.builtIns])
 
   const toggleBuiltIn = async (name: string, enabled: boolean) => {
     const previous = config
@@ -252,7 +258,11 @@ export default function McpManager() {
       const response = await fetch('/api/cc-mcp', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ servers: config.servers, builtIns }),
+        body: JSON.stringify({
+          servers: config.servers,
+          builtIns,
+          builtInPermissions: config.builtInPermissions,
+        }),
       })
       const data = (await response.json()) as ApiPayload
       if (!response.ok || !data.ok || !data.config) throw new Error(data.error || '保存失败')
@@ -264,6 +274,39 @@ export default function McpManager() {
     } catch (reason) {
       setConfig(previous)
       setBuiltIn(current => current.map(server => server.name === name ? { ...server, enabled: !enabled } : server))
+      setError((reason as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const setBuiltInPermission = async (name: string, permission: 'allow' | 'ask') => {
+    const previous = config
+    const previousBuiltIn = builtIn
+    const builtInPermissions = { ...(config.builtInPermissions || {}), [name]: permission }
+    setConfig({ ...config, builtInPermissions })
+    setBuiltIn(current => current.map(server => server.name === name ? { ...server, permission } : server))
+    setSaving(true)
+    setError('')
+    setNote('')
+    try {
+      const response = await fetch('/api/cc-mcp', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          servers: config.servers,
+          builtIns: config.builtIns,
+          builtInPermissions,
+        }),
+      })
+      const data = (await response.json()) as ApiPayload
+      if (!response.ok || !data.ok || !data.config) throw new Error(data.error || '保存失败')
+      setConfig(data.config)
+      setBuiltIn(data.builtIn || [])
+      setNote(permission === 'allow' ? '内置 MCP 已设为自动允许。' : '内置 MCP 已设为每次询问。')
+    } catch (reason) {
+      setConfig(previous)
+      setBuiltIn(previousBuiltIn)
       setError((reason as Error).message)
     } finally {
       setSaving(false)
@@ -318,11 +361,11 @@ export default function McpManager() {
     const next = config.servers.map(server =>
       server.name === name ? { ...server, enabled } : server,
     )
-    setConfig({ version: 1, builtIns: config.builtIns, servers: next })
+    setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: next })
     try {
       await persist(next, enabled ? 'MCP 已启用。' : 'MCP 已停用。')
     } catch {
-      setConfig({ version: 1, builtIns: config.builtIns, servers: previous })
+      setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: previous })
     }
   }
 
@@ -395,7 +438,7 @@ export default function McpManager() {
           }
         : server,
     )
-    setConfig({ version: 1, builtIns: config.builtIns, servers: next })
+    setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: next })
     try {
       await persist(
         next,
@@ -404,7 +447,7 @@ export default function McpManager() {
           : '工具已关闭，说明与参数会从下一句话开始移出上下文。',
       )
     } catch {
-      setConfig({ version: 1, builtIns: config.builtIns, servers: previous })
+      setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: previous })
     }
   }
 
@@ -690,7 +733,20 @@ export default function McpManager() {
                       <h4 className="text-sm font-semibold text-[var(--color-text-heading)]">{server.label}</h4>
                       <span className="font-mono text-[10px] text-[var(--color-text-disabled)]">{server.name}</span>
                       <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">内置 · 无链接</span>
-                      <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] text-[var(--color-primary)]">自动允许</span>
+                      {server.permissionConfigurable ? (
+                        <select
+                          className="rounded-full border border-[var(--color-border)] bg-white px-2 py-0.5 text-[10px] text-[var(--color-primary)] outline-none"
+                          value={server.permission}
+                          disabled={saving || !server.enabled}
+                          onChange={event => void setBuiltInPermission(server.name, event.target.value as 'allow' | 'ask')}
+                          aria-label={`${server.label} 权限`}
+                        >
+                          <option value="allow">自动允许</option>
+                          <option value="ask">每次询问</option>
+                        </select>
+                      ) : (
+                        <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] text-[var(--color-primary)]">自动允许</span>
+                      )}
                     </div>
                     <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
                       v{server.version} · {server.tools.length} 个工具 · {server.enabled ? `预估 ${tokens.toLocaleString()} token` : `开启后约 ${server.tools.reduce((sum, tool) => sum + estimateMcpToolTokens(tool), 0).toLocaleString()} token`}
