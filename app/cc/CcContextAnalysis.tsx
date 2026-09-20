@@ -199,15 +199,9 @@ export default function CcContextAnalysis(props: Props) {
     ['Skills', analysis.skills?.tokens || 0],
     ['Slash Commands', analysis.slashCommands?.tokens || 0],
   ].filter(([, tokens]) => Number(tokens) > 0) as Array<[string, number]> : []
-  const messageRows = analysis?.messageBreakdown ? [
-    ['用户消息', analysis.messageBreakdown.userMessageTokens],
-    ['助手消息', analysis.messageBreakdown.assistantMessageTokens],
-    ['工具调用', analysis.messageBreakdown.toolCallTokens],
-    ['工具结果', analysis.messageBreakdown.toolResultTokens],
-    ['附件', analysis.messageBreakdown.attachmentTokens],
-    ['重定向上下文', analysis.messageBreakdown.redirectedContextTokens],
-    ['SDK 未归因', analysis.messageBreakdown.unattributedTokens],
-  ].filter(([, tokens]) => Number(tokens) > 0) as Array<[string, number]> : []
+  // SDK 的 messageBreakdown 在长会话、压缩和 resume 后可能继续累计旧消息，
+  // 甚至单项超过当前消息历史总量。这里不再展示那组不可校验的数字。
+  const conversationEstimate = estimateContextTokens(props.conversationText)
   const disabledReason = props.busy
     ? '正在回复，结束后才能读取'
     : !props.live
@@ -247,7 +241,7 @@ export default function CcContextAnalysis(props: Props) {
                 {new Date(analysis.updatedAt).toLocaleString('zh-HK', { hour12: false })}
               </div>
             </div>
-            <TokenCard title="SDK 官方分类" hint="官方实际 token" rows={exactRows} base={analysis.totalTokens} />
+            <TokenCard title="SDK 官方分类" hint="当前总量 / 分类估算" rows={exactRows} base={analysis.totalTokens} />
             {detailRows.length > 0 ? (
               <div className="mt-3">
                 <div className="mb-1.5 text-[10.5px] font-medium text-[var(--color-text-secondary)]">前缀明细</div>
@@ -261,16 +255,14 @@ export default function CcContextAnalysis(props: Props) {
                 </div>
               </div>
             ) : null}
-            {messageRows.length > 0 ? (
+            {conversationEstimate > 0 ? (
               <div className="mt-3">
-                <div className="mb-1.5 text-[10.5px] font-medium text-[var(--color-text-secondary)]">消息明细</div>
+                <div className="mb-1.5 text-[10.5px] font-medium text-[var(--color-text-secondary)]">消息正文</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {messageRows.map(([label, tokens]) => (
-                    <div key={label} className="flex justify-between gap-2 text-[9.5px]">
-                      <span className="text-[var(--color-text-tertiary)]">{label}</span>
-                      <span className="tabular-nums text-[var(--color-text-secondary)]">{fmtK(tokens)}</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between gap-2 text-[9.5px]">
+                    <span className="text-[var(--color-text-tertiary)]">当前已加载对话（预估）</span>
+                    <span className="tabular-nums text-[var(--color-text-secondary)]">{fmtK(conversationEstimate)}</span>
+                  </div>
                 </div>
               </div>
             ) : null}

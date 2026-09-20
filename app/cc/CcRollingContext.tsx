@@ -280,10 +280,10 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     return () => { cancelled = true }
   }, [sessionId])
 
-  const estimatedChars = useMemo(() => days.reduce((total, day) => {
+  const estimatedDateTokens = useMemo(() => days.reduce((total, day) => {
     const mode = draft?.day_modes?.[day.day] || (draft?.strategy === 'daily_rolling' ? 'raw' : 'omit')
-    if (mode === 'raw') return total + day.raw_chars
-    if (mode === 'review') return total + (day.review?.chars || 0)
+    if (mode === 'raw') return total + (day.token_estimate?.total ?? Math.ceil(day.raw_chars * 1.3))
+    if (mode === 'review') return total + (day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || ''))
     return total
   }, 0), [days, draft])
 
@@ -321,8 +321,8 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     }
     const longTermTokens = [...selectedBuckets.values(), ...journalItems.filter(item => selectedJournals.has(item.id))]
       .reduce((total, item) => total + estimateHandoffTokens(item.content), 0)
-    return Math.ceil(estimatedChars * 1.3) + longTermTokens
-  }, [estimatedChars, feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
+    return estimatedDateTokens + longTermTokens
+  }, [estimatedDateTokens, feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
 
   if (loading) return <div className="py-8 text-center text-[11px] text-[var(--color-text-disabled)]">读取上下文日期…</div>
   if (!draft || !session) return <div className="text-[11px] text-red-600">{note || '没有可用的窗口配置'}</div>
@@ -431,6 +431,53 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     return next
   })
 
+  const modeForDay = (day: ConversationContextDay) => draft.day_modes?.[day.day] || 'raw'
+  const sortedDays = [...days].sort((a, b) => b.day.localeCompare(a.day))
+  const includedDays = sortedDays.filter(day => modeForDay(day) !== 'omit')
+  const omittedDays = sortedDays.filter(day => modeForDay(day) === 'omit')
+  const renderDay = (day: ConversationContextDay) => {
+    const mode = modeForDay(day)
+    const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
+    const bodyRestore = savedMode !== 'raw' && mode === 'raw'
+    const estimate = day.token_estimate
+    const reviewTokens = day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || '')
+    const rawTokens = estimate?.total ?? Math.ceil(day.raw_chars * 1.3)
+    return (
+      <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[11.5px] text-[var(--color-text-secondary)]">
+            <span>{day.day}</span>
+            {bodyRestore ? <span className="rounded-full bg-[var(--color-pending-bg)] px-1.5 py-0.5 text-[9px] text-[var(--color-pending)]">正文恢复</span> : null}
+          </div>
+          {mode === 'raw' ? (
+            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[9.5px] text-[var(--color-text-disabled)]">
+              <span>{day.turn_count} 轮</span>
+              <span>对话 {(estimate?.conversation ?? rawTokens).toLocaleString()}</span>
+              <span>工具 {(estimate?.tools || 0).toLocaleString()}</span>
+              <span>附件 {(estimate?.attachments || 0).toLocaleString()}</span>
+              <span>召回 {(estimate?.recall || 0).toLocaleString()}</span>
+              <span>thinking {(estimate?.thinking || 0).toLocaleString()}</span>
+              <span className="text-[var(--color-text-secondary)]">合计约 {rawTokens.toLocaleString()} token</span>
+            </div>
+          ) : mode === 'review' ? (
+            <div className="mt-0.5 text-[9.5px] text-[var(--color-text-disabled)]">日回顾合计约 {reviewTokens.toLocaleString()} token</div>
+          ) : (
+            <div className="mt-0.5 text-[9.5px] text-[var(--color-text-disabled)]">当前不带 · 0 token</div>
+          )}
+        </div>
+        <select
+          className={SELECT}
+          value={mode}
+          onChange={event => setDraft({ ...draft, day_modes: { ...draft.day_modes, [day.day]: event.target.value as 'raw' | 'review' | 'omit' } })}
+        >
+          <option value="raw">原文</option>
+          <option value="review" disabled={!day.review}>日回顾</option>
+          <option value="omit">不带</option>
+        </select>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="mb-2 text-[11px] text-[var(--color-text-disabled)]">上下文方式</div>
@@ -454,34 +501,19 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             </select>
           </div>
           <div className="mb-2 flex justify-between text-[10.5px] text-[var(--color-text-disabled)]">
-            <span>日期内容</span><span>约 {estimatedChars.toLocaleString()} 字</span>
+            <span>日期内容</span><span>预估约 {estimatedDateTokens.toLocaleString()} token</span>
           </div>
           <div className="space-y-1.5">
-            {[...days].sort((a, b) => b.day.localeCompare(a.day)).map(day => {
-              const mode = draft.day_modes?.[day.day] || 'raw'
-              const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
-              const bodyRestore = savedMode !== 'raw' && mode === 'raw'
-              return (
-                <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 text-[11.5px] text-[var(--color-text-secondary)]">
-                      <span>{day.day}</span>
-                      {bodyRestore ? <span className="rounded-full bg-[var(--color-pending-bg)] px-1.5 py-0.5 text-[9px] text-[var(--color-pending)]">正文恢复</span> : null}
-                    </div>
-                    <div className="text-[9.5px] text-[var(--color-text-disabled)]">{day.turn_count} 轮 · 原文 {day.raw_chars.toLocaleString()} 字{day.review ? ` · 回顾 ${day.review.chars.toLocaleString()} 字` : ' · 暂无日回顾'}</div>
-                  </div>
-                  <select
-                    className={SELECT}
-                    value={mode}
-                    onChange={event => setDraft({ ...draft, day_modes: { ...draft.day_modes, [day.day]: event.target.value as 'raw' | 'review' | 'omit' } })}
-                  >
-                    <option value="raw">原文</option>
-                    <option value="review" disabled={!day.review}>日回顾</option>
-                    <option value="omit">不带</option>
-                  </select>
-                </div>
-              )
-            })}
+            {includedDays.map(renderDay)}
+            {omittedDays.length > 0 ? (
+              <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)]">
+                <button type="button" onClick={() => toggleSection('omitted-days')} className="flex w-full items-center justify-between px-2.5 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+                  <span>已不带 {omittedDays.length} 天</span>
+                  <span>{openSections.has('omitted-days') ? '收起' : '展开'}</span>
+                </button>
+                {openSections.has('omitted-days') ? <div className="space-y-1.5 border-t border-[var(--color-border-light)] p-1.5">{omittedDays.map(renderDay)}</div> : null}
+              </div>
+            ) : null}
           </div>
 
           <div className={`mb-3 mt-4 rounded-[var(--radius-md)] border px-2.5 py-2 text-[10.5px] leading-relaxed ${estimatedTotalTokens >= 100000 ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>

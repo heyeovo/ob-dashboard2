@@ -65,7 +65,15 @@ export type ConversationContextDay = {
   raw_chars: number
   first_turn_id: number
   last_turn_id: number
-  review: { content: string; chars: number; updated_at: string } | null
+  token_estimate?: {
+    conversation: number
+    tools: number
+    attachments: number
+    recall: number
+    thinking: number
+    total: number
+  }
+  review: { content: string; chars: number; estimated_tokens?: number; updated_at: string } | null
 }
 
 export type HavenConversationSession = {
