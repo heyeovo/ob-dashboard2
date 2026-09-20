@@ -190,6 +190,7 @@ export type StrictRecordTurnInput = RecordTurnInput & {
   personaId: string
   recalledBucketIds?: string[]
   createdBucketIds?: string[]
+  breathBucketIds?: string[]
   attachmentIds?: string[]
   turnKind?: 'user' | 'agent_wake'
   laneId?: string
@@ -456,6 +457,7 @@ export async function recordTurnStrict(input: StrictRecordTurnInput): Promise<St
       attachment_ids: input.attachmentIds || [],
       recalled_bucket_ids: input.recalledBucketIds || [],
       created_bucket_ids: input.createdBucketIds || [],
+      breath_bucket_ids: input.breathBucketIds || [],
       turn_kind: input.turnKind || 'user',
       lane_id: input.laneId || '',
       agent_wake_update: input.agentWakeUpdate,

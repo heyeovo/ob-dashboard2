@@ -74,7 +74,7 @@ type Candidate = {
 type PreexcludedBucket = {
   bucket_id: string
   bucket_name: string
-  exclusion_history?: Array<{ kind: 'recalled' | 'created'; chat_day: string }>
+  exclusion_history?: Array<{ kind: 'recalled' | 'created' | 'breath'; chat_day: string }>
 }
 
 type ShadowUtilityStatus = 'promote' | 'neutral' | 'reject'
@@ -576,7 +576,8 @@ function RoundDetail({ round }: { round: DebugRound }) {
             {preexcluded.map((bucket) => {
               const history = bucket.exclusion_history || []
               const reasons = [...new Set(history.map((entry) => entry.kind === 'recalled'
-                ? 'prior_session_recall' : 'prior_session_created'))]
+                ? 'prior_session_recall'
+                : entry.kind === 'breath' ? 'prior_session_breath' : 'prior_session_created'))]
               return (
                 <div key={bucket.bucket_id} className="rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-3">
                   <p className="text-xs font-medium text-[var(--color-text-primary)]">{bucket.bucket_name || bucket.bucket_id}</p>

@@ -306,31 +306,41 @@ function crossEngineRecallReference(turns: HavenTurn[]): string {
   ].join('\n')
 }
 
-function createdBucketIdsFromToolResult(toolName: string, result: string, isError: boolean): string[] {
-  if (isError || (toolName !== 'hold' && !toolName.endsWith('__hold'))) return []
+const BUCKET_ID_CAPTURE = '([A-Za-z0-9][A-Za-z0-9_-]{5,127})'
+
+function bucketIdsFromToolText(result: string): string[] {
   const ids = new Set<string>()
-  try {
-    const parsed = JSON.parse(result) as Record<string, unknown>
-    const bucketId = String(parsed.bucket_id || '')
-    if (
-      parsed.status === 'success' &&
-      parsed.action === 'created' &&
-      /^[a-f0-9]{12}$/i.test(bucketId)
-    ) {
-      ids.add(bucketId)
-    }
-  } catch {
-    // 旧 MCP 返回纯文本，继续走下面的兼容标记。
-  }
   const patterns = [
-    /\bbucket_id=([a-f0-9]{12})\b/gi,
-    /(?:📔日记|🫧whisper|🗺️轨迹|📌钉选)→([a-f0-9]{12})\b/gi,
+    new RegExp(`\\[bucket_id:${BUCKET_ID_CAPTURE}\\]`, 'gi'),
+    new RegExp(`\\bbucket_id\\s*[=:]\\s*["']?${BUCKET_ID_CAPTURE}`, 'gi'),
+    new RegExp(`"bucket_id"\\s*:\\s*"${BUCKET_ID_CAPTURE}"`, 'gi'),
+    new RegExp(`(?:📔日记|🫧whisper|🗺️轨迹|📌钉选)→${BUCKET_ID_CAPTURE}\\b`, 'gi'),
   ]
   for (const pattern of patterns) {
     let match: RegExpExecArray | null
     while ((match = pattern.exec(result)) !== null) ids.add(match[1])
   }
   return [...ids]
+}
+
+function createdBucketIdsFromToolResult(toolName: string, result: string, isError: boolean): string[] {
+  if (isError || (toolName !== 'hold' && !toolName.endsWith('__hold'))) return []
+  const ids = new Set<string>()
+  try {
+    const parsed = JSON.parse(result) as Record<string, unknown>
+    const bucketId = String(parsed.bucket_id || '')
+    // hold 的 created / updated / merged 都表示这个桶已出现在当前原文。
+    if (parsed.status === 'success' && /^[A-Za-z0-9][A-Za-z0-9_-]{5,127}$/.test(bucketId)) ids.add(bucketId)
+  } catch {
+    // 旧 MCP 返回纯文本，继续走下面的兼容标记。
+  }
+  for (const bucketId of bucketIdsFromToolText(result)) ids.add(bucketId)
+  return [...ids]
+}
+
+function breathBucketIdsFromToolResult(toolName: string, result: string, isError: boolean): string[] {
+  if (isError || (toolName !== 'breath' && !toolName.endsWith('__breath'))) return []
+  return bucketIdsFromToolText(result)
 }
 
 /**
@@ -495,6 +505,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   // 这一轮的收集口。hook / canUseTool 都经 processCollector 的桶拿，不捕获局部变量。
   const bucket = newTurnBucket()
   const createdBucketIds = new Set<string>()
+  const breathBucketIds = new Set<string>()
   setTurnBucket(sessionId, bucket)
   // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
   attachSend(sessionId, send)
@@ -1106,6 +1117,9 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           for (const bucketId of createdBucketIdsFromToolResult(toolName, rawResult, isError)) {
             createdBucketIds.add(bucketId)
           }
+          for (const bucketId of breathBucketIdsFromToolResult(toolName, rawResult, isError)) {
+            breathBucketIds.add(bucketId)
+          }
           const keepResult =
             ((isMcpTool(toolName) && shouldSaveMcpResult(toolName)) ||
               isWebTool(toolName)) &&
@@ -1329,6 +1343,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         attachmentIds: attachments.map(item => item.id),
         recalledBucketIds: recalledMemoryIds,
         createdBucketIds: [...createdBucketIds],
+        breathBucketIds: [...breathBucketIds],
         raw: {
           version: 1,
           engine: 'cc',
@@ -1398,6 +1413,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
               }
             : undefined,
           created_bucket_ids: [...createdBucketIds],
+          breath_bucket_ids: [...breathBucketIds],
           tools: bucket.toolEvents,
           tool_call_count: bucket.toolCallCount,
           max_tool_calls: MAX_CC_TOOL_CALLS_PER_TURN,

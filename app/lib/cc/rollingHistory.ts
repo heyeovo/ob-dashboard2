@@ -66,6 +66,7 @@ export type RollingSeedDiagnostic = {
   retainedEnvelopeCount: number
   bodyRestoredTurnCount: number
   thinkingPrunedBlockCount: number
+  memoryRecallPrunedBlockCount: number
   toolUseCount: number
   toolResultCount: number
   memoryRecallCount: number
@@ -474,6 +475,7 @@ function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<Rolling
     retainedEnvelopeCount: 0,
     bodyRestoredTurnCount: 0,
     thinkingPrunedBlockCount: 0,
+    memoryRecallPrunedBlockCount: 0,
     toolUseCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_use').length, 0),
     toolResultCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_result').length, 0),
     memoryRecallCount: messages.filter(message => /<记忆召回>|<memory_card\b/i.test(transcriptMessageContent(message))).length,
@@ -525,6 +527,54 @@ function pruneCompletedThinking(entries: SessionStoreEntry[]): {
     if (content.length === 0) return []
     message.content = content
     return [cloned]
+  })
+  return { entries: prunedEntries, removedBlockCount }
+}
+
+const MEMORY_RECALL_BLOCKS = [
+  /<记忆召回[^>]*>[\s\S]*?<\/记忆召回>/gi,
+  /<之前的记忆[^>]*>[\s\S]*?<\/之前的记忆>/gi,
+  /<memory_card\b[^>]*>[\s\S]*?<\/memory_card>/gi,
+]
+
+/**
+ * 旧日期的动态召回已经可从 Haven 重新获取，重建时直接从 user
+ * 文本删掉。不留“已清理”占位符；真实用户正文和末尾时间戳保留。
+ */
+function prunePersistedRecall(entries: SessionStoreEntry[]): {
+  entries: SessionStoreEntry[]
+  removedBlockCount: number
+} {
+  let removedBlockCount = 0
+  const stripText = (value: string) => {
+    let next = value
+    for (const pattern of MEMORY_RECALL_BLOCKS) {
+      next = next.replace(pattern, () => {
+        removedBlockCount += 1
+        return ''
+      })
+    }
+    return next.replace(/\n{3,}/g, '\n\n').trim()
+  }
+
+  const prunedEntries = entries.flatMap(entry => {
+    const cloned = JSON.parse(JSON.stringify(entry)) as SessionStoreEntry
+    const message = messageRecord(cloned)
+    if (message?.role !== 'user' || !isPrimaryUserEntry(cloned)) return [cloned]
+    if (typeof message.content === 'string') {
+      message.content = stripText(message.content)
+      return message.content ? [cloned] : []
+    }
+    if (!Array.isArray(message.content)) return [cloned]
+    const content = message.content.flatMap(block => {
+      if (!block || typeof block !== 'object') return [block]
+      const record = block as Record<string, unknown>
+      if (record.type !== 'text' || typeof record.text !== 'string') return [block]
+      const text = stripText(record.text)
+      return text ? [{ ...record, text }] : []
+    })
+    message.content = content
+    return content.length ? [cloned] : []
   })
   return { entries: prunedEntries, removedBlockCount }
 }
@@ -1238,6 +1288,7 @@ export async function createModelSurfaceRebaseSeed(
       retainedEnvelopeCount: envelopeCount,
       bodyRestoredTurnCount: 0,
       thinkingPrunedBlockCount: 0,
+      memoryRecallPrunedBlockCount: 0,
     }),
   }
 }
@@ -1330,6 +1381,7 @@ async function createRevisionSeedFromEntries(
   let retainedEnvelopeCount = 0
   let bodyRestoredTurnCount = 0
   let thinkingPrunedBlockCount = 0
+  let memoryRecallPrunedBlockCount = 0
   for (const turn of [...rawTurns].sort((a, b) => a.id - b.id)) {
     if (isAgentWakeLimitTurn(turn)) continue
     const envelope = aligned.get(turn.id)
@@ -1341,9 +1393,11 @@ async function createRevisionSeedFromEntries(
         ob2ChatDay: turn.chat_day || '',
       }))
       if (turn.chat_day && turn.chat_day !== latestRawDay) {
-        const pruned = pruneCompletedThinking(taggedEntries)
-        thinkingPrunedBlockCount += pruned.removedBlockCount
-        selectedEntries.push(...pruned.entries)
+        const recallPruned = prunePersistedRecall(taggedEntries)
+        memoryRecallPrunedBlockCount += recallPruned.removedBlockCount
+        const thinkingPruned = pruneCompletedThinking(recallPruned.entries)
+        thinkingPrunedBlockCount += thinkingPruned.removedBlockCount
+        selectedEntries.push(...thinkingPruned.entries)
       } else {
         selectedEntries.push(...taggedEntries)
       }
@@ -1380,6 +1434,7 @@ async function createRevisionSeedFromEntries(
       retainedEnvelopeCount,
       bodyRestoredTurnCount,
       thinkingPrunedBlockCount,
+      memoryRecallPrunedBlockCount,
     }),
   }
 }

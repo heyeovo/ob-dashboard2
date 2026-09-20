@@ -991,7 +991,7 @@ describe('runTurn：普通回复', () => {
     expect(turns.recordTurn.mock.calls[0][0].raw.created_bucket_ids).toEqual(['abc123def456'])
   })
 
-  it('从 hold 结构化成功结果提取新桶，但合并结果不计作新建', async () => {
+  it('从 hold 结构化结果隔离新建或合并后出现在原文的桶', async () => {
     const handle = driveTurn([
       initMsg(),
       toolUse('hold-created', 'mcp__ombre__hold', { content: '新记忆' }),
@@ -1007,7 +1007,21 @@ describe('runTurn：普通回复', () => {
     ])
     await handle.promise
 
-    expect(turns.recordTurn.mock.calls[0][0].createdBucketIds).toEqual(['abc123def456'])
+    expect(turns.recordTurn.mock.calls[0][0].createdBucketIds).toEqual(['abc123def456', 'fff111aaa222'])
+  })
+
+  it('把 breath 结果里实际展示的桶写进召回隔离账本', async () => {
+    const handle = driveTurn([
+      initMsg(),
+      toolUse('breath-1', 'mcp__ombre__breath', { query: '旧事' }),
+      toolResult('breath-1', '[bucket_id:abc123def456] 第一条\n---\n[bucket_id:fff111aaa222] 第二条'),
+      textDelta('找到了'),
+      resultMsg(),
+    ])
+    await handle.promise
+
+    expect(turns.recordTurn.mock.calls[0][0].breathBucketIds).toEqual(['abc123def456', 'fff111aaa222'])
+    expect(turns.recordTurn.mock.calls[0][0].raw.breath_bucket_ids).toEqual(['abc123def456', 'fff111aaa222'])
   })
 
   it('连续 text delta 拼成一段正文，process 也合并成一段', async () => {

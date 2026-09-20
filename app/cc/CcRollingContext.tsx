@@ -87,7 +87,7 @@ function effectiveRawTokenEstimate(day: ConversationContextDay, latestRawDay: st
   const conversation = Number(estimate.conversation || 0)
   const tools = Number(estimate.tools || 0)
   const attachments = Number(estimate.attachments || 0)
-  const recall = Number(estimate.recall || 0)
+  const recall = day.day === latestRawDay ? Number(estimate.recall || 0) : 0
   const timestamps = Number(estimate.timestamps || 0)
   const messageOverhead = Number(estimate.message_overhead || 0)
   const agentWake = Number(estimate.agent_wake || 0)
@@ -488,6 +488,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     const reviewTokens = day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || '')
     const rawTokens = estimate.total
     const thinkingPruned = day.day !== latestRawDay && Number(day.token_estimate?.thinking || 0) > 0
+    const recallPruned = day.day !== latestRawDay && Number(day.token_estimate?.recall || 0) > 0
     return (
       <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
         <div className="min-w-0 flex-1">
@@ -501,7 +502,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
               <span>正文 {estimate.conversation.toLocaleString()}</span>
               <span>工具 {estimate.tools.toLocaleString()}</span>
               <span>附件 {estimate.attachments.toLocaleString()}{day.attachment_unknown_count ? `（${day.attachment_unknown_count} 未知）` : ''}</span>
-              <span>召回 {estimate.recall.toLocaleString()}</span>
+              <span>召回 {estimate.recall.toLocaleString()}{recallPruned ? `（已剥离 ${Number(day.token_estimate?.recall || 0).toLocaleString()}）` : ''}</span>
               <span>thinking {estimate.thinking.toLocaleString()}{thinkingPruned ? '（已剥离）' : ''}</span>
               <span>时间戳≈{estimate.timestamps.toLocaleString()}</span>
               <span>框架≈{estimate.message_overhead.toLocaleString()}</span>
@@ -538,7 +539,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
       {draft.strategy === 'daily_rolling' ? (
         <>
           <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-2.5 text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">
-            这里只决定模型下一轮能看到什么，不删除聊天记录。原文日里的已召回记忆不会重复召回；改成日回顾或不带后，以后可以再次召回。
+            这里只决定模型下一轮能看到什么，不删除聊天记录。重建时只保留最新一个有对话原文日的召回和 thinking；旧召回剥离后可重新参与召回，但原文期新写入或被 breath 看过的桶仍会隔离。
           </div>
           <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] p-2.5 text-[10.5px] leading-relaxed text-[var(--color-pending)]">
             已经退出“原文”的旧日期以后重新设为“原文”时，只会从 Haven 恢复可见的用户与助手正文；当时的工具调用、工具结果和动态召回过程不会恢复。

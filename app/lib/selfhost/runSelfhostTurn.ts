@@ -455,21 +455,42 @@ function addUsage(total: AnthropicUsage, next: AnthropicUsage) {
   total.context_input_tokens += next.context_input_tokens
 }
 
-function createdBucketIdFromToolResult(
+function bucketIdsFromToolResultText(text: string): string[] {
+  const ids = new Set<string>()
+  for (const pattern of [
+    /\[bucket_id:([A-Za-z0-9][A-Za-z0-9_-]{5,127})\]/gi,
+    /\bbucket_id\s*[=:]\s*["']?([A-Za-z0-9][A-Za-z0-9_-]{5,127})/gi,
+    /"bucket_id"\s*:\s*"([A-Za-z0-9][A-Za-z0-9_-]{5,127})"/gi,
+  ]) {
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(text)) !== null) ids.add(match[1])
+  }
+  return [...ids]
+}
+
+function createdBucketIdsFromToolResult(
   toolName: string,
   result: { isError: boolean; structuredContent?: Record<string, unknown>; text: string },
-): string {
-  if (result.isError || !toolName.endsWith('__hold')) return ''
+): string[] {
+  if (result.isError || (toolName !== 'hold' && !toolName.endsWith('__hold'))) return []
+  const ids = new Set<string>()
   const structured = result.structuredContent
   if (
     structured?.status === 'success' &&
-    structured.action === 'created' &&
-    /^[a-f0-9]{12}$/i.test(String(structured.bucket_id || ''))
+    /^[A-Za-z0-9][A-Za-z0-9_-]{5,127}$/.test(String(structured.bucket_id || ''))
   ) {
-    return String(structured.bucket_id)
+    ids.add(String(structured.bucket_id))
   }
-  const legacy = /\bbucket_id=([a-f0-9]{12})\b/i.exec(result.text)
-  return legacy?.[1] || ''
+  for (const bucketId of bucketIdsFromToolResultText(result.text)) ids.add(bucketId)
+  return [...ids]
+}
+
+function breathBucketIdsFromToolResult(
+  toolName: string,
+  result: { isError: boolean; text: string },
+): string[] {
+  if (result.isError || (toolName !== 'breath' && !toolName.endsWith('__breath'))) return []
+  return bucketIdsFromToolResultText(result.text)
 }
 
 function appendProcess(
@@ -653,6 +674,7 @@ export function createSelfhostStream(
         const process: Array<Record<string, unknown>> = []
         const toolEvents: Array<Record<string, unknown>> = []
         const createdBucketIds = new Set<string>()
+        const breathBucketIds = new Set<string>()
         let assistantText = ''
         let thinkingText = ''
         let stopReason = ''
@@ -738,8 +760,12 @@ export function createSelfhostStream(
               status: toolEvent.status,
               durationMs,
             })
-            const createdBucketId = createdBucketIdFromToolResult(toolUse.name, result)
-            if (createdBucketId) createdBucketIds.add(createdBucketId)
+            for (const bucketId of createdBucketIdsFromToolResult(toolUse.name, result)) {
+              createdBucketIds.add(bucketId)
+            }
+            for (const bucketId of breathBucketIdsFromToolResult(toolUse.name, result)) {
+              breathBucketIds.add(bucketId)
+            }
             toolResults.push({
               type: 'tool_result',
               tool_use_id: toolUse.id,
@@ -778,10 +804,12 @@ export function createSelfhostStream(
           attachmentIds: request.attachmentIds || [],
           recalledBucketIds: recall.ok ? recall.recalledIds : [],
           createdBucketIds: [...createdBucketIds],
+          breathBucketIds: [...breathBucketIds],
           raw: {
             version: 1,
             engine: 'selfhost',
             request_id: request.requestId,
+            rolling_context_revision: prepared.session?.context_revision || 0,
             attachments: currentAttachments.map(item => ({
               id: item.id,
               filename: item.filename,
@@ -809,6 +837,7 @@ export function createSelfhostStream(
             process,
             tools: toolEvents,
             created_bucket_ids: [...createdBucketIds],
+            breath_bucket_ids: [...breathBucketIds],
             mcp: {
               available_tools: anthropicTools.map(tool => tool.name),
               warnings: mcpRuntime.warnings,

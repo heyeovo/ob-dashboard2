@@ -298,13 +298,18 @@ const RECALL_RULE_COPY: Record<string, RecallRuleCopy> = {
     effect: 'reject',
   },
   prior_session_recall: {
-    title: '之前有过召回记录',
-    description: 'Haven 记录显示这个桶此前在本窗口被召回，因此本轮在检索前排除。该记录不证明召回正文仍留在当前上下文。',
+    title: '当前上下文已自动召回',
+    description: '这个桶仍在最新原文日的召回正文中，或者在最近一次上下文重建后已经注入，因此本轮在检索前排除。',
     effect: 'reject',
   },
   prior_session_created: {
-    title: '此前在本窗口创建',
-    description: 'Haven 记录显示这个桶此前在本窗口创建，因此本轮在检索前排除。',
+    title: '原文期在本窗口写入',
+    description: 'Haven 记录显示这个桶在当前保留的原文时段内被创建、更新或合并，因此本轮在检索前排除。',
+    effect: 'reject',
+  },
+  prior_session_breath: {
+    title: '原文期已通过 breath 看过',
+    description: '这个桶已经出现在当前保留的 breath 工具结果中，为避免同一份内容再次自动注入，本轮在检索前排除。',
     effect: 'reject',
   },
   semantic_session_dedupe: {

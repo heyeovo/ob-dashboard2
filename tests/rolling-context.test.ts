@@ -313,6 +313,8 @@ describe('daily rolling context', () => {
           type: 'thinking', thinking: `较早日期 thinking ${Math.floor(index / 2) + 1}`, signature: `sig-${index}`,
         })
       }
+      const olderRecallUser = source.entries[2].message as { role: string; content: string }
+      olderRecallUser.content = '<记忆召回>\n<memory_card>较早日期召回</memory_card>\n</记忆召回>\n\n第2天'
       const toolUseId = 'toolu_keep_me'
       await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
         {
@@ -356,6 +358,8 @@ describe('daily rolling context', () => {
       expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 2')
       expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 3')
       expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 4')
+      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期召回')
+      expect(JSON.stringify(revised?.entries)).toContain('第2天')
       expect(JSON.stringify(revised?.entries)).toContain('最新日期 thinking')
       expect(JSON.stringify(revised?.entries)).toContain('最新日期加密 thinking')
       expect(revised?.diagnostic).toMatchObject({
@@ -364,6 +368,7 @@ describe('daily rolling context', () => {
         retainedEnvelopeCount: 4,
         bodyRestoredTurnCount: 0,
         thinkingPrunedBlockCount: 3,
+        memoryRecallPrunedBlockCount: 1,
         toolUseCount: 1,
         toolResultCount: 1,
         memoryRecallCount: 1,
@@ -418,7 +423,7 @@ describe('daily rolling context', () => {
     }
   })
 
-  it('preserves recall, tools and images across two revisions and a disk reopen', async () => {
+  it('prunes older recall but preserves latest recall, tools and images across revisions', async () => {
     const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-lifecycle-'))
     const firstTurn = {
       ...turns[0], id: 11, round_id: 11, chat_day: '2026-09-12',
@@ -502,7 +507,9 @@ describe('daily rolling context', () => {
       const reopened = openRollingHistoryResume(revisionTwo!.resumeFrom, { storeRoot })
       expect(reopened).not.toBeNull()
       const audit = await inspectRollingHistoryTranscript(reopened!.resumeFrom, { storeRoot })
-      expect(audit?.messages.filter(message => message.containsMemoryRecall)).toHaveLength(2)
+      expect(audit?.messages.filter(message => message.containsMemoryRecall)).toHaveLength(1)
+      expect(audit?.messages.some(message => message.content.includes('第一次召回'))).toBe(false)
+      expect(audit?.messages.some(message => message.content.includes('第二次召回'))).toBe(true)
       expect(audit?.messages.flatMap(message => message.toolNames)).toEqual(['search_chat', 'breath'])
       expect(audit?.messages.filter(message => message.blockTypes.includes('tool_result'))).toHaveLength(2)
       expect(audit?.messages.some(message => message.blockTypes.includes('image'))).toBe(true)
