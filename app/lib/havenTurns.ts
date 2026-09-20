@@ -71,8 +71,12 @@ export type ConversationContextDay = {
     attachments: number
     recall: number
     thinking: number
+    timestamps: number
+    message_overhead: number
+    agent_wake: number
     total: number
   }
+  attachment_unknown_count?: number
   review: { content: string; chars: number; estimated_tokens?: number; updated_at: string } | null
 }
 

@@ -13,6 +13,9 @@ export type HavenAttachment = {
   sha256: string
   text_chars?: number
   text_truncated?: boolean
+  image_width?: number
+  image_height?: number
+  estimated_tokens?: number
   created_at: string
   cleared: boolean
   cleared_at?: string

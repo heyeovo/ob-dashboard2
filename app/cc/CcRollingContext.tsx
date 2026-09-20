@@ -65,6 +65,47 @@ function includeSelected(visible: Candidate[], all: Candidate[], selected: Set<s
   return [...visible, ...all.filter(item => selected.has(item.id) && !visibleIds.has(item.id))]
 }
 
+function latestRawConversationDay(
+  days: ConversationContextDay[],
+  config: RollingContextConfig,
+): string {
+  return days
+    .filter(day => day.turn_count > 0 && (config.day_modes?.[day.day] || 'raw') === 'raw')
+    .map(day => day.day)
+    .sort((a, b) => b.localeCompare(a))[0] || ''
+}
+
+function effectiveRawTokenEstimate(day: ConversationContextDay, latestRawDay: string) {
+  const estimate = day.token_estimate
+  if (!estimate) {
+    const conversation = Math.ceil(day.raw_chars * 1.3)
+    return {
+      conversation, tools: 0, attachments: 0, recall: 0, thinking: 0,
+      timestamps: 0, message_overhead: 0, agent_wake: 0, total: conversation,
+    }
+  }
+  const conversation = Number(estimate.conversation || 0)
+  const tools = Number(estimate.tools || 0)
+  const attachments = Number(estimate.attachments || 0)
+  const recall = Number(estimate.recall || 0)
+  const timestamps = Number(estimate.timestamps || 0)
+  const messageOverhead = Number(estimate.message_overhead || 0)
+  const agentWake = Number(estimate.agent_wake || 0)
+  const thinking = day.day === latestRawDay ? Number(estimate.thinking || 0) : 0
+  const total = conversation
+    + tools
+    + attachments
+    + recall
+    + thinking
+    + timestamps
+    + messageOverhead
+    + agentWake
+  return {
+    conversation, tools, attachments, recall, thinking, timestamps,
+    message_overhead: messageOverhead, agent_wake: agentWake, total,
+  }
+}
+
 function shuffled<T>(items: T[], seed: number): T[] {
   const next = [...items]
   let value = seed || 1
@@ -280,12 +321,15 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     return () => { cancelled = true }
   }, [sessionId])
 
-  const estimatedDateTokens = useMemo(() => days.reduce((total, day) => {
+  const estimatedDateTokens = useMemo(() => {
+    const latestRawDay = draft ? latestRawConversationDay(days, draft) : ''
+    return days.reduce((total, day) => {
     const mode = draft?.day_modes?.[day.day] || (draft?.strategy === 'daily_rolling' ? 'raw' : 'omit')
-    if (mode === 'raw') return total + (day.token_estimate?.total ?? Math.ceil(day.raw_chars * 1.3))
+    if (mode === 'raw') return total + effectiveRawTokenEstimate(day, latestRawDay).total
     if (mode === 'review') return total + (day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || ''))
     return total
-  }, 0), [days, draft])
+    }, 0)
+  }, [days, draft])
 
   const journalVisible = useMemo(
     () => includeSelected(journalItems.slice(0, journalLimit), journalItems, selectedJournals),
@@ -432,6 +476,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   })
 
   const modeForDay = (day: ConversationContextDay) => draft.day_modes?.[day.day] || 'raw'
+  const latestRawDay = latestRawConversationDay(days, draft)
   const sortedDays = [...days].sort((a, b) => b.day.localeCompare(a.day))
   const includedDays = sortedDays.filter(day => modeForDay(day) !== 'omit')
   const omittedDays = sortedDays.filter(day => modeForDay(day) === 'omit')
@@ -439,9 +484,10 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     const mode = modeForDay(day)
     const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
     const bodyRestore = savedMode !== 'raw' && mode === 'raw'
-    const estimate = day.token_estimate
+    const estimate = effectiveRawTokenEstimate(day, latestRawDay)
     const reviewTokens = day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || '')
-    const rawTokens = estimate?.total ?? Math.ceil(day.raw_chars * 1.3)
+    const rawTokens = estimate.total
+    const thinkingPruned = day.day !== latestRawDay && Number(day.token_estimate?.thinking || 0) > 0
     return (
       <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
         <div className="min-w-0 flex-1">
@@ -452,11 +498,14 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
           {mode === 'raw' ? (
             <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[9.5px] text-[var(--color-text-disabled)]">
               <span>{day.turn_count} 轮</span>
-              <span>对话 {(estimate?.conversation ?? rawTokens).toLocaleString()}</span>
-              <span>工具 {(estimate?.tools || 0).toLocaleString()}</span>
-              <span>附件 {(estimate?.attachments || 0).toLocaleString()}</span>
-              <span>召回 {(estimate?.recall || 0).toLocaleString()}</span>
-              <span>thinking {(estimate?.thinking || 0).toLocaleString()}</span>
+              <span>正文 {estimate.conversation.toLocaleString()}</span>
+              <span>工具 {estimate.tools.toLocaleString()}</span>
+              <span>附件 {estimate.attachments.toLocaleString()}{day.attachment_unknown_count ? `（${day.attachment_unknown_count} 未知）` : ''}</span>
+              <span>召回 {estimate.recall.toLocaleString()}</span>
+              <span>thinking {estimate.thinking.toLocaleString()}{thinkingPruned ? '（已剥离）' : ''}</span>
+              <span>时间戳≈{estimate.timestamps.toLocaleString()}</span>
+              <span>框架≈{estimate.message_overhead.toLocaleString()}</span>
+              <span>wake≈{estimate.agent_wake.toLocaleString()}</span>
               <span className="text-[var(--color-text-secondary)]">合计约 {rawTokens.toLocaleString()} token</span>
             </div>
           ) : mode === 'review' ? (
