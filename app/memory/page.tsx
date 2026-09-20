@@ -98,7 +98,7 @@ const DATE_PRESETS: { key: DatePreset; label: string }[] = [
 ]
 
 const isFeel = (b: Bucket) =>
-  b.type === 'feel' || (b.domain ?? []).includes('feel') || (b.tags ?? []).includes('feel')
+  b.type === 'feel' || (b.domain ?? []).includes('feel') || (b.domain ?? []).includes('沉淀物') || (b.tags ?? []).includes('feel')
 
 const isJourney = (b: Bucket) => (b.domain ?? []).includes('journey')
 

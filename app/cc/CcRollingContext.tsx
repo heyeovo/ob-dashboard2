@@ -273,7 +273,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             noise: type === 'noise' || Boolean(b.noise ?? metadata.noise) || hasMarker('noise'),
             resolved: Boolean(b.resolved ?? metadata.resolved),
             digested: Boolean(b.digested ?? metadata.digested),
-            feel: type === 'feel' || hasMarker('feel'),
+            feel: type === 'feel' || hasMarker('feel') || hasMarker('沉淀物'),
             journal: type === 'journal',
           }]
         })

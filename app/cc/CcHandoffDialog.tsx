@@ -182,7 +182,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
         if (failed >= 0) throw new Error(String(payloads[failed]?.error || `读取换窗资料失败（${responses[failed].status}）`))
 
         const rawBuckets = Array.isArray(payloads[0]) ? payloads[0] : (payloads[0]?.buckets || [])
-        const bucketItems = rawBuckets.map((raw: any): Candidate & { pinned: boolean; type: string; tags: string[] } => {
+        const bucketItems = rawBuckets.map((raw: any): Candidate & { pinned: boolean; type: string; tags: string[]; domain: string[] } => {
           const metadata = raw?.metadata || {}
           return {
             id: String(raw?.id || ''),
@@ -192,11 +192,13 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
             pinned: Boolean(raw?.pinned ?? metadata?.pinned),
             type: String(raw?.type || metadata?.type || 'dynamic'),
             tags: Array.isArray(raw?.tags || metadata?.tags) ? (raw?.tags || metadata?.tags).map(String) : [],
+            domain: Array.isArray(raw?.domain || metadata?.domain) ? (raw?.domain || metadata?.domain).map(String) : [],
           }
         }).filter((item: Candidate) => item.id && item.content.trim())
-        const pinnedItems = bucketItems.filter((item: any) => item.pinned && item.type !== 'feel')
-        const feelItems = bucketItems.filter((item: any) => item.type === 'feel' && !item.tags.some((tag: string) => ['whisper', 'daily_impression', 'weekly_impression', 'relationship_weather'].includes(tag))).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
-        const recentItems = bucketItems.filter((item: any) => !item.pinned && !['feel', 'archived', 'journal'].includes(item.type)).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        const isFeelItem = (item: any) => item.type === 'feel' || (item.tags || []).includes('feel') || (item.domain || []).includes('沉淀物')
+        const pinnedItems = bucketItems.filter((item: any) => item.pinned && !isFeelItem(item))
+        const feelItems = bucketItems.filter((item: any) => isFeelItem(item) && !item.tags.some((tag: string) => ['whisper', 'daily_impression', 'weekly_impression', 'relationship_weather'].includes(tag))).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        const recentItems = bucketItems.filter((item: any) => !item.pinned && !isFeelItem(item) && !['archived', 'journal'].includes(item.type)).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
         setPinned(pinnedItems)
         setRecent(recentItems)
         setFeels(feelItems)
