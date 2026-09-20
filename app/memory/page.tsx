@@ -1256,9 +1256,9 @@ function HomeClient() {
               <div>
                 {quickFilter === 'all' ? (
                   <>
-                    <GridSection title="★ 钉选记忆" items={displayed.filter(b => b.pinned)} />
-                    <GridSection title="♦ 重要 (imp ≥ 7)" items={displayed.filter(b => !b.pinned && Number(b.importance) >= 7 && !b.resolved && !b.digested)} />
-                    <GridSection title="feel" items={displayed.filter(b => !b.pinned && isFeel(b) && !b.resolved && !b.digested)} />
+                    <GridSection title="★ 钉选记忆" items={displayed.filter(b => b.pinned && !isFeel(b))} />
+                    <GridSection title="♦ 重要 (imp ≥ 7)" items={displayed.filter(b => !b.pinned && Number(b.importance) >= 7 && !b.resolved && !b.digested && !isFeel(b))} />
+                    <GridSection title="feel" items={displayed.filter(b => isFeel(b) && !b.resolved && !b.digested)} />
                     <GridSection title="已解决" items={displayed.filter(b => !b.pinned && b.resolved)} />
                     <GridSection title="已消化" items={displayed.filter(b => !b.pinned && !b.resolved && b.digested)} />
                     <GridSection title="已归档" items={displayed.filter(b => b.type === 'archived')} />

@@ -194,8 +194,8 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
             tags: Array.isArray(raw?.tags || metadata?.tags) ? (raw?.tags || metadata?.tags).map(String) : [],
           }
         }).filter((item: Candidate) => item.id && item.content.trim())
-        const pinnedItems = bucketItems.filter((item: any) => item.pinned)
-        const feelItems = bucketItems.filter((item: any) => !item.pinned && item.type === 'feel' && !item.tags.some((tag: string) => ['whisper', 'daily_impression', 'weekly_impression', 'relationship_weather'].includes(tag))).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
+        const pinnedItems = bucketItems.filter((item: any) => item.pinned && item.type !== 'feel')
+        const feelItems = bucketItems.filter((item: any) => item.type === 'feel' && !item.tags.some((tag: string) => ['whisper', 'daily_impression', 'weekly_impression', 'relationship_weather'].includes(tag))).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
         const recentItems = bucketItems.filter((item: any) => !item.pinned && !['feel', 'archived', 'journal'].includes(item.type)).sort((a: Candidate, b: Candidate) => b.created.localeCompare(a.created))
         setPinned(pinnedItems)
         setRecent(recentItems)

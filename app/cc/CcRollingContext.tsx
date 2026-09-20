@@ -277,11 +277,12 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             journal: type === 'journal',
           }]
         })
-        const pinned: Candidate[] = buckets.filter(bucket => bucket.pinned)
+        const pinned: Candidate[] = buckets.filter(bucket => bucket.pinned && !bucket.feel)
         setPinnedItems(pinned)
 
-        const eligible = buckets.filter(bucket => !bucket.pinned && !bucket.archived && !bucket.noise
-          && !bucket.resolved && !bucket.digested && !bucket.journal)
+        const eligible = buckets.filter(bucket => !bucket.archived && !bucket.noise
+          && !bucket.resolved && !bucket.digested && !bucket.journal
+          && (!bucket.pinned || bucket.feel))
         const recent = eligible.filter(bucket => !bucket.feel)
           .sort((a, b) => String(b.created).localeCompare(String(a.created)))
         const feels = eligible.filter(bucket => bucket.feel)
