@@ -4,11 +4,13 @@ const loader = vi.hoisted(() => ({ load: vi.fn() }))
 const runner = vi.hoisted(() => ({ run: vi.fn() }))
 const live = vi.hoisted(() => ({ peek: vi.fn(), pending: vi.fn() }))
 const haven = vi.hoisted(() => ({ record: vi.fn(), getTurn: vi.fn(), begin: vi.fn(), patch: vi.fn() }))
+const outcomes = vi.hoisted(() => ({ record: vi.fn() }))
 
 vi.mock('@/app/lib/cc/turnInputs', () => ({ loadBackgroundTurnInputs: loader.load }))
 vi.mock('@/app/lib/cc/runTurn', () => ({ runTurn: runner.run }))
 vi.mock('@/app/lib/ccSession', () => ({ peekSession: live.peek }))
 vi.mock('@/app/lib/ccChannel', () => ({ hasPending: live.pending }))
+vi.mock('@/app/lib/cc/turnOutcome', () => ({ recordTurnOutcome: outcomes.record }))
 vi.mock('@/app/lib/havenTurns', () => ({
   recordTurnStrict: haven.record,
   getTurnByRequestId: haven.getTurn,
@@ -38,6 +40,7 @@ beforeEach(() => {
   haven.getTurn.mockResolvedValue({ ok: true, found: false, turn: null, error: '', httpStatus: 404 })
   haven.begin.mockResolvedValue({ ok: true, status: 'started', run: {}, error: '', httpStatus: 200 })
   haven.patch.mockResolvedValue({ ok: true, schedule: {}, error: '', httpStatus: 200 })
+  outcomes.record.mockResolvedValue(undefined)
 })
 
 describe('Dashboard background wake runner', () => {
@@ -157,6 +160,7 @@ describe('Dashboard background wake runner', () => {
       assistantText: "You've hit your session limit · resets 9:50pm (UTC)",
       interrupted: true,
       interruptedReason: 'pro_limit',
+      nativeTurnUuid: 'native-limit-uuid',
     })
     const result = await runBackgroundWake({
       sessionId: 'window-1', wakeId: 'wake-limit', at: '2026-09-19T20:32:59Z',
@@ -167,6 +171,10 @@ describe('Dashboard background wake runner', () => {
       status: 'failed', failureKind: 'pro_limit', retryAfterSeconds: 3600,
     })
     expect(haven.record).not.toHaveBeenCalled()
+    expect(outcomes.record).toHaveBeenCalledWith(expect.objectContaining({
+      turnUuid: 'native-limit-uuid', requestId: 'wake-limit',
+      outcome: 'explicit_failure', reason: 'subscription_limit',
+    }))
   })
 
   it('persists a no-op wake without creating visible assistant text', async () => {

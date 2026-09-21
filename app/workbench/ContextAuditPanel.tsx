@@ -96,6 +96,8 @@ type AuditData = {
     recoveredAssistantMismatchCount: number
     isolatedWakeRaceCount: number
     excludedAgentWakeLimitCount: number
+    isolatedExplicitFailureCount: number
+    indeterminateOutcomeCount: number
   } | null
   system_prompt: {
     current: {
@@ -302,7 +304,7 @@ export default function ContextAuditPanel() {
                 {data.rolling_alignment ? (
                   <p className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.aligned ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
                     {data.rolling_alignment.aligned
-                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；隔离失败/中断的半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条；隔离 wake 并发简单错误轮次 ${number(data.rolling_alignment.isolatedWakeRaceCount)} 条。未保存设置。`
+                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；按终态凭据隔离明确失败轮次 ${number(data.rolling_alignment.isolatedExplicitFailureCount)} 条；兼容隔离失败/中断半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条；隔离 wake 并发简单错误轮次 ${number(data.rolling_alignment.isolatedWakeRaceCount)} 条。未保存设置。`
                       : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
                   </p>
                 ) : null}
@@ -319,6 +321,12 @@ export default function ContextAuditPanel() {
                     ) : null}
                     {data.rolling_alignment.isolatedWakeRaceCount ? (
                       <div className="mt-1">另有 {data.rolling_alignment.isolatedWakeRaceCount} 条紧接 wake、未写入 Haven 且仅含一问一答短纯文字的简单错误轮次：只在新重建副本中省略，旧 transcript 不修改。</div>
+                    ) : null}
+                    {data.rolling_alignment.isolatedExplicitFailureCount ? (
+                      <div className="mt-1">另有 {data.rolling_alignment.isolatedExplicitFailureCount} 条请求已有明确失败终态、且没有 Haven 成功凭据：只在新重建副本中省略；旧 transcript 不修改。新请求按持久终态判断，不依赖具体错误文案。</div>
+                    ) : null}
+                    {data.rolling_alignment.indeterminateOutcomeCount ? (
+                      <div className="mt-1">仍有 {data.rolling_alignment.indeterminateOutcomeCount} 条请求终态无法确认：为防止丢失真实回复，继续阻止重建。</div>
                     ) : null}
                     {data.rolling_alignment.excludedAgentWakeLimitCount ? (
                       <div className="mt-1">另有 {data.rolling_alignment.excludedAgentWakeLimitCount} 条主动唤醒额度失败记录：额度提示是 CLI/SDK 状态而非 Claude 回答，记录保留在 Haven，但不进入新 transcript，也不阻止重建。</div>

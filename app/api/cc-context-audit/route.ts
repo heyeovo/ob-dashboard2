@@ -156,6 +156,8 @@ export async function GET(request: NextRequest) {
             recoveredAssistantMismatchCount: 0,
             isolatedWakeRaceCount: 0,
             excludedAgentWakeLimitCount: 0,
+            isolatedExplicitFailureCount: 0,
+            indeterminateOutcomeCount: 0,
           })
       : null
     const personaResult = await getPersona(session.persona_id)

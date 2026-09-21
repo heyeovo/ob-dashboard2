@@ -34,6 +34,7 @@ import {
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
 import type { ConversationContextDay, HavenConversationSession, HavenTurn } from '@/app/lib/havenTurns'
+import { recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 
 const session = {
   context_revision: 7,
@@ -1335,6 +1336,118 @@ describe('daily rolling context', () => {
       )
       expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('session limit')
       expect(limitWake.assistant_text).toContain('session limit')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('isolates legacy OAuth failures as transport status without matching repeated Haven text', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-legacy-auth-'))
+    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-21' } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      const failure = 'Failed to authenticate: OAuth session expired and could not be refreshed'
+      const entries = Array.from({ length: 7 }, (_, index) => {
+        const wake = index % 2 === 1
+        return [
+          {
+            type: 'user', uuid: `auth-user-${index}`, sessionId: source.resumeFrom,
+            timestamp: `2026-09-21T00:${49 + index}:00.000Z`,
+            message: { role: 'user', content: wake
+              ? '<agent_wake cause="cache_keepalive"/>'
+              : '。结果两个你都叫我起床失败' },
+          },
+          {
+            type: 'assistant', uuid: `auth-status-${index}`, sessionId: source.resumeFrom,
+            message: { role: 'assistant', content: [{ type: 'text', text: failure }] },
+          },
+        ]
+      }).flat() as SessionStoreEntry[]
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, entries)
+
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [retained], { storeRoot })
+      expect(inspection).toMatchObject({
+        aligned: true,
+        matchedTurnCount: 1,
+        isolatedExplicitFailureCount: 7,
+        indeterminateOutcomeCount: 0,
+        issues: [],
+      })
+      const revised = await createRollingHistoryRevisionSeed(
+        source.resumeFrom, [retained], [retained], {
+          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+          requiredFullRawDays: [retained.chat_day],
+        },
+      )
+      const rebuilt = JSON.stringify(revised?.entries)
+      expect(rebuilt).not.toContain('Failed to authenticate')
+      expect(rebuilt).not.toContain('结果两个你都叫我起床失败')
+      expect(rebuilt).toContain(retained.assistant_text)
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('uses a durable terminal outcome for new failure wording and blocks indeterminate output', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-outcome-ledger-'))
+    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-21' } as HavenTurn
+    try {
+      const source = createRollingHistorySeed([retained], {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        { type: 'user', uuid: 'future-failure', sessionId: source.resumeFrom, message: { role: 'user', content: '未送达的问题' } },
+        { type: 'assistant', uuid: 'future-status', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: 'A brand new SDK terminal status' }] } },
+      ])
+      await recordTurnOutcome({
+        turnUuid: 'future-failure', requestId: 'request-failed',
+        outcome: 'explicit_failure', reason: 'sdk_terminal_failure', storeRoot,
+      })
+      expect(await inspectRollingHistoryAlignment(source.resumeFrom, [retained], { storeRoot })).toMatchObject({
+        aligned: true, isolatedExplicitFailureCount: 1, indeterminateOutcomeCount: 0,
+      })
+
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        { type: 'user', uuid: 'unknown-outcome', sessionId: source.resumeFrom, message: { role: 'user', content: '可能已经送达的问题' } },
+        { type: 'assistant', uuid: 'unknown-answer', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: '可能是真实回答' }] } },
+      ])
+      await recordTurnOutcome({
+        turnUuid: 'unknown-outcome', requestId: 'request-unknown',
+        outcome: 'indeterminate', reason: 'haven_commit_unknown', storeRoot,
+      })
+      const blocked = await inspectRollingHistoryAlignment(source.resumeFrom, [retained], { storeRoot })
+      expect(blocked).toMatchObject({ aligned: false, indeterminateOutcomeCount: 1 })
+      expect(blocked.error).toContain('状态不明 1 条')
+    } finally {
+      await rm(storeRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('never treats an authentication string beside thinking or tools as a disposable status turn', async () => {
+    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-auth-with-thinking-'))
+    try {
+      const source = createManualRollingBodyRecoverySeed(turns, {
+        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
+      })!
+      await materializeRollingHistorySeed(source)
+      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
+        { type: 'user', uuid: 'auth-with-thinking', sessionId: source.resumeFrom, message: { role: 'user', content: '有真实输出的请求' } },
+        {
+          type: 'assistant', uuid: 'auth-thinking', sessionId: source.resumeFrom,
+          message: { role: 'assistant', content: [
+            { type: 'thinking', thinking: 'private reasoning' },
+            { type: 'text', text: 'Failed to authenticate: OAuth session expired and could not be refreshed' },
+          ] },
+        },
+      ])
+      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
+      expect(inspection.aligned).toBe(false)
+      expect(inspection.isolatedExplicitFailureCount).toBe(0)
+      expect(inspection.issues).toMatchObject([{ userUuid: 'auth-with-thinking' }])
     } finally {
       await rm(storeRoot, { recursive: true, force: true })
     }

@@ -10,6 +10,11 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
 import { isClaudeSessionLimitNotice } from '@/app/lib/cc/subscriptionLimit'
+import {
+  isLegacyClaudeTerminalStatus,
+  loadTurnOutcomes,
+  type TurnOutcomeRecord,
+} from '@/app/lib/cc/turnOutcome'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 
 export type RollingHistorySeed = {
@@ -713,6 +718,31 @@ function isInterruptedStatusOnlyEnvelope(envelope: TranscriptEnvelope): boolean 
   }) && assistants.every(message => normalized(transcriptMessageContent(message)) === 'No response requested.')
 }
 
+/**
+ * One-time compatibility for transcripts created before outcome receipts existed.
+ * Only a pure text transport-status envelope is safe to omit. Any tool, thinking,
+ * image, or unrecognized assistant body remains indeterminate and blocks rebuilding.
+ */
+function isLegacyExplicitFailureEnvelope(envelope: TranscriptEnvelope): boolean {
+  const assistantTexts: string[] = []
+  for (const entry of envelope.entries) {
+    const message = messageRecord(entry)
+    if (!message) continue
+    if (typeof message.content === 'string') {
+      if (message.role === 'assistant') assistantTexts.push(message.content)
+      continue
+    }
+    if (!Array.isArray(message.content)) return false
+    for (const block of message.content) {
+      if (!block || typeof block !== 'object' || block.type !== 'text' || typeof block.text !== 'string') {
+        return false
+      }
+      if (message.role === 'assistant') assistantTexts.push(block.text)
+    }
+  }
+  return assistantTexts.length > 0 && assistantTexts.every(isLegacyClaudeTerminalStatus)
+}
+
 function havenNativeTurnUuid(turn: HavenTurn): string {
   if (!turn.raw_json) return ''
   try {
@@ -750,6 +780,9 @@ function alignEnvelopesToTurns(
   onNoCandidate?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
   onAssistantMismatchRecovered?: (envelope: TranscriptEnvelope, envelopeIndex: number, turn: HavenTurn) => void,
   onWakeRaceIsolated?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
+  outcomes: Map<string, TurnOutcomeRecord> = new Map(),
+  onExplicitFailureIsolated?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
+  onIndeterminateOutcome?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
 ): Map<number, TranscriptEnvelope> {
   const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
   const diagnostics = {
@@ -759,6 +792,8 @@ function alignEnvelopesToTurns(
     noCandidate: 0,
     ambiguousCandidates: 0,
     isolatedWakeRace: 0,
+    isolatedExplicitFailure: 0,
+    indeterminateOutcome: 0,
   }
   const active: Array<{ envelope: TranscriptEnvelope; candidates: Set<number> }> = []
   for (const [envelopeIndex, envelope] of envelopes.entries()) {
@@ -786,6 +821,21 @@ function alignEnvelopesToTurns(
     }
     if (nativeUuidMatches.length > 0) {
       active.push({ envelope, candidates: new Set(nativeUuidMatches.map(({ index }) => index)) })
+      continue
+    }
+    const recordedOutcome = primaryUserUuid ? outcomes.get(primaryUserUuid) : undefined
+    if (recordedOutcome?.outcome === 'explicit_failure'
+      || (allowIncompleteUserOnly && isLegacyExplicitFailureEnvelope(envelope))) {
+      diagnostics.isolatedExplicitFailure += 1
+      onExplicitFailureIsolated?.(envelope, envelopeIndex)
+      continue
+    }
+    if (recordedOutcome?.outcome === 'indeterminate') {
+      diagnostics.indeterminateOutcome += 1
+      diagnostics.noCandidate += 1
+      onIndeterminateOutcome?.(envelope, envelopeIndex)
+      onNoCandidate?.(envelope, envelopeIndex)
+      active.push({ envelope, candidates: new Set() })
       continue
     }
     const textMatches = orderedTurns
@@ -876,6 +926,7 @@ function alignEnvelopesToTurns(
     throw new Error(
       '旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本'
       + `（${reason}；失败/中断的半截轮次已隔离 ${diagnostics.skippedIncomplete} 条；`
+      + `明确失败轮次已隔离 ${diagnostics.isolatedExplicitFailure} 条；状态不明 ${diagnostics.indeterminateOutcome} 条；`
       + `wake 并发简单错误轮次已隔离 ${diagnostics.isolatedWakeRace} 条；`
       + `Haven 编号缺失 ${diagnostics.missingHavenId} 条、编号冲突 ${diagnostics.conflictingIds} 条、`
       + `无正文候选 ${diagnostics.noCandidate} 条、重复候选 ${diagnostics.ambiguousCandidates} 条）`,
@@ -949,6 +1000,8 @@ export async function inspectRollingHistoryAlignment(
   recoveredAssistantMismatchCount: number
   isolatedWakeRaceCount: number
   excludedAgentWakeLimitCount: number
+  isolatedExplicitFailureCount: number
+  indeterminateOutcomeCount: number
 }> {
   const source = openRollingHistoryResume(resumeFrom, options)
   if (!source) {
@@ -960,6 +1013,8 @@ export async function inspectRollingHistoryAlignment(
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
       isolatedWakeRaceCount: 0,
       excludedAgentWakeLimitCount: 0,
+      isolatedExplicitFailureCount: 0,
+      indeterminateOutcomeCount: 0,
     }
   }
   const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
@@ -972,12 +1027,16 @@ export async function inspectRollingHistoryAlignment(
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
       isolatedWakeRaceCount: 0,
       excludedAgentWakeLimitCount: 0,
+      isolatedExplicitFailureCount: 0,
+      indeterminateOutcomeCount: 0,
     }
   }
   const envelopes = transcriptEnvelopes(entries).envelopes
   const issues: RollingAlignmentIssue[] = []
   let recoveredAssistantMismatchCount = 0
   let isolatedWakeRaceCount = 0
+  let isolatedExplicitFailureCount = 0
+  let indeterminateOutcomeCount = 0
   const recordNoCandidate = (envelope: TranscriptEnvelope, envelopeIndex: number) => {
     const userMatches = turns.filter(turn => envelopeUserMatchesTurn(envelope, turn))
     const primaryUser = envelope.entries.find(entry => isPrimaryUserEntry(entry))
@@ -993,6 +1052,7 @@ export async function inspectRollingHistoryAlignment(
     })
   }
   try {
+    const outcomes = await loadTurnOutcomes({ storeRoot: options.storeRoot })
     const matched = alignEnvelopesToTurns(
       envelopes,
       turns,
@@ -1000,6 +1060,9 @@ export async function inspectRollingHistoryAlignment(
       recordNoCandidate,
       () => { recoveredAssistantMismatchCount += 1 },
       () => { isolatedWakeRaceCount += 1 },
+      outcomes,
+      () => { isolatedExplicitFailureCount += 1 },
+      () => { indeterminateOutcomeCount += 1 },
     )
     const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
     const unmatchedRawTurns = (options.rawTurns || []).filter(turn => !matched.has(turn.id))
@@ -1019,7 +1082,8 @@ export async function inspectRollingHistoryAlignment(
     return {
       available: true, aligned: true, envelopeCount: envelopes.length,
       matchedTurnCount: matched.size,
-      isolatedIncompleteCount: envelopes.length - matched.size - isolatedWakeRaceCount,
+      isolatedIncompleteCount: envelopes.length - matched.size
+        - isolatedWakeRaceCount - isolatedExplicitFailureCount,
       error: '',
       issues,
       missingRawTurns,
@@ -1027,6 +1091,8 @@ export async function inspectRollingHistoryAlignment(
       recoveredAssistantMismatchCount,
       isolatedWakeRaceCount,
       excludedAgentWakeLimitCount,
+      isolatedExplicitFailureCount,
+      indeterminateOutcomeCount,
     }
   } catch (error) {
     return {
@@ -1037,6 +1103,8 @@ export async function inspectRollingHistoryAlignment(
       missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
       isolatedWakeRaceCount: 0,
       excludedAgentWakeLimitCount: 0,
+      isolatedExplicitFailureCount,
+      indeterminateOutcomeCount,
     }
   }
 }
@@ -1371,7 +1439,11 @@ async function createRevisionSeedFromEntries(
   sourceKind: 'revision_seed' | 'fixed_transcript_migration',
 ): Promise<RollingHistorySeed | null> {
   const { prefix, envelopes } = transcriptEnvelopes(sourceEntries)
-  const aligned = alignEnvelopesToTurns(envelopes, allTurns, sourceKind === 'revision_seed')
+  const outcomes = await loadTurnOutcomes({ storeRoot: options.storeRoot })
+  const aligned = alignEnvelopesToTurns(
+    envelopes, allTurns, sourceKind === 'revision_seed',
+    undefined, undefined, undefined, outcomes,
+  )
   const nextSessionId = randomUUID()
   const selectedEntries: SessionStoreEntry[] = [...prefix]
   const requiredFullRawDays = new Set(options.requiredFullRawDays || [])

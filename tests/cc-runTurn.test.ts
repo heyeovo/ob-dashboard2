@@ -397,7 +397,10 @@ describe('runTurn：普通回复', () => {
       config: makeConfig({ sessionId, cred: 'subscription', laneId: 'subscription' }),
     }).promise
 
-    expect(result).toMatchObject({ ok: false, phase: 'failed', failureKind: 'authentication' })
+    expect(result).toMatchObject({
+      ok: false, phase: 'failed', failureKind: 'authentication',
+      persistenceOutcome: 'explicit_failure', nativeTurnUuid: expect.any(String),
+    })
     expect(sdk.closeCalls).toBe(closeCallsBefore + 1)
     expect(turns.recordTurn).not.toHaveBeenCalled()
   })
@@ -1178,8 +1181,10 @@ describe('runTurn：中止与失败', () => {
     ])
     const result = await handle.promise
 
-    expect(result.ok).toBe(false)
-    expect(result.phase).toBe('failed')
+    expect(result).toMatchObject({
+      ok: false, phase: 'failed', failureKind: 'upstream',
+      persistenceOutcome: 'explicit_failure', nativeTurnUuid: expect.any(String),
+    })
     expect(handle.events.find(event => event.event === 'error')?.data).toMatchObject({
       code: 'upstream_failed',
       message: 'Provider temporarily unavailable',
@@ -1287,7 +1292,10 @@ describe('runTurn：中止与失败', () => {
     const handle = driveTurn([initMsg(), textDelta('已生成正文'), resultMsg()])
     const result = await handle.promise
 
-    expect(result.phase).toBe('failed')
+    expect(result).toMatchObject({
+      phase: 'failed', failureKind: 'persistence', persistenceOutcome: 'explicit_failure',
+      nativeTurnUuid: expect.any(String),
+    })
     expect(eventNames(handle)).not.toContain('done')
     const error = handle.events.find(event => event.event === 'error')?.data
     expect(error).toMatchObject({

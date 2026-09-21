@@ -6,6 +6,7 @@ import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
 import { beginAgentWakeRun, getTurnByRequestId, patchAgentWakeSchedule, recordTurnStrict } from '@/app/lib/havenTurns'
 import { parseAgentWakeNoop } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
+import { recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 import {
   tryRunBackgroundSessionTurn,
   type BackgroundTurnDeferredReason,
@@ -39,6 +40,22 @@ function wakePrompt(input: BackgroundWakeInput): string {
     input.reason ? `reason=${JSON.stringify(input.reason)}` : '',
   ].filter(Boolean)
   return `<agent_wake ${attributes.join(' ')}/>`
+}
+
+async function recordBackgroundOutcome(
+  turn: RunTurnResult,
+  requestId: string,
+  outcome: 'explicit_failure' | 'indeterminate',
+  reason: string,
+) {
+  if (!turn.nativeTurnUuid) return
+  try {
+    await recordTurnOutcome({ turnUuid: turn.nativeTurnUuid, requestId, outcome, reason })
+  } catch (error) {
+    console.error('[cc-agent-wake] outcome write failed', {
+      requestId, outcome, reason, error: (error as Error).message || String(error),
+    })
+  }
 }
 
 /** Programmatic runner only. Phase 4 will provide the Haven scheduler callback. */
@@ -144,6 +161,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         if (turnResult.interruptedReason === 'pro_limit') {
           // CLI quota notices are transport status, not model-authored wake messages.
           // Let the scheduler retry later without creating a Haven conversation turn.
+          await recordBackgroundOutcome(turnResult, wakeId, 'explicit_failure', 'subscription_limit')
           return {
             status: 'failed',
             error: 'Claude Pro 额度已用尽',
@@ -154,7 +172,10 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         const noop = parseAgentWakeNoop(turnResult.assistantText || '')
         const assistantText = noop ? '' : turnResult.assistantText || ''
         const session = current.sessionSnapshot.session
-        if (!session) return { status: 'failed', error: 'Haven 返回空窗口' }
+        if (!session) {
+          await recordBackgroundOutcome(turnResult, wakeId, 'indeterminate', 'haven_session_missing')
+          return { status: 'failed', error: 'Haven 返回空窗口' }
+        }
         // This persistence must remain inside the session coordinator. Releasing the
         // lock before the CAS lets a foreground message race this wake and disappear.
         const persisted = await recordTurnStrict({
@@ -206,6 +227,12 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
           signal: input.signal,
         })
         if (!persisted.ok || !persisted.stored) {
+          await recordBackgroundOutcome(
+            turnResult,
+            wakeId,
+            persisted.httpStatus == null ? 'indeterminate' : 'explicit_failure',
+            persisted.httpStatus == null ? 'haven_commit_unknown' : 'haven_commit_rejected',
+          )
           return { status: 'failed', error: persisted.error || '后台 wake 未保存到 Haven' }
         }
         return {

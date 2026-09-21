@@ -89,6 +89,7 @@ import {
 } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments, type VersionedDisplaySegments } from '@/app/lib/cc/displaySegments'
 import { isClaudeSessionLimitNotice } from '@/app/lib/cc/subscriptionLimit'
+import { isClaudeAuthenticationFailure, recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 
 function isSubscriptionLimitError(
   msg: SDKMessage & { errors?: string[] },
@@ -186,7 +187,7 @@ export type CacheDiagnostic = {
 export type RunTurnResult = {
   ok: boolean
   error?: string
-  failureKind?: 'authentication'
+  failureKind?: 'authentication' | 'upstream' | 'cancelled' | 'persistence'
   /** 为什么收尾的（succeeded / failed / cancelled），测试和日志断言用 */
   phase: TurnPhase
   assistantText?: string
@@ -203,23 +204,13 @@ export type RunTurnResult = {
   nativeTurnUuid?: string
   interrupted?: boolean
   interruptedReason?: 'user_stop' | 'pro_limit'
+  persistenceOutcome?: 'committed' | 'awaiting_commit' | 'explicit_failure' | 'indeterminate'
 }
 
 /** 同一 Node 进程内固定；变化表示 Dashboard 进程/部署实例已经切换。 */
 const DASHBOARD_INSTANCE_ID = randomUUID()
 
-const CLAUDE_AUTH_FAILURE = /authentication_failed|failed to authenticate|oauth access token has expired|re-authenticate to continue/i
-
-export function isClaudeAuthenticationFailure(input: {
-  error?: unknown
-  text?: unknown
-  apiErrorStatus?: unknown
-  errors?: unknown
-}): boolean {
-  if (Number(input.apiErrorStatus) === 401) return true
-  const errors = Array.isArray(input.errors) ? input.errors.join('\n') : String(input.errors || '')
-  return CLAUDE_AUTH_FAILURE.test([input.error, input.text, errors].map(value => String(value || '')).join('\n'))
-}
+export { isClaudeAuthenticationFailure } from '@/app/lib/cc/turnOutcome'
 
 /* ── 私有工具函数（原 route.ts 原样搬） ── */
 
@@ -497,6 +488,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   const attachments = inputAttachments || []
   const turnKind = input.turnKind || 'user'
   const persistTurn = input.persistTurn !== false
+  const isRolling = config.rollingHistory !== undefined
   const resumeKey = ccResumeKey(sessionId, config.laneId, config.contextRevision)
   setTurnWebSettings(sessionId, config.webSettings)
   const state = new TurnState(sessionId)
@@ -517,6 +509,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
   let wakeStateEnded = false
   let modelRequestStartedAt = 0
   let confirmedCacheRefreshAt = 0
+  let nativeTurnUuid = ''
   let cacheDiagnostic: CacheDiagnostic | undefined
   let rollingSeedDiagnostic: (RollingSeedDiagnostic & {
     source: string
@@ -532,6 +525,23 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           : '',
       }
     : undefined
+  const recordOutcomeSafe = async (
+    outcome: 'explicit_failure' | 'indeterminate',
+    reason: string,
+  ) => {
+    // Fixed windows can later migrate their native transcript into rolling mode, so
+    // every CC request needs the same durable terminal evidence from day one.
+    if (!nativeTurnUuid) return
+    try {
+      await recordTurnOutcome({ turnUuid: nativeTurnUuid, requestId, outcome, reason })
+    } catch (error) {
+      // Losing the outcome marker must never turn a failed model call into a successful
+      // request. A later rebuild will treat the unmarked envelope as unknown and block.
+      console.error(`[cc-turn-outcome ${sessionId} request=${requestId}] write failed`, {
+        outcome, reason, error: (error as Error).message || String(error),
+      })
+    }
+  }
 
   try {
     const wakeState = turnKind === 'user'
@@ -563,7 +573,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     )
 
     const currentLive = peekSession(sessionId)
-    const isRolling = config.rollingHistory !== undefined
     const rollingHistory = config.rollingHistory || []
     const shouldPrepareHistorySeed = !currentLive ||
       currentLive.resumeKey !== resumeKey ||
@@ -769,6 +778,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 自己给这句话编个 id：回退（rewindFiles）要的就是「回到哪句话之前」，
     // 而它认的是消息 uuid。不自己编就没有可回退的锚点。
     const turnUuid = randomUUID()
+    nativeTurnUuid = turnUuid
 
     // 先告诉前端这一轮开始了，再去等召回 —— 召回开语义要 4-6 秒，
     // 放在 start 前面的话这几秒界面上什么都没有。
@@ -1070,8 +1080,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             request_id: requestId,
             generated_not_saved: false,
           })
+          await recordOutcomeSafe('explicit_failure', 'authentication')
           state.markFailed()
-          return { ok: false, error: message, failureKind: 'authentication', phase: state.current }
+          return {
+            ok: false, error: message, failureKind: 'authentication', phase: state.current,
+            nativeTurnUuid: turnUuid, persistenceOutcome: 'explicit_failure',
+          }
         }
         for (const block of msg.message.content) {
           if (block.type === 'tool_use') {
@@ -1177,8 +1191,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             request_id: requestId,
             generated_not_saved: false,
           })
+          await recordOutcomeSafe('explicit_failure', 'authentication')
           state.markFailed()
-          return { ok: false, error: message, failureKind: 'authentication', phase: state.current }
+          return {
+            ok: false, error: message, failureKind: 'authentication', phase: state.current,
+            nativeTurnUuid: turnUuid, persistenceOutcome: 'explicit_failure',
+          }
         }
         // 用户点了停止：result 可能是 error subtype 或带 aborted 标记，
         // 都不当错误处理 —— 已生成的字照常留，写库时打 interrupted 标记。
@@ -1232,8 +1250,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             errors,
             generated_not_saved: generatedNotSaved,
           })
+          await recordOutcomeSafe('explicit_failure', 'sdk_terminal_failure')
           state.markFailed()
-          return { ok: false, error: message, phase: state.current }
+          return {
+            ok: false, error: message, failureKind: 'upstream', phase: state.current,
+            nativeTurnUuid: turnUuid, persistenceOutcome: 'explicit_failure',
+          }
         }
         // result 里的 result 字段是这一轮的完整文本，用它兜底。
         // 只有 success 才有这个字段（error subtype 只有 errors 数组）。
@@ -1315,6 +1337,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         nativeTurnUuid: turnUuid,
         interrupted: interrupted || undefined,
         interruptedReason: interruptedReason || undefined,
+        persistenceOutcome: 'awaiting_commit',
       }
     }
 
@@ -1472,9 +1495,16 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         // “核对保存状态”若确认未保存，会从最近一轮已保存的 resume 点重新生成，
         // 不把同一句在旧私有上下文里重复追加。
         dropSession(sessionId, 'persistence_failed')
+        await recordOutcomeSafe(unknown ? 'indeterminate' : 'explicit_failure', unknown
+          ? 'haven_commit_unknown'
+          : 'haven_commit_rejected')
         stamp?.('写库失败')
         state.markFailed()
-        return { ok: false, error: rec?.error || '对话保存失败', phase: state.current }
+        return {
+          ok: false, error: rec?.error || '对话保存失败', failureKind: 'persistence', phase: state.current,
+          nativeTurnUuid: turnUuid,
+          persistenceOutcome: unknown ? 'indeterminate' : 'explicit_failure',
+        }
       }
       acknowledgePendingCompactions(sessionId, preCompactions.map(item => item.id))
       // 中断的轮不喂 persona 学习 —— 半截回复拿去更新协作者记忆，可能学到没说完的想法
@@ -1503,7 +1533,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         generated_not_saved: false,
       })
       state.markFailed()
-      return { ok: false, error: '模型没有返回正文', phase: state.current }
+      await recordOutcomeSafe('explicit_failure', 'empty_response')
+      return {
+        ok: false, error: '模型没有返回正文', failureKind: 'upstream', phase: state.current,
+        nativeTurnUuid: turnUuid, persistenceOutcome: 'explicit_failure',
+      }
     }
     stamp?.('写库完')
 
@@ -1551,6 +1585,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       nativeTurnUuid: turnUuid,
       interrupted: interrupted || undefined,
       interruptedReason: interruptedReason || undefined,
+      persistenceOutcome: 'committed',
     }
   } catch (e) {
     const err = e as Error
@@ -1560,14 +1595,22 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 进程、靠 resume 接回上下文，跟原 route.ts 的 catch 行为一致。
     if (err.name === 'AbortError') {
       dropSession(sessionId, 'request_aborted')
+      await recordOutcomeSafe('explicit_failure', 'request_aborted')
       state.markCancelled()
-      return { ok: false, error: err.message, phase: state.current }
+      return {
+        ok: false, error: err.message, failureKind: 'cancelled', phase: state.current,
+        nativeTurnUuid: nativeTurnUuid || undefined, persistenceOutcome: 'explicit_failure',
+      }
     }
+    await recordOutcomeSafe('indeterminate', 'unexpected_exception')
     // 子进程崩了 / 流坏了：这个会话的 iterator 已经不可用，收掉重来
     dropSession(sessionId, 'turn_exception')
     send('error', { message: err.message || String(err) })
     state.markFailed()
-    return { ok: false, error: err.message || String(err), phase: state.current }
+    return {
+      ok: false, error: err.message || String(err), phase: state.current,
+      nativeTurnUuid: nativeTurnUuid || undefined, persistenceOutcome: 'indeterminate',
+    }
   } finally {
     if (!wakeStateEnded) endAgentWakeTurn(sessionId)
     // 正常路径上面已经摘过了（为了让人能立刻发下一句）。
