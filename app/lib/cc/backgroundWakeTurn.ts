@@ -12,7 +12,7 @@ import {
   type BackgroundTurnDeferredReason,
 } from '@/app/lib/cc/sessionTurnCoordinator'
 
-export type BackgroundWakeCause = 'cache_keepalive' | 'agent_schedule' | 'conversation_silence'
+export type BackgroundWakeCause = 'cache_keepalive' | 'agent_schedule' | 'conversation_silence' | 'agent_followup'
 
 export type BackgroundWakeInput = {
   sessionId: string

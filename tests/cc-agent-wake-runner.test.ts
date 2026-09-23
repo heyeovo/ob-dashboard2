@@ -56,6 +56,14 @@ describe('Haven agent wake callback route', () => {
     }))
   })
 
+  it('accepts a persisted followup wake', async () => {
+    const response = await POST(request({ ...validBody, cause: 'agent_followup' }))
+    expect(response.status).toBe(200)
+    expect(wake.run).toHaveBeenCalledWith(expect.objectContaining({
+      cause: 'agent_followup',
+    }))
+  })
+
   it('returns Retry-After when authentication failure pauses background wakes', async () => {
     wake.run.mockResolvedValueOnce({
       status: 'failed', error: 'Claude 登录态失效', failureKind: 'authentication', retryAfterSeconds: 3600,

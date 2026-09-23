@@ -7,6 +7,14 @@ import { formatBeijingDateTime } from '@/app/utils/format'
 // 注意：列表接口 /api/buckets 和单桶接口 /api/bucket/{id} 返回结构不同
 // - 列表接口：source, wish, todo, todo_done, type, valence, arousal 在顶层
 // - 单桶接口：这些字段在 metadata 里（metadata_view 也在 metadata 里）
+interface BucketComment {
+  id?: string
+  created?: string
+  author?: string
+  kind?: string
+  content?: string
+}
+
 interface BucketDetail {
   id: string
   content: string
@@ -35,13 +43,7 @@ interface BucketDetail {
     event_time?: string
     source?: string       // 单桶接口在此
     wish?: boolean
-    comments?: Array<{
-      id?: string
-      created?: string
-      author?: string
-      kind?: string
-      content?: string
-    }>
+    comments?: BucketComment[]
   }
 }
 
@@ -139,6 +141,55 @@ export default function BucketDetailDrawer({
   } | null>(null)
   const [momentsLoading, setMomentsLoading] = useState(false)
   const [momentsError, setMomentsError] = useState('')
+  const [commentState, setCommentState] = useState<{ bucketId: string; comments: BucketComment[] } | null>(null)
+  const [editingCommentId, setEditingCommentId] = useState('')
+  const [commentDraft, setCommentDraft] = useState('')
+  const [commentOperatingId, setCommentOperatingId] = useState('')
+  const [commentError, setCommentError] = useState('')
+
+  const comments = commentState && commentState.bucketId === selected?.id
+    ? commentState.comments
+    : selected?.metadata.comments || []
+
+  const mutateComment = async (commentId: string, method: 'PATCH' | 'DELETE', content?: string) => {
+    if (!selected) return
+    setCommentOperatingId(commentId)
+    setCommentError('')
+    try {
+      const response = await fetch(
+        `/api/bucket/${encodeURIComponent(selected.id)}/comments/${encodeURIComponent(commentId)}`,
+        {
+          method,
+          headers: method === 'PATCH' ? { 'Content-Type': 'application/json' } : undefined,
+          body: method === 'PATCH' ? JSON.stringify({ content }) : undefined,
+        },
+      )
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || '年轮操作失败')
+      if (method === 'PATCH') {
+        setCommentState(current => {
+          const source = current?.bucketId === selected.id ? current.comments : selected.metadata.comments || []
+          return {
+            bucketId: selected.id,
+            comments: source.map(comment => (
+              comment.id === commentId ? { ...comment, content: data.comment?.content ?? content } : comment
+            )),
+          }
+        })
+        setEditingCommentId('')
+        setCommentDraft('')
+      } else {
+        setCommentState(current => {
+          const source = current?.bucketId === selected.id ? current.comments : selected.metadata.comments || []
+          return { bucketId: selected.id, comments: source.filter(comment => comment.id !== commentId) }
+        })
+      }
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setCommentOperatingId('')
+    }
+  }
 
   const fetchSimilar = async (id: string) => {
     setSimilarLoading(true)
@@ -575,22 +626,63 @@ export default function BucketDetailDrawer({
 
               <div>
                 <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">年轮</div>
-                {(selected.metadata.comments || []).length === 0 ? (
+                {comments.length === 0 ? (
                   <div className="text-xs text-[var(--color-text-disabled)]">还没有年轮</div>
                 ) : (
                   <div className="space-y-2">
-                    {(selected.metadata.comments || []).map((comment, index) => (
+                    {comments.map((comment, index) => (
                       <div key={comment.id || index} className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
-                        <div className="flex flex-wrap gap-x-2 text-[10px] text-[var(--color-text-disabled)] mb-1">
-                          <span>{comment.created ? formatBeijingDateTime(comment.created) : '时间未知'}</span>
-                          <span>{comment.author || '作者未知'}</span>
-                          <span>{comment.kind || 'comment'}</span>
+                        <div className="flex items-start justify-between gap-3 mb-1">
+                          <div className="flex flex-wrap gap-x-2 text-[10px] text-[var(--color-text-disabled)]">
+                            <span>{comment.created ? formatBeijingDateTime(comment.created) : '时间未知'}</span>
+                            <span>{comment.author || '作者未知'}</span>
+                            <span>{comment.kind || 'comment'}</span>
+                          </div>
+                          {comment.id ? (
+                            <div className="flex shrink-0 gap-2 text-[10px]">
+                              <button
+                                type="button"
+                                disabled={Boolean(commentOperatingId)}
+                                className="text-[var(--color-primary)] disabled:opacity-40"
+                                onClick={() => { setEditingCommentId(comment.id || ''); setCommentDraft(comment.content || ''); setCommentError('') }}
+                              >编辑</button>
+                              <button
+                                type="button"
+                                disabled={Boolean(commentOperatingId)}
+                                className="text-[var(--color-danger)] disabled:opacity-40"
+                                onClick={() => {
+                                  if (comment.id && window.confirm('确认删除这条年轮？删除后无法恢复。')) void mutateComment(comment.id, 'DELETE')
+                                }}
+                              >{commentOperatingId === comment.id ? '处理中…' : '删除'}</button>
+                            </div>
+                          ) : null}
                         </div>
-                        <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap">{comment.content}</div>
+                        {editingCommentId === comment.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={commentDraft}
+                              onChange={event => setCommentDraft(event.target.value)}
+                              className="min-h-20 w-full rounded-lg border border-[var(--color-border)] bg-white px-2 py-1.5 text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-primary)]"
+                              autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button type="button" className="text-[10px] text-[var(--color-text-tertiary)]" onClick={() => { setEditingCommentId(''); setCommentDraft('') }}>取消</button>
+                              <button
+                                type="button"
+                                disabled={!commentDraft.trim() || Boolean(commentOperatingId)}
+                                className="rounded bg-[var(--color-primary)] px-2 py-1 text-[10px] text-white disabled:opacity-40"
+                                onClick={() => { if (comment.id) void mutateComment(comment.id, 'PATCH', commentDraft.trim()) }}
+                              >{commentOperatingId === comment.id ? '保存中…' : '保存'}</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap">{comment.content}</div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
+                {commentError ? <div className="mt-2 text-xs text-[var(--color-danger)]">{commentError}</div> : null}
               </div>
             </div>
 

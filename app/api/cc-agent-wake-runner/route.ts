@@ -4,7 +4,7 @@ import { runBackgroundWake, type BackgroundWakeCause } from '@/app/lib/cc/backgr
 export const runtime = 'nodejs'
 export const maxDuration = 360
 
-const CAUSES = new Set<BackgroundWakeCause>(['cache_keepalive', 'agent_schedule', 'conversation_silence'])
+const CAUSES = new Set<BackgroundWakeCause>(['cache_keepalive', 'agent_schedule', 'conversation_silence', 'agent_followup'])
 
 function secureMatch(actual: string, expected: string) {
   const a = Buffer.from(actual)
