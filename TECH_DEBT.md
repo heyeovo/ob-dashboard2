@@ -1,46 +1,43 @@
-# 技术债务 / 待删 / 冗余 清单
+# 技术债务 / 技术卡
 
-> 给 AI 看的账本。凡是有「没做完 / 不确定 / 留待处理 / 疑似废弃 / 刻意保留」的东西，都记在这里，**不靠记忆**。
-> 每次改动收尾时检查一遍：新增的遗留要补进来，已解决的标 ✅ 并附日期。
+> 给 AI 看的账本：代码层面的债务、刻意保留项和需要细节的技术卡。**不通读**——先看下面的索引，要处理哪张再 Grep 卡号（如 `CC-02`）定点读。
+> 想做的功能 / 活记 OB Todo（一句话）；需要细节时在这里开卡，卡里写对应 Todo ID。已关闭的卡搬到 `docs/tech-debt-archive.md`，本文件只留还开着的。规则见 `MAINTENANCE_CONTRACT.md` 铁律 4。
 >
-> 状态标记：
-> - 🟥 **确认废弃 / 可删** —— 已查实无引用，删之前看「删除前置」栏
-> - 🟨 **待确认** —— 疑似废弃，但还没查实或涉及决策
-> - 🟦 **刻意保留** —— 明确为回退 / 对比 / 兜底保留，别当孤儿误删
-> - ✅ **已解决**
->
-> **分工（2026-09-27 定）：**「想做的功能 / 活」统一放 OB Todo（`list_todos`），每条一句话；本文件只记代码层面的债务和需要细节的技术卡，OB Todo 的背景里引用这里的卡号。`docs/handoff/` 是历史档案，状态见 `docs/handoff/README.md`。
+> 状态：🟥 确认废弃可删 · 🟨 待确认 / 待决策 · 🟦 刻意保留（别当孤儿删）· ⬜ 未排期
+
+## 索引
+
+| 卡号 | 一句话 | 状态 | OB Todo |
+|---|---|---|---|
+| KEEP-01 | Dashboard `cc-test` / `cc-hook-test` 回归对比路由 | 🟦 | — |
+| KEEP-02 | Haven `CLAUDE_PROMPT.md`、`docs/Tool Guide.md` 外部接入指引 | 🟦 | — |
+| H-01 | Haven 内置单文件 `dashboard.html`（355KB）要不要继续维护 | 🟨 产品决策 | — |
+| H-02 | Haven 根目录 `INTERNALS.md` / `BEHAVIOR_SPEC.md` 旧文档归档 | 🟨 随 Haven 文档梳理处理 | — |
+| L-01 | 旧 session 诊断表补 profile 隔离 | ⬜ | — |
+| CC-02 | 缓存 usage 与中转站账单口径不一致 / 连续缓存写 | ⬜ | — |
+| CC-04 | Agent SDK MCP `tool_result` 后的续写边界 | ⬜ | — |
+| CC-05 | Polaris 导入旧 MCP 工具结果正文缺失 | ⬜ | — |
+| CC-06 | 浏览器断开后中转站仍继续生成 / 计费 | ⬜ 供应商受限 | — |
+| CC-07 | selfhost 跨引擎后历史图片占 token 但模型看不见 | ⬜ | `e87e2e85c3d545e0` |
+| CC-08 | Context GC 旧 Claude transcript 的有界保留 | ⬜ | — |
+| CC-P01 | UI 设置与聊天信息层级整理 | 产品候选 | `ea074ff139f64c54` |
+| CC-P02 | 纪念日 | 产品候选 | `876b8bc1482247f2` |
+| CC-P03 | 群聊 / 多协作者 | 产品候选 | — |
+| CC-P04 | 花费单价表 | 产品候选 | — |
+| CC-P05 | cc 会话备份导出 | 产品候选 | — |
 
 ---
 
-## dashboard（ob-dashboard2）
+## 刻意保留
 
-### ✅ 2026-09-27 清理
-
-- 已删：4.6 导航重构死代码（`NavBar`、`MobileViewSwitch`、`app/chat/`、`app/review/` 及随之成为孤儿的 `api/review-status`）、孤儿 route（`api/provider-relay`、`api/mcp-relay`）、根目录调试残留（`cookiejar.txt`、`test.txt`、`tmp_headers.txt`）。需要回退从 git 历史取。
-- 测试恢复全绿（352 项）：召回规则 / 召回透镜文案两处断言对齐 9.13、9.20 的有意改动；滚动冷启动测试改用真实临时 cwd（Windows 假路径在 Linux 上与 SDK 算出不同 project key，生产不受影响）；登录篡改断言修掉末位恰为 `x` 时的随机失败。原「display_segments.version」断言项早已不再失败。
-
-### 🟦 刻意保留（别删）
+#### KEEP-01｜Dashboard 回归对比路由
 
 | 项 | 说明 |
 |---|---|
 | `app/api/cc-test/route.ts` | 注释明确「第 1 步的 /api/cc-test 保持原样不动，出问题时回归对比」 |
 | `app/api/cc-hook-test/route.ts` | 同上，hook 回归对比用 |
 
----
-
-## Haven（Ombre-Brain-Haven）
-
-### 🟨 待评估
-
-| 项 | 说明 | 为什么待定 |
-|---|---|---|
-| `dashboard.html`（355KB）+ `dashboard_assets/` | **仍在被使用**：`server.py` 的 `/dashboard` 路由（~13055 行）服务它，README 也把它当正式 Dashboard 入口 | 它是「后端内置单文件 Dashboard」，与 Vercel 前端 ob-dashboard2 **并存**。体积很大，是否继续维护 / 瘦身 / 用前端取代，是产品决策 |
-| `INTERNALS.md`（608 行） | 内部开发文档，写「最后更新 2026-04-19」 | 与 CLAUDE.md / README 大面积重叠，建议归档 `docs/` |
-| `BEHAVIOR_SPEC.md`（632 行） | 行为规格旧版，4/21 后未动 | 同上，建议归档 |
-| `state/`、`data/` 目录 | 运行时状态 / 数据 | 需确认是否被 git 跟踪（违反「.data 不做唯一持久存储」原则的风险） |
-
-### 🟦 刻意保留
+#### KEEP-02｜Haven 外部接入指引
 
 | 项 | 说明 |
 |---|---|
@@ -49,33 +46,32 @@
 
 ---
 
-## 未接入功能 / 长期遗留（无近期实施窗口）
+## Haven 待评估
 
-> 这里只记录短期不处理、没有明确实施窗口的事项。已经安排给后续窗口的工作写入对应 handoff，不在这里重复维护。dashboard 的 CLAUDE.md 与 Haven 的 CLAUDE.md 都引用这份，以这里为准。
+#### H-01｜内置单文件 Dashboard
 
-- [ ] **旧 session 诊断表补 profile 隔离** —— `request_rounds`、`injected_buckets`、`injection_debug`、`recent_context_injections`、`upstream_usage`、`handoff_blocks` 只有 session_id；为避免跨 profile 误删，当前永久删除保留这些后台记录，后续迁移 profile_id 后再纳入清理。
+- `dashboard.html`（355KB）+ `dashboard_assets/` **仍在被使用**：`server.py` 的 `/dashboard` 路由服务它，README 也把它当正式 Dashboard 入口。
+- 它是「后端内置单文件 Dashboard」，与 ob-dashboard2 **并存**。体积很大，是否继续维护 / 瘦身 / 用前端取代，是产品决策。
 
-### ✅ 已关闭（2026-09-27）
+#### H-02｜旧开发文档
 
-- **LLM 自动唤醒**：已由 Dashboard 侧 CC Agent Wake 实现并日常使用（2026-09-01 跑通，Bark 推送），不再走原设想的 Haven 服务端调度。事实源见 `docs/handoff/HANDOFF-cc-agent-wake.md`；唤醒时段自定义等后续需求在 OB Todo。
-- **重新脱水（redehydrate）**：现在基本由协作者直接写桶，不走脱水，不再需要。
-- **控制台配置页**：Haven 已有 `settings/*` 配置子页，视为已实现。
-- **自动备份**：VPS B2 每日备份已上线（见 `HANDOFF-cc-VPS迁移.md` §21）。
-- **情感唤起罗盘**：用户决定暂不做。
+- `INTERNALS.md`（608 行，写「最后更新 2026-04-19」）、`BEHAVIOR_SPEC.md`（632 行，4/21 后未动）与 Haven 参考文档 / README 大面积重叠，建议归档到 `docs/`。随 Haven `docs/` 梳理一起处理。
 
-### cc v1 收口后的独立任务卡（均未排期）
+---
+
+## 长期遗留
+
+#### L-01｜旧 session 诊断表补 profile 隔离
+
+- `request_rounds`、`injected_buckets`、`injection_debug`、`recent_context_injections`、`upstream_usage`、`handoff_blocks` 只有 session_id；为避免跨 profile 误删，当前永久删除保留这些后台记录，后续迁移 profile_id 后再纳入清理。
+
+---
+
+## cc 任务卡（均未排期）
 
 > cc 前端 v1 主体已于 2026-08-09 收口。以后用户选中一张卡后，一次只处理这一张。
 >
-> **新窗口必读范围：**本仓库 `AGENTS.md`、`MAINTENANCE_CONTRACT.md`、`CLAUDE.md` + 被选中的这一张任务卡；涉及 Haven 才加读 Haven `CLAUDE.md`。两份 `HANDOFF-cc*.md` 都是历史档案，**默认不读**；只有任务卡证据与现状冲突、需要追溯旧实验时才定点查对应历史章节。
-
-#### ✅ CC-01｜切换长窗口重复加载 / 性能（2026-08-09）
-
-- **结论：**实测 9 轮短窗首次首屏约 2.39 秒，509 轮长窗约 5.11 秒；二次切回仍分别约 2.24 秒和 3.95 秒。根因是 `switchSession` 先清空消息，再无条件重复读取最近 100 条历史；长窗 DOM 量会放大差距，但不是唯一瓶颈。
-- **已解决：**浏览器按 `session_id` 保留最近 5 个窗口的内存快照，60 秒内切回不重复读取历史；过期快照先即时显示、再后台更新。首次读取缩为最近 50 条，更早历史仍按原顺序手动加载；切换中的旧请求会取消，避免快速换窗串数据。
-- **手机体验：**`/cc` 消息区右侧增加仅手机显示的可拖动快速滚动条；原顶部 / 底部跳转按钮保留。
-- **边界保持：**未修改 Haven 原文、分页顺序、刷新 / 换设备读取语义，也未改 selfhost 发送时读取完整 Haven 历史的逻辑。
-- **验证：**Dashboard 15 个测试文件 / 76 项测试、TypeScript、定向 ESLint、生产 build 全部通过。
+> **开工必读：**`AGENTS.md`、`MAINTENANCE_CONTRACT.md` + 被选中的这一张卡；涉及 Haven 才加读 Haven `AGENTS.md`。`HANDOFF-cc*.md` 都是历史档案，**默认不读**；只有卡片证据与现状冲突、需要追溯旧实验时才定点查。
 
 #### CC-02｜缓存 usage 与中转站账单口径不一致 / 连续缓存写
 
@@ -86,15 +82,6 @@
 - **待判定分支：**中转站计费口径不同；同一响应含多条非标准 usage 事件；解析器错误覆盖后值；上游没有缓存命中。没有原始帧前不选分支。
 - **边界：**不记录请求正文、密钥或附件内容；不直接修改累计 / 覆盖规则；不把旧 cc 的 `getContextUsage()` 历史问题当成本问题；不安排无诊断的连续付费实验。
 - **验收：**能用一组原始帧解释 Dashboard 与账单差异；若改代码，新增对应回归测试，并在最少真实请求中确认读写数字与选定口径一致。
-
-#### ✅ CC-03｜cc 引擎 + 部分 Kiro 模型 `Invalid tool use format`（2026-09-27 关闭）
-
-- **关闭原因：**用户已不再使用 Kiro 模型，cc 引擎主要走 Pro 订阅；以后若换回并复现，按下面的旧记录重开。
-- **原状态：**未排期。localhost 的 cc 引擎曾在同一中转站 / 模型下返回 `400 REQUEST_BODY_INVALID / Invalid tool use format`，而 selfhost 成功。selfhost 10.6 中“空工具说明导致 breath 400”已经解决，不能把两者视为同一个问题。
-- **开工第一步：**请用户用当前部署重新确认是否仍能复现，并提供本次模型、启用工具集合、错误时间和完整错误码；能在 1 分钟内人工确认时，不先追代码。
-- **定位入口：**若仍复现，先对照同端点 cc / selfhost 的实际工具清单和 schema；`rg -n "mcpServers|strictMcpConfig|disallowedTools|Invalid tool use" app/api/cc-chat app/lib`，只读决定工具注入的最小文件集。
-- **边界：**不修改 selfhost 已验收的 10.6 工具循环、thinking、权限或持久化；不预设是 Kiro、中转站或 SDK 的责任；不靠删工具长期规避。
-- **验收：**原失败模型在相同工具集合下可正常首轮调用；其他模型、无工具聊天、权限 allow/ask/deny 与工具结果保存不回退。
 
 #### CC-04｜cc Agent SDK MCP `tool_result` 后的续写边界
 
@@ -137,7 +124,7 @@
 - **边界：**只允许删除 Haven GC 历史明确记录、且已不是任何 `cc_lanes_json.cc_session_id` 当前指针的 fork；不得按目录时间批量删除未知 Claude 会话，不删除 Dashboard `conversation_turns` 或附件。
 - **验收：**超过保留口径的非活动 GC 副本可审计地清理，当前 lane、可回退副本、普通 Claude Code 会话和 Dashboard 历史均不受影响。
 
-### cc 后续产品候选卡（尚未形成实施窗口）
+## cc 产品候选卡（尚未形成实施窗口）
 
 > 这些是增强候选，不是 v1 欠账。选中后先做产品定案；定案前不改代码。
 

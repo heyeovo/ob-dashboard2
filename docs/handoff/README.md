@@ -3,7 +3,7 @@
 > 2026-09-27 整理。这里的文件都是**历史档案**：记录当时的方案、验收和踩坑，默认不读，需要追溯时再定点查。
 > 待办不在这里维护——想做的活看 OB Todo（`list_todos`），代码债务和技术卡看根目录 `TECH_DEBT.md`。
 > 文件正文里的“尚未提交 / 待部署 / 下一步”是写作当时的状态，以本索引为准。
-> 部署方式也以当前为准：Dashboard 与 Haven 现在都是 push `main` 后自动部署（见 `CLAUDE.md`、Haven `AGENTS.md`）；VPS 迁移 handoff 里“普通 push 不会自动更新”“手动 Redeploy”的描述已过时。
+> 部署方式也以当前为准：Dashboard 与 Haven 现在都是 push `main` 后自动部署（见两边仓库的 `AGENTS.md`）；VPS 迁移 handoff 里“普通 push 不会自动更新”“手动 Redeploy”的描述已过时。
 
 | 文件 | 状态 | 备注 |
 |---|---|---|

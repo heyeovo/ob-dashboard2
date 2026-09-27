@@ -1,12 +1,12 @@
 # 维护契约（Maintenance Contract）
 
-> **给 AI 看的**。每次代码改动收尾时，必须先读这份，按「变更 → 同步表」确认哪些文档要更新，再算完成。
+> **给 AI 看的**。每个工作窗口开工时和当前仓库 `AGENTS.md` 一起读；每次代码改动收尾时，按「变更 → 同步表」确认哪些文档要更新，再算完成。
 >
 > 铁律：
 > 1. **一份事实只写一处。** 同一件事不要在两个文档里各写一份，否则必然对不齐。
 > 2. **文档是交付物的一部分，不是可选项。** 改完代码没同步文档 = 没改完。
 > 3. **只同步命中的行。** 没动的东西不顺手改。
-> 4. **待办分三处，各管一件事。** 想做的功能 / 活 → OB Todo（`create_todo` / `list_todos`，每条一句话）；代码层面的债务和需要细节的技术卡 → `TECH_DEBT.md`（OB Todo 背景里引用卡号）；`docs/handoff/` 是历史档案，每份状态只看 `docs/handoff/README.md`。
+> 4. **待办分三处，各管一件事。** 想做的功能 / 活 → OB Todo（`create_todo` / `list_todos`，每条一句话）；代码层面的债务和需要细节的技术卡 → `TECH_DEBT.md`（卡里写对应 Todo ID，新卡同时加进顶部索引；闲聊窗口只能记 Todo，需要细节时由工作窗口补卡）；`docs/handoff/` 是历史档案，每份状态只看 `docs/handoff/README.md`。
 
 ---
 
@@ -16,36 +16,38 @@
 
 | 你改了什么 | 必须同步 | 说明 |
 |---|---|---|
-| 新增 / 删除 / 改名页面（`app/*/page.tsx`） | dashboard `CLAUDE.md`「页面」表 | 页面表 = 导航真相，漏了新窗口就找不到页 |
-| 改导航结构（`SideRail` / `BottomTabBar` / 设置聚合页） | dashboard `CLAUDE.md`「导航架构」 | |
-| 新增 / 改有特殊逻辑的 API route | dashboard `CLAUDE.md`「app/api」表 | 纯透传的不写 |
-| 新增 / 改共享组件 | dashboard `CLAUDE.md`「组件」表 | |
+| 新增 / 删除 / 改名页面（`app/*/page.tsx`） | dashboard `docs/reference.md`「文件结构速查」 | 页面表 = 导航真相，漏了新窗口就找不到页 |
+| 改导航结构（`SideRail` / `BottomTabBar` / 设置聚合页） | dashboard `AGENTS.md`「设计与组件」导航条 | |
+| 新增 / 改有特殊逻辑的 API route | dashboard `docs/reference.md`「文件结构速查」`app/api` 行 | 纯透传的不写 |
+| 新增 / 改共享组件 | dashboard `AGENTS.md`「设计与组件」 | 只写统一约定，不列全部组件 |
+| 改 cc 引擎 / 持久化 / 滚动 / 唤醒契约 | dashboard `docs/reference.md`「cc 数据持久化契约」 | 机制说明较长的放 `docs/architecture.md` |
+| 改协作 / git / 部署规矩 | 对应仓库 `AGENTS.md` | |
 | 改设计 token / 配色 / 圆角 / 间距 | `DESIGN.md` + `globals.css` | |
 | 新增 cc 数据 / 配置 / 用户开关 | 先查 `AGENTS.md`「cc 数据持久化规则」→ 判断存 Haven 还是浏览器 | 含密钥只能服务端读写 |
 | 想做但这次不做的功能 / 活 | OB Todo（一句话） | 需要细节的另开 `TECH_DEBT.md` 技术卡，Todo 背景里写卡号 |
 | 跨窗口进行中的大活 | 对应 `HANDOFF-*.md` + `docs/handoff/README.md` 登记 | 写明当前状态、已定决定、下一步和验收方法；做完在索引里标归档 |
 | 代码层面的遗留 / 风险 / 刻意保留项 | `TECH_DEBT.md` | 记录影响、暂不处理原因和未来处理条件 |
-| 改的是以前记录过的遗留项 | `TECH_DEBT.md` 对应项标 ✅ | 附解决日期 |
+| 关闭以前记录过的卡 | 从 `TECH_DEBT.md` 移到 `docs/tech-debt-archive.md`，索引删掉对应行 | 附关闭日期；有 Todo 的一起勾掉 |
 
 ### Haven（Ombre-Brain-Haven）
 
 | 你改了什么 | 必须同步 | 说明 |
 |---|---|---|
-| 新增 / 改后端模块 | Haven `CLAUDE.md`「核心模块」表 | |
-| 新增 / 改 REST 路由 | Haven `CLAUDE.md`「REST API」分组 | 全量以代码为准，用 `grep -oE "@mcp\.custom_route\(\"[^\"]*\"" server.py` 实时核对 |
-| 改环境变量 / 启动 / 部署 | `ENV_VARS.md` + `README.md`「部署」 | 环境变量只写一份在 ENV_VARS，别复制进 CLAUDE.md |
+| 新增 / 改后端模块 | Haven `docs/reference.md`「核心模块」表 | |
+| 新增 / 改 REST 路由 | Haven `docs/reference.md`「REST API」分组 | 全量以代码为准，用 `grep -oE "@mcp\.custom_route\(\"[^\"]*\"" server.py` 实时核对 |
+| 改环境变量 / 启动 / 部署 | `ENV_VARS.md` + `README.md`「部署」 | 环境变量只写一份在 ENV_VARS，别复制进 reference / AGENTS |
 | 改行为 / 记忆逻辑 / 影响外部接入 | `README.md`（系统级总览） | |
 | 改给 Claude / ChatGPT 用的行为指引 | `CLAUDE_PROMPT.md` + `docs/Tool Guide.md` | 改行为后同步，否则外部接入用的是旧指引 |
-| 改 cc 持久化 / 表结构 | Haven `CLAUDE.md`「cc 持久化」节 | |
-| 改合并 / 评分 / 召回算法 | Haven `CLAUDE.md`「关键实现细节」对应节 | |
+| 改 cc 持久化 / 表结构 | Haven `docs/reference.md`「cc 持久化（Haven 侧）」节 | |
+| 改合并 / 评分 / 召回算法 | Haven `docs/reference.md`「关键实现细节」对应节；召回链路同步 `docs/recall-pipeline.md` | |
 
 ### 跨仓库
 
 | 场景 | 要动的 |
 |---|---|
-| 后端接口改了，前端调用方跟着改 | dashboard `CLAUDE.md`「app/api」表 + Haven `CLAUDE.md`「REST API」 |
+| 后端接口改了，前端调用方跟着改 | dashboard `docs/reference.md`「文件结构速查」`app/api` 行 + Haven `docs/reference.md`「REST API」 |
 | 跨仓库功能想做 / 完成 | OB Todo 新增 / 勾掉；完成事实同步两端正式文档 |
-| 跨仓库代码遗留新增 / 完成 | `TECH_DEBT.md` 对应项新增 / 标 ✅ |
+| 跨仓库代码遗留新增 / 关闭 | `TECH_DEBT.md` 新增卡 / 移入归档 |
 
 ---
 
@@ -59,7 +61,7 @@
    - 删除文件确认「无引用」（grep 引用）。
 4. **打开这份维护契约**，按第一节表命中行，同步对应文档。
 5. **归档未完成事项**：想做的功能 / 活 → OB Todo（一句话）；代码层面的债务或需要细节的技术卡 → `TECH_DEBT.md`；handoff 只作历史档案，状态更新到 `docs/handoff/README.md`。
-6. **commit + push**：CC 可直接提交并 push `main`（见 `CLAUDE.md` Git 一节）。
+6. **commit + push**：CC 可直接提交并 push `main`（见 `AGENTS.md`「Git 与部署」）。
 7. **确认部署**：Dashboard push `main` 后由 Coolify 自动部署；Haven push `main` 后先跑 GitHub Actions `Tests`，通过后由 `deploy-haven` job 更新 `HAVEN_RELEASE_SHA` 并部署（见 Haven `AGENTS.md`）。确认最新 deployment 对应目标 commit 且健康，未触发或失败时才手动 Redeploy。
 
 ---
@@ -84,10 +86,13 @@
 ### ob-dashboard2（前端，VPS / Coolify）
 | 文档 | 职责 |
 |---|---|
-| `CLAUDE.md` | 前端全貌：页面 / API / 导航 / 组件 / 实现细节 |
-| `AGENTS.md` | cc 数据持久化规则 + Next.js 版本警告 |
+| `AGENTS.md` | 入口：开工必读、协作 / git / 部署 / 设计 / 持久化硬规矩 |
+| `CLAUDE.md` | 只有一行 `@AGENTS.md`，不放内容 |
 | `MAINTENANCE_CONTRACT.md` | **本文件**：维护契约 |
-| `TECH_DEBT.md` | 代码债务 / 待删 / 冗余 / 刻意保留项 + 技术卡账本 |
+| `docs/reference.md` | 查表：环境变量、文件结构、API 特殊逻辑、cc 持久化契约 |
+| `docs/architecture.md` | 详细实现机制 |
+| `TECH_DEBT.md` | 开着的代码债务 / 刻意保留项 / 技术卡，顶部索引 |
+| `docs/tech-debt-archive.md` | 已关闭的卡 |
 | `docs/handoff/README.md` | handoff 历史档案的状态索引 |
 | `DESIGN.md` | 设计 token 规范 |
 
@@ -95,8 +100,11 @@
 | 文档 | 职责 |
 |---|---|
 | `README.md` | 系统级总览 / 架构 / 部署 / 客户端接入（**系统事实源**） |
-| `AGENTS.md` | Codex/代理在 Haven 中的项目级工作规则 |
-| `CLAUDE.md` | 开发入口：模块 / REST 路由 / 实现细节 |
+| `AGENTS.md` | 入口：开工必读、持久化 / 发布硬规矩 |
+| `CLAUDE.md` | 只有一行 `@AGENTS.md`，不放内容 |
+| `docs/reference.md` | 查表：模块 / 配置 / REST 路由 / 实现细节 / 调试命令 |
+| `docs/recall-pipeline.md` | 召回链路架构 |
+| `docs/memory-system-roadmap.md` | 记忆系统运行基线与后续方向 |
 | `ENV_VARS.md` | 环境变量唯一清单 |
 | `CLAUDE_PROMPT.md` | 给 Claude/ChatGPT 的行为指引 |
 | `docs/Tool Guide.md` | 粘贴给外部平台的工具指南 |
