@@ -34,21 +34,42 @@
 
 ### 阶段 1：主题引擎 + 外观设置页（先做）
 
-**Token 分层**（`globals.css`）
+**1a. 硬编码收编（最先做，单独 commit）**
+
+2026-09-27 复查：9.03 那次只清了 hex，而 Tailwind 调色板类从来没收编过，后来还加了新的。现状：
+- Tailwind 调色板类约 595 处，最多的是 `bg-white` 220、`text-white` 73、`red-*` 约 94、`emerald-*` 约 50、`amber-*` 约 39、`rose-*` 约 33、`bg-black` 21、`slate/gray-*` 约 43。集中在 `journey/WeeklyJourneyReview`、`memory/page`、`settings/automation/WeeklyJourneyStatusCard`、`journey/page`、`journal/page`、`persona/page`、`McpManager`、`BucketDetailDrawer`。
+- tsx 里内联 hex / rgb 约 72 处，任意值类 `[#...]` / `[rgb(...)]` 约 35 处，`globals.css` 在 `:root` 之外约 24 行。
+
+这些地方不改，换主题时就会有一半页面不跟着变：白卡片不会变成玻璃，状态色不跟主题走。映射规则：
+- `bg-white` → `--color-surface`（或需要玻璃的 `--glass-fill`）。
+- 主色按钮上的 `text-white` → 新增 `--color-on-primary`。
+- `red / rose` → `--color-danger*`；`emerald / green` → `--color-digested*` 或新增 `--color-success*`；`amber` → `--color-pending*` / `--color-wish*`，按语义挑，不要按颜色挑。
+- 遮罩 `bg-black/NN` → 新增 `--color-overlay`。
+- `slate / gray` → `--color-text-*` / `--color-surface-*` / `--color-border*`。
+- **允许保留**：`app/cc/persona.ts` 的头像渐变预设（这是用户可选的颜色数据，不是主题色）；图表的分类色可以收编成 `--chart-*` 一组 Token。
+
+**验收**：用下面的 grep 复查，除允许保留的项以外清零，逐项说明剩下的为什么保留；页面观感和现在一致（这一步只换引用，不换颜色）。
+
+```bash
+grep -rnoE "\b(bg|text|border|from|to|via|ring|fill|stroke|divide|outline)-(white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)\b" app --include=*.tsx
+grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | grep -v "/api/"
+```
+
+**1b. Token 分层**（`globals.css`）
 - 现有 `--color-*` 保留为语义层，页面不用改。
 - 新增：`--bg-base`、`--bg-image`、`--bg-overlay`、`--glass-fill`、`--glass-border`、`--glass-blur`、`--glass-shadow`、`--font-display`、`--font-body`、`--font-scale`、`--label-tracking`、`--chat-bubble-alpha`。
 - 主题块：`:root[data-theme="linen"] { ... }`。滑条类的值由 `<html style>` 上的内联变量覆盖（`--glass-blur`、`--font-scale`、`--effect-rain-intensity`）。
 - 暖白 `linen` 初稿（实现后按截图微调）：底色是暖纸色，从上到下轻微渐变；主色把 `#D97757` 降一点饱和度，保留家族感；文字换成暖棕灰；边框用带暖色的低透明度描边，替代现在的中性灰。
 - 字体：拉丁标题用 Cormorant Garamond，中文标题用 Noto Serif SC（`next/font/google`，`preload: false`，按需子集加载），正文保留 Geist 加系统中文字体。
 
-**Haven**
+**1c. Haven**
 - `GET/POST /api/cc/appearance`：JSON 配置，结构如下，服务端做 normalize：
   `{ version, theme, background: { kind: "gradient"|"upload"|"none", assetId? }, glass: { blur, opacity }, font: { display: "serif"|"sans", scale }, effects: { rain: { mode: "off"|"on"|"weather", intensity } } }`
 - `GET/POST/DELETE /api/cc/appearance/background`：上传一张背景图（限制大小和 MIME，压缩到合适宽度），只保留当前这一张。
 - 新路由必须同时加进 `server.py` 的 `/gateway/*` 转发表（`gateway.py` 路由表里有 ⚠️ 注释）。
 - 同步 Haven `docs/reference.md`「REST API」和「cc 持久化（Haven 侧）」。
 
-**Dashboard**
+**1d. Dashboard**
 - `app/api/appearance` 代理（含背景图）；`app/lib/appearance.ts` 放类型、默认值和 normalize。
 - `app/layout.tsx`：服务端读取配置，把 `data-theme` / `data-font` / `data-rain` 和内联变量写到 `<html>` 上。Haven 读不到时用默认值，页面不报错。
 - `AppearanceProvider`（客户端）：设置页改动后即时预览并保存；同时写一份 `localStorage` 镜像，用于 Haven 慢的时候兜底。
@@ -84,7 +105,7 @@
 
 ### 阶段 5：扩展
 
-- 更多主题：樱粉、雾蓝、深色「夜」。前提是先把剩下约 30 处低频硬编码色收编成 Token（graph 节点色、breath-sim 柱色、prompts 页、journal 滚动条、impressions 圆点、persona 渐变、import 边框等，清单见旧 `HANDOFF-ui-design-system.md` 第一步）；否则切到深色主题时这些地方不会跟着变。
+- 更多主题：樱粉、雾蓝、深色「夜」。前提是阶段 1a 的硬编码收编已完成（旧文档里那约 30 处低频硬编码也包含在 1a 里）。
 - 动效：页面切换淡入 / 滑入、列表卡片交错淡入、按钮按下微缩回弹、弹窗用 spring 曲线。按页面改造时顺手做，是否引入 Framer Motion 到时候再评估。
 - 雨痕 `weather` 模式：按城市查天气 API，下雨时才显示；需要确定城市配置和天气源。
 
