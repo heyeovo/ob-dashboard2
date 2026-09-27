@@ -133,6 +133,8 @@ html {
   --label-tracking:        .12em;
   --chat-bubble-alpha:     .9;
   --effect-rain-intensity: .35;
+  --rain-base-opacity:     .245;
+  --rain-extra-opacity:    .065;
 
   /* ---- Radius / 圆角层级 ---- */
   --radius-sm:              6px;
@@ -234,6 +236,11 @@ html {
 html {
   font-size: calc(16px * var(--font-scale));
   background-color: var(--bg-base);
+  /* Paint the canvas too: iOS can expose it below fixed layers in the home-screen PWA. */
+  background-image: var(--bg-overlay), var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 /* ---- Tailwind theme bridge ---- */
@@ -259,6 +266,19 @@ body::before {
   pointer-events: none;
   background-image: var(--bg-overlay), var(--bg-image);
   background-size: cover;
+  background-position: center;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 2;
+  pointer-events: none;
+  background: var(--color-surface);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 h1, h2 {
@@ -274,17 +294,36 @@ h1, h2 {
 
 .rain-layer {
   position: fixed;
-  inset: 0;
+  inset: -8px 0;
   z-index: 0;
   pointer-events: none;
-  opacity: calc(var(--effect-rain-intensity) * .6);
-  background-image: repeating-linear-gradient(105deg, transparent 0 21px, rgba(92, 78, 70, .5) 22px, transparent 23px 59px);
-  background-size: 220px 220px;
-  animation: rain-drift 28s linear infinite;
+  animation: rain-drift 28s ease-in-out infinite alternate;
+}
+
+.rain-layer::before,
+.rain-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url('/rain-glass.png');
+  background-size: auto 100%;
+  background-position: center top;
+  background-repeat: repeat-x;
+}
+
+.rain-layer::before {
+  opacity: var(--rain-base-opacity);
+}
+
+.rain-layer::after {
+  opacity: var(--rain-extra-opacity);
+  background-size: auto 85%;
+  background-position: 17% top;
+  transform: scaleX(-1);
 }
 
 .rain-layer[data-paused="true"] { animation-play-state: paused; }
-@keyframes rain-drift { to { background-position: -70px 220px; } }
+@keyframes rain-drift { to { transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) {
   .rain-layer { animation: none; }
 }

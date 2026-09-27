@@ -135,11 +135,11 @@
 | `--glass-fill`, `--glass-border`, `--glass-blur`, `--glass-shadow` | 固定外框的玻璃质感；滑条覆盖模糊与不透明度 |
 | `--font-display`, `--font-body`, `--font-scale` | 标题字体、正文黑体与整体字号缩放；标题可选 serif / sans |
 | `--label-tracking`, `--chat-bubble-alpha` | 小号大写标签字距、聊天表面透明度预留语义 |
-| `--effect-rain-intensity` | 雨痕强度；默认关闭，强度 100% 时在上传背景上也应清楚可见；页面不可见暂停，减少动态效果时静止 |
+| `--effect-rain-intensity` | 透明玻璃水珠的数量与可见度；低强度水珠较少且较淡，高强度叠加更多水珠；默认关闭，页面不可见暂停，减少动态效果时静止 |
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
 
-`backdrop-filter` 只放在顶栏、输入栏、导航栏、抽屉或弹窗等固定外框；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover` 让背景延伸到 iPhone 顶部状态栏下，交互内容避开安全区域；清单和浏览器主题色使用 `linen` 底色作为回退。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
+`backdrop-filter` 只放在顶栏、输入栏、导航栏、抽屉或弹窗等固定外框；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover` 让背景延伸到 iPhone 顶部状态栏下，交互内容避开安全区域；顶部状态栏下与顶栏用相近的玻璃底色衔接，根画布也绘制背景，避免底部安全区域露出纯色。清单和浏览器主题色使用 `linen` 底色作为回退。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
 
 ### CC 对话气泡
 

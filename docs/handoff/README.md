@@ -18,5 +18,5 @@
 | `HANDOFF-memory-continuity-fixes.md` | 📦 已完成归档 | |
 | `HANDOFF-cc-auto-chat-slices.md` | ⏸ 暂停 | 阶段一、二代码已提交（Haven `c250299` / `ab43aa3`，Dashboard `96a2668`），9.13 与日回顾解耦后停下。重开时以本文件为事实源；OB Todo「自动化原文切片摘要」 |
 | `HANDOFF-ui-design-system.md` | 📦 已被取代 | 第一步清理硬编码已完成；其余草案以 `HANDOFF-ui-redesign.md` 为准 |
-| `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1 基础代码已提交（dashboard `4d748e0` / `c3d39f9`、Haven `8762d84`）；雨痕与 iPhone 顶部安全区域按截图微调见 dashboard `0b9a9ba`，待部署和手机验收；阶段 2–4 开工前须先定布局；Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
+| `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1 基础代码已提交（dashboard `4d748e0` / `c3d39f9`、Haven `8762d84`）；截图复验发现 `0b9a9ba` 的斜线雨纹、顶部割裂和底部空白，正改为玻璃水珠并修安全区域，待部署和手机复验；阶段 2–4 开工前须先定布局；Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
 | `OB待处理大问题清单.md` | 📦 已完成归档 | P0 两项、journey、聊天原文库已完成；语录、moments、官端开窗已转入 OB Todo |

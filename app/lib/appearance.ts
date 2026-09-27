@@ -70,6 +70,8 @@ export function appearanceHtmlStyle(appearance: Appearance): Record<string, stri
     '--glass-opacity': String(appearance.glass.opacity),
     '--font-scale': String(appearance.font.scale),
     '--effect-rain-intensity': String(appearance.effects.rain.intensity),
+    '--rain-base-opacity': String(Number((appearance.effects.rain.intensity * 0.7).toFixed(3))),
+    '--rain-extra-opacity': String(Number(Math.min(0.9, Math.max(0, (appearance.effects.rain.intensity - 0.3) * 1.3)).toFixed(3))),
     '--bg-image': background.kind === 'upload'
       ? `url("/api/appearance/background?assetId=${encodeURIComponent(background.assetId || '')}")`
       : background.kind === 'none' ? 'none' : 'var(--bg-gradient)',
