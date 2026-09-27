@@ -75,6 +75,19 @@ describe("yanzhi's files built-in MCP", () => {
       .resolves.toContain('已写入')
   })
 
+  it('patches one unique snippet and auto-creates the artifacts folder', async () => {
+    await executeYanzhiFiles({ action: 'write', path: 'artifacts/game.html', content: '<p>a</p>\n<p>b</p>\n<p>b</p>' }, root)
+    await expect(executeYanzhiFiles({ action: 'patch', path: 'artifacts/game.html', old_text: '<p>a</p>', new_text: '<p>A</p>' }, root))
+      .resolves.toContain('第 1 行')
+    await expect(executeYanzhiFiles({ action: 'read', path: 'artifacts/game.html' }, root)).resolves.toContain('1: <p>A</p>')
+    await expect(executeYanzhiFiles({ action: 'patch', path: 'artifacts/game.html', old_text: '<p>b</p>', new_text: 'x' }, root))
+      .rejects.toThrow('多次')
+    await expect(executeYanzhiFiles({ action: 'patch', path: 'artifacts/game.html', old_text: 'missing', new_text: 'x' }, root))
+      .rejects.toThrow('未找到')
+    await expect(executeYanzhiFiles({ action: 'write', path: 'other/deep.md', content: 'x' }, root))
+      .rejects.toThrow('父目录不存在')
+  })
+
   it('blocks absolute paths, traversal, and symbolic-link escape', async () => {
     await expect(executeYanzhiFiles({ action: 'list', path: '/etc' }, root)).rejects.toThrow('相对路径')
     await expect(executeYanzhiFiles({ action: 'read', path: '../outside.txt' }, root)).rejects.toThrow('..')

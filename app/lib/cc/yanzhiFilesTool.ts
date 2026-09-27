@@ -5,8 +5,10 @@ import { z } from 'zod'
 
 export const YANZHI_FILES_SERVER_NAME = 'yanzhi'
 export const YANZHI_FILES_TOOL_NAME = 'files'
-export const YANZHI_FILES_MCP_VERSION = '1.0.0'
+export const YANZHI_FILES_MCP_VERSION = '1.1.0'
 export const YANZHI_FILES_ROOT = '/data/cc-chat-files'
+/** 言之做的可交互页面放这里，由 /api/artifacts 托管、/artifacts 收藏页列出。 */
+export const ARTIFACTS_DIR = 'artifacts'
 
 const MAX_LIST_ENTRIES = 100
 const MAX_READ_LINES = 500
@@ -18,26 +20,30 @@ const MAX_TEXT_FILE_BYTES = 1024 * 1024
 const MAX_WRITE_BYTES = 256 * 1024
 
 const INPUT = {
-  action: z.enum(['list', 'search', 'read', 'write', 'mkdir']),
+  action: z.enum(['list', 'search', 'read', 'write', 'patch', 'mkdir']),
   path: z.string().optional(),
   query: z.string().optional(),
   content: z.string().optional(),
+  old_text: z.string().optional(),
+  new_text: z.string().optional(),
   offset: z.number().int().min(0).optional(),
   limit: z.number().int().min(1).optional(),
   overwrite: z.boolean().optional(),
 }
 
 export type YanzhiFilesInput = {
-  action: 'list' | 'search' | 'read' | 'write' | 'mkdir'
+  action: 'list' | 'search' | 'read' | 'write' | 'patch' | 'mkdir'
   path?: string
   query?: string
   content?: string
+  old_text?: string
+  new_text?: string
   offset?: number
   limit?: number
   overwrite?: boolean
 }
 
-const DESCRIPTION = "Manage text files only inside yanzhi's files. action=list lists one directory; search finds names/text using query; read returns lines using offset/limit; write uses content (existing files require overwrite=true); mkdir creates folders. path is relative to the fixed root; no delete, move, commands, absolute paths, or access outside it."
+const DESCRIPTION = "Manage text files only inside yanzhi's files. action=list lists one directory; search finds names/text using query; read returns lines using offset/limit; write uses content (existing files require overwrite=true); patch replaces one unique old_text with new_text; mkdir creates folders. Playable pages go in artifacts/<name>.html with <title> and <meta name=description>; chat shows them as an openable card. path is relative to the fixed root; no delete, move, commands, absolute paths, or access outside it."
 
 function cleanRelativePath(value: string | undefined, allowRoot = false): string {
   const raw = String(value || '').trim().replaceAll('\\', '/')
@@ -180,11 +186,32 @@ async function writeAction(root: string, input: YanzhiFilesInput): Promise<strin
   if (Buffer.byteLength(input.content, 'utf8') > MAX_WRITE_BYTES) throw new Error('单次写入不能超过 256 KB。')
   const { relative, target } = await safeTarget(root, input.path, { allowMissing: true })
   const parent = path.dirname(target)
+  // artifacts/ 是约定目录，第一次写页面时自动建，不用先 mkdir。
+  if (path.posix.dirname(relative) === ARTIFACTS_DIR) await mkdir(parent, { recursive: true })
   const parentInfo = await stat(parent).catch(() => null)
   if (!parentInfo?.isDirectory()) throw new Error('父目录不存在，请先用 mkdir 创建。')
   await safeTarget(root, path.posix.dirname(relative) === '.' ? '' : path.posix.dirname(relative), { allowRoot: true })
   await writeFile(target, input.content, { encoding: 'utf8', flag: input.overwrite ? 'w' : 'wx' })
   return `已写入 ${relative}（${Buffer.byteLength(input.content, 'utf8')} bytes）。`
+}
+
+async function patchAction(root: string, input: YanzhiFilesInput): Promise<string> {
+  const oldText = input.old_text ?? ''
+  if (!oldText) throw new Error('patch 必须提供 old_text。')
+  if (input.new_text === undefined) throw new Error('patch 必须提供 new_text。')
+  const { relative, target } = await safeTarget(root, input.path)
+  const info = await stat(target)
+  if (!info.isFile()) throw new Error('patch 只能修改文件。')
+  if (info.size > MAX_TEXT_FILE_BYTES) throw new Error('文件超过 1 MB，无法 patch。')
+  const text = ensureText(await readFile(target))
+  const first = text.indexOf(oldText)
+  if (first < 0) throw new Error('old_text 未找到，请先 read 确认原文。')
+  if (text.indexOf(oldText, first + 1) >= 0) throw new Error('old_text 出现多次，请带上更多上下文使其唯一。')
+  const next = text.slice(0, first) + input.new_text + text.slice(first + oldText.length)
+  if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE_BYTES) throw new Error('patch 后文件超过 1 MB。')
+  await writeFile(target, next, 'utf8')
+  const line = text.slice(0, first).split('\n').length
+  return `已修改 ${relative}（第 ${line} 行起）。`
 }
 
 async function mkdirAction(root: string, input: YanzhiFilesInput): Promise<string> {
@@ -199,6 +226,7 @@ export async function executeYanzhiFiles(input: YanzhiFilesInput, root = YANZHI_
   if (input.action === 'search') return searchAction(root, input)
   if (input.action === 'read') return readAction(root, input)
   if (input.action === 'write') return writeAction(root, input)
+  if (input.action === 'patch') return patchAction(root, input)
   return mkdirAction(root, input)
 }
 

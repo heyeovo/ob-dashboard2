@@ -44,8 +44,9 @@ import {
 import { builtInMcpServerNames, builtInMcpServers } from '@/app/lib/cc/builtInMcp'
 
 /** CC 引擎每轮最多允许的工具调用次数。超过后 PreToolUse 拒绝后续调用，
- *  模型被迫输出文本汇报进度，用户下一轮再继续。 */
-export const MAX_CC_TOOL_CALLS_PER_TURN = 15
+ *  模型被迫输出文本汇报进度，用户下一轮再继续。
+ *  工作模式一轮常要读、改、跑测试多步，放宽；闲聊保持紧。 */
+export const MAX_CC_TOOL_CALLS_PER_TURN: Record<CcMode, number> = { chat: 15, work: 50 }
 
 /** 直接放行、不弹批准卡的只读工具。 */
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob']
@@ -557,13 +558,13 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
             }
 
             const current = getTurnBucket(sessionId)
-            if (current && current.toolCallCount >= MAX_CC_TOOL_CALLS_PER_TURN) {
+            if (current && current.toolCallCount >= MAX_CC_TOOL_CALLS_PER_TURN[config.mode]) {
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
                   permissionDecision: 'deny' as const,
                   permissionDecisionReason:
-                    `这一轮工具调用已达上限（${MAX_CC_TOOL_CALLS_PER_TURN} 次）。` +
+                    `这一轮工具调用已达上限（${MAX_CC_TOOL_CALLS_PER_TURN[config.mode]} 次）。` +
                     '请停下来，告诉用户当前进展和接下来还要做什么，用户会在下一轮让你继续。',
                 },
               }

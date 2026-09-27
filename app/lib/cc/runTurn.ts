@@ -1439,7 +1439,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           breath_bucket_ids: [...breathBucketIds],
           tools: bucket.toolEvents,
           tool_call_count: bucket.toolCallCount,
-          max_tool_calls: MAX_CC_TOOL_CALLS_PER_TURN,
+          max_tool_calls: MAX_CC_TOOL_CALLS_PER_TURN[config.mode],
           result: resultInfo,
           // 第 5 步：改了哪些文件、跑了哪些命令、批了/拒了什么。
           // 子进程回收后工作台就靠这份重建（历史消息读回来也能看见）。
