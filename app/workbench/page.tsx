@@ -73,7 +73,7 @@ function Switch({ tab, onPick }: { tab: 'bench' | 'tune'; onPick: (t: 'bench' | 
           key={k}
           onClick={() => onPick(k)}
           className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-            tab === k ? 'bg-white text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-tertiary)]'
+            tab === k ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-tertiary)]'
           }`}
         >
           {label}

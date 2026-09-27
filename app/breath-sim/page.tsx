@@ -23,7 +23,7 @@ interface BucketDetail {
   metadata: { name: string; domain: string[]; tags: string[]; valence: number; arousal: number; importance: number; pinned: boolean; resolved: boolean; digested?: boolean; type: string; created: string; last_active: string; activation_count?: number; event_time?: string }
 }
 
-const BAR_COLORS = { topic: '#C86B45', emotion: '#D98D6A', time: '#DFA882', importance: '#C4B49A' }
+const BAR_COLORS = { topic: 'var(--color-primary-hover)', emotion: 'var(--color-chart-emotion)', time: 'var(--color-chart-time)', importance: 'var(--color-chart-importance)' }
 const SLIDER_STYLE = `w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[var(--color-primary)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[var(--color-primary)] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-[var(--color-primary)] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0`
 const SCORING_LS_KEY = 'breath-sim-scoring'
 
@@ -82,7 +82,7 @@ export default function BreathSimPage() {
         <div className="flex gap-1 mb-6 bg-[var(--color-surface-tertiary)] rounded-xl p-1 w-fit">
           {([{ key: 'pipeline', label: '模拟 Pipeline' }, { key: 'sim', label: '即时模拟' }, { key: 'hitstats', label: '命中统计' }, { key: 'trace', label: '检索追溯' }] as const).map(t => (
             <button key={t.key} onClick={() => { setActiveTab(t.key); if (t.key === 'hitstats' && !hitStats) fetchHitStats(); if (t.key === 'trace' && recentSearches.length === 0) fetchRecentSearches(); if (t.key === 'sim' && Object.keys(scoringCurrent).length === 0) fetchScoringConfig() }}
-              className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg font-medium transition-colors ${activeTab === t.key ? 'bg-white text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'}`}>{t.label}</button>
+              className={`text-xs sm:text-sm px-3 sm:px-4 py-1.5 rounded-lg font-medium transition-colors ${activeTab === t.key ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'}`}>{t.label}</button>
           ))}
         </div>
 
@@ -90,17 +90,17 @@ export default function BreathSimPage() {
         {activeTab === 'pipeline' && <>
           <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1 max-w-full">
             {[['1', '输入', 'query / valence / arousal'], ['2', '候选池', `${data?.total_candidates ?? '--'} 桶`], ['3', '四维评分', 'topic . emotion . time . imp'], ['4', '阈值过滤', `${data?.threshold ?? threshold} → ${data?.passed_count ?? '--'} 通过`], ['5', '排序', `top ${data?.results?.length ?? 'N'}`]].map(([n, title, sub], i) => (
-              <div key={i} className="flex items-center gap-1 flex-shrink-0"><div className="bg-white border border-[var(--color-border)] rounded-xl px-3 py-2 text-center min-w-[90px]"><div className="text-xs text-[var(--color-text-disabled)]">{n} {title}</div><div className="text-xs text-[var(--color-text-secondary)] mt-0.5">{sub}</div></div>{i < 4 && <span className="text-[var(--color-text-divider)] text-sm">{'->'}</span>}</div>
+              <div key={i} className="flex items-center gap-1 flex-shrink-0"><div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2 text-center min-w-[90px]"><div className="text-xs text-[var(--color-text-disabled)]">{n} {title}</div><div className="text-xs text-[var(--color-text-secondary)] mt-0.5">{sub}</div></div>{i < 4 && <span className="text-[var(--color-text-divider)] text-sm">{'->'}</span>}</div>
             ))}
           </div>
-          <div className="bg-white border border-[var(--color-border)] rounded-2xl p-3 sm:p-5 mb-6 flex flex-row flex-wrap gap-2 items-end">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-3 sm:p-5 mb-6 flex flex-row flex-wrap gap-2 items-end">
             <div className="flex-1 min-w-[80px]"><div className="text-xs text-[var(--color-text-disabled)] mb-1">Query</div><input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && simulate()} placeholder="搜索关键词..." className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]" /></div>
             <div className="w-16 sm:w-20"><div className="text-xs text-[var(--color-text-disabled)] mb-1">Valence</div><input value={valence} onChange={e => setValence(e.target.value)} placeholder="0~1" className="w-full border border-[var(--color-border)] rounded-lg px-2 py-2 text-sm outline-none focus:border-[var(--color-primary)]" /></div>
             <div className="w-16 sm:w-20"><div className="text-xs text-[var(--color-text-disabled)] mb-1">Arousal</div><input value={arousal} onChange={e => setArousal(e.target.value)} placeholder="0~1" className="w-full border border-[var(--color-border)] rounded-lg px-2 py-2 text-sm outline-none focus:border-[var(--color-primary)]" /></div>
-            <button onClick={simulate} disabled={loading} className="w-28 bg-[var(--color-primary)] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">{loading ? '模拟中...' : '模拟 Breath'}</button>
+            <button onClick={simulate} disabled={loading} className="w-28 bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">{loading ? '模拟中...' : '模拟 Breath'}</button>
             <div className="w-full flex items-center gap-4 pt-1">
               <div className="flex-1 flex items-center gap-3"><span className="text-xs text-[var(--color-text-disabled)] whitespace-nowrap">阈值</span><input type="range" min="0" max="100" value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${threshold}%, var(--color-border-subtle) ${threshold}%)` }} className={SLIDER_STYLE} /><span className="text-sm font-medium text-[var(--color-primary)] w-4 text-right tabular-nums">{threshold}</span></div>
-              <button onClick={async () => { const d = await (await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fuzzy_threshold: threshold }) })).json(); if (d.ok) alert(`已应用：阈值 ${d.fuzzy_threshold}`) }} className="w-28 bg-[var(--color-primary)] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">应用到后端</button>
+              <button onClick={async () => { const d = await (await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fuzzy_threshold: threshold }) })).json(); if (d.ok) alert(`已应用：阈值 ${d.fuzzy_threshold}`) }} className="w-28 bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">应用到后端</button>
             </div>
           </div>
           {data && (<div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--color-text-tertiary)] my-5 px-1"><span>权重：<span className="text-[var(--color-text-secondary)]">topic x{data.weights?.topic}</span></span><span className="hidden sm:inline text-[var(--color-text-divider)]">.</span><span className="text-[var(--color-text-secondary)]">emotion x{data.weights?.emotion}</span><span className="hidden sm:inline text-[var(--color-text-divider)]">.</span><span className="text-[var(--color-text-secondary)]">time x{data.weights?.time}</span><span className="hidden sm:inline text-[var(--color-text-divider)]">.</span><span className="text-[var(--color-text-secondary)]">imp x{data.weights?.importance}</span><span className="mx-1 text-[var(--color-text-divider)]">|</span><span>阈值 <span className="text-[var(--color-text-primary)]">{data.threshold}</span></span><span className="mx-1 text-[var(--color-text-divider)]">|</span><span>候选 <span className="text-[var(--color-text-primary)]">{data.total_candidates}</span> {`->`} 通过 <span className="text-[var(--color-primary)]">{data.passed_count}</span></span></div>)}
@@ -115,7 +115,7 @@ export default function BreathSimPage() {
         {/* Instant Simulation + Knobs (side panel) */}
         {activeTab === 'sim' && (
           <div className="flex flex-col lg:flex-row gap-5 lg:items-start">
-            <div className="w-full lg:w-52 flex-shrink-0 bg-white border border-[var(--color-border)] rounded-2xl overflow-hidden">
+            <div className="w-full lg:w-52 flex-shrink-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl overflow-hidden">
               <div
                 onClick={() => setKnobsOpen(v => !v)}
                 className="w-full flex items-center justify-between p-4 hover:bg-[var(--color-surface-secondary)] transition-colors cursor-pointer"
@@ -125,7 +125,7 @@ export default function BreathSimPage() {
               >
                 <span className="text-xs font-medium text-[var(--color-text-primary)]">评分旋钮</span>
                 <span className="flex items-center gap-2">
-                  {knobsOpen && <button onClick={(e) => { e.stopPropagation(); resetScoringConfig() }} className="text-[10px] text-red-500 hover:text-red-700">重置</button>}
+                  {knobsOpen && <button onClick={(e) => { e.stopPropagation(); resetScoringConfig() }} className="text-[10px] text-[var(--color-danger-strong)] hover:text-[var(--color-danger)]">重置</button>}
                   <span className="text-[var(--color-text-disabled)] text-xs transition-transform duration-200" style={{ transform: knobsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                 </span>
               </div>
@@ -142,9 +142,9 @@ export default function BreathSimPage() {
               )}
             </div>
             <div className="flex-1 min-w-0 space-y-3">
-              <div className="bg-white border border-[var(--color-border)] rounded-2xl p-3 flex gap-2 items-end">
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-3 flex gap-2 items-end">
                 <div className="flex-1"><input value={simQuery} onChange={e => setSimQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && doInstantSim()} placeholder="输入查询词（不计入统计）..." className="w-full border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]" /></div>
-                <button onClick={doInstantSim} disabled={simLoading || !simQuery.trim()} className="bg-[var(--color-primary)] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">{simLoading ? '检索中...' : '即时模拟'}</button>
+                <button onClick={doInstantSim} disabled={simLoading || !simQuery.trim()} className="bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">{simLoading ? '检索中...' : '即时模拟'}</button>
               </div>
               {(simResults.length === 0 && vecResults.length === 0) && !simLoading && <Card variant="empty" padding="md" className="py-16 text-center text-sm text-[var(--color-text-disabled)]">输入关键词后点击即时模拟查看命中详情</Card>}
               {(simResults.length > 0 || vecResults.length > 0) && (() => {
@@ -172,7 +172,7 @@ export default function BreathSimPage() {
         {/* Hit Stats Tab */}
         {activeTab === 'hitstats' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between"><div className="text-sm text-[var(--color-text-tertiary)]">共追踪 <span className="text-[var(--color-text-primary)] font-medium">{hitStats?.tracked_buckets ?? '--'}</span> 个桶 . 累计搜索 <span className="text-[var(--color-text-primary)] font-medium">{hitStats?.total_searches ?? '--'}</span> 次</div><div className="flex gap-2"><button onClick={() => { const o = hitStatsOrder === 'desc' ? 'asc' : 'desc'; setHitStatsOrder(o); fetchHitStats(o) }} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors">{hitStatsOrder === 'desc' ? '热门优先' : '冷门优先'}</button><button onClick={() => fetchHitStats()} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors">{hitStatsLoading ? '刷新中...' : '刷新'}</button><button onClick={async () => { await fetch('/api/hit-stats', { method: 'POST' }); setHitStats(null) }} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-red-500 hover:bg-red-50 transition-colors">重置统计</button></div></div>
+            <div className="flex items-center justify-between"><div className="text-sm text-[var(--color-text-tertiary)]">共追踪 <span className="text-[var(--color-text-primary)] font-medium">{hitStats?.tracked_buckets ?? '--'}</span> 个桶 . 累计搜索 <span className="text-[var(--color-text-primary)] font-medium">{hitStats?.total_searches ?? '--'}</span> 次</div><div className="flex gap-2"><button onClick={() => { const o = hitStatsOrder === 'desc' ? 'asc' : 'desc'; setHitStatsOrder(o); fetchHitStats(o) }} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors">{hitStatsOrder === 'desc' ? '热门优先' : '冷门优先'}</button><button onClick={() => fetchHitStats()} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors">{hitStatsLoading ? '刷新中...' : '刷新'}</button><button onClick={async () => { await fetch('/api/hit-stats', { method: 'POST' }); setHitStats(null) }} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-danger-strong)] hover:bg-[var(--color-danger-bg)] transition-colors">重置统计</button></div></div>
             {!hitStats ? <Card variant="empty" padding="md" className="py-20 text-center text-sm text-[var(--color-text-disabled)]">{hitStatsLoading ? '读取中...' : '点击刷新加载命中统计'}</Card> : hitStats.items.length === 0 ? <Card variant="empty" padding="md" className="py-20 text-center text-sm text-[var(--color-text-disabled)]">还没有命中数据，先进行一次搜索</Card> : (
               <div className="space-y-2">{hitStats.items.map((item: any) => (<Card key={item.id} variant="interactive" padding="sm" onClick={() => openBucket(item.id)} className="flex items-center gap-4"><span className={`text-xs font-mono w-10 text-right flex-shrink-0 ${item.count === 0 ? 'text-[var(--color-text-disabled)]' : 'text-[var(--color-primary)] font-bold'}`}>{item.count === 0 ? '--' : item.count}次</span><div className="flex-1 min-w-0"><div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{item.name || item.id}</div>{item.last_query && <div className="text-xs text-[var(--color-text-disabled)] truncate">最近: {item.last_query}</div>}</div>{item.surface_count > 0 && <span className="text-xs text-[var(--color-text-disabled)] flex-shrink-0">浮现{item.surface_count}次</span>}</Card>))}</div>
             )}

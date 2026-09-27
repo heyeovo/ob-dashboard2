@@ -34,7 +34,7 @@ type BucketCandidate = Candidate & {
   journal: boolean
 }
 
-const SELECT = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2 py-1.5 text-[11px] text-[var(--color-text-secondary)]'
+const SELECT = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[11px] text-[var(--color-text-secondary)]'
 
 function defaultModes(days: ConversationContextDay[]): Record<string, 'raw' | 'review' | 'omit'> {
   const newest = [...days].sort((a, b) => b.day.localeCompare(a.day))
@@ -373,7 +373,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   }, [estimatedDateTokens, feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
 
   if (loading) return <div className="py-8 text-center text-[11px] text-[var(--color-text-disabled)]">读取上下文日期…</div>
-  if (!draft || !session) return <div className="text-[11px] text-red-600">{note || '没有可用的窗口配置'}</div>
+  if (!draft || !session) return <div className="text-[11px] text-[var(--color-danger)]">{note || '没有可用的窗口配置'}</div>
 
   const updateStrategy = (strategy: RollingContextConfig['strategy']) => {
     setDraft(current => current ? {
@@ -654,11 +654,11 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
         </div>
       )}
 
-      <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-white disabled:opacity-50">
+      <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-[var(--color-on-primary)] disabled:opacity-50">
         {saving ? '保存中…' : busy ? '回复结束后可保存' : '保存上下文拼接'}
       </button>
       {draft.strategy === 'daily_rolling' ? (
-        <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-red-50/60 p-2.5">
+        <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)]/60 p-2.5">
           <div className="text-[10.5px] font-medium text-[var(--color-danger)]">损坏窗口恢复</div>
           <div className="mt-1 text-[9.5px] leading-relaxed text-[var(--color-text-tertiary)]">
             仅在旧 transcript 无法继续时使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
@@ -667,7 +667,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             type="button"
             disabled={recovering || saving || busy}
             onClick={() => void recoverFromHavenBody()}
-            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 bg-white px-3 py-2 text-[10.5px] text-[var(--color-danger)] disabled:opacity-50"
+            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 bg-[var(--color-surface)] px-3 py-2 text-[10.5px] text-[var(--color-danger)] disabled:opacity-50"
           >
             {recovering ? '正在重建…' : '舍弃损坏的原生记录，用 Haven 正文重建'}
           </button>

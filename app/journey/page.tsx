@@ -44,9 +44,9 @@ function statusText(status: JourneyStage['journey_status']) {
 }
 
 function statusClass(status: JourneyStage['journey_status']) {
-  if (status === 'open') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (status === 'closed') return 'bg-slate-50 text-slate-500 border-slate-200'
-  return 'bg-amber-50 text-amber-700 border-amber-200'
+  if (status === 'open') return 'bg-[var(--color-success-bg)] text-[var(--color-success)] border-[var(--color-success-border)]'
+  if (status === 'closed') return 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)] border-[var(--color-border)]'
+  return 'bg-[var(--color-pending-bg)] text-[var(--color-pending)] border-[var(--color-pending-border)]'
 }
 
 export default function JourneyPage() {
@@ -273,7 +273,7 @@ export default function JourneyPage() {
         {loading ? (
           <div className="py-20 text-center text-sm text-[var(--color-text-disabled)]">读取中…</div>
         ) : error ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+          <div className="rounded-2xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger)]">{error}</div>
         ) : stages.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--color-border)] py-16 text-center text-sm text-[var(--color-text-disabled)]">还没有关系轨迹</div>
         ) : (
@@ -284,8 +284,8 @@ export default function JourneyPage() {
                 onClick={() => openStage(stage.id)}
                 className="group relative flex w-full gap-4 text-left"
               >
-                <span className={`relative z-[1] mt-5 h-[19px] w-[19px] flex-none rounded-full border-4 border-[var(--color-bg)] ${stage.journey_status === 'open' ? 'bg-emerald-500' : 'bg-[var(--color-primary)]'}`} />
-                <span className="block flex-1 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:border-[var(--color-primary)]/40 group-hover:shadow-md sm:p-5">
+                <span className={`relative z-[1] mt-5 h-[19px] w-[19px] flex-none rounded-full border-4 border-[var(--color-bg)] ${stage.journey_status === 'open' ? 'bg-[var(--color-success-strong)]' : 'bg-[var(--color-primary)]'}`} />
+                <span className="block flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:border-[var(--color-primary)]/40 group-hover:shadow-md sm:p-5">
                   <span className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs text-[var(--color-text-tertiary)]">
                       {displayDate(stage.journey_start)} → {stage.journey_status === 'open' ? '至今' : displayDate(stage.journey_end)}
@@ -297,7 +297,7 @@ export default function JourneyPage() {
                   <span className="block font-medium text-[var(--color-text-primary)]">{stage.name}</span>
                   <span className="mt-2 line-clamp-3 block text-sm leading-relaxed text-[var(--color-text-secondary)]">{stage.journey_summary}</span>
                   {stage.missing_fields.length > 0 && (
-                    <span className="mt-3 block text-[11px] text-amber-600">旧阶段有 {stage.missing_fields.length} 项结构字段未标注</span>
+                    <span className="mt-3 block text-[11px] text-[var(--color-pending)]">旧阶段有 {stage.missing_fields.length} 项结构字段未标注</span>
                   )}
                 </span>
               </button>
@@ -363,15 +363,15 @@ export default function JourneyPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="sm:col-span-2">
                       <span className="mb-1.5 block text-xs text-[var(--color-text-tertiary)]">阶段标题</span>
-                      <input value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]" />
+                      <input value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]" />
                     </label>
                     <label>
                       <span className="mb-1.5 block text-xs text-[var(--color-text-tertiary)]">开始日期</span>
-                      <input type="date" value={form.journey_start} onChange={event => setForm(current => ({ ...current, journey_start: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm" />
+                      <input type="date" value={form.journey_start} onChange={event => setForm(current => ({ ...current, journey_start: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm" />
                     </label>
                     <label>
                       <span className="mb-1.5 block text-xs text-[var(--color-text-tertiary)]">状态</span>
-                      <select value={form.journey_status} onChange={event => setForm(current => ({ ...current, journey_status: event.target.value as JourneyStage['journey_status'] }))} className="w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm">
+                      <select value={form.journey_status} onChange={event => setForm(current => ({ ...current, journey_status: event.target.value as JourneyStage['journey_status'] }))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm">
                         <option value="unmarked">未标注（旧阶段）</option>
                         <option value="open">进行中</option>
                         <option value="closed">已结束</option>
@@ -380,31 +380,31 @@ export default function JourneyPage() {
                     {form.journey_status === 'closed' && (
                       <label>
                         <span className="mb-1.5 block text-xs text-[var(--color-text-tertiary)]">结束日期</span>
-                        <input type="date" value={form.journey_end} onChange={event => setForm(current => ({ ...current, journey_end: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm" />
+                        <input type="date" value={form.journey_end} onChange={event => setForm(current => ({ ...current, journey_end: event.target.value }))} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm" />
                       </label>
                     )}
                   </div>
 
                   <label className="block">
                     <span className="mb-1.5 block text-xs text-[var(--color-text-tertiary)]">阶段摘要</span>
-                    <textarea value={form.journey_summary} onChange={event => setForm(current => ({ ...current, journey_summary: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-[var(--color-primary)]" />
+                    <textarea value={form.journey_summary} onChange={event => setForm(current => ({ ...current, journey_summary: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm leading-relaxed outline-none focus:border-[var(--color-primary)]" />
                   </label>
 
                   <label className="block">
                     <span className="mb-1.5 block text-xs text-[var(--color-text-tertiary)]">完整正文与关键事件</span>
-                    <textarea value={form.content} onChange={event => setForm(current => ({ ...current, content: event.target.value }))} rows={16} className="w-full resize-y rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm leading-7 outline-none focus:border-[var(--color-primary)]" />
+                    <textarea value={form.content} onChange={event => setForm(current => ({ ...current, content: event.target.value }))} rows={16} className="w-full resize-y rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm leading-7 outline-none focus:border-[var(--color-primary)]" />
                   </label>
 
                   <section>
                     <div className="mb-2 text-xs text-[var(--color-text-tertiary)]">证据桶（名称 + ID）</div>
                     <div className="mb-3 space-y-2">
                       {editEvidence.map(bucket => (
-                        <div key={bucket.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2">
+                        <div key={bucket.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{bucket.name}</div>
                             <div className="truncate font-mono text-[11px] text-[var(--color-text-tertiary)]">{bucket.id}</div>
                           </div>
-                          <button onClick={() => setEditEvidence(current => current.filter(item => item.id !== bucket.id))} className="flex-none text-xs text-red-500">移除</button>
+                          <button onClick={() => setEditEvidence(current => current.filter(item => item.id !== bucket.id))} className="flex-none text-xs text-[var(--color-danger-strong)]">移除</button>
                         </div>
                       ))}
                     </div>
@@ -414,12 +414,12 @@ export default function JourneyPage() {
                         onChange={event => setEvidenceQuery(event.target.value)}
                         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); searchEvidence() } }}
                         placeholder="按桶名称或 ID 搜索"
-                        className="min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
+                        className="min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
                       />
                       <button onClick={searchEvidence} disabled={evidenceSearching || !evidenceQuery.trim()} className="rounded-xl bg-[var(--color-surface-secondary)] px-4 py-2 text-sm disabled:opacity-50">{evidenceSearching ? '搜索中…' : '搜索'}</button>
                     </div>
                     {evidenceResults.length > 0 && (
-                      <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-2">
+                      <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
                         {evidenceResults.map(bucket => (
                           <button key={bucket.id} onClick={() => addEvidence(bucket)} className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-[var(--color-surface-secondary)]">
                             <span className="truncate text-sm">{bucket.name || bucket.id}</span>
@@ -434,13 +434,13 @@ export default function JourneyPage() {
             </div>
 
             <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--color-border)] pt-4">
-              <div className="text-xs text-red-600">{saveError}</div>
+              <div className="text-xs text-[var(--color-danger)]">{saveError}</div>
               {!editing ? (
                 <button onClick={startEdit} className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm hover:bg-[var(--color-surface-secondary)]">人工纠错</button>
               ) : (
                 <div className="flex gap-2">
                   <button onClick={() => setEditing(false)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消</button>
-                  <button onClick={saveJourney} disabled={saving} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-white disabled:opacity-50">{saving ? '保存中…' : '保存更改'}</button>
+                  <button onClick={saveJourney} disabled={saving} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-[var(--color-on-primary)] disabled:opacity-50">{saving ? '保存中…' : '保存更改'}</button>
                 </div>
               )}
             </div>

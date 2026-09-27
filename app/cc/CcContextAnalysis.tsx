@@ -222,7 +222,7 @@ export default function CcContextAnalysis(props: Props) {
             type="button"
             disabled={loading || Boolean(disabledReason)}
             onClick={() => void readExact(Boolean(analysis))}
-            className="shrink-0 rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10.5px] text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? '读取中…' : analysis ? '重新读取' : '读取官方分析'}
           </button>

@@ -33,7 +33,7 @@ type Payload = {
   }
 }
 
-const BUTTON = 'rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
+const BUTTON = 'rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
 
 const KIND_GROUPS: Array<{ key: string; label: string; kinds: Set<Candidate['kind']> }> = [
   { key: 'memory', label: 'OB 记忆', kinds: new Set(['ob_recall', 'read_bucket', 'breath', 'introspection', 'read_daily_reviews', 'hold', 'comment_bucket']) },

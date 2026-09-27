@@ -54,15 +54,15 @@ export default function HomeToolDrawer({
         type="button"
         aria-label="关闭功能侧边栏"
         onClick={onClose}
-        className="absolute inset-0 bg-slate-950/25 backdrop-blur-[5px]"
+        className="absolute inset-0 bg-[var(--color-dark-surface)]/25 backdrop-blur-[5px]"
       />
       <aside
         role="dialog"
         aria-modal="true"
         aria-label="家的功能导航"
-        className="home-nav-drawer absolute inset-y-0 left-0 flex w-[82vw] max-w-[360px] flex-col overflow-hidden border-r border-white/60 bg-[var(--color-bg)] shadow-2xl"
+        className="home-nav-drawer absolute inset-y-0 left-0 flex w-[82vw] max-w-[360px] flex-col overflow-hidden border-r border-[var(--color-surface)]/60 bg-[var(--color-bg)] shadow-2xl"
       >
-        <header className="flex h-16 shrink-0 items-center border-b border-[var(--color-border)] bg-white/55 px-5 backdrop-blur-md">
+        <header className="flex h-16 shrink-0 items-center border-b border-[var(--color-border)] bg-[var(--color-surface)]/55 px-5 backdrop-blur-md">
           <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
           <div className="ml-2.5">
             <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">小言&小羊的家</h2>
@@ -72,7 +72,7 @@ export default function HomeToolDrawer({
             type="button"
             onClick={onClose}
             aria-label="关闭"
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-tertiary)] hover:bg-black/5"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5"
           >
             ×
           </button>
@@ -91,7 +91,7 @@ export default function HomeToolDrawer({
                       key={item.key}
                       href={item.href}
                       onClick={onClose}
-                      className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm text-[var(--color-text-secondary)] transition hover:bg-white/75 hover:text-[var(--color-primary)]"
+                      className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface)]/75 hover:text-[var(--color-primary)]"
                     >
                       <span className="flex h-7 w-7 items-center justify-center text-lg text-[var(--color-text-tertiary)]">
                         {item.icon}

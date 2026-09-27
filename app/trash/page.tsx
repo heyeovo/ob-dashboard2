@@ -75,7 +75,7 @@ export default function TrashPage() {
           </div>
           {items.length > 0 && (
             <button onClick={emptyTrash} disabled={operating}
-              className="text-sm text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
+              className="text-sm text-[var(--color-danger-strong)] hover:text-[var(--color-danger)] font-medium disabled:opacity-50">
               清空回收站
             </button>
           )}
@@ -84,13 +84,13 @@ export default function TrashPage() {
         {loading ? (
           <div className="text-center text-[var(--color-text-disabled)] py-20">读取中...</div>
         ) : items.length === 0 ? (
-          <div className="text-center text-[var(--color-text-disabled)] py-20 bg-white rounded-2xl border border-[var(--color-border)] border-dashed">
+          <div className="text-center text-[var(--color-text-disabled)] py-20 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] border-dashed">
             🗑️ 回收站为空
           </div>
         ) : (
           <div className="space-y-2">
             {items.map(item => (
-              <div key={item.id} className="bg-white border border-[var(--color-border)] rounded-xl px-4 py-3 flex items-center gap-3">
+              <div key={item.id} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{item.name}</div>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -102,11 +102,11 @@ export default function TrashPage() {
                   </div>
                 </div>
                 <button onClick={() => { alert('click restore ' + item.id); restore(item.id) }} disabled={operating}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors flex-shrink-0">
                   恢复
                 </button>
                 <button onClick={() => purge(item.id)} disabled={operating}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors flex-shrink-0">
+                  className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-danger-strong)] hover:bg-[var(--color-danger-bg)] disabled:opacity-50 transition-colors flex-shrink-0">
                   彻底删除
                 </button>
               </div>

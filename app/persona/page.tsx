@@ -143,7 +143,7 @@ function Metric({ label, value }: { label: string; value: unknown }) {
       <span className="text-[var(--color-text-secondary)]">{label}</span>
       <div className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-tertiary)]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[#D7A9A0] via-[var(--color-primary)] to-[#8DA8A3] transition-[width] duration-500"
+          className="h-full rounded-full bg-gradient-to-r from-[var(--color-chart-warm)] via-[var(--color-primary)] to-[var(--color-chart-cool)] transition-[width] duration-500"
           style={{ width: `${Math.round(amount * 100)}%` }}
         />
       </div>
@@ -159,7 +159,7 @@ function MetricCard({ title, pace, fields, values }: {
   values: NumberMap
 }) {
   return (
-    <section className="rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="font-semibold text-[var(--color-text-heading)]">{title}</h2>
         <span className="text-[11px] text-[var(--color-text-disabled)]">{pace}</span>
@@ -173,10 +173,10 @@ function MetricCard({ title, pace, fields, values }: {
 
 function StatusPill({ label, ok, paused }: { label: string; ok: boolean; paused?: boolean }) {
   const tone = ok
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    ? 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
     : paused
-      ? 'border-amber-200 bg-amber-50 text-amber-700'
-      : 'border-rose-200 bg-rose-50 text-rose-700'
+      ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
+      : 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
   return <span className={`rounded-full border px-2.5 py-1 text-[11px] ${tone}`}>{label}</span>
 }
 
@@ -199,7 +199,7 @@ function DeltaList({ event }: { event: PersonaEvent }) {
       {deltas.map(({ group, key, value }) => (
         <span
           key={`${group}-${key}`}
-          className={`rounded-full px-2 py-1 text-[11px] tabular-nums ${value > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
+          className={`rounded-full px-2 py-1 text-[11px] tabular-nums ${value > 0 ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' : 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]'}`}
           title={`${group}.${key}`}
         >
           {group}·{FIELD_LABELS[key] || key} {value > 0 ? '+' : ''}{value.toFixed(3)}
@@ -280,7 +280,7 @@ function PersonaStateView() {
       <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg)]/90 backdrop-blur-sm">
         <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
           <div className="flex items-center gap-3">
-            <Link href="/" className="rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-black/5">← Home</Link>
+            <Link href="/" className="rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5">← Home</Link>
             <div>
               <h1 className="text-base font-semibold">Persona 中心</h1>
               <p className="hidden text-xs text-[var(--color-text-disabled)] sm:block">内在状态由 Haven 管理</p>
@@ -294,7 +294,7 @@ function PersonaStateView() {
               setLoading(true)
               loadPersona(sessionId).catch(reason => setError(reason instanceof Error ? reason.message : '刷新失败')).finally(() => setLoading(false))
             }}
-            className="rounded-lg border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] disabled:opacity-50"
+            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] disabled:opacity-50"
           >
             {loading ? '读取中…' : '刷新'}
           </button>
@@ -322,7 +322,7 @@ function PersonaStateView() {
                 setLoading(true)
                 loadPersona(next).catch(reason => setError(reason instanceof Error ? reason.message : '切换 session 失败')).finally(() => setLoading(false))
               }}
-              className="max-w-[260px] rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-xs text-[var(--color-text-primary)]"
+              className="max-w-[260px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-primary)]"
             >
               {sessionId && !sessions.some(session => session.session_id === sessionId) && <option value={sessionId}>{sessionId}</option>}
               {sessions.map(session => (
@@ -334,21 +334,21 @@ function PersonaStateView() {
           </label>
         </div>
 
-        {error && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+        {error && <div className="mb-5 rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">{error}</div>}
 
         {!payload && loading ? (
-          <div className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-16 text-center text-sm text-[var(--color-text-disabled)]">正在从 Haven 读取 Persona 状态…</div>
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-16 text-center text-sm text-[var(--color-text-disabled)]">正在从 Haven 读取 Persona 状态…</div>
         ) : payload && (
           <>
             <div className="mb-5 grid gap-5 lg:grid-cols-[minmax(280px,.82fr)_minmax(0,1.18fr)]">
-              <section className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-white p-6 shadow-sm sm:p-8">
+              <section className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm sm:p-8">
                 <div
                   className="persona-orb-motion mx-auto h-40 w-40 rounded-full sm:h-44 sm:w-44"
                   style={{
                     '--persona-speed': `${6.5 - arousal * 3.5}s`,
                     opacity: 0.76 + arousal * 0.24,
-                    background: `radial-gradient(circle at 36% 30%, rgba(255,255,255,.94), rgba(255,255,255,.16) 28%, transparent 41%), radial-gradient(circle at 55% 56%, hsl(${warmth} 42% 64%), hsl(${155 - valence * 38} 22% 48%) 62%, hsl(355 30% 63%) 100%)`,
-                    boxShadow: '18px 18px 34px rgba(139,116,102,.18), -14px -14px 30px rgba(255,255,255,.86), inset 14px 14px 28px rgba(255,255,255,.30), inset -16px -16px 28px rgba(59,84,78,.22)',
+                    background: `var(--persona-orb-sheen), radial-gradient(circle at 55% 56%, hsl(${warmth} 42% 64%), hsl(${155 - valence * 38} 22% 48%) 62%, hsl(355 30% 63%) 100%)`,
+                    boxShadow: 'var(--persona-orb-shadow)',
                   } as React.CSSProperties}
                   role="img"
                   aria-label={`当前心情 ${mood}，唤醒度 ${Math.round(arousal * 100)}`}
@@ -392,7 +392,7 @@ function PersonaStateView() {
               </div>
             </div>
 
-            <section className="mb-5 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm sm:p-5">
+            <section className="mb-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="font-semibold text-[var(--color-text-heading)]">运行状态</h2>
@@ -407,7 +407,7 @@ function PersonaStateView() {
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
+            <section className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
               <div className="flex flex-col gap-3 border-b border-[var(--color-border-light)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div>
                   <h2 className="font-semibold text-[var(--color-text-heading)]">Recent Persona Events</h2>
@@ -419,7 +419,7 @@ function PersonaStateView() {
                       key={value}
                       type="button"
                       onClick={() => setRange(value)}
-                      className={`rounded-md px-3 py-1.5 ${range === value ? 'bg-white font-medium text-[var(--color-text-heading)] shadow-sm' : 'text-[var(--color-text-tertiary)]'}`}
+                      className={`rounded-md px-3 py-1.5 ${range === value ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-heading)] shadow-sm' : 'text-[var(--color-text-tertiary)]'}`}
                     >{label}</button>
                   ))}
                 </div>
@@ -441,7 +441,7 @@ function PersonaStateView() {
                           return (
                             <article key={`${event.created_at || index}-${event.message_hash || index}`} className="rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/45 p-4">
                               <div className="flex flex-wrap items-start justify-between gap-2">
-                                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)]">{event.event_type || 'unknown'}</span>
+                                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)]">{event.event_type || 'unknown'}</span>
                                 <time className="text-[11px] text-[var(--color-text-disabled)]">{formatTime(event.created_at)}</time>
                               </div>
                               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">{thought}</p>

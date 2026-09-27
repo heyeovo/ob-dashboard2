@@ -39,7 +39,7 @@ export function EntryCard({ entry }: { entry: Entry }) {
 
   if (entry.todo || !entry.href) {
     return (
-      <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-white/50 px-4 py-3.5">
+      <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50 px-4 py-3.5">
         {inner}
       </div>
     )
@@ -48,7 +48,7 @@ export function EntryCard({ entry }: { entry: Entry }) {
   return (
     <Link
       href={entry.href}
-      className="rounded-xl border border-[var(--color-border)] bg-white px-4 py-3.5 transition-all duration-200 hover:border-[var(--color-primary)]/30 hover:shadow-md"
+      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3.5 transition-all duration-200 hover:border-[var(--color-primary)]/30 hover:shadow-md"
     >
       {inner}
     </Link>

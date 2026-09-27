@@ -139,14 +139,14 @@ export default function ImportPage() {
         {!isRunning && !isComplete && (
           <>
           <div className="flex flex-wrap gap-3 mb-6">
-            <div className="flex items-center gap-2 bg-white border border-[var(--color-border)] rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2">
               <span className="text-xs text-[var(--color-text-disabled)]">模式</span>
               <button onClick={() => setMode('large')}
-                className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${mode === 'large' ? 'bg-[var(--color-text-primary)] text-white' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>大批量</button>
+                className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${mode === 'large' ? 'bg-[var(--color-text-primary)] text-[var(--color-on-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>大批量</button>
               <button onClick={() => setMode('small')}
-                className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${mode === 'small' ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>小分量补漏</button>
+                className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${mode === 'small' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}>小分量补漏</button>
             </div>
-            <label className="flex items-center gap-2 bg-white border border-[var(--color-border)] rounded-xl px-3 py-2 cursor-pointer">
+            <label className="flex items-center gap-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-3 py-2 cursor-pointer">
               <input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} className="accent-[var(--color-primary)] w-3.5 h-3.5" />
               <span className="text-xs text-[var(--color-text-secondary)]">试跑模式（仅3块）</span>
             </label>
@@ -157,7 +157,7 @@ export default function ImportPage() {
             <div
               onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={handleFileDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`bg-white border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${dragOver ? 'border-[var(--color-primary)] bg-[var(--color-pinned-bg)]/30' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'}`}>
+              className={`bg-[var(--color-surface)] border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${dragOver ? 'border-[var(--color-primary)] bg-[var(--color-pinned-bg)]/30' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'}`}>
               <div className="text-3xl mb-3">📁</div>
               <div className="text-sm font-medium text-[var(--color-text-primary)] mb-1">{uploading ? '上传中…' : '拖拽文件到此处，或点击选择'}</div>
               <div className="text-xs text-[var(--color-text-disabled)]">支持 JSON · Markdown · TXT · ZIP</div>
@@ -166,11 +166,11 @@ export default function ImportPage() {
             {!showPaste ? (
               <button onClick={() => setShowPaste(true)} className="w-full text-center text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] py-2 transition-colors">或直接粘贴文本</button>
             ) : (
-              <div className="bg-white border border-[var(--color-border)] rounded-xl p-4">
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4">
                 <textarea value={textPaste} onChange={e => setTextPaste(e.target.value)} placeholder="粘贴对话记录或文本内容…" rows={8} className="w-full border border-[var(--color-border)] rounded-lg p-3 text-sm outline-none focus:border-[var(--color-primary)] resize-y" />
                 <div className="flex justify-end gap-2 mt-3">
                   <button onClick={() => { setShowPaste(false); setTextPaste('') }} className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">取消</button>
-                  <button onClick={handlePasteSubmit} disabled={!textPaste.trim() || uploading} className="text-sm bg-[var(--color-primary)] text-white px-4 py-1.5 rounded-lg disabled:opacity-50">{uploading ? '导入中…' : '开始导入'}</button>
+                  <button onClick={handlePasteSubmit} disabled={!textPaste.trim() || uploading} className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-1.5 rounded-lg disabled:opacity-50">{uploading ? '导入中…' : '开始导入'}</button>
                 </div>
               </div>
             )}
@@ -180,7 +180,7 @@ export default function ImportPage() {
 
         {/* Progress banner */}
         {(isRunning || polling) && importStatus && (
-          <div className="bg-white border border-[var(--color-border)] rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-[var(--color-text-primary)]">{isRunning ? '导入中…' : '✅ 导入完成'}</span>
               {importStatus.source_file && <span className="text-xs text-[var(--color-text-disabled)] truncate max-w-[200px]">{importStatus.source_file}</span>}
@@ -202,12 +202,12 @@ export default function ImportPage() {
               <Stat label="CNY 估算" value={importStatus.total_cost_usd != null ? `¥${(importStatus.total_cost_usd * 7.2).toFixed(2)}` : '—'} />
             </div>
             {importStatus.errors && importStatus.errors.length > 0 && (
-              <div className="bg-[var(--color-pinned-bg)] border border-[#F5D5CB] rounded-xl p-3">
+              <div className="bg-[var(--color-pinned-bg)] border border-[var(--color-primary-border)] rounded-xl p-3">
                 <div className="text-xs font-medium text-[var(--color-primary)] mb-1">错误 ({importStatus.errors.length})</div>
                 <div className="text-xs text-[var(--color-text-tertiary)] max-h-24 overflow-y-auto space-y-0.5">{importStatus.errors.slice(-5).map((e, i) => <div key={i} className="truncate">{e}</div>)}</div>
               </div>
             )}
-            {importStatus.error && <div className="bg-[var(--color-pinned-bg)] border border-[#F5D5CB] rounded-xl p-3 text-xs text-[var(--color-primary)]">{importStatus.error}</div>}
+            {importStatus.error && <div className="bg-[var(--color-pinned-bg)] border border-[var(--color-primary-border)] rounded-xl p-3 text-xs text-[var(--color-primary)]">{importStatus.error}</div>}
           </div>
         )}
 
@@ -230,7 +230,7 @@ export default function ImportPage() {
                   setReviewActions(newActions)
                   applyReviews(newActions)
                 }} disabled={reviewLoading}
-                  className="text-sm bg-[var(--color-text-primary)] text-white px-4 py-2 rounded-lg disabled:opacity-50">
+                  className="text-sm bg-[var(--color-text-primary)] text-[var(--color-on-primary)] px-4 py-2 rounded-lg disabled:opacity-50">
                   应用所有标记
                 </button>
               </div>
@@ -241,7 +241,7 @@ export default function ImportPage() {
             ) : (
               <>
                 {reviewItems.map(b => (
-                  <div key={b.id} className={`bg-white border rounded-xl px-4 py-3 flex items-start gap-3 transition-all ${reviewActions[b.id] === 'noise' ? 'opacity-40 border-[var(--color-border)]' : reviewActions[b.id] === 'delete' ? 'opacity-30 line-through border-[var(--color-border)]' : 'border-[var(--color-border)]'}`}>
+                  <div key={b.id} className={`bg-[var(--color-surface)] border rounded-xl px-4 py-3 flex items-start gap-3 transition-all ${reviewActions[b.id] === 'noise' ? 'opacity-40 border-[var(--color-border)]' : reviewActions[b.id] === 'delete' ? 'opacity-30 line-through border-[var(--color-border)]' : 'border-[var(--color-border)]'}`}>
                     <input type="checkbox" checked={checked.has(b.id)} onChange={() => toggleCheck(b.id)}
                       className="mt-1 accent-[var(--color-primary)] w-4 h-4 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -256,7 +256,7 @@ export default function ImportPage() {
                     <select
                       value={reviewActions[b.id] || 'keep'}
                       onChange={e => setAction(b.id, e.target.value as any)}
-                      className="text-xs border border-[var(--color-border)] rounded-lg px-2 py-1.5 bg-white outline-none flex-shrink-0"
+                      className="text-xs border border-[var(--color-border)] rounded-lg px-2 py-1.5 bg-[var(--color-surface)] outline-none flex-shrink-0"
                     >
                       <option value="keep">保留</option>
                       <option value="noise">标噪声</option>
@@ -268,7 +268,7 @@ export default function ImportPage() {
                 {Object.keys(reviewActions).length > 0 && (
                   <div className="flex justify-end">
                     <button onClick={() => applyReviews()}
-                      className="text-sm bg-[var(--color-primary)] text-white px-6 py-2 rounded-xl hover:bg-[var(--color-primary-hover)] transition-colors">
+                      className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-2 rounded-xl hover:bg-[var(--color-primary-hover)] transition-colors">
                       应用 ({Object.keys(reviewActions).length} 条变更)
                     </button>
                   </div>
@@ -288,10 +288,10 @@ export default function ImportPage() {
               {importStatus?.total_cost_usd != null && <span> · 花费 ${importStatus.total_cost_usd.toFixed(4)}</span>}
             </div>
             <button onClick={() => { setImportStatus(null); setReviewItems([]) }}
-              className="text-sm bg-[var(--color-text-primary)] text-white px-6 py-2 rounded-xl mr-3 hover:opacity-80 transition-colors">
+              className="text-sm bg-[var(--color-text-primary)] text-[var(--color-on-primary)] px-6 py-2 rounded-xl mr-3 hover:opacity-80 transition-colors">
               再次导入
             </button>
-            <Link href="/" className="text-sm bg-[var(--color-primary)] text-white px-6 py-2 rounded-xl hover:bg-[var(--color-primary-hover)] transition-colors inline-block">回到主页</Link>
+            <Link href="/" className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-6 py-2 rounded-xl hover:bg-[var(--color-primary-hover)] transition-colors inline-block">回到主页</Link>
           </div>
         )}
       </main>

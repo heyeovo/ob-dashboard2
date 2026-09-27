@@ -35,11 +35,11 @@ const TYPE_LABELS: Record<JourneyCandidateType, string> = {
 }
 
 function statusClass(status: JourneyCandidateStatus) {
-  if (status === 'pending') return 'border-amber-200 bg-amber-50 text-amber-700'
-  if (status === 'completed') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  if (status === 'conflict' || status === 'failed') return 'border-red-200 bg-red-50 text-red-700'
-  if (status === 'rejected') return 'border-slate-200 bg-slate-50 text-slate-500'
-  return 'border-blue-200 bg-blue-50 text-blue-700'
+  if (status === 'pending') return 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
+  if (status === 'completed') return 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+  if (status === 'conflict' || status === 'failed') return 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+  if (status === 'rejected') return 'border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'
+  return 'border-[var(--color-resolved-border)] bg-[var(--color-resolved-bg)] text-[var(--color-resolved)]'
 }
 
 function displayTime(value?: string) {
@@ -50,7 +50,7 @@ function displayTime(value?: string) {
 
 function JsonPreview({ value }: { value: Record<string, unknown> | undefined }) {
   return (
-    <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">
+    <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--color-dark-surface)] p-3 text-[11px] leading-5 text-[var(--color-dark-text)]">
       {JSON.stringify(value || {}, null, 2)}
     </pre>
   )
@@ -244,13 +244,13 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
   const retryable = current?.status === 'failed'
 
   return (
-    <section className="mb-8 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm sm:p-5">
+    <section className="mb-8 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="font-semibold">每周关系轨迹候选</h2>
             {pendingCount > 0 && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700">{pendingCount} 条待确认</span>
+              <span className="rounded-full bg-[var(--color-pending-bg)] px-2 py-0.5 text-[11px] text-[var(--color-pending)]">{pendingCount} 条待确认</span>
             )}
           </div>
           <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">只在这里人工确认后才会修改 journey；关闭页面不会写入。</p>
@@ -259,7 +259,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
       </div>
 
       {notice && (
-        <div className={`mb-4 rounded-xl border px-3 py-2 text-xs leading-5 ${notice.kind === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+        <div className={`mb-4 rounded-xl border px-3 py-2 text-xs leading-5 ${notice.kind === 'error' ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]' : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'}`}>
           {notice.text}
           {notice.kind === 'error' && /重新生成|journey|冲突/.test(notice.text) && (
             <Link href="/settings/automation" className="ml-2 underline">去重新生成候选</Link>
@@ -270,7 +270,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
       {loading ? (
         <div className="py-8 text-center text-sm text-[var(--color-text-disabled)]">读取候选中…</div>
       ) : listError ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
           {listError}
           <button onClick={() => void loadCandidates()} className="ml-3 underline">重试</button>
         </div>
@@ -292,7 +292,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
                 <span>revision {item.revision}</span>
                 <span>{displayTime(item.updated_at || item.created_at)}</span>
               </div>
-              {item.error && <div className="mt-2 line-clamp-2 text-xs text-red-600">{item.error}</div>}
+              {item.error && <div className="mt-2 line-clamp-2 text-xs text-[var(--color-danger)]">{item.error}</div>}
             </button>
           ))}
         </div>
@@ -323,7 +323,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
 
               <section>
                 <h3 className="mb-2 text-xs font-semibold text-[var(--color-text-tertiary)]">输入完整性</h3>
-                <div className={`rounded-xl border px-3 py-2 text-sm ${(input?.missing_daily_review_dates || []).length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                <div className={`rounded-xl border px-3 py-2 text-sm ${(input?.missing_daily_review_dates || []).length ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'}`}>
                   {(input?.missing_daily_review_dates || []).length
                     ? `缺少日回顾：${input?.missing_daily_review_dates?.join('、')}`
                     : '本周每日回顾完整'}
@@ -384,7 +384,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
                       )
                     })}
                   </div>
-                  {editing && chosenEvidence.length === 0 && <div className="mt-2 text-xs text-amber-700">写入型候选至少需要一个证据桶。</div>}
+                  {editing && chosenEvidence.length === 0 && <div className="mt-2 text-xs text-[var(--color-pending)]">写入型候选至少需要一个证据桶。</div>}
                 </section>
               )}
 
@@ -398,19 +398,19 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
                 <div className="mt-1 break-all font-mono text-[11px]">{current.draft_payload_hash || current.approved_payload_hash || '当前状态无可确认 hash'}</div>
               </section>
 
-              {current.error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{current.error}</div>}
+              {current.error && <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">{current.error}</div>}
 
               <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--color-border)] pt-4">
                 {editing ? (
                   <>
                     <button onClick={() => setEditing(false)} disabled={Boolean(working)} className="px-4 py-2 text-sm text-[var(--color-text-tertiary)]">取消编辑</button>
-                    <button onClick={() => void saveDraft()} disabled={Boolean(working)} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-white disabled:opacity-50">{working === 'save' ? '保存中…' : '保存为新 revision'}</button>
+                    <button onClick={() => void saveDraft()} disabled={Boolean(working)} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-[var(--color-on-primary)] disabled:opacity-50">{working === 'save' ? '保存中…' : '保存为新 revision'}</button>
                   </>
                 ) : (
                   <>
                     {actionable && current.candidate_type !== 'no_change' && <button onClick={beginEdit} disabled={Boolean(working)} className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm">编辑候选</button>}
-                    {actionable && <button onClick={() => void rejectCandidate()} disabled={Boolean(working)} className="rounded-full border border-red-200 px-4 py-2 text-sm text-red-600">{working === 'reject' ? '拒绝中…' : '拒绝'}</button>}
-                    {(actionable || retryable) && <button onClick={() => void confirmCandidate()} disabled={Boolean(working)} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-white disabled:opacity-50">{working === 'confirm' ? '确认中…' : retryable ? '重试已冻结执行' : '确认当前 revision/hash'}</button>}
+                    {actionable && <button onClick={() => void rejectCandidate()} disabled={Boolean(working)} className="rounded-full border border-[var(--color-danger-border)] px-4 py-2 text-sm text-[var(--color-danger)]">{working === 'reject' ? '拒绝中…' : '拒绝'}</button>}
+                    {(actionable || retryable) && <button onClick={() => void confirmCandidate()} disabled={Boolean(working)} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-[var(--color-on-primary)] disabled:opacity-50">{working === 'confirm' ? '确认中…' : retryable ? '重试已冻结执行' : '确认当前 revision/hash'}</button>}
                     {(current.status === 'conflict' || current.status === 'failed') && <Link href="/settings/automation" className="rounded-full border border-[var(--color-border)] px-4 py-2 text-sm">重新生成候选</Link>}
                   </>
                 )}

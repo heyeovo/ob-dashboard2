@@ -102,7 +102,7 @@ export default function PortraitStateCard({
   )
 
   return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold text-[var(--color-text-heading)]">Portrait State</h2>
@@ -125,8 +125,8 @@ export default function PortraitStateCard({
         <div
           className={`mb-4 rounded-[var(--radius-md)] border px-3 py-2 text-xs ${
             message.kind === 'error'
-              ? 'border-rose-200 bg-rose-50 text-rose-700'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+              : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
           }`}
         >
           {message.text}
@@ -252,7 +252,7 @@ export default function PortraitStateCard({
             <button
               type="button"
               onClick={() => setEditorScope(null)}
-              className="rounded-[var(--radius-md)] px-2 py-1 text-xs text-[var(--color-text-tertiary)] hover:bg-black/5"
+              className="rounded-[var(--radius-md)] px-2 py-1 text-xs text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5"
             >
               收起
             </button>

@@ -83,7 +83,7 @@ export function highlightSearchText(text: string, query: string, active = false)
     parts.push(
       <mark
         key={`${match}-${parts.length}`}
-        className={`rounded-sm px-0.5 text-inherit ${active ? 'bg-amber-300' : 'bg-amber-100'}`}
+        className={`rounded-sm px-0.5 text-inherit ${active ? 'bg-[var(--color-warning-strong)]' : 'bg-[var(--color-pending-bg)]'}`}
       >
         {text.slice(match, match + needle.length)}
       </mark>,

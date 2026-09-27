@@ -124,7 +124,7 @@ export default function UpstreamSettingsPage() {
     }
   }
 
-  const box = 'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm'
+  const box = 'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm'
   const label = 'mb-1 block text-xs text-[var(--color-text-tertiary)]'
 
   return (
@@ -156,7 +156,7 @@ export default function UpstreamSettingsPage() {
                 <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">API 中转站</h2>
                 <button
                   type="button"
-                  className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs"
+                  className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs"
                   onClick={() => patch({ providers: [...config.providers, draftProvider()] })}
                 >
                   加一个
@@ -172,7 +172,7 @@ export default function UpstreamSettingsPage() {
                   {config.providers.map(p => (
                     <div
                       key={p.id}
-                      className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4"
+                      className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4"
                     >
                       <div className="mb-3 flex items-center gap-2">
                         <input
@@ -225,7 +225,7 @@ export default function UpstreamSettingsPage() {
                                   type="button"
                                   disabled={!m.trim() || t?.state === 'running'}
                                   onClick={() => void testModel(p.id, m.trim())}
-                                  className="shrink-0 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2.5 py-2 text-xs text-[var(--color-text-secondary)] disabled:opacity-40"
+                                  className="shrink-0 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs text-[var(--color-text-secondary)] disabled:opacity-40"
                                 >
                                   {t?.state === 'running' ? '测…' : '测试'}
                                 </button>
@@ -242,7 +242,7 @@ export default function UpstreamSettingsPage() {
                                 <div
                                   className={`mt-1 text-[11px] leading-relaxed ${
                                     t.state === 'ok'
-                                      ? 'text-[#4F7C5E]'
+                                      ? 'text-[var(--color-success)]'
                                       : 'text-[var(--color-danger)]'
                                   }`}
                                 >
@@ -275,7 +275,7 @@ export default function UpstreamSettingsPage() {
               <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-heading)]">
                 订阅（本机 claude 登录态）
               </h2>
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4">
+              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4">
                 <label className={label}>能选的模型名，一个一行（留空就用 claude 自己的默认）</label>
                 <div className="space-y-2">
                   {config.subscriptionModels.map((m, i) => (
@@ -324,7 +324,7 @@ export default function UpstreamSettingsPage() {
             {/* ── 新对话默认值 ── */}
             <section>
               <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-heading)]">新对话默认用</h2>
-              <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4">
+              <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4">
                 <div>
                   <label className={label}>供应商</label>
                   <div className="flex gap-2">
@@ -336,7 +336,7 @@ export default function UpstreamSettingsPage() {
                         className={`flex-1 rounded-[var(--radius-md)] border px-3 py-2 text-sm ${
                           config.defaultKind === kind
                             ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
-                            : 'border-[var(--color-border)] bg-white'
+                            : 'border-[var(--color-border)] bg-[var(--color-surface)]'
                         }`}
                       >
                         {kind === 'subscription' ? '订阅' : 'api 中转站'}
@@ -383,7 +383,7 @@ export default function UpstreamSettingsPage() {
                         className={`flex-1 rounded-[var(--radius-md)] border px-2 py-1.5 text-xs ${
                           config.defaultEffort === o.id
                             ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]'
-                            : 'border-[var(--color-border)] bg-white'
+                            : 'border-[var(--color-border)] bg-[var(--color-surface)]'
                         }`}
                       >
                         {o.label}
@@ -416,7 +416,7 @@ export default function UpstreamSettingsPage() {
                 type="button"
                 disabled={saving}
                 onClick={() => void save()}
-                className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 py-2.5 text-sm font-medium text-[var(--color-on-primary)] disabled:opacity-50"
               >
                 {saving ? '保存中' : '保存'}
               </button>

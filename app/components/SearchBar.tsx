@@ -14,7 +14,7 @@ interface SearchBarProps {
 
 export default function SearchBar({ value, onChange, onKeyDown, placeholder = '搜索关键词...', className = '' }: SearchBarProps) {
   return (
-    <div className={`bg-white border border-[var(--color-border)] rounded-full px-3.5 py-2 flex items-center gap-2 flex-1 ${className}`}>
+    <div className={`bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full px-3.5 py-2 flex items-center gap-2 flex-1 ${className}`}>
       <svg className="w-3.5 h-3.5 text-[var(--color-text-disabled)] flex-shrink-0" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
         <circle cx="5.5" cy="5.5" r="4.5" />
         <path d="M9 9l4 4" />

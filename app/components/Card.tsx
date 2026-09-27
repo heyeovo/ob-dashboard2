@@ -26,10 +26,10 @@ const PADDING = {
 }
 
 const VARIANT = {
-  interactive: 'bg-white border border-[var(--color-border)] hover:shadow-md hover:border-[var(--color-primary)]/30 cursor-pointer transition-all duration-200',
-  outline: 'bg-white border border-[var(--color-border)]',
+  interactive: 'bg-[var(--color-surface)] border border-[var(--color-border)] hover:shadow-md hover:border-[var(--color-primary)]/30 cursor-pointer transition-all duration-200',
+  outline: 'bg-[var(--color-surface)] border border-[var(--color-border)]',
   ghost: 'border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]',
-  empty: 'bg-white border border-dashed border-[var(--color-border)]',
+  empty: 'bg-[var(--color-surface)] border border-dashed border-[var(--color-border)]',
 }
 
 export default function Card({ variant = 'outline', padding = 'md', onClick, className = '', children }: CardProps) {

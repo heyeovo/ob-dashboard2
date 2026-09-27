@@ -8,7 +8,7 @@ export default function McpPage() {
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-3 sm:px-6">
           <Link
             href="/"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-secondary)] hover:bg-black/5"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-overlay)]/5"
             aria-label="返回主页"
           >
             ←

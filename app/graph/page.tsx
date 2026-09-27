@@ -54,9 +54,9 @@ const TYPE_LABEL: Record<string, string> = { dynamic: '动态', permanent: '永�
 const TYPES: ('dynamic' | 'permanent' | 'feel')[] = ['dynamic', 'permanent', 'feel']
 
 const TYPE_COLORS: Record<string, { fill: string; border: string; text: string }> = {
-  dynamic: { fill: '#FFF5F0', border: 'var(--color-primary)', text: 'var(--color-primary-hover)' },
-  permanent: { fill: '#FFFBF0', border: '#C49B3A', text: '#8A6A1F' },
-  feel: { fill: '#F8F0FA', border: '#B795C9', text: '#8A6A9A' },
+  dynamic: { fill: 'var(--color-primary-light)', border: 'var(--color-primary)', text: 'var(--color-primary-hover)' },
+  permanent: { fill: 'var(--color-wish-bg)', border: 'var(--color-graph-wish-border)', text: 'var(--color-graph-wish-text)' },
+  feel: { fill: 'var(--color-graph-feel-bg)', border: 'var(--color-graph-feel-border)', text: 'var(--color-graph-feel-text)' },
 }
 
 function radiusFor(importance: number) {
@@ -573,7 +573,7 @@ export default function GraphPage() {
                     <>
                       <input value={listSearch} onChange={e => setListSearch(e.target.value)}
                         placeholder="搜索桶名或内容…"
-                        className="w-full text-sm px-3 py-1.5 mb-2 border border-[var(--color-border)] rounded-xl bg-white outline-none focus:border-[var(--color-primary)] text-[var(--color-text-primary)]" />
+                        className="w-full text-sm px-3 py-1.5 mb-2 border border-[var(--color-border)] rounded-xl bg-[var(--color-surface)] outline-none focus:border-[var(--color-primary)] text-[var(--color-text-primary)]" />
                       <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                         {(['all', ...TYPES] as const).map(t => (
                           <FilterPill key={t} label={t === 'all' ? '全部' : TYPE_LABEL[t]} active={typeFilter === t} onClick={() => setTypeFilter(t)} />
@@ -581,7 +581,7 @@ export default function GraphPage() {
                       </div>
                       <div className="flex items-center gap-1.5 mb-3">
                         <select value={sortBy} onChange={e => setSortBy(e.target.value as 'score' | 'importance' | 'created')}
-                          className="text-xs px-2 py-1.5 flex-1 border border-[var(--color-border)] rounded-xl bg-white outline-none text-[var(--color-text-secondary)]">
+                          className="text-xs px-2 py-1.5 flex-1 border border-[var(--color-border)] rounded-xl bg-[var(--color-surface)] outline-none text-[var(--color-text-secondary)]">
                           <option value="score">权重</option>
                           <option value="importance">重要度</option>
                           <option value="created">时间</option>
@@ -667,7 +667,7 @@ export default function GraphPage() {
                           if (!pos) return null
                           const r = radiusFor(n.importance)
                           const isSel = selectedId === n.id
-                          const tc = TYPE_COLORS[n.type] ?? { fill: '#FFFFFF', border: 'var(--border)', text: 'var(--text)' }
+                          const tc = TYPE_COLORS[n.type] ?? { fill: 'var(--color-surface)', border: 'var(--border)', text: 'var(--text)' }
                           return (
                             <div key={n.id}
                               onMouseDown={e => onNodeMouseDown(e, n.id)}
@@ -676,15 +676,15 @@ export default function GraphPage() {
                               style={{
                                 left: pos.x, top: pos.y, width: r * 2, height: r * 2,
                                 fontSize: r > 32 ? 11 : 10,
-                                background: isSel ? 'var(--color-pinned-bg)' : (n.pinned ? '#FFFBF0' : tc.fill),
-                                borderColor: isSel ? 'var(--accent)' : (n.pinned ? '#E8A23A' : tc.border),
-                                color: isSel ? 'var(--color-primary-hover)' : (n.pinned ? '#8A6A1F' : tc.text),
+                                background: isSel ? 'var(--color-pinned-bg)' : (n.pinned ? 'var(--color-wish-bg)' : tc.fill),
+                                borderColor: isSel ? 'var(--accent)' : (n.pinned ? 'var(--color-graph-wish-border)' : tc.border),
+                                color: isSel ? 'var(--color-primary-hover)' : (n.pinned ? 'var(--color-graph-wish-text)' : tc.text),
                                 boxShadow: isSel ? '0 0 0 4px var(--accent-glow)' : '0 1px 3px var(--shadow-dark-subtle)',
                               }}>
                               {n.name?.length > 12 ? n.name.slice(0, 11) + '…' : n.name}
                               <div onMouseDown={e => onHandleMouseDown(e, n.id)}
                                 title="拖到另一个节点上连线"
-                                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white cursor-crosshair hover:scale-110 transition-transform"
+                                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[var(--color-surface)] cursor-crosshair hover:scale-110 transition-transform"
                                 style={{ background: 'var(--accent)' }} />
                             </div>
                           )
@@ -714,7 +714,7 @@ export default function GraphPage() {
                       <p className="text-sm text-[var(--text)] leading-relaxed mb-4 whitespace-pre-wrap opacity-80">{selectedNode.content_preview}</p>
 
                       <div className="flex items-center gap-3 mb-4 flex-wrap">
-                        <button onClick={() => openBucketDetail(selectedNode.id)} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-full text-xs px-4 py-1.5 font-medium text-white">查看详情</button>
+                        <button onClick={() => openBucketDetail(selectedNode.id)} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-full text-xs px-4 py-1.5 font-medium text-[var(--color-on-primary)]">查看详情</button>
                         {selectedInGraph ? (
                           <button onClick={() => toggleNodeInGraph(selectedNode.id)} className="text-xs text-[var(--text-dim)] hover:text-[var(--color-danger)] hover:underline">移出图谱</button>
                         ) : (
@@ -754,7 +754,7 @@ export default function GraphPage() {
                             placeholder="+ 添加关联记忆…"
                             className="neu-input w-full text-xs px-3 py-1.5" />
                           {addRelResults.length > 0 && (
-                            <div className="overflow-hidden border border-[var(--color-border)] rounded-xl bg-white shadow-md absolute z-20 mt-1 w-full">
+                            <div className="overflow-hidden border border-[var(--color-border)] rounded-xl bg-[var(--color-surface)] shadow-md absolute z-20 mt-1 w-full">
                               {addRelResults.map(b => (
                                 <div key={b.id} onClick={() => addRelation(b.id)}
                                   className="px-3 py-2 text-xs hover:bg-[var(--color-primary-soft)] cursor-pointer truncate text-[var(--text)]">{b.name}</div>

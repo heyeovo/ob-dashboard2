@@ -456,7 +456,7 @@ export default function CcPersonaDialog({
                   ) : (
                     <div className="flex flex-col gap-2.5">
                       {draft.promptModules.map((module, index) => (
-                        <div key={module.id} className="rounded-2xl border border-[var(--color-border-light)] bg-white p-3.5">
+                        <div key={module.id} className="rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3.5">
                           <button type="button" className="w-full text-left" onClick={() => setEditingPromptModuleId(module.id)}>
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">

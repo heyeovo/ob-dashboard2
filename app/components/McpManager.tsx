@@ -43,7 +43,7 @@ type Draft = {
 }
 
 const INPUT =
-  'w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-primary)]/50 focus:ring-2 focus:ring-[var(--color-primary)]/10'
+  'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-primary)]/50 focus:ring-2 focus:ring-[var(--color-primary)]/10'
 
 function idFromLabel(value: string) {
   let id = value
@@ -606,7 +606,7 @@ export default function McpManager() {
           />
         </label>
 
-        <div className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-white/60 p-3 sm:grid-cols-2">
+        <div className="grid gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
             <input
               type="checkbox"
@@ -625,7 +625,7 @@ export default function McpManager() {
           </label>
         </div>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -638,7 +638,7 @@ export default function McpManager() {
             type="button"
             disabled={saving}
             onClick={() => void saveDraft()}
-            className="rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] disabled:opacity-50"
           >
             {saving ? '保存中…' : '保存并立即应用'}
           </button>
@@ -663,14 +663,14 @@ export default function McpManager() {
             type="button"
             disabled={checking || saving}
             onClick={() => void refreshTools()}
-            className="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-xs text-[var(--color-text-secondary)] disabled:opacity-50"
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-secondary)] disabled:opacity-50"
           >
             {checking ? '刷新中…' : '刷新工具清单'}
           </button>
           <button
             type="button"
             onClick={() => setDraft(emptyDraft())}
-            className="rounded-xl bg-[var(--color-primary)] px-3 py-2 text-xs font-medium text-white"
+            className="rounded-xl bg-[var(--color-primary)] px-3 py-2 text-xs font-medium text-[var(--color-on-primary)]"
           >
             + 新增 MCP
           </button>
@@ -696,12 +696,12 @@ export default function McpManager() {
       </div>
 
       {note && (
-        <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs leading-relaxed text-emerald-700">
+        <p className="mb-3 rounded-xl bg-[var(--color-success-bg)] px-3 py-2 text-xs leading-relaxed text-[var(--color-success)]">
           {note}
         </p>
       )}
       {error && (
-        <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
+        <p className="mb-3 rounded-xl bg-[var(--color-danger-bg)] px-3 py-2 text-xs leading-relaxed text-[var(--color-danger)]">
           {error}
         </p>
       )}
@@ -717,7 +717,7 @@ export default function McpManager() {
               ? server.tools.reduce((sum, tool) => sum + estimateMcpToolTokens(tool), 0)
               : 0
             return (
-              <article key={server.name} className="rounded-2xl border border-[var(--color-border)] bg-white/80 p-4 shadow-sm">
+              <article key={server.name} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-4 shadow-sm">
                 <div className="flex items-start gap-3">
                   <label className="mt-0.5 flex cursor-pointer items-center">
                     <input
@@ -735,7 +735,7 @@ export default function McpManager() {
                       <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">内置 · 无链接</span>
                       {server.permissionConfigurable ? (
                         <select
-                          className="rounded-full border border-[var(--color-border)] bg-white px-2 py-0.5 text-[10px] text-[var(--color-primary)] outline-none"
+                          className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] text-[var(--color-primary)] outline-none"
                           value={server.permission}
                           disabled={saving || !server.enabled}
                           onChange={event => void setBuiltInPermission(server.name, event.target.value as 'allow' | 'ask')}
@@ -790,7 +790,7 @@ export default function McpManager() {
           return (
             <article
               key={server.name}
-              className="rounded-2xl border border-[var(--color-border)] bg-white/80 p-4 shadow-sm"
+              className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-start gap-3">
                 <label className="mt-0.5 flex cursor-pointer items-center">
@@ -820,8 +820,8 @@ export default function McpManager() {
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] ${
                           status.status === 'connected'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-amber-50 text-amber-700'
+                            ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                            : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
                         }`}
                       >
                         {statusLabel(status.status)}
@@ -854,7 +854,7 @@ export default function McpManager() {
                   <button
                     type="button"
                     onClick={() => void removeServer(server.name, server.label)}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    className="text-xs text-[var(--color-danger-strong)] hover:text-[var(--color-danger)]"
                   >
                     删除
                   </button>
@@ -889,7 +889,7 @@ export default function McpManager() {
                         className={`rounded-xl px-3 py-2.5 transition ${
                           tool.enabled
                             ? 'bg-[var(--color-surface-secondary)]'
-                            : 'bg-black/[0.025] opacity-60'
+                            : 'bg-[var(--color-overlay)]/[0.025] opacity-60'
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -908,7 +908,7 @@ export default function McpManager() {
                               }
                               aria-label={`${tool.enabled ? '关闭' : '开启'} ${shortToolName(tool.name)}`}
                             />
-                            <span className="h-5 w-9 rounded-full bg-black/10 transition peer-checked:bg-[var(--color-primary)] peer-disabled:cursor-not-allowed peer-disabled:opacity-50 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:after:translate-x-4" />
+                            <span className="h-5 w-9 rounded-full bg-[var(--color-overlay)]/10 transition peer-checked:bg-[var(--color-primary)] peer-disabled:cursor-not-allowed peer-disabled:opacity-50 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-[var(--color-surface)] after:shadow-sm after:transition peer-checked:after:translate-x-4" />
                           </label>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -916,10 +916,10 @@ export default function McpManager() {
                                 {tool.title || shortToolName(tool.name)}
                               </span>
                               {tool.destructive && (
-                                <span className="text-[9px] text-red-600">可能有破坏性</span>
+                                <span className="text-[9px] text-[var(--color-danger)]">可能有破坏性</span>
                               )}
                               {tool.openWorld && (
-                                <span className="text-[9px] text-amber-700">访问外部</span>
+                                <span className="text-[9px] text-[var(--color-pending)]">访问外部</span>
                               )}
                               <span className="text-[9px] tabular-nums text-[var(--color-text-disabled)]">
                                 {server.enabled && tool.enabled
@@ -932,7 +932,7 @@ export default function McpManager() {
                             </p>
                           </div>
                           <select
-                            className="rounded-lg border border-[var(--color-border)] bg-white px-2 py-1 text-[10px]"
+                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[10px]"
                             value={server.toolPermissions?.[tool.name] || ''}
                             disabled={saving || !tool.enabled}
                             onChange={event =>

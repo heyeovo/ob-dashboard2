@@ -307,7 +307,7 @@ export default function CcComposer({
                   <div className="min-w-0"><div className="truncate text-xs font-medium">{attachment.filename}</div><div className="text-[10px] text-[var(--color-text-tertiary)]">{attachment.textTruncated ? '已截断' : '已读取'}</div></div>
                 </div>
               )}
-              <button type="button" aria-label={`移除 ${attachment.filename}`} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-xs text-white" onClick={() => void removeAttachment(attachment)}>×</button>
+              <button type="button" aria-label={`移除 ${attachment.filename}`} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-overlay)]/55 text-xs text-[var(--color-on-primary)]" onClick={() => void removeAttachment(attachment)}>×</button>
             </div>
           ))}
           {uploading ? <div className="flex h-16 min-w-20 items-center justify-center rounded-xl bg-[var(--color-surface-secondary)] px-3 text-[10px] text-[var(--color-text-tertiary)]">解析上传中</div> : null}
@@ -319,9 +319,9 @@ export default function CcComposer({
       <input ref={documentRef} type="file" accept={DOCUMENT_ACCEPT} multiple className="hidden" onChange={event => void addFiles([...(event.target.files || [])])} />
 
       {menuOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[28px] bg-white px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
-            <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-black/15" />
+        <div className="fixed inset-0 z-50 bg-[var(--color-overlay)]/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[28px] bg-[var(--color-surface)] px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
+            <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--color-overlay)]/15" />
             {menuView === 'main' ? (
               <>
                 <div className="grid grid-cols-3 gap-3">
@@ -383,7 +383,7 @@ export default function CcComposer({
       <div className="flex items-end gap-2">
         <button type="button" aria-label="添加" aria-expanded={menuOpen} disabled={disabled || sending || uploading} onClick={() => { setMenuView('main'); setMenuOpen(true) }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40">+</button>
         <textarea ref={ref} rows={1} value={value} onChange={event => onChange(event.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={disabled} placeholder={placeholder || '说点什么'} className="flex-1 border-0 bg-transparent px-1 py-1 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-disabled)] disabled:opacity-60" />
-        <button type="button" onClick={sending ? onStop : submit} disabled={disabled || uploading || (!sending && !hasContent)} aria-label={sending ? '停止生成' : uploading ? '附件上传中' : '发送'} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition-colors ${sending ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]' : hasContent && !uploading ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-disabled)]'}`}>{sending ? '■' : '↑'}</button>
+        <button type="button" onClick={sending ? onStop : submit} disabled={disabled || uploading || (!sending && !hasContent)} aria-label={sending ? '停止生成' : uploading ? '附件上传中' : '发送'} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition-colors ${sending ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]' : hasContent && !uploading ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-disabled)]'}`}>{sending ? '■' : '↑'}</button>
       </div>
     </div>
   )

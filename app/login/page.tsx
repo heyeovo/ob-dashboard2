@@ -25,7 +25,7 @@ export default async function LoginPage({
         </div>
 
         {error ? (
-          <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="mb-4 rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-sm text-[var(--color-danger)]">
             口令不正确，请稍后重试。
           </p>
         ) : null}
@@ -45,12 +45,12 @@ export default async function LoginPage({
               required
               autoFocus
               autoComplete="current-password"
-              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 outline-none transition focus:border-[var(--color-text-tertiary)] focus:ring-2 focus:ring-black/5"
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 outline-none transition focus:border-[var(--color-text-tertiary)] focus:ring-2 focus:ring-[var(--color-overlay)]/5"
             />
           </label>
           <button
             type="submit"
-            className="w-full rounded-xl bg-[var(--color-text-heading)] px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+            className="w-full rounded-xl bg-[var(--color-text-heading)] px-4 py-3 text-sm font-semibold text-[var(--color-on-primary)] transition hover:opacity-90"
           >
             登录
           </button>

@@ -354,14 +354,14 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
             <button key={f} onClick={() => { setFilter(f); setCurrent(0) }}
               className={`flex items-center gap-1 text-xs px-3.5 py-1.5 rounded-full border transition-all whitespace-nowrap ${
                 filter === f
-                  ? 'bg-[var(--color-text-heading)] border-[var(--color-text-heading)] text-white'
-                  : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  ? 'bg-[var(--color-text-heading)] border-[var(--color-text-heading)] text-[var(--color-on-primary)]'
+                  : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
               }`}
             >
               <span className={`text-[10px] ${
-                f === '待办' ? 'text-yellow-400' :
-                f === '存疑' ? 'text-red-400' :
-                f === '已精修' ? 'text-green-400' : 'text-[var(--color-text-disabled)]'
+                f === '待办' ? 'text-[var(--color-warning-strong)]' :
+                f === '存疑' ? 'text-[var(--color-danger-strong)]' :
+                f === '已精修' ? 'text-[var(--color-success-strong)]' : 'text-[var(--color-text-disabled)]'
               }`}>●</span>
               {f} {f !== '全部' && <span className="opacity-60 ml-0.5">{counts[f as keyof typeof counts]}</span>}
             </button>
@@ -372,8 +372,8 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
               <button key={t} onClick={() => { setTimeFilter(t); setCurrent(0) }}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap ${
                   timeFilter === t
-                    ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-white'
-                    : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                    ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-[var(--color-on-primary)]'
+                    : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {t}
               </button>
@@ -386,11 +386,11 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
       <div className="flex-1 overflow-y-auto min-h-0 mb-4">
         {/* 卡片 */}
         {!cur ? (
-          <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-[var(--color-border)] border-dashed">
+          <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] border-dashed">
             {filter === '待办' ? '🎉 全部审阅完啦' : '这里什么都没有'}
           </div>
         ) : (
-          <div className="bg-white border border-[var(--color-border)] rounded-2xl p-4 sm:p-6 shadow-sm mb-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-4 sm:p-6 shadow-sm mb-4">
           {/* 第一行：日期 左，页码右 */}
           <div className="flex items-center justify-between text-xs text-[var(--color-text-disabled)] mb-3">
             <span>{formatReviewDate(cur.created || '')}</span>
@@ -437,7 +437,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
             <select
               value={categoryMap[cur.id] ?? ''}
               onChange={e => updateCategory(cur.id, e.target.value || null)}
-              className="flex-1 bg-white text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)]"
+              className="flex-1 bg-[var(--color-surface)] text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)]"
             >
               <option value="">— 选择分类 —</option>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -452,7 +452,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
                   setNewCatInput('')
                 }
               }}
-              className="w-24 sm:w-32 bg-white text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)]"
+              className="w-24 sm:w-32 bg-[var(--color-surface)] text-[var(--color-text-primary)] text-xs sm:text-sm rounded-lg px-2.5 py-2 border border-[var(--color-border)] outline-none focus:border-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -476,7 +476,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
                   className="py-2.5 rounded-xl bg-[var(--color-surface-tertiary)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] text-xs sm:text-sm font-semibold"
                 >取消</button>
                 <button onClick={saveEdit} disabled={savingEdit}
-                  className="py-2.5 rounded-xl bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
+                  className="py-2.5 rounded-xl bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)] text-xs sm:text-sm font-semibold disabled:opacity-50"
                 >保存</button>
               </>
             ) : (
@@ -493,10 +493,10 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
         {queue.length > 1 && (
           <div className="flex justify-between">
             <button onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}
-              className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
+              className="px-5 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
             >← 上一条</button>
             <button onClick={() => setCurrent(c => Math.min(queue.length - 1, c + 1))} disabled={current === queue.length - 1}
-              className="px-5 py-2 rounded-lg bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
+              className="px-5 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 text-sm"
             >下一条 →</button>
           </div>
         )}
@@ -530,7 +530,7 @@ function PendingSection({
             onClick={() => setQueue('auto')}
             className={`rounded-lg px-3 py-2 font-medium transition-colors ${
               queue === 'auto'
-                ? 'bg-white text-[var(--color-text-primary)] shadow-sm'
+                ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm'
                 : 'text-[var(--color-text-tertiary)]'
             }`}
           >
@@ -540,7 +540,7 @@ function PendingSection({
             onClick={() => setQueue('review')}
             className={`rounded-lg px-3 py-2 font-medium transition-colors ${
               queue === 'review'
-                ? 'bg-white text-[var(--color-text-primary)] shadow-sm'
+                ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm'
                 : 'text-[var(--color-text-tertiary)]'
             }`}
           >
@@ -834,7 +834,7 @@ function HomeClient() {
                 key={i}
                 className="w-1 h-2 rounded-[1px]"
                 style={{
-                  backgroundColor: `rgba(217, 119, 87, ${opacity})`,
+                  backgroundColor: `color-mix(in srgb, var(--color-primary) ${opacity * 100}%, transparent)`,
                 }}
               />
             )
@@ -847,7 +847,7 @@ function HomeClient() {
     )
   }
   const SkeletonCard = () => (
-    <div className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl p-4 sm:p-6 border border-[var(--color-border)] w-full animate-pulse">
+    <div className="bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-border-light)]/50 rounded-2xl p-4 sm:p-6 border border-[var(--color-border)] w-full animate-pulse">
       <div className="flex items-start justify-between mb-1 gap-3">
         <div className="flex-1 min-w-0">
           <div className="h-5 bg-[var(--color-border)] rounded-md w-2/3 mb-2" />
@@ -869,7 +869,7 @@ function HomeClient() {
   const BucketCard = ({ b }: { b: Bucket }) => (
   <div
     onClick={() => openBucket(b.id)}
-    className={`bg-gradient-to-br from-white to-slate-50/50 rounded-2xl p-4 sm:p-6 hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y ${
+    className={`bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-border-light)]/50 rounded-2xl p-4 sm:p-6 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y ${
       (b.noise || (b.resolved && b.importance === 1))
         ? 'border-[var(--color-border)] opacity-50 saturate-50'
         : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'
@@ -997,7 +997,7 @@ function HomeClient() {
   )
 
   return (
-    <div className={`min-h-screen ${activeTab === 'review' ? 'flex flex-col' : ''} bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-white pb-20`}>
+    <div className={`min-h-screen ${activeTab === 'review' ? 'flex flex-col' : ''} bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-[var(--color-on-primary)] pb-20`}>
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1014,7 +1014,7 @@ function HomeClient() {
       </header>
 
       {/* 桌面端：顶部横条撤了，三格切换器搬进页面 */}
-      <div className="hidden md:block sticky top-0 z-10 border-b border-[var(--color-border)] bg-white/50 backdrop-blur-md">
+      <div className="hidden md:block sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)]/50 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
           <MemoryViewSwitch />
         </div>
@@ -1045,13 +1045,13 @@ function HomeClient() {
           />
         ) : (
           <>
-            <div className="bg-white border border-[var(--color-border)] rounded-2xl p-3 sm:p-4 shadow-sm mb-4">
+            <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-3 sm:p-4 shadow-sm mb-4">
               <div className="relative w-full mb-3 sm:mb-4">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-disabled)]" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <circle cx="8.5" cy="8.5" r="6" /><path d="M13.5 13.5L18 18" />
                 </svg>
                 <input
-                  className="w-full bg-[var(--color-surface-secondary)] border border-transparent rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all placeholder-[var(--color-text-disabled)]"
+                  className="w-full bg-[var(--color-surface-secondary)] border border-transparent rounded-xl pl-8 pr-4 py-2.5 text-sm outline-none focus:bg-[var(--color-surface)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all placeholder-[var(--color-text-disabled)]"
                   placeholder="搜索记忆、标签或内容..."
                   value={search}
                   onChange={e => {
@@ -1085,8 +1085,8 @@ function HomeClient() {
                       className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
                         // 统一了选中与未选中的边框颜色及 hover 效果
                         activeCategory === '' 
-                          ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white' 
-                          : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-secondary)]'
+                          ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-[var(--color-on-primary)]'
+                          : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-secondary)]'
                       }`}>
                       全部
                     </button>
@@ -1098,8 +1098,8 @@ function HomeClient() {
                         className={`flex-shrink-0 text-xs px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all border whitespace-nowrap ${
                           // 统一了选中与未选中的边框颜色及 hover 效果
                           activeCategory === c 
-                            ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white' 
-                            : 'bg-white border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-secondary)]'
+                            ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-[var(--color-on-primary)]'
+                            : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-secondary)]'
                         }`}>{c}</button>
                     ))}
                   </div>
@@ -1109,14 +1109,14 @@ function HomeClient() {
                 <div className="flex gap-1.5 sm:gap-2 mt-4 pt-4 border-t border-[var(--color-border-light)] overflow-x-auto no-scrollbar">
                   <button onClick={() => setActiveTag(activeTag === 'feel' ? null : 'feel')}
                     className={`text-xs px-2.5 sm:px-3 py-1 rounded-md whitespace-nowrap ${
-                      activeTag === 'feel' ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)]'
+                      activeTag === 'feel' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)]'
                     }`}>
                     feel
                   </button>
                   {topTags.map(t => (
                     <button key={t} onClick={() => setActiveTag(activeTag === t ? null : t)}
                       className={`text-xs px-2.5 sm:px-3 py-1 rounded-md whitespace-nowrap ${
-                        activeTag === t ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)]'
+                        activeTag === t ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)]'
                       }`}>
                       {t}
                     </button>
@@ -1146,7 +1146,7 @@ function HomeClient() {
               )}
 
               {/* 时间选择器 */}
-              <div className="flex items-center gap-2 bg-white/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--color-border)] shadow-sm">
+              <div className="flex items-center gap-2 bg-[var(--color-surface)]/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--color-border)] shadow-sm">
                 <span className="text-xs text-[var(--color-text-disabled)] hidden sm:inline">时间</span>
                 <select
                   className="text-xs bg-transparent outline-none text-[var(--color-text-secondary)] cursor-pointer"
@@ -1156,10 +1156,10 @@ function HomeClient() {
                 {datePreset === 'custom' && (
                   <div className="flex items-center gap-1">
                     <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                      className="bg-white rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
+                      className="bg-[var(--color-surface)] rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
                     <span className="text-[var(--color-text-disabled)]">-</span>
                     <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                      className="bg-white rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
+                      className="bg-[var(--color-surface)] rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
                   </div>
                 )}
               </div>
@@ -1168,16 +1168,16 @@ function HomeClient() {
               {activeTab === 'grid' && (
                 <>
                   <button onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-white/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]"
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]"
                   >{gridViewMode === 'list' ? '⧉' : '☰'}</button>
                   <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-white/60 backdrop-blur-sm text-[var(--color-text-secondary)] outline-none cursor-pointer">
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 backdrop-blur-sm text-[var(--color-text-secondary)] outline-none cursor-pointer">
                     <option value="score">权重</option>
                     <option value="importance">重要度</option>
                     <option value="created">时间</option>
                   </select>
                   <button onClick={() => setSortOrder(order => order === 'desc' ? 'asc' : 'desc')}
-                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[var(--color-primary)] text-white' : 'bg-white/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}
+                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-[var(--color-surface)]/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}
                   >{sortOrder === 'desc' ? '↓降序' : '↑升序'}</button>
                 </>
               )}
@@ -1235,9 +1235,9 @@ function HomeClient() {
                                 {!isDayCollapsed && (
                                   <>
                                     {/* 极细空气线 */}
-                                    <div className="absolute left-0 top-2.5 bottom-0 w-[1px] bg-slate-200/60" />
+                                    <div className="absolute left-0 top-2.5 bottom-0 w-[1px] bg-[var(--color-surface-tertiary)]/60" />
                                     {/* 空心呼吸圆点 */}
-                                    <div className="absolute left-0 top-2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[var(--color-primary)] bg-white ring-4 ring-orange-50 shadow-[0_0_6px_rgba(217,119,87,0.15)] z-[1]" />
+                                    <div className="absolute left-0 top-2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[var(--color-primary)] bg-[var(--color-surface)] ring-4 ring-[var(--color-primary-light)] shadow-[var(--shadow-timeline-dot)] z-[1]" />
                                     <div className="space-y-3 ml-1">
                                       {items.map(b => <BucketCard key={b.id} b={b} />)}
                                     </div>
@@ -1270,7 +1270,7 @@ function HomeClient() {
               </div>
             )}
             {displayed.length === 0 && !loading && (
-              <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-white rounded-2xl border border-dashed border-[var(--color-border)]">
+              <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-[var(--color-surface)] rounded-2xl border border-dashed border-[var(--color-border)]">
                 没有找到对应的记录
               </div>
             )}
@@ -1363,7 +1363,7 @@ function HomeClient() {
       {/* 悬浮加号 */}
       {activeTab !== 'review' && (
         <button onClick={() => setShowAdd(true)}
-          className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
+          className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
           +
         </button>
       )}
@@ -1400,7 +1400,7 @@ function HomeClient() {
                     setSearchResults(null)
                     await fetchBuckets()
                   }}
-                  className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
+                  className="px-4 py-2 text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg disabled:opacity-40 hover:bg-[var(--color-primary-hover)] transition-colors">
                   {adding ? '存入中…' : '存入记忆'}
                 </button>
               </div>

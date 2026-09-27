@@ -102,7 +102,7 @@ export default function CarePage() {
     <main className="min-h-screen bg-[var(--color-bg)] px-4 pb-24 pt-5 text-[var(--color-text-primary)] md:px-8 md:pt-8">
       <div className="mx-auto max-w-5xl">
         <header className="mb-6 flex items-start gap-3">
-          <Link href="/" className={`${button} border border-[var(--color-border)] bg-white`}>← Home</Link>
+          <Link href="/" className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>← Home</Link>
           <div>
             <h1 className="text-2xl font-semibold text-[var(--color-text-heading)]">照顾备忘</h1>
             <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">Reminder 与 Todo 分开保存、分开使用。</p>
@@ -112,13 +112,13 @@ export default function CarePage() {
         <div className="mb-5 inline-flex rounded-xl bg-[var(--color-surface-tertiary)] p-1">
           {([['reminders', '照顾备忘'], ['todos', 'Todo']] as const).map(([key, label]) => (
             <button key={key} type="button" onClick={() => { setTab(key); setMessage('') }}
-              className={`${button} ${tab === key ? 'bg-white text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)]'}`}>
+              className={`${button} ${tab === key ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)]'}`}>
               {label}
             </button>
           ))}
         </div>
 
-        {message && <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm">{message}</div>}
+        {message && <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm">{message}</div>}
         {tab === 'reminders'
           ? <ReminderPanel onMessage={setMessage} />
           : <TodoPanel onMessage={setMessage} />}
@@ -200,11 +200,11 @@ function ReminderPanel({ onMessage }: { onMessage: (value: string) => void }) {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-2">
         {([['active', '进行中'], ['done', '已完成'], ['archived', '已归档'], ['all', '全部']] as const).map(([key, label]) =>
-          <button key={key} type="button" onClick={() => { setLoading(true); setStatus(key) }} className={`${button} ${status === key ? 'bg-[var(--color-primary)] text-white' : 'border border-[var(--color-border)] bg-white'}`}>{label}</button>)}
+          <button key={key} type="button" onClick={() => { setLoading(true); setStatus(key) }} className={`${button} ${status === key ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'border border-[var(--color-border)] bg-[var(--color-surface)]'}`}>{label}</button>)}
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => { setLoading(true); void load() }} className={`${button} border border-[var(--color-border)] bg-white`}>刷新</button>
-        <button type="button" onClick={startCreate} className={`${button} bg-[var(--color-primary)] text-white`}>新增备忘</button>
+        <button type="button" onClick={() => { setLoading(true); void load() }} className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>刷新</button>
+        <button type="button" onClick={startCreate} className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`}>新增备忘</button>
       </div>
     </div>
 
@@ -229,7 +229,7 @@ function ReminderPanel({ onMessage }: { onMessage: (value: string) => void }) {
           <Field label="会话 session_id"><input className={input} value={form.session_id} onChange={e => setForm({ ...form, session_id: e.target.value })} /></Field>
         </div>
       </details>
-      <button className={`${button} bg-[var(--color-primary)] text-white`} type="submit">保存</button>
+      <button className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`} type="submit">保存</button>
     </form>}
 
     {loading ? <Empty text="加载中…" /> : items.length === 0 ? <Empty text="这里还没有照顾备忘。" /> :
@@ -238,10 +238,10 @@ function ReminderPanel({ onMessage }: { onMessage: (value: string) => void }) {
         <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{item.content}</p>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--color-text-tertiary)]"><div>下次：{displayTime(item.next_due_at)}</div><div>重复：{item.repeat_rule}</div><div>开始：{displayTime(item.start_at)}</div><div>结束：{displayTime(item.end_at)}</div></dl>
         <div className="mt-4 flex flex-wrap gap-2">
-          {item.status !== 'done' && <button type="button" onClick={() => void patch(item.id, { status: 'done' }, '已标记完成。')} className={`${button} bg-[var(--color-primary)] text-white`}>标完成</button>}
-          {item.status !== 'active' && <button type="button" onClick={() => void patch(item.id, { status: 'active' }, '已重新打开。')} className={`${button} border border-[var(--color-border)] bg-white`}>重新打开</button>}
-          {item.status === 'active' && <button type="button" onClick={() => void patch(item.id, { snooze_minutes: 60 }, '已稍后提醒 60 分钟。')} className={`${button} border border-[var(--color-border)] bg-white`}>稍后 1 小时</button>}
-          {item.status !== 'archived' && <button type="button" onClick={() => void patch(item.id, { status: 'archived' }, '已归档。')} className={`${button} border border-[var(--color-border)] bg-white`}>归档</button>}
+          {item.status !== 'done' && <button type="button" onClick={() => void patch(item.id, { status: 'done' }, '已标记完成。')} className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`}>标完成</button>}
+          {item.status !== 'active' && <button type="button" onClick={() => void patch(item.id, { status: 'active' }, '已重新打开。')} className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>重新打开</button>}
+          {item.status === 'active' && <button type="button" onClick={() => void patch(item.id, { snooze_minutes: 60 }, '已稍后提醒 60 分钟。')} className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>稍后 1 小时</button>}
+          {item.status !== 'archived' && <button type="button" onClick={() => void patch(item.id, { status: 'archived' }, '已归档。')} className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>归档</button>}
         </div>
       </article>)}</div>}
   </section>
@@ -378,10 +378,10 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-2">
-        {([['pending', '待完成'], ['done', '已完成'], ['all', '全部']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => { setLoading(true); setDone(key) }} className={`${button} ${done === key ? 'bg-[var(--color-primary)] text-white' : 'border border-[var(--color-border)] bg-white'}`}>{label}</button>)}
+        {([['pending', '待完成'], ['done', '已完成'], ['all', '全部']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => { setLoading(true); setDone(key) }} className={`${button} ${done === key ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'border border-[var(--color-border)] bg-[var(--color-surface)]'}`}>{label}</button>)}
         <select aria-label="Todo 类型" className={`${input} w-auto`} value={domain} onChange={e => { setLoading(true); setDomain(e.target.value as typeof domain) }}><option value="all">全部类型</option><option value="tech">技术</option><option value="emotional">情感</option></select>
       </div>
-      <div className="flex gap-2"><button type="button" onClick={() => { setLoading(true); void load() }} className={`${button} border border-[var(--color-border)] bg-white`}>刷新</button><button type="button" onClick={startCreate} className={`${button} bg-[var(--color-primary)] text-white`}>新增 Todo</button></div>
+      <div className="flex gap-2"><button type="button" onClick={() => { setLoading(true); void load() }} className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>刷新</button><button type="button" onClick={startCreate} className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`}>新增 Todo</button></div>
     </div>
 
     {formOpen && <form onSubmit={submit} className={`${panel} space-y-4 p-4 md:p-5`}>
@@ -392,7 +392,7 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
         {editing?.source !== 'bucket' && <Field label="关联桶 ID（可选）"><input className={input} value={form.source_bucket} onChange={e => setForm({ ...form, source_bucket: e.target.value })} /></Field>}
         {editing?.source !== 'bucket' && <Field label="背景说明（无关联桶时必填）" wide><textarea required={!form.source_bucket.trim()} rows={2} className={input} value={form.context} onChange={e => setForm({ ...form, context: e.target.value })} /></Field>}
       </div>
-      <button className={`${button} bg-[var(--color-primary)] text-white`} type="submit">保存</button>
+      <button className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`} type="submit">保存</button>
     </form>}
 
     {loading ? <Empty text="加载中…" /> : items.length === 0 ? <Empty text="这里还没有 Todo。" /> :

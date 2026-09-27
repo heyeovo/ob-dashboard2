@@ -191,7 +191,7 @@ export default function PortraitEditor({
           onChange={event => setText(event.target.value)}
           rows={5}
           placeholder={isPersona ? '还没有长出新的第一人称自我理解。' : '还没有 stable portrait。'}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
+          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
         />
         <div className="mt-2 flex flex-wrap gap-2">
           <ActionButton onClick={saveStable} disabled={busy}>

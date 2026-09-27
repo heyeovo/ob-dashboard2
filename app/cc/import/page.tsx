@@ -78,12 +78,12 @@ export default function PolarisImportPage() {
             <div className="text-xs text-[var(--color-text-tertiary)]">cc chat · 数据迁移</div>
             <h1 className="mt-1 text-2xl font-semibold">导入 Polaris 对话</h1>
           </div>
-          <Link href="/cc" className="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm hover:bg-[var(--color-surface-secondary)]">
+          <Link href="/cc" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm hover:bg-[var(--color-surface-secondary)]">
             返回对话
           </Link>
         </div>
 
-        <section className="rounded-2xl border border-[var(--color-border)] bg-white p-5 shadow-sm">
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
           <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
             只读取 ZIP 中的对话清单，不导入 Persona、运行配置、空间、集合，也不会修改 cc chat 设置。ZIP 中的图片文件本轮不迁移。
           </p>
@@ -105,7 +105,7 @@ export default function PolarisImportPage() {
             onChange={event => void chooseFile(event.target.files?.[0])}
           />
 
-          {error ? <div className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+          {error ? <div className="mt-4 rounded-xl bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">{error}</div> : null}
 
           {preview ? (
             <div className="mt-5">
@@ -129,7 +129,7 @@ export default function PolarisImportPage() {
                 type="button"
                 onClick={() => void runImport()}
                 disabled={importing}
-                className="mt-5 w-full rounded-xl bg-[var(--color-primary)] px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+                className="mt-5 w-full rounded-xl bg-[var(--color-primary)] px-4 py-3 text-sm font-medium text-[var(--color-on-primary)] hover:opacity-90 disabled:opacity-60"
               >
                 {importing ? '正在写入 Haven…' : `确认导入 ${preview.conversationCount} 个对话`}
               </button>
@@ -137,7 +137,7 @@ export default function PolarisImportPage() {
           ) : null}
 
           {result ? (
-            <div className={`mt-5 rounded-xl px-4 py-4 text-sm ${result.failed_conversations ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>
+            <div className={`mt-5 rounded-xl px-4 py-4 text-sm ${result.failed_conversations ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'bg-[var(--color-success-bg)] text-[var(--color-success)]'}`}>
               <div className="font-medium">导入完成</div>
               <div className="mt-1 leading-6">
                 成功 {result.imported_conversations || 0} 个对话、{result.imported_turns || 0} 轮；

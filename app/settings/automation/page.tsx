@@ -242,7 +242,7 @@ function Section({ title, description, children }: {
   children: ReactNode
 }) {
   return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
+    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 sm:p-5">
       <div className="mb-4">
         <h2 className="font-semibold text-[var(--color-text-heading)]">{title}</h2>
         {description && (
@@ -420,9 +420,9 @@ export default function AutomationSettingsPage() {
   }
 
   const inputClass =
-    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)]'
+    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)]'
   const selectClass =
-    'w-auto min-w-24 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)]'
+    'w-auto min-w-24 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text-disabled)]'
 
   const toggle = (key: keyof FormState, label: string, disabled = false) => (
     <div className="flex items-center justify-between gap-3">
@@ -484,11 +484,11 @@ export default function AutomationSettingsPage() {
         {loading ? (
           <div className="py-16 text-center text-sm text-[var(--color-text-disabled)]">读取中</div>
         ) : loadError ? (
-          <div className="rounded-[var(--radius-lg)] border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger)]">
             <p>读取失败：{loadError}</p>
             <button
               type="button"
-              className="mt-3 rounded-[var(--radius-md)] border border-red-300 bg-white px-3 py-1.5 text-xs"
+              className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs"
               onClick={() => void loadConfig()}
             >
               重试
@@ -640,7 +640,7 @@ export default function AutomationSettingsPage() {
               description="关系整理仍可运行；旧日印象和自动记忆已暂时停用。"
             >
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                <div className="sm:col-span-2 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] px-3 py-2 text-xs leading-5 text-[var(--color-pending)]">
                   旧日印象、旧自动记忆及其每日汇总已由后端暂停；历史数据和原配置保留。
                 </div>
                 {toggle('reflectionEnabled', '整理引擎')}
@@ -794,10 +794,10 @@ export default function AutomationSettingsPage() {
               </Field>
             </Section>
 
-            <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-h-5 text-sm">
                 {notice ? (
-                  <span className={notice.kind === 'error' ? 'text-red-600' : 'text-emerald-700'}>
+                  <span className={notice.kind === 'error' ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}>
                     {notice.text}
                   </span>
                 ) : dirty ? (
@@ -810,7 +810,7 @@ export default function AutomationSettingsPage() {
                 type="button"
                 disabled={!dirty || saving}
                 onClick={() => void save()}
-                className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-[var(--color-on-primary)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saving ? '保存中…' : '保存'}
               </button>

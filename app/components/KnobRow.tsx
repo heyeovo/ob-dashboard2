@@ -36,7 +36,7 @@ export default function KnobRow({ label, desc, value, min, max, step, onChange }
         <span className="text-xs font-bold text-[var(--color-primary)] tabular-nums">{value}</span>
       </div>
       {showTip && (
-        <div className="absolute left-0 top-6 z-20 bg-[var(--color-text-primary)] text-white text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap
+        <div className="absolute left-0 top-6 z-20 bg-[var(--color-text-primary)] text-[var(--color-on-primary)] text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap
           before:content-[''] before:absolute before:-top-1 before:left-3 before:w-2 before:h-2 before:bg-[var(--color-text-primary)] before:rotate-45">
           {desc}
         </div>

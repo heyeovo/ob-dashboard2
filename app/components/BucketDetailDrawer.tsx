@@ -296,7 +296,7 @@ export default function BucketDetailDrawer({
                     {editingEventTime ? (
                       <input
                         type="date"
-                        className="text-xs px-1 py-0 border border-[var(--color-primary)] rounded bg-white outline-none text-[var(--color-primary)]"
+                        className="text-xs px-1 py-0 border border-[var(--color-primary)] rounded bg-[var(--color-surface)] outline-none text-[var(--color-primary)]"
                         value={eventTimeVal.slice(0, 10)}
                         onChange={e => {
                           const v = e.target.value + 'T00:00:00'
@@ -340,7 +340,7 @@ export default function BucketDetailDrawer({
 
             {/* 信息胶囊 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-white/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+              <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                 <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">IMP</div>
                 <div className="h-5 flex items-center justify-center">
                   <input
@@ -356,23 +356,23 @@ export default function BucketDetailDrawer({
                   />
                 </div>
               </div>
-                <div className="bg-white/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">权重</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.score?.toFixed(2) ?? '—'}</div>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">激活</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.activation_count ?? '—'}</div>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">效价 V</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">唤醒 A</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">类型</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                     {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}
@@ -395,14 +395,14 @@ export default function BucketDetailDrawer({
               <button disabled={operating}
                 onClick={() => onTraceOp(selected.id, { pinned: selected.metadata.pinned ? 0 : 1 })}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.pinned ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  selected.metadata.pinned ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {selected.metadata.pinned ? '已钉选' : '钉 选'}
               </button>
               <button disabled={operating}
                 onClick={() => onTraceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 })}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.digested ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  selected.metadata.digested ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {selected.metadata.digested ? '已消化' : '消 化'}
               </button>
@@ -411,31 +411,31 @@ export default function BucketDetailDrawer({
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                   selected.metadata.resolved
                     ? 'bg-[var(--color-resolved-bg)] text-[var(--color-resolved)]'
-                    : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                    : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {selected.metadata.resolved ? '已解决' : '解 决'}
               </button>
               <button disabled={operating}
                 onClick={() => onArchive(selected.id)}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.type === 'archived' ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-tertiary)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  selected.metadata.type === 'archived' ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-tertiary)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {selected.metadata.type === 'archived' ? '已归档' : '归 档'}
               </button>
               <button disabled={operating}
                 onClick={() => onTouch(selected.id)}
-                className="text-xs py-2 rounded-lg font-medium bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50">
+                className="text-xs py-2 rounded-lg font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50">
                 轻 触
               </button>
               <button disabled={operating}
                 onClick={() => onActivate(selected.id)}
-                className="text-xs py-2 rounded-lg font-medium bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50">
+                className="text-xs py-2 rounded-lg font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50">
                 激 活
               </button>
               <button disabled={operating}
                 onClick={() => onTraceOp(selected.id, { wish: sWish ? 0 : 1 })}
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  sWish ? 'bg-[var(--color-wish-bg)] text-[var(--color-wish)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                  sWish ? 'bg-[var(--color-wish-bg)] text-[var(--color-wish)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {sWish ? '已悬念' : '标悬念'}
               </button>
@@ -452,7 +452,7 @@ export default function BucketDetailDrawer({
                 className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                   (selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1))
                     ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-tertiary)] line-through'
-                    : 'bg-white border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                    : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
                 }`}>
                 {(selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1)) ? '已噪声' : '标噪声'}
               </button>
@@ -464,7 +464,7 @@ export default function BucketDetailDrawer({
                 <div className="flex justify-between items-center px-5 pt-3 pb-2 border-b border-[var(--color-border-light)]">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">内容</span>
-                    <span className="text-[10px] text-[#C4896A] font-mono">
+                    <span className="text-[10px] text-[var(--color-primary-caption)] font-mono">
                       {selected.content.length} 字 · ~{Math.ceil(selected.content.length * 1.3)} tokens
                     </span>
                   </div>
@@ -493,13 +493,13 @@ export default function BucketDetailDrawer({
                   onChange={e => onStartEdit(e.target.value)}
                 />
                 <div className="flex justify-between items-center mt-3">
-                  <span className="text-[10px] text-[#C4896A] font-mono">
+                  <span className="text-[10px] text-[var(--color-primary-caption)] font-mono">
                     {editContent.length} 字 · ~{Math.ceil(editContent.length * 1.3)} tokens
                   </span>
                   <div className="flex gap-2">
                     <button onClick={onCancelEdit} className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">取消</button>
                     <button onClick={onSaveEdit} disabled={saving}
-                      className="text-sm bg-[var(--color-primary)] text-white px-4 py-1.5 rounded-lg disabled:opacity-50">{saving ? '保存中' : '保存更改'}</button>
+                      className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-1.5 rounded-lg disabled:opacity-50">{saving ? '保存中' : '保存更改'}</button>
                   </div>
                 </div>
               </div>
@@ -517,7 +517,7 @@ export default function BucketDetailDrawer({
                       {(['言之', '小羊', '共同'] as const).map(a => (
                         <button key={a} onClick={() => setJournalAuthor(a)}
                           className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                            journalAuthor === a ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]' : 'bg-white border border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]'
+                            journalAuthor === a ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]'
                           }`}>
                           {a}
                         </button>
@@ -547,7 +547,7 @@ export default function BucketDetailDrawer({
                           setShowJournalForm(false)
                           onClose()
                         }}
-                        className="text-sm bg-[var(--color-primary)] text-white px-4 py-1.5 rounded-lg disabled:opacity-50 hover:bg-[var(--color-primary-hover)]"
+                        className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-1.5 rounded-lg disabled:opacity-50 hover:bg-[var(--color-primary-hover)]"
                       >
                         {convertingToJournal ? '转换中…' : '确认转为日记'}
                       </button>
@@ -562,7 +562,7 @@ export default function BucketDetailDrawer({
             )}
 
             {/* Moments, relations, and rings */}
-            <div className="mb-4 bg-white border border-[var(--color-border)] rounded-xl p-4 space-y-5">
+            <div className="mb-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 space-y-5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">Moments 与关联</span>
                 <button onClick={() => fetchMoments(selected.id)} disabled={momentsLoading}
@@ -662,7 +662,7 @@ export default function BucketDetailDrawer({
                             <textarea
                               value={commentDraft}
                               onChange={event => setCommentDraft(event.target.value)}
-                              className="min-h-20 w-full rounded-lg border border-[var(--color-border)] bg-white px-2 py-1.5 text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-primary)]"
+                              className="min-h-20 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-primary)]"
                               autoFocus
                             />
                             <div className="flex justify-end gap-2">
@@ -670,7 +670,7 @@ export default function BucketDetailDrawer({
                               <button
                                 type="button"
                                 disabled={!commentDraft.trim() || Boolean(commentOperatingId)}
-                                className="rounded bg-[var(--color-primary)] px-2 py-1 text-[10px] text-white disabled:opacity-40"
+                                className="rounded bg-[var(--color-primary)] px-2 py-1 text-[10px] text-[var(--color-on-primary)] disabled:opacity-40"
                                 onClick={() => { if (comment.id) void mutateComment(comment.id, 'PATCH', commentDraft.trim()) }}
                               >{commentOperatingId === comment.id ? '保存中…' : '保存'}</button>
                             </div>
@@ -687,7 +687,7 @@ export default function BucketDetailDrawer({
             </div>
 
             {/* Similar Buckets / 相似记忆 */}
-            <div className="mb-4 bg-white border border-[var(--color-border)] rounded-xl p-4">
+            <div className="mb-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">相似记忆</span>
                 <button
@@ -728,7 +728,7 @@ export default function BucketDetailDrawer({
             {/* 抹除和索引 */}
             <div className="flex justify-between items-center">
               <button onClick={() => { if (confirm('确定抹除此记忆？将移入回收站。')) { onTraceOp(selected.id, { delete: true }).then(onClose) } }}
-                className="text-sm text-[var(--color-danger)] font-medium hover:text-red-700">抹除</button>
+                className="text-sm text-[var(--color-danger)] font-medium hover:text-[var(--color-danger)]">抹除</button>
               <div onClick={onCopyId} className="inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-[var(--color-border-light)] px-3 py-1.5 rounded-full">
                 <span className="text-[var(--color-text-disabled)]">索引: {selected.id}</span>
                 <span className={`${copied ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-disabled)]'}`}>{copied ? '已复制' : '复制'}</span>
@@ -743,7 +743,7 @@ export default function BucketDetailDrawer({
       {mergePreviewLoading ? (
         <div className="text-center py-16 text-[var(--color-text-disabled)]">生成合并预览中...</div>
       ) : mergePreview?.error ? (
-        <div className="text-red-500 text-sm">{mergePreview.error}</div>
+        <div className="text-[var(--color-danger-strong)] text-sm">{mergePreview.error}</div>
       ) : mergePreview ? (
         <>
           {/* Header */}
@@ -810,7 +810,7 @@ export default function BucketDetailDrawer({
                   {mergePreviewLoading ? '重做中...' : '重做'}
                 </button>
                 <button onClick={doMergeCommit} disabled={mergeCommitting}
-                  className="text-sm bg-[var(--color-primary)] text-white px-5 py-2 rounded-lg hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors">
+                  className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-5 py-2 rounded-lg hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors">
                   {mergeCommitting ? '合并中...' : '确认合并'}
                 </button>
               </div>

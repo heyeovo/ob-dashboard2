@@ -123,8 +123,8 @@ export function ActionButton({
 }) {
   const tone =
     variant === 'danger'
-      ? 'border-rose-200 bg-white text-[var(--color-danger)] hover:bg-rose-50'
-      : 'border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)]'
+      ? 'border-[var(--color-danger-border)] bg-[var(--color-surface)] text-[var(--color-danger)] hover:bg-[var(--color-danger-bg)]'
+      : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)]'
   return (
     <button
       type="button"

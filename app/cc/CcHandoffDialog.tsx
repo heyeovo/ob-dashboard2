@@ -304,17 +304,17 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
               </button>
             ))}
           </div>
-          {error ? <div className="mb-3 rounded-[var(--radius-md)] border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</div> : null}
+          {error ? <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-[11px] text-[var(--color-danger)]">{error}</div> : null}
           <div className="space-y-2">{sections.map(section => <SelectionSection key={section.id} {...section} />)}</div>
         </div>
         <div className="border-t border-[var(--color-border-light)] px-5 py-3.5">
-          <div className={`mb-2.5 rounded-[var(--radius-md)] border px-3 py-2 ${snapshot.stats.over_budget ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'}`}>
+          <div className={`mb-2.5 rounded-[var(--radius-md)] border px-3 py-2 ${snapshot.stats.over_budget ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'}`}>
             <div className="text-[11px] font-medium">本次选择：{snapshot.stats.selected_chars.toLocaleString()} 字 · 约 {snapshot.stats.selected_estimated_tokens.toLocaleString()} token</div>
             <div className="mt-0.5 text-[10px] opacity-80">
               统一预算 {snapshot.stats.budget_tokens.toLocaleString()} token{snapshot.stats.over_budget ? `；超出部分会按相同规则裁剪，实际约 ${snapshot.stats.effective_estimated_tokens.toLocaleString()} token，省略 ${snapshot.stats.dropped_item_count} 项` : '；CC 与 selfhost 将使用同一份固定快照'}
             </div>
           </div>
-          <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
+          <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-[12.5px] font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
         </div>
       </div>
     </div>

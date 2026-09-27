@@ -291,7 +291,7 @@ export default function MemoryProcessingSettingsPage() {
   }
 
   const inputClass =
-    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]'
+    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]'
   const labelClass = 'mb-1 block text-xs text-[var(--color-text-tertiary)]'
 
   const secretField = (
@@ -336,11 +336,11 @@ export default function MemoryProcessingSettingsPage() {
         {loading ? (
           <div className="py-16 text-center text-sm text-[var(--color-text-disabled)]">读取中</div>
         ) : loadError ? (
-          <div className="rounded-[var(--radius-lg)] border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger)]">
             <p>读取失败：{loadError}</p>
             <button
               type="button"
-              className="mt-3 rounded-[var(--radius-md)] border border-red-300 bg-white px-3 py-1.5 text-xs"
+              className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs"
               onClick={() => void loadConfig()}
             >
               重试
@@ -348,7 +348,7 @@ export default function MemoryProcessingSettingsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
+            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 sm:p-5">
               <h2 className="mb-4 text-sm font-semibold text-[var(--color-text-heading)]">
                 脱水 / 打标 API
               </h2>
@@ -422,7 +422,7 @@ export default function MemoryProcessingSettingsPage() {
               </div>
             </section>
 
-            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
+            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
@@ -471,7 +471,7 @@ export default function MemoryProcessingSettingsPage() {
               </div>
             </section>
 
-            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:p-5">
+            <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">
@@ -555,10 +555,10 @@ export default function MemoryProcessingSettingsPage() {
               </div>
             </section>
 
-            <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-h-5 text-sm">
                 {notice ? (
-                  <span className={notice.kind === 'error' ? 'text-red-600' : 'text-emerald-700'}>
+                  <span className={notice.kind === 'error' ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]'}>
                     {notice.text}
                   </span>
                 ) : dirty ? (
@@ -571,7 +571,7 @@ export default function MemoryProcessingSettingsPage() {
                 type="button"
                 disabled={!dirty || saving}
                 onClick={() => void save()}
-                className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-[var(--color-on-primary)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saving ? '保存中…' : '保存'}
               </button>

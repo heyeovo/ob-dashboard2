@@ -91,12 +91,12 @@ function compactTokenLabel(tokens: number | null) {
 function CompactionDivider({ compaction }: { compaction: CcCompactionEvent }) {
   const trigger = compaction.trigger === 'manual' ? '手动压缩已完成' : '自动压缩已完成'
   return (
-    <div className="my-4 flex w-full items-center gap-3 text-[11px] text-amber-700/80" role="separator">
-      <span className="h-px flex-1 bg-amber-300/60" />
+    <div className="my-4 flex w-full items-center gap-3 text-[11px] text-[var(--color-pending)]/80" role="separator">
+      <span className="h-px flex-1 bg-[var(--color-warning-strong)]/60" />
       <span className="shrink-0 tabular-nums">
         {trigger} · {compactTokenLabel(compaction.preTokens)} → {compactTokenLabel(compaction.postTokens)}
       </span>
-      <span className="h-px flex-1 bg-amber-300/60" />
+      <span className="h-px flex-1 bg-[var(--color-warning-strong)]/60" />
     </div>
   )
 }
@@ -464,7 +464,7 @@ export default function CcMessageRow({
                             type="button"
                             aria-label={`清除图片 ${attachment.filename}`}
                             title="从 Haven 永久清除图片"
-                            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-black/55 text-sm text-white opacity-100 transition-opacity hover:bg-black/70 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
+                            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-[var(--color-overlay)]/55 text-sm text-[var(--color-on-primary)] opacity-100 transition-opacity hover:bg-[var(--color-overlay)]/70 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
                             onClick={event => {
                               event.stopPropagation()
                               onClearAttachment(message.id, attachment.id)
@@ -482,7 +482,7 @@ export default function CcMessageRow({
                           rel="noreferrer"
                           className="flex min-h-24 min-w-56 items-center gap-3 px-4 py-3 text-left"
                         >
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--color-primary)]" aria-hidden="true">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-surface)] text-[var(--color-primary)]" aria-hidden="true">
                             <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z"/><path d="M14 3.5V8h4M9 13h6M9 16h4"/></svg>
                           </span>
                           <span className="min-w-0">
@@ -497,7 +497,7 @@ export default function CcMessageRow({
                             type="button"
                             aria-label={`清除文件 ${attachment.filename}`}
                             title="从 Haven 永久清除文件"
-                            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-black/55 text-sm text-white opacity-100 transition-opacity hover:bg-black/70 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
+                            className="absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-full bg-[var(--color-overlay)]/55 text-sm text-[var(--color-on-primary)] opacity-100 transition-opacity hover:bg-[var(--color-overlay)]/70 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100"
                             onClick={event => {
                               event.stopPropagation()
                               onClearAttachment(message.id, attachment.id)
@@ -585,7 +585,7 @@ export default function CcMessageRow({
         <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
           <button type="button" aria-label="关闭转发消息" onClick={() => setForwardOpen(false)} className="absolute inset-0" />
           <div role="dialog" aria-modal="true" aria-label={`转发消息：${forwardedMessage.title}`} className="cc-modal cc-tool-sheet relative flex max-h-[86vh] w-full max-w-2xl flex-col">
-            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-black/10 sm:hidden" />
+            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
             <div className="flex items-start gap-3 border-b border-[var(--color-border-light)] px-5 py-4">
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-[15px] font-semibold text-[var(--color-text-heading)]">
@@ -823,7 +823,7 @@ export default function CcMessageRow({
 
         {/* 开发者模式：引擎/模型/Provider */}
         {!message.streaming && showRuntimeInfo && (message.engine || message.providerLabel || shownModel) ? (
-          <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+          <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)]/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
@@ -850,7 +850,7 @@ export default function CcMessageRow({
 
             {/* 保存状态图标 */}
             {message.deliveryState === 'saved' || message.deliveryState === 'replayed' ? (
-              <span title={message.deliveryNote || '已保存'} className="text-emerald-600">
+              <span title={message.deliveryNote || '已保存'} className="text-[var(--color-success)]">
                 <svg aria-hidden="true" viewBox="0 0 20 10" className="h-3 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="1 5 4 8 10 2" />
                   <polyline points="7 5 10 8 16 2" />
@@ -872,7 +872,7 @@ export default function CcMessageRow({
                       onRetryPersistence(message)
                     }
                   }}
-                  className={`text-rose-500 ${message.deliveryState === 'persistence_unknown' && onRetryPersistence ? 'cursor-pointer hover:text-rose-700' : 'cursor-default'}`}
+                  className={`text-[var(--color-danger-strong)] ${message.deliveryState === 'persistence_unknown' && onRetryPersistence ? 'cursor-pointer hover:text-[var(--color-danger)]' : 'cursor-default'}`}
                 >
                   <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="8" cy="8" r="7" />
@@ -881,7 +881,7 @@ export default function CcMessageRow({
                   </svg>
                 </button>
                 {message.deliveryNote ? (
-                  <span className="text-xs text-rose-500/80">{message.deliveryNote}</span>
+                  <span className="text-xs text-[var(--color-danger-strong)]/80">{message.deliveryNote}</span>
                 ) : null}
               </>
             ) : null}
@@ -907,7 +907,7 @@ export default function CcMessageRow({
                   <div
                     role="dialog"
                     aria-label="上下文详情"
-                    className="absolute bottom-full left-0 z-30 mb-1.5 w-64 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-white p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg"
+                    className="absolute bottom-full left-0 z-30 mb-1.5 w-64 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg"
                   >
                     <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
                     <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">

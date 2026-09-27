@@ -12,7 +12,7 @@ type NotificationPayload = {
   error?: string
 }
 
-const BUTTON = 'rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
+const BUTTON = 'rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
 const ROW = 'flex items-center justify-between gap-3 py-2 text-[11px]'
 
 function fmt(value: string) {

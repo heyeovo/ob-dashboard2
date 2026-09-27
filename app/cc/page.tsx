@@ -255,7 +255,7 @@ function CcScrollJumps({
               aria-label="搜索当前对话"
               title="搜索当前对话"
               onClick={onOpenSearch}
-              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-white/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95 md:hidden"
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95 md:hidden"
             >
               <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <circle cx="10.8" cy="10.8" r="6.3" />
@@ -269,7 +269,7 @@ function CcScrollJumps({
               aria-label="跳到对话顶部"
               title="跳到顶部"
               onClick={() => jump(0)}
-              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-white/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
             >
               <span aria-hidden="true" className="text-sm leading-none">↑</span>
             </button>
@@ -280,7 +280,7 @@ function CcScrollJumps({
               aria-label="跳到对话底部"
               title="跳到最新消息"
               onClick={() => jump(scrollRef.current?.scrollHeight || 0)}
-              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-white/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
             >
               <span aria-hidden="true" className="text-sm leading-none">↓</span>
             </button>
@@ -626,7 +626,7 @@ export default function CcChatPage() {
         <button
           type="button"
           onClick={() => selectMode ? stopSelecting() : startSelecting()}
-          className="hidden rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex"
+          className="hidden rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex"
         >
           {selectMode ? '取消选择' : '选择'}
         </button>
@@ -665,7 +665,7 @@ export default function CcChatPage() {
             <path d="m15.5 15.5 4 4" />
           </svg>
         </button>
-        <div className="flex rounded-full border border-[var(--color-border)] bg-white p-0.5 text-[10px]">
+        <div className="flex rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-[10px]">
           {(['cc', 'selfhost'] as const).map(engine => (
             <button
               key={engine}
@@ -770,7 +770,7 @@ export default function CcChatPage() {
               type="button"
               onClick={() => void chat.loadEarlierHistory()}
               disabled={chat.earlierHistoryLoading}
-              className="rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-60"
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-60"
             >
               {chat.earlierHistoryLoading ? '正在加载…' : '加载更早消息'}
             </button>
@@ -867,7 +867,7 @@ export default function CcChatPage() {
               type="button"
               disabled={selectedMessageIds.size === 0}
               onClick={forwardSelectedMessages}
-              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-[var(--color-on-primary)] disabled:opacity-40"
             >
               转发所选消息
             </button>
@@ -876,7 +876,7 @@ export default function CcChatPage() {
           <>
         {searchVisible ? (
           <div className="mb-2">
-            <div className="flex items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-white px-2 py-1.5 shadow-sm">
+            <div className="flex items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 shadow-sm">
               <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                 <circle cx="10.8" cy="10.8" r="6.3" />
                 <path d="m15.5 15.5 4 4" />
@@ -942,7 +942,7 @@ export default function CcChatPage() {
           </div>
         ) : null}
         {requiresImportedSessionHandoff(chat.activeSessionSource, chat.effectiveEngine) ? (
-          <div className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-sm">
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-sm">
             <div>Claude Code 无法直接接回原来的 Polaris 运行会话；可切到自建引擎原窗续聊，或换窗启动新的 cc 会话。</div>
             <button
               type="button"
@@ -1057,7 +1057,7 @@ export default function CcChatPage() {
         type="button"
         aria-label="关闭协作者列表"
         onClick={() => setPersonaRailOpen(false)}
-        className="absolute inset-0 bg-black/20"
+        className="absolute inset-0 bg-[var(--color-overlay)]/20"
       />
       <div className="absolute left-0 top-0 h-full w-[78%] max-w-[300px] bg-[var(--color-surface)] shadow-xl">
         <CcPersonaRail
@@ -1204,10 +1204,10 @@ export default function CcChatPage() {
           <div className="cc-modal relative w-full max-w-xs p-5" role="dialog" aria-label="查看历史消息">
             <div className="text-[13px] font-medium text-[var(--color-text-heading)]">跳到某一天</div>
             <div className="mt-1 text-[10.5px] text-[var(--color-text-disabled)]">仍在当前聊天页内；上下滚动可以继续进入相邻日期。</div>
-            <input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="mt-4 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-[12px]" />
+            <input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="mt-4 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12px]" />
             <button
               type="button"
-              className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-white"
+              className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-[var(--color-on-primary)]"
               onClick={() => {
                 void (async () => {
                   const found = await chat.loadHistoryDay(historyDate)
@@ -1261,7 +1261,7 @@ export default function CcChatPage() {
             aria-label="选择转发目标"
             className="cc-modal cc-tool-sheet relative flex max-h-[70vh] w-full max-w-md flex-col"
           >
-            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-black/10 sm:hidden" />
+            <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
             <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-4">
               <h2 className="text-[15px] font-semibold text-[var(--color-text-heading)]">
                 转发到…

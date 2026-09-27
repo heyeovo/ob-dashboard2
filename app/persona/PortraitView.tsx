@@ -79,7 +79,7 @@ export default function PortraitView() {
       <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg)]/90 backdrop-blur-sm">
         <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
           <div className="flex items-center gap-3">
-            <Link href="/" className="rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-black/5">
+            <Link href="/" className="rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5">
               ← Home
             </Link>
             <div>
@@ -94,7 +94,7 @@ export default function PortraitView() {
               type="button"
               disabled={loading || busy}
               onClick={() => void load()}
-              className="rounded-lg border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] disabled:opacity-50"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] disabled:opacity-50"
             >
               刷新
             </button>
@@ -102,7 +102,7 @@ export default function PortraitView() {
               type="button"
               disabled={loading || busy}
               onClick={() => void runMaintain()}
-              className="rounded-lg border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] disabled:opacity-50"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] disabled:opacity-50"
             >
               {busy ? '生成中…' : '手动生成'}
             </button>
@@ -110,7 +110,7 @@ export default function PortraitView() {
               type="button"
               disabled={loading || busy}
               onClick={() => void runReset()}
-              className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs text-[var(--color-danger)] hover:bg-rose-50 disabled:opacity-50"
+              className="rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-danger)] hover:bg-[var(--color-danger-bg)] disabled:opacity-50"
             >
               清空画像
             </button>
@@ -125,8 +125,8 @@ export default function PortraitView() {
           <div
             className={`mb-4 rounded-[var(--radius-lg)] border px-4 py-3 text-sm ${
               notice.kind === 'error'
-                ? 'border-rose-200 bg-rose-50 text-rose-700'
-                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
             }`}
           >
             {notice.text}
@@ -134,15 +134,15 @@ export default function PortraitView() {
         )}
 
         {loading ? (
-          <div className="rounded-2xl border border-[var(--color-border)] bg-white px-4 py-16 text-center text-sm text-[var(--color-text-disabled)]">
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-16 text-center text-sm text-[var(--color-text-disabled)]">
             正在从 Haven 读取画像状态…
           </div>
         ) : error ? (
-          <div className="rounded-[var(--radius-lg)] border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger)]">
             <p>读取失败：{error}</p>
             <button
               type="button"
-              className="mt-3 rounded-[var(--radius-md)] border border-red-300 bg-white px-3 py-1.5 text-xs"
+              className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs"
               onClick={() => void load()}
             >
               重试

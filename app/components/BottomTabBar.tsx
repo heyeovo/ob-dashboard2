@@ -42,7 +42,7 @@ export default function BottomTabBar() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-100/60 bg-white/80 pt-3 backdrop-blur-md"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--color-border-light)]/60 bg-[var(--color-surface)]/80 pt-3 backdrop-blur-md"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0.5rem)' }}
     >
       <div className="mx-auto flex max-w-lg items-start justify-around" style={{ minHeight: 64 }}>
@@ -72,7 +72,7 @@ export default function BottomTabBar() {
                   </svg>
                 </div>
                 <span className={`text-[11px] leading-none tracking-wide ${
-                  isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-slate-400'
+                  isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'
                 }`}>
                   {tab.label}
                 </span>
@@ -86,11 +86,11 @@ export default function BottomTabBar() {
               onClick={() => router.push(tab.href)}
               className="group flex min-w-[64px] flex-col items-center gap-1.5 transition-all duration-200 active:scale-90"
             >
-              <div className="flex h-6 w-6 items-center justify-center text-slate-400 transition-all duration-200">
+              <div className="flex h-6 w-6 items-center justify-center text-[var(--color-text-tertiary)] transition-all duration-200">
                 <TabIcon slug={tab.slug} active={isActive} />
               </div>
               <span className={`text-[11px] leading-none tracking-wide transition-all duration-200 ${
-                isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-slate-400'
+                isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'
               }`}>
                 {tab.label}
               </span>

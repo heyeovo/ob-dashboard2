@@ -19,7 +19,7 @@ export default function PersonaTabs({ active }: { active: PersonaTab }) {
           href={tab.href}
           className={`rounded-lg px-4 py-2 transition ${
             tab.id === active
-              ? 'bg-white font-medium text-[var(--color-text-heading)] shadow-sm'
+              ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-heading)] shadow-sm'
               : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
           }`}
         >

@@ -28,7 +28,7 @@ export default function PortraitProposalsSection({
   const [anchorBusy, setAnchorBusy] = useState(false)
 
   const inputClass =
-    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]'
+    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]'
   const labelClass = 'mb-1 block text-xs text-[var(--color-text-tertiary)]'
 
   const generateFacts = async () => {
@@ -125,7 +125,7 @@ export default function PortraitProposalsSection({
   }
 
   return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
       <h2 className="font-semibold text-[var(--color-text-heading)]">画像候选 / Anchor 候选</h2>
       <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
         从一个证据桶生成画像事实或 Anchor 候选，确认后写入记忆库。
@@ -166,8 +166,8 @@ export default function PortraitProposalsSection({
             <div
               className={`mt-3 rounded-[var(--radius-md)] border px-3 py-2 text-xs ${
                 factMessage.kind === 'error'
-                  ? 'border-rose-200 bg-rose-50 text-rose-700'
-                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                  : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
               }`}
             >
               {factMessage.text}
@@ -231,8 +231,8 @@ export default function PortraitProposalsSection({
             <div
               className={`mt-3 rounded-[var(--radius-md)] border px-3 py-2 text-xs ${
                 anchorMessage.kind === 'error'
-                  ? 'border-rose-200 bg-rose-50 text-rose-700'
-                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+                  : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
               }`}
             >
               {anchorMessage.text}

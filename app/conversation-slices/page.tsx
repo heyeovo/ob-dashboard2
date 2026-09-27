@@ -257,7 +257,7 @@ export default function ConversationSlicesPage() {
                 {sessions.map(session => <option key={session.session_id} value={session.session_id}>{session.pinned_at ? '★ ' : ''}{session.title || session.session_id}</option>)}
               </select>
               <input type="date" value={selectedDay} onChange={event => setSelectedDay(event.target.value)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm" />
-              <button disabled={!sessionId || !selectedDay || Boolean(busy)} onClick={generateDate} className="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-white disabled:opacity-50">{busy === 'generate' ? '生成中…' : '生成并检查'}</button>
+              <button disabled={!sessionId || !selectedDay || Boolean(busy)} onClick={generateDate} className="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-on-primary)] disabled:opacity-50">{busy === 'generate' ? '生成中…' : '生成并检查'}</button>
             </div>
           </section>
           <section>
@@ -270,7 +270,7 @@ export default function ConversationSlicesPage() {
             </div>
             {estimate && <div className="mt-3 rounded-lg bg-[var(--color-primary-muted)] p-3 text-sm">
               <div>{estimate.message_count.toLocaleString()} 条消息 · 约 {estimate.estimated_input_tokens.toLocaleString()} 输入 token · {estimate.estimated_call_count.toLocaleString()} 次调用</div>
-              <button onClick={createBackfill} disabled={Boolean(busy)} className="mt-2 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">确认创建任务（不自动执行）</button>
+              <button onClick={createBackfill} disabled={Boolean(busy)} className="mt-2 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-xs font-medium text-[var(--color-on-primary)] disabled:opacity-50">确认创建任务（不自动执行）</button>
             </div>}
           </section>
         </div>
@@ -321,7 +321,7 @@ export default function ConversationSlicesPage() {
         </section>
       </div>
 
-      {!!tasks.length && <Card className="mt-5" padding="lg"><h2 className="font-semibold text-[var(--color-text-heading)]">离线任务</h2><div className="mt-3 space-y-2">{tasks.slice(0, 30).map(task => <div key={task.task_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--color-surface-secondary)] p-3 text-xs"><div><div className="font-medium">{task.chat_day} · {sessions.find(item => item.session_id === task.session_id)?.title || task.session_id}</div><div className="mt-1 text-[var(--color-text-tertiary)]">{task.trigger_type} · {task.status} · {task.message_count} 条 · 约 {task.estimated_input_tokens.toLocaleString()} token</div>{task.error_detail && <div className="mt-1 text-[var(--color-danger)]">{task.error_detail}</div>}</div><div className="flex gap-1">{task.status === 'queued' && <><button onClick={() => operateTask(task, 'pause')} className="rounded-md border border-[var(--color-border)] px-2 py-1">暂停</button><button onClick={() => operateTask(task, 'run_task')} className="rounded-md bg-[var(--color-primary)] px-2 py-1 text-white">执行</button></>}{task.status === 'paused' && <button onClick={() => operateTask(task, 'resume')} className="rounded-md border border-[var(--color-border)] px-2 py-1">继续</button>}{task.status === 'failed' && <button onClick={() => operateTask(task, 'retry')} className="rounded-md border border-[var(--color-danger-border)] px-2 py-1 text-[var(--color-danger)]">失败重试</button>}</div></div>)}</div></Card>}
+      {!!tasks.length && <Card className="mt-5" padding="lg"><h2 className="font-semibold text-[var(--color-text-heading)]">离线任务</h2><div className="mt-3 space-y-2">{tasks.slice(0, 30).map(task => <div key={task.task_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--color-surface-secondary)] p-3 text-xs"><div><div className="font-medium">{task.chat_day} · {sessions.find(item => item.session_id === task.session_id)?.title || task.session_id}</div><div className="mt-1 text-[var(--color-text-tertiary)]">{task.trigger_type} · {task.status} · {task.message_count} 条 · 约 {task.estimated_input_tokens.toLocaleString()} token</div>{task.error_detail && <div className="mt-1 text-[var(--color-danger)]">{task.error_detail}</div>}</div><div className="flex gap-1">{task.status === 'queued' && <><button onClick={() => operateTask(task, 'pause')} className="rounded-md border border-[var(--color-border)] px-2 py-1">暂停</button><button onClick={() => operateTask(task, 'run_task')} className="rounded-md bg-[var(--color-primary)] px-2 py-1 text-[var(--color-on-primary)]">执行</button></>}{task.status === 'paused' && <button onClick={() => operateTask(task, 'resume')} className="rounded-md border border-[var(--color-border)] px-2 py-1">继续</button>}{task.status === 'failed' && <button onClick={() => operateTask(task, 'retry')} className="rounded-md border border-[var(--color-danger-border)] px-2 py-1 text-[var(--color-danger)]">失败重试</button>}</div></div>)}</div></Card>}
     </main>
   )
 }

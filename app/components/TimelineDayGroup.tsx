@@ -18,12 +18,12 @@ export default function TimelineDayGroup({
     <div className="relative pl-2 mb-6">
       {/* 极细浅灰空气线 */}
       {expanded && (
-        <div className="absolute left-0 top-2.5 bottom-0 w-[1px] bg-slate-200/60" />
+        <div className="absolute left-0 top-2.5 bottom-0 w-[1px] bg-[var(--color-surface-tertiary)]/60" />
       )}
 
       {/* 空心呼吸圆点（与文本居中对齐） */}
       {expanded && (
-        <div className="absolute left-0 top-2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[var(--color-primary)] bg-white ring-4 ring-orange-50 shadow-[0_0_6px_rgba(217,119,87,0.15)] z-[1]" />
+        <div className="absolute left-0 top-2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-[var(--color-primary)] bg-[var(--color-surface)] ring-4 ring-[var(--color-primary-light)] shadow-[var(--shadow-timeline-dot)] z-[1]" />
       )}
 
       {/* 日期头 */}

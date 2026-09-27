@@ -224,12 +224,12 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
           <button
             type="button"
             onClick={() => { setSelectMode(prev => !prev); setSelected(new Set()) }}
-            className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] md:inline-flex ${selectMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'}`}
+            className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] md:inline-flex ${selectMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-tertiary)]'}`}
           >
             {selectMode ? '取消选择' : '选择'}
           </button>
         ) : (
-          <span className="hidden shrink-0 rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex">
+          <span className="hidden shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex">
             只读
           </span>
         )}
@@ -308,13 +308,13 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
               type="button"
               onClick={doForward}
               disabled={selected.size === 0}
-              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+              className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-xs font-medium text-[var(--color-on-primary)] disabled:opacity-40"
             >
               转发到当前对话
             </button>
           </div>
         ) : (
-          <form onSubmit={submitSearch} className="mx-auto flex max-w-[var(--chat-assistant-width)] items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-white px-3 py-2 shadow-sm">
+          <form onSubmit={submitSearch} className="mx-auto flex max-w-[var(--chat-assistant-width)] items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 shadow-sm">
             <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <circle cx="10.8" cy="10.8" r="6.3" />
               <path d="m15.5 15.5 4 4" />

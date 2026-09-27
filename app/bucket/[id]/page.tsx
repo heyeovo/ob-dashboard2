@@ -35,30 +35,30 @@ export default function BucketPage() {
   }, [id])
 
   if (loading) return (
-    <div className="flex items-center justify-center h-screen text-gray-400">加载中...</div>
+    <div className="flex items-center justify-center h-screen text-[var(--color-text-tertiary)]">加载中...</div>
   )
   if (!bucket) return (
-    <div className="flex items-center justify-center h-screen text-gray-400">找不到</div>
+    <div className="flex items-center justify-center h-screen text-[var(--color-text-tertiary)]">找不到</div>
   )
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 max-w-2xl mx-auto">
+    <div className="min-h-screen bg-[var(--color-dark-surface)] text-[var(--color-dark-text)] p-6 max-w-2xl mx-auto">
       <button
         onClick={() => router.back()}
-        className="text-gray-400 hover:text-gray-200 mb-6 flex items-center gap-1"
+        className="text-[var(--color-text-tertiary)] hover:text-[var(--color-dark-text)] mb-6 flex items-center gap-1"
       >
         ← 返回
       </button>
 
       <div className="flex items-center gap-2 mb-2">
-        {bucket.pinned && <span className="text-yellow-400">📌</span>}
+        {bucket.pinned && <span className="text-[var(--color-warning-strong)]">📌</span>}
         <h1 className="text-2xl font-bold">{bucket.name}</h1>
         {bucket.resolved && (
-          <span className="text-xs bg-gray-600 px-2 py-0.5 rounded text-gray-300">已解决</span>
+          <span className="text-xs bg-[var(--color-dark-surface-soft)] px-2 py-0.5 rounded text-[var(--color-dark-text-muted)]">已解决</span>
         )}
       </div>
 
-      <div className="flex gap-4 text-sm text-gray-400 mb-4">
+      <div className="flex gap-4 text-sm text-[var(--color-text-tertiary)] mb-4">
         <span>重要度 {bucket.importance}/10</span>
         <span>情感 {bucket.valence?.toFixed(1)}</span>
         <span>创建 {new Date(bucket.created).toLocaleDateString('zh-CN')}</span>
@@ -66,14 +66,14 @@ export default function BucketPage() {
 
       <div className="flex flex-wrap gap-1.5 mb-6">
  {(bucket.domain ?? []).map(d => (
-  <span key={d} className="text-xs bg-gray-700 px-2 py-0.5 rounded text-gray-300">{d}</span>
+  <span key={d} className="text-xs bg-[var(--color-dark-surface-soft)] px-2 py-0.5 rounded text-[var(--color-dark-text-muted)]">{d}</span>
 ))}
 {(bucket.tags ?? []).map(t => (
-  <span key={t} className="text-xs bg-gray-900 px-2 py-0.5 rounded text-gray-400">{t}</span>
+  <span key={t} className="text-xs bg-[var(--color-dark-surface)] px-2 py-0.5 rounded text-[var(--color-text-tertiary)]">{t}</span>
 ))}
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-5 text-gray-200 leading-relaxed whitespace-pre-wrap">
+      <div className="bg-[var(--color-dark-surface-soft)] rounded-lg p-5 text-[var(--color-dark-text)] leading-relaxed whitespace-pre-wrap">
         {bucket.content}
       </div>
     </div>

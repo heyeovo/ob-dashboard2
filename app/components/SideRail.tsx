@@ -66,7 +66,7 @@ export default function SideRail() {
         className={`relative flex w-14 flex-col items-center gap-1 rounded-xl py-2 transition-colors ${
           active
             ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
-            : 'text-[var(--color-text-tertiary)] hover:bg-black/[0.03] hover:text-[var(--color-text-primary)]'
+            : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/[0.03] hover:text-[var(--color-text-primary)]'
         }`}
       >
         <Icon name={item.icon} />
@@ -79,7 +79,7 @@ export default function SideRail() {
   }
 
   return (
-    <nav className="fixed left-0 top-0 z-30 hidden h-screen w-[68px] flex-col items-center border-r border-[var(--color-border)] bg-white/70 py-3 backdrop-blur-md md:flex">
+    <nav className="fixed left-0 top-0 z-30 hidden h-screen w-[68px] flex-col items-center border-r border-[var(--color-border)] bg-[var(--color-surface)]/70 py-3 backdrop-blur-md md:flex">
       <Link href="/" title="Ombre Brain" className="mb-3 flex h-9 w-9 items-center justify-center">
         <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
       </Link>

@@ -45,7 +45,7 @@ export default function HomePage() {
           type="button"
           aria-label="打开家的功能"
           onClick={() => setToolsOpen(true)}
-          className="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-secondary)] hover:bg-black/5"
+          className="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-overlay)]/5"
         >
           ☰
         </button>
@@ -59,7 +59,7 @@ export default function HomePage() {
             type="button"
             aria-label="打开家的功能"
             onClick={() => setToolsOpen(true)}
-            className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-white/70 text-xl text-[var(--color-text-secondary)] shadow-sm transition hover:border-[var(--color-primary)]/30 hover:text-[var(--color-primary)]"
+            className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/70 text-xl text-[var(--color-text-secondary)] shadow-sm transition hover:border-[var(--color-primary)]/30 hover:text-[var(--color-primary)]"
           >
             ☰
           </button>

@@ -269,7 +269,7 @@ export default function JournalPage() {
       <style>{`
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #D4C9BD; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: var(--color-border-hover); border-radius: 4px; }
       `}</style>
 
       {/* ===== 顶部导航 ===== */}
@@ -277,18 +277,18 @@ export default function JournalPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
 
         {/* ===== 头部 ===== */}
-        <div className="pb-4 border-b border-slate-100 mb-5">
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Journal</h1>
-          <p className="text-sm text-slate-400 mt-1">寻回时间的线索，点滴卡片皆当下。</p>
+        <div className="pb-4 border-b border-[var(--color-border-light)] mb-5">
+          <h1 className="text-3xl font-bold text-[var(--color-text-heading)] tracking-tight">Journal</h1>
+          <p className="text-sm text-[var(--color-text-tertiary)] mt-1">寻回时间的线索，点滴卡片皆当下。</p>
 
           {/* 数据看板 */}
-          <div className="flex items-center gap-3 text-xs text-slate-700 mt-3">
+          <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] mt-3">
             <div>言之 <span className="font-semibold">{statsSummary.言之}</span> 条</div>
-            <div className="h-3 w-[1px] bg-slate-200" />
+            <div className="h-3 w-[1px] bg-[var(--color-surface-tertiary)]" />
             <div>小羊 <span className="font-semibold">{statsSummary.小羊}</span> 条</div>
-            <div className="h-3 w-[1px] bg-slate-200" />
+            <div className="h-3 w-[1px] bg-[var(--color-surface-tertiary)]" />
             <div>共同 <span className="font-semibold">{statsSummary.共同}</span> 条</div>
-            <div className="h-3 w-[1px] bg-slate-200" />
+            <div className="h-3 w-[1px] bg-[var(--color-surface-tertiary)]" />
             <div>总计 <span className="font-semibold">{statsSummary.total}</span> 篇</div>
           </div>
         </div>
@@ -300,24 +300,24 @@ export default function JournalPage() {
 
         {/* ===== 日期筛选（右下角） ===== */}
         <div className="flex items-center justify-end gap-1.5 mb-5">
-          <div className="flex items-center gap-1 bg-white border border-[var(--color-border)] rounded-lg px-2 py-1.5">
-            <svg className="w-3 h-3 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex items-center gap-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5">
+            <svg className="w-3 h-3 text-[var(--color-text-tertiary)] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
               <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
             <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
-              className="text-xs outline-none bg-transparent text-slate-600 w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
+              className="text-xs outline-none bg-transparent text-[var(--color-text-secondary)] w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
           </div>
-          <span className="text-xs text-slate-400">至</span>
-          <div className="flex items-center gap-1 bg-white border border-[var(--color-border)] rounded-lg px-2 py-1.5">
-            <svg className="w-3 h-3 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <span className="text-xs text-[var(--color-text-tertiary)]">至</span>
+          <div className="flex items-center gap-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5">
+            <svg className="w-3 h-3 text-[var(--color-text-tertiary)] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
               <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
             <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)}
-              className="text-xs outline-none bg-transparent text-slate-600 w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
+              className="text-xs outline-none bg-transparent text-[var(--color-text-secondary)] w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
           </div>
         </div>
 
@@ -339,7 +339,7 @@ export default function JournalPage() {
                 </div>
                 <div className="flex-1">
                   <div className="h-4 w-24 bg-[var(--color-border)] rounded mb-3" />
-                  <div className="h-28 bg-gradient-to-br from-white to-slate-50/50 rounded-2xl border border-[var(--color-border)]" />
+                  <div className="h-28 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-border-light)]/50 rounded-2xl border border-[var(--color-border)]" />
                 </div>
               </div>
             ))}
@@ -365,7 +365,7 @@ export default function JournalPage() {
                         const s = stats(e.content ?? '')
                         return (
                           <div key={e.id}
-                            className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl p-4 sm:p-6 hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y border-[var(--color-border)] hover:border-[var(--color-primary)]/30"
+                            className="bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-border-light)]/50 rounded-2xl p-4 sm:p-6 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y border-[var(--color-border)] hover:border-[var(--color-primary)]/30"
                             onClick={() => openDetail(e)}>
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -375,7 +375,7 @@ export default function JournalPage() {
                             <span className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{e.name}</span>
                             {e.locked && <span className="text-xs flex-shrink-0 opacity-60">🔒</span>}
                           </div>
-                          <span className="text-[11px] text-[#B0A590] font-mono flex-shrink-0 whitespace-nowrap">{s.chars}字·~{s.tokens}tok</span>
+                          <span className="text-[11px] text-[var(--color-text-tertiary)] font-mono flex-shrink-0 whitespace-nowrap">{s.chars}字·~{s.tokens}tok</span>
                         </div>
                         {e.locked ? (
                           <p className="text-sm text-[var(--color-text-disabled)] italic leading-relaxed">
@@ -435,10 +435,10 @@ export default function JournalPage() {
                     <div className="flex min-h-[430px] flex-col bg-[var(--color-surface-secondary)]/45 p-4 sm:p-6 lg:min-h-0">
                       <label className="mb-2 text-xs font-medium text-[var(--color-text-tertiary)]">正文</label>
                       <textarea value={editContent} onChange={e => setEditContent(e.target.value)} autoFocus
-                        className="min-h-[380px] w-full flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-white p-5 text-sm leading-7 text-[var(--color-text-primary)] outline-none transition-shadow focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 lg:min-h-0" />
+                        className="min-h-[380px] w-full flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-sm leading-7 text-[var(--color-text-primary)] outline-none transition-shadow focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 lg:min-h-0" />
                     </div>
 
-                    <aside className="space-y-5 border-t border-[var(--color-border-light)] bg-white p-5 sm:p-6 lg:border-l lg:border-t-0">
+                    <aside className="space-y-5 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] p-5 sm:p-6 lg:border-l lg:border-t-0">
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-tertiary)]">标题</label>
                         <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="标题"
@@ -456,7 +456,7 @@ export default function JournalPage() {
                         <div className="flex flex-wrap gap-2">
                           {(['言之', '小羊', '共同'] as Author[]).map(a => (
                             <button key={a} onClick={() => setEditAuthor(a)}
-                              className={`rounded-full px-3 py-1.5 text-xs font-medium ${editAuthor === a ? authorColor(a) : 'border border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'}`}>
+                              className={`rounded-full px-3 py-1.5 text-xs font-medium ${editAuthor === a ? authorColor(a) : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-tertiary)]'}`}>
                               {a}
                             </button>
                           ))}
@@ -479,9 +479,9 @@ export default function JournalPage() {
                 )}
 
                 {/* 底部操作区 */}
-                <div className="flex-shrink-0 border-t border-[var(--color-border-light)] bg-white px-5 py-3 sm:px-7">
+                <div className="flex-shrink-0 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] px-5 py-3 sm:px-7">
                   <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="text-[11px] text-[#B0A590] font-mono">
+                    <div className="text-[11px] text-[var(--color-text-tertiary)] font-mono">
                       {stats(editing ? editContent : detail.fullContent).chars} 字 · ~{stats(editing ? editContent : detail.fullContent).tokens} tokens
                     </div>
                     <div className="flex items-center gap-3">
@@ -505,14 +505,14 @@ export default function JournalPage() {
                             取消
                           </button>
                           <button onClick={saveEdit} disabled={saving}
-                            className="text-xs text-white px-4 py-1.5 rounded-full disabled:opacity-50 transition-all"
+                            className="text-xs text-[var(--color-on-primary)] px-4 py-1.5 rounded-full disabled:opacity-50 transition-all"
                             style={{ background: 'linear-gradient(135deg, var(--color-primary-gradient), var(--color-primary))' }}>
                             {saving ? '保存中…' : '保存更改'}
                           </button>
                         </>
                       )}
                       <button onClick={deleteJournal}
-                        className="text-xs font-medium text-[var(--color-danger)] hover:text-red-700 transition-colors">
+                        className="text-xs font-medium text-[var(--color-danger)] hover:text-[var(--color-danger)] transition-colors">
                         抹除
                       </button>
                     </div>
@@ -553,7 +553,7 @@ export default function JournalPage() {
                 {(['言之', '小羊', '共同'] as Author[]).map(a => (
                   <button key={a} onClick={() => setNewAuthor(a)}
                     className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                      newAuthor === a ? authorColor(a) : 'bg-white border border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]'
+                      newAuthor === a ? authorColor(a) : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]'
                     }`}>
                     {a}
                   </button>
@@ -578,7 +578,7 @@ export default function JournalPage() {
                 取消
               </button>
               <button onClick={submitNew} disabled={submitting || !newContent.trim()}
-                className="text-sm text-white px-5 py-2 rounded-full disabled:opacity-50 transition-all hover:shadow-md"
+                className="text-sm text-[var(--color-on-primary)] px-5 py-2 rounded-full disabled:opacity-50 transition-all hover:shadow-md"
                 style={{ background: 'linear-gradient(135deg, var(--color-primary-gradient), var(--color-primary))' }}>
                 {submitting ? '保存中…' : '保存日记'}
               </button>
@@ -588,7 +588,7 @@ export default function JournalPage() {
 
       {/* 悬浮加号 */}
       <button onClick={() => { setShowAdd(true); resetNewForm() }}
-        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-white text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
+        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
         +
       </button>
     </div>

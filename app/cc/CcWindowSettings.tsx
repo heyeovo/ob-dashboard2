@@ -89,13 +89,13 @@ const VAL = 'truncate text-right text-[var(--color-text-secondary)]'
 const LABEL = 'mb-1.5 text-[11px] text-[var(--color-text-disabled)]'
 const HINT = 'mb-2 text-[10.5px] leading-relaxed text-[var(--color-text-disabled)]'
 const SELECT =
-  'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-2.5 py-1.5 text-[11.5px] text-[var(--color-text-secondary)]'
+  'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11.5px] text-[var(--color-text-secondary)]'
 
 function seg(on: boolean) {
   return `flex-1 rounded-[var(--radius-md)] border px-2 py-1.5 text-[11.5px] transition-colors disabled:opacity-50 ${
     on
       ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)] text-[var(--color-text-heading)]'
-      : 'border-[var(--color-border)] bg-white text-[var(--color-text-secondary)]'
+      : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
   }`
 }
 
@@ -327,22 +327,22 @@ export default function CcWindowSettings({
           ) : null}
 
           {engine === 'cc' && mode === 'work' ? (
-            <div className="mb-3 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50/60 p-2.5">
+            <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)]/60 p-2.5">
               <div className="mb-1.5 flex items-center justify-between gap-3">
                 <span className={KEY}>手动压缩 Context</span>
                 <button
                   type="button"
                   disabled={!stats.live || stats.busy || stats.compacting}
                   onClick={() => void requestCompact()}
-                  className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[10.5px] text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-[var(--color-pending-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-pending)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {stats.compacting ? '压缩中…' : '立即压缩'}
                 </button>
               </div>
-              <div className="text-[10px] leading-relaxed text-amber-800/70">
+              <div className="text-[10px] leading-relaxed text-[var(--color-pending)]/70">
                 仅复用当前在线且空闲的 CC 工作会话；不会唤醒已回收会话。会额外调用一次模型生成摘要。
               </div>
-              {compactNote ? <div className="mt-1 text-[10px] text-amber-800">{compactNote}</div> : null}
+              {compactNote ? <div className="mt-1 text-[10px] text-[var(--color-pending)]">{compactNote}</div> : null}
             </div>
           ) : null}
 

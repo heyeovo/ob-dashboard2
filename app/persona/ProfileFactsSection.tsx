@@ -119,11 +119,11 @@ export default function ProfileFactsSection({
   const deprecatedCount = list.filter(fact => fact.deprecated || fact.state === 'deprecated').length
 
   const inputClass =
-    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]'
+    'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]'
   const labelClass = 'mb-1 block text-xs text-[var(--color-text-tertiary)]'
 
   return (
-    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold text-[var(--color-text-heading)]">Profile Facts</h2>
@@ -140,8 +140,8 @@ export default function ProfileFactsSection({
         <div
           className={`mb-4 rounded-[var(--radius-md)] border px-3 py-2 text-xs ${
             message.kind === 'error'
-              ? 'border-rose-200 bg-rose-50 text-rose-700'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              ? 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
+              : 'border-[var(--color-success-border)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
           }`}
         >
           {message.text}

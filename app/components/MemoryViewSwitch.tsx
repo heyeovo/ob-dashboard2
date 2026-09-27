@@ -32,7 +32,7 @@ export default function MemoryViewSwitch({ size = 'md' }: { size?: 'sm' | 'md' }
           onClick={() => router.replace(`/memory?tab=${slug}`, { scroll: false })}
           className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
             activeTab === slug
-              ? 'bg-white text-[var(--color-text-primary)] shadow-sm'
+              ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm'
               : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
           }`}
         >

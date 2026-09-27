@@ -249,7 +249,7 @@ export default function CcSessionRail({
             <h1 className="text-base font-medium text-[var(--color-text-heading)]">对话</h1>
             <div className="mt-0.5 text-[10.5px] text-[var(--color-text-disabled)]">{loading ? '正在同步窗口…' : `${sessions.length} 个窗口`}</div>
           </div>
-          <button type="button" onClick={onNew} className="rounded-full bg-[var(--color-primary)] px-3.5 py-2 text-xs font-medium text-white">新对话</button>
+          <button type="button" onClick={onNew} className="rounded-full bg-[var(--color-primary)] px-3.5 py-2 text-xs font-medium text-[var(--color-on-primary)]">新对话</button>
         </div>
         {notice ? <div className="mx-3 mt-3 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">{notice}</div> : null}
         <div className="no-scrollbar flex-1 overflow-y-auto px-3 pb-5 pt-3">
@@ -368,7 +368,7 @@ export default function CcSessionRail({
                     <button
                       type="button"
                       onClick={() => void permanentlyRemove(session)}
-                      className="shrink-0 text-[10px] text-rose-600 hover:underline"
+                      className="shrink-0 text-[10px] text-[var(--color-danger)] hover:underline"
                     >
                       永久删除
                     </button>

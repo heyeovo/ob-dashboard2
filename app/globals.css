@@ -19,6 +19,11 @@ html {
   --color-primary-gradient: #E8A58F;
   --color-primary-hover-soft:#FBE5DE;
   --color-primary-light:    #FFF5F2;
+  --color-primary-border:   #F5D5CB;
+  --color-primary-caption:  #C4896A;
+  --color-on-primary:       #FFFFFF;
+  --color-on-solid:         #FFFFFF;
+  --color-overlay:          #000000;
 
   /* ---- Color: surface / 表面层级 ---- */
   --color-bg:               #FCFAF8;
@@ -63,6 +68,24 @@ html {
   --color-danger-bg:        #FCEEED;
   --color-danger-border:    #F0C0BF;
   --color-danger-hover:     #FADAD9;
+  --color-danger-strong:    #EF4444;
+  --color-success:          #047857;
+  --color-success-bg:       #ECFDF5;
+  --color-success-border:   #A7F3D0;
+  --color-success-strong:   #10B981;
+  --color-warning-strong:   #FCD34D;
+  --color-dark-surface:     #030712;
+  --color-dark-surface-soft:#1F2937;
+  --color-dark-text:        #F3F4F6;
+  --color-dark-text-muted:  #9CA3AF;
+  --color-memory-event:     #8AA4A0;
+  --color-graph-wish-border:#C49B3A;
+  --color-graph-wish-text:  #8A6A1F;
+  --color-graph-feel-bg:    #F8F0FA;
+  --color-graph-feel-border:#B795C9;
+  --color-graph-feel-text:  #8A6A9A;
+  --color-chart-warm:       #D7A9A0;
+  --color-chart-cool:       #8DA8A3;
   --color-vector:           #478B4A;
 
   /* ---- Color: pending / 待处理黄 ---- */
@@ -88,6 +111,10 @@ html {
   --color-field-domain:     #8A8681;
   --color-field-tags:       #3B72B9;
   --color-field-content:    #478B4A;
+  --color-chart-topic:      #C86B45;
+  --color-chart-emotion:    #D98D6A;
+  --color-chart-time:       #DFA882;
+  --color-chart-importance: #C4B49A;
 
   /* ---- Radius / 圆角层级 ---- */
   --radius-sm:              6px;
@@ -117,6 +144,11 @@ html {
   --shadow-sm:              0 2px 6px rgba(58, 56, 54, 0.04);
   --shadow-md:              0 4px 14px rgba(58, 56, 54, 0.06);
   --shadow-hover:           0 4px 18px rgba(217, 119, 87, 0.10);
+  --shadow-card-hover:      0 8px 30px rgba(0, 0, 0, 0.02);
+  --shadow-timeline-dot:    0 0 6px rgba(217, 119, 87, 0.15);
+  --shadow-danger-hover:    0 2px 8px rgba(198, 75, 69, .08);
+  --persona-orb-sheen:      radial-gradient(circle at 36% 30%, rgba(255,255,255,.94), rgba(255,255,255,.16) 28%, transparent 41%);
+  --persona-orb-shadow:     18px 18px 34px rgba(139,116,102,.18), -14px -14px 30px rgba(255,255,255,.86), inset 14px 14px 28px rgba(255,255,255,.30), inset -16px -16px 28px rgba(59,84,78,.22);
 
   /* ---- Layout / 布局 ---- */
   --page-width:             1152px;
@@ -261,7 +293,7 @@ body {
   transition: border-color var(--duration-normal) var(--ease-standard);
 }
 .cc-composer:focus-within {
-  border-color: rgba(217, 119, 87, 0.34);
+  border-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
 }
 .cc-composer textarea {
   max-height: var(--chat-composer-max-h);
@@ -330,7 +362,7 @@ body {
 }
 .cc-rail-pane {
   border-right: 1px solid var(--color-border-light);
-  background: rgba(255, 255, 255, 0.42);
+  background: color-mix(in srgb, var(--color-surface) 42%, transparent);
 }
 
 /* ---- 助手侧名字行 ---- */
@@ -353,7 +385,7 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  color: #fff;
+  color: var(--color-on-primary);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: .02em;
@@ -382,7 +414,7 @@ body {
 }
 .cc-recall-btn:hover {
   color: var(--color-primary);
-  border-color: rgba(217, 119, 87, 0.3);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 /* ---- thinking：流式中跟着输出，答完保持展开（跟 Polaris 不同，用户要的） ---- */
@@ -470,7 +502,7 @@ body {
   transition: background var(--duration-normal) var(--ease-standard);
 }
 .cc-toolchip:hover {
-  background: rgba(255, 255, 255, 0.58);
+  background: color-mix(in srgb, var(--color-surface) 58%, transparent);
 }
 .cc-toolchip-name {
   min-width: 0;
@@ -495,15 +527,15 @@ body {
 .cc-tool-status {
   flex-shrink: 0;
   border-radius: 999px;
-  background: rgba(88, 83, 78, 0.07);
+  background: color-mix(in srgb, var(--color-text-secondary) 7%, transparent);
   padding: 2px 7px;
   font-size: 9.5px;
   color: var(--color-text-tertiary);
 }
-.cc-tool-status.running { color: #9a6b22; background: #fff6df; }
+.cc-tool-status.running { color: var(--color-pending); background: var(--color-pending-bg); }
 .cc-tool-status.error,
-.cc-tool-status.denied { color: #b44a4a; background: #fff0f0; }
-.cc-tool-status.completed { color: #3c7b61; background: #eaf7f0; }
+.cc-tool-status.denied { color: var(--color-danger); background: var(--color-danger-bg); }
+.cc-tool-status.completed { color: var(--color-success); background: var(--color-success-bg); }
 .cc-tool-dot {
   width: 5px;
   height: 5px;
@@ -529,7 +561,7 @@ body {
 .cc-popmenu-item:hover { background: var(--color-surface-secondary); }
 
 /* ---- 弹窗（工具详情 / 召回详情共用） ---- */
-.cc-modal-scrim { background: rgba(43, 41, 39, 0.22); backdrop-filter: blur(2px); }
+.cc-modal-scrim { background: color-mix(in srgb, var(--color-overlay) 22%, transparent); backdrop-filter: blur(2px); }
 .cc-modal {
   border-radius: var(--radius-xl);
   background: var(--color-surface);
@@ -653,7 +685,7 @@ body {
 .cc-md-link {
   color: var(--color-primary);
   text-decoration: underline;
-  text-decoration-color: rgba(217, 119, 87, 0.32);
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 32%, transparent);
   text-underline-offset: 2px;
 }
 .cc-md-link:hover { text-decoration-color: var(--color-primary); }
@@ -665,7 +697,7 @@ body {
   padding: 0.13em 0.38em;
   font-family: var(--font-mono);
   font-size: 0.88em;
-  color: #A8543A;
+  color: var(--color-primary-hover);
   overflow-wrap: anywhere;
 }
 
@@ -927,7 +959,7 @@ body {
   padding: 6px 18px;
   font-size: 12.5px;
   font-weight: 500;
-  color: #fff;
+  color: var(--color-on-primary);
   transition: background var(--duration-fast) var(--ease-standard);
 }
 .cc-btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
@@ -950,7 +982,7 @@ body {
   background: var(--color-danger);
   padding: 5px 13px;
   font-size: 11.5px;
-  color: #fff;
+  color: var(--color-on-solid);
 }
 
 /* ========================================================================
@@ -978,7 +1010,7 @@ body {
   padding: 2px 8px;
   font-size: 10.5px;
   font-weight: 500;
-  color: #fff;
+  color: var(--color-on-primary);
 }
 .cc-perm-kind.bash { background: var(--color-text-heading); }
 .cc-perm-title {
@@ -1027,8 +1059,8 @@ body {
   color: var(--color-text-disabled);
   user-select: none;
 }
-.cc-diff-line.add { background: rgba(107, 155, 122, 0.13); color: var(--color-text-primary); }
-.cc-diff-line.del { background: rgba(198, 93, 78, 0.11); color: var(--color-text-tertiary); }
+.cc-diff-line.add { background: color-mix(in srgb, var(--color-success) 13%, transparent); color: var(--color-text-primary); }
+.cc-diff-line.del { background: color-mix(in srgb, var(--color-danger) 11%, transparent); color: var(--color-text-tertiary); }
 .cc-diff-line.gap { color: var(--color-text-disabled); }
 
 /* 「本会话都放行」开着时顶部那条提示 */
@@ -1066,7 +1098,7 @@ body {
   font-size: 10.5px;
   color: var(--color-text-secondary);
 }
-.cc-wb-count.hot { background: var(--color-primary); color: #fff; }
+.cc-wb-count.hot { background: var(--color-primary); color: var(--color-on-primary); }
 .cc-wb-body { padding: 11px 13px; }
 .cc-wb-empty { font-size: 11.5px; line-height: 1.7; color: var(--color-text-disabled); }
 .cc-wb-row {
@@ -1085,7 +1117,7 @@ body {
   overflow-wrap: anywhere;
 }
 .cc-wb-delta { flex-shrink: 0; margin-left: auto; font-size: 10.5px; font-family: var(--font-mono); }
-.cc-wb-add { color: #4F7C5E; }
+.cc-wb-add { color: var(--color-success); }
 .cc-wb-del { color: var(--color-danger); }
 .cc-wb-pre {
   border-radius: var(--radius-md);
@@ -1107,15 +1139,15 @@ body {
   display: block;
   max-width: 360px;
   border-radius: var(--radius-xl);
-  border: 1.5px solid rgba(255, 72, 72, 0.2);
-  background: #FFFBFA;
+  border: 1.5px solid color-mix(in srgb, var(--color-danger) 20%, transparent);
+  background: var(--color-danger-bg);
   overflow: hidden;
   transition: border-color var(--duration-normal) var(--ease-standard),
               box-shadow var(--duration-normal) var(--ease-standard);
 }
 .xhs-card-loaded:hover {
-  border-color: rgba(255, 72, 72, 0.4);
-  box-shadow: 0 2px 8px rgba(255, 72, 72, 0.08);
+  border-color: color-mix(in srgb, var(--color-danger) 40%, transparent);
+  box-shadow: var(--shadow-danger-hover);
 }
 .xhs-card-cover {
   position: relative;
@@ -1135,8 +1167,8 @@ body {
   right: 8px;
   padding: 2px 7px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.55);
-  color: white;
+  background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
+  color: var(--color-on-solid);
   font-size: 11px;
 }
 .xhs-card-body {

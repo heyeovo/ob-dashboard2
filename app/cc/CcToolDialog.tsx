@@ -66,7 +66,7 @@ export default function CcToolDialog({
     <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
       <div className="cc-modal cc-tool-sheet relative flex max-h-[86vh] w-full max-w-2xl flex-col">
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-black/10 sm:hidden" />
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
         <div className="flex items-start gap-3 border-b border-[var(--color-border-light)] px-5 py-4">
           <span className="cc-tool-wrench mt-0.5" aria-hidden="true">⌁</span>
           <div className="min-w-0 flex-1">
@@ -100,7 +100,7 @@ export default function CcToolDialog({
 
           <div className="cc-modal-label mt-5">{error ? '错误' : '输出结果'}</div>
           {error ? (
-            <pre className="cc-modal-pre border-red-200 bg-red-50 text-red-700">{error}</pre>
+            <pre className="cc-modal-pre border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]">{error}</pre>
           ) : result ? (
             <pre className="cc-modal-pre">{result}</pre>
           ) : tool.status === 'running' ? (

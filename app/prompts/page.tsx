@@ -80,31 +80,31 @@ function TestModal({ item, draft, onClose }: { item: PromptItem; draft: string; 
       </div>
       <div className="grid sm:grid-cols-2 min-h-[420px]">
         <div className="flex flex-col border-b sm:border-b-0 sm:border-r border-[var(--color-border)]">
-          <div className="px-4 py-2.5 bg-[#FEF3EE] text-xs font-medium text-[#C86B45]">
+          <div className="px-4 py-2.5 bg-[var(--color-primary-soft)] text-xs font-medium text-[var(--color-primary-hover)]">
             {isMerge ? '旧记忆' : '测试原文'}
           </div>
           <textarea value={sample} onChange={e => setSample(e.target.value)}
             placeholder={isMerge ? '粘贴一段旧记忆…' : '粘贴要测试的记忆正文…'}
             className="min-h-40 flex-1 p-4 text-xs font-mono outline-none resize-none" />
           {isMerge && <>
-            <div className="px-4 py-2.5 bg-[#FEF3EE] text-xs font-medium text-[#C86B45] border-t border-[var(--color-border)]">新内容</div>
+            <div className="px-4 py-2.5 bg-[var(--color-primary-soft)] text-xs font-medium text-[var(--color-primary-hover)] border-t border-[var(--color-border)]">新内容</div>
             <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="粘贴准备合入的新内容…"
               className="min-h-40 flex-1 p-4 text-xs font-mono outline-none resize-none" />
           </>}
         </div>
-        <div className="flex flex-col bg-[#FAFAF8]">
-          <div className="px-4 py-2.5 bg-[#FEF3EE] text-xs font-medium text-[#C86B45]">试跑结果</div>
+        <div className="flex flex-col bg-[var(--color-surface-secondary)]">
+          <div className="px-4 py-2.5 bg-[var(--color-primary-soft)] text-xs font-medium text-[var(--color-primary-hover)]">试跑结果</div>
           <div className="flex-1 overflow-auto p-4">
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            {error && <p className="text-xs text-[var(--color-danger-strong)]">{error}</p>}
             {result && <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed">{result}</pre>}
-            {!result && !error && <p className="text-xs text-[#C0BBB5]">试跑结果不会写入记忆或 Prompt 配置。</p>}
+            {!result && !error && <p className="text-xs text-[var(--color-text-disabled)]">试跑结果不会写入记忆或 Prompt 配置。</p>}
           </div>
         </div>
       </div>
       <div className="px-5 py-3 border-t border-[var(--color-border)] flex justify-end gap-2">
         <button onClick={onClose} className="text-xs px-4 py-2 border border-[var(--color-border)] rounded-lg">关闭</button>
         <button onClick={run} disabled={!sample.trim() || (isMerge && !newContent.trim()) || running}
-          className="text-xs px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40">
+          className="text-xs px-4 py-2 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg disabled:opacity-40">
           {running ? '运行中…' : '运行测试'}
         </button>
       </div>
@@ -183,7 +183,7 @@ export default function PromptsPage() {
   }
 
   if (loading) return <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center text-sm text-[var(--color-text-tertiary)]">加载中…</div>
-  if (loadError) return <div className="min-h-screen bg-[var(--color-bg)] flex flex-col gap-3 items-center justify-center text-sm text-red-500"><span>{loadError}</span><button onClick={load} className="px-4 py-2 border rounded-lg text-[var(--color-text-primary)]">重新加载</button></div>
+  if (loadError) return <div className="min-h-screen bg-[var(--color-bg)] flex flex-col gap-3 items-center justify-center text-sm text-[var(--color-danger-strong)]"><span>{loadError}</span><button onClick={load} className="px-4 py-2 border rounded-lg text-[var(--color-text-primary)]">重新加载</button></div>
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] pb-20">
@@ -206,7 +206,7 @@ export default function PromptsPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium">{PROMPT_META[name].label}</span>
                     <span className="text-[10px] font-mono text-[var(--color-text-disabled)]">{name}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${item.customized ? 'bg-[#FEF3EE] text-[#C86B45]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${item.customized ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
                       {item.customized ? '用户自定义' : '系统默认'}
                     </span>
                     {dirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
@@ -218,55 +218,55 @@ export default function PromptsPage() {
                   {item.test_supported && <button onClick={() => setTestName(name)} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg">测试</button>}
                   {dirty && <button onClick={() => setEditing(prev => ({ ...prev, [name]: item.content }))} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg">还原未保存修改</button>}
                   {item.customized && <button onClick={() => restoreDefault(name)} disabled={busy === name} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg disabled:opacity-40">恢复系统默认</button>}
-                  <button onClick={() => save(name)} disabled={!dirty || busy === name} className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40">{busy === name ? '处理中…' : '保存并生效'}</button>
-                  <button onClick={() => setCollapsed(prev => ({ ...prev, [name]: !prev[name] }))} className="text-xs text-[#C0BBB5]">{collapsed[name] ? '▾' : '▴'}</button>
+                  <button onClick={() => save(name)} disabled={!dirty || busy === name} className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg disabled:opacity-40">{busy === name ? '处理中…' : '保存并生效'}</button>
+                  <button onClick={() => setCollapsed(prev => ({ ...prev, [name]: !prev[name] }))} className="text-xs text-[var(--color-text-disabled)]">{collapsed[name] ? '▾' : '▴'}</button>
                 </div>
               </div>
-              {note?.text && <div className={`px-4 sm:px-6 pb-3 text-xs ${note.type === 'error' ? 'text-red-500' : 'text-[var(--color-digested)]'}`}>{note.text}</div>}
+              {note?.text && <div className={`px-4 sm:px-6 pb-3 text-xs ${note.type === 'error' ? 'text-[var(--color-danger-strong)]' : 'text-[var(--color-digested)]'}`}>{note.text}</div>}
               {!collapsed[name] && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
                 <div className="mt-4 mb-2 flex items-center justify-between gap-3">
                   <div>
                     <div className="text-xs font-medium text-[var(--color-text-primary)]">可编辑的产品提示词</div>
                     <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">控制文风、关注重点、判断尺度和篇幅</div>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FEF3EE] text-[#C86B45]">可编辑</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]">可编辑</span>
                 </div>
                 <textarea value={editing[name] || ''} onChange={e => setEditing(prev => ({ ...prev, [name]: e.target.value }))}
                   rows={Math.max(7, (editing[name] || '').split('\n').length + 2)}
-                  className="w-full text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
-                <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{(editing[name] || '').length} 字符</div>
+                  className="w-full text-xs font-mono bg-[var(--color-surface-secondary)] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
+                <div className="text-[10px] text-[var(--color-text-disabled)] mt-1.5 text-right">{(editing[name] || '').length} 字符</div>
 
                 <div className="mt-5 grid gap-3">
                   <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-3.5">
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="text-xs font-medium text-[var(--color-text-primary)]">运行时自动叠加</div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
                     </div>
                     <ul className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
                       {(item.runtime_layers || []).map((line, index) => <li key={index} className="flex gap-2"><span>•</span><span>{line}</span></li>)}
                     </ul>
                   </div>
 
-                  <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[#F7F7F5] overflow-hidden">
+                  <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-tertiary)] overflow-hidden">
                     <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-medium text-[var(--color-text-primary)]">模型不可覆盖的固定约束</div>
                         <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">实际发送给模型，始终生效，不会被上方内容覆盖</div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
                     </summary>
-                    <pre className="mx-3.5 mb-3.5 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-white border border-[var(--color-border-light)] p-3 text-[11px] font-mono leading-relaxed text-[var(--color-text-tertiary)]">{item.model_hard_constraints}</pre>
+                    <pre className="mx-3.5 mb-3.5 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--color-surface)] border border-[var(--color-border-light)] p-3 text-[11px] font-mono leading-relaxed text-[var(--color-text-tertiary)]">{item.model_hard_constraints}</pre>
                   </details>
 
-                  <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[#F7F7F5] overflow-hidden">
+                  <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-tertiary)] overflow-hidden">
                     <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-medium text-[var(--color-text-primary)]">模型返回后的服务端校验</div>
                         <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">这些不是 Prompt 文字，而是 Haven 程序继续执行的安全边界</div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
                     </summary>
-                    <ul className="mx-3.5 mb-3.5 space-y-1.5 rounded-md bg-white border border-[var(--color-border-light)] p-3 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                    <ul className="mx-3.5 mb-3.5 space-y-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border-light)] p-3 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
                       {(item.server_validations || []).map((line, index) => <li key={index} className="flex gap-2"><span>•</span><span>{line}</span></li>)}
                     </ul>
                   </details>
@@ -371,7 +371,7 @@ function AgentWakePromptSection() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium">主动唤醒</span>
               <span className="text-[10px] font-mono text-[var(--color-text-disabled)]">agent_wake_instructions</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full ${config.customized ? 'bg-[#FEF3EE] text-[#C86B45]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full ${config.customized ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
                 {config.customized ? '用户自定义' : '系统默认'}
               </span>
               {dirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
@@ -382,11 +382,11 @@ function AgentWakePromptSection() {
           <div className="flex gap-2 flex-wrap items-center">
             {dirty && <button onClick={() => { setInstructions(config.instructions); setToolDesc(config.tool_description) }} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg">还原未保存修改</button>}
             {config.customized && <button onClick={reset} disabled={busy} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg disabled:opacity-40">恢复系统默认</button>}
-            <button onClick={save} disabled={!dirty || busy} className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg disabled:opacity-40">{busy ? '处理中…' : '保存并生效'}</button>
-            <button onClick={() => setCollapsed(!collapsed)} className="text-xs text-[#C0BBB5]">{collapsed ? '▾' : '▴'}</button>
+            <button onClick={save} disabled={!dirty || busy} className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-[var(--color-on-primary)] rounded-lg disabled:opacity-40">{busy ? '处理中…' : '保存并生效'}</button>
+            <button onClick={() => setCollapsed(!collapsed)} className="text-xs text-[var(--color-text-disabled)]">{collapsed ? '▾' : '▴'}</button>
           </div>
         </div>
-        {message && <div className={`px-4 sm:px-6 pb-3 text-xs ${message.type === 'error' ? 'text-red-500' : 'text-[var(--color-digested)]'}`}>{message.text}</div>}
+        {message && <div className={`px-4 sm:px-6 pb-3 text-xs ${message.type === 'error' ? 'text-[var(--color-danger-strong)]' : 'text-[var(--color-digested)]'}`}>{message.text}</div>}
         {!collapsed && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
           <div className="mt-4 mb-2">
             <div className="text-xs font-medium text-[var(--color-text-primary)]">Wake 行为说明</div>
@@ -394,8 +394,8 @@ function AgentWakePromptSection() {
           </div>
           <textarea value={instructions} onChange={e => setInstructions(e.target.value)}
             rows={Math.max(6, instructions.split('\n').length + 2)}
-            className="w-full text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
-          <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{instructions.length} 字符</div>
+            className="w-full text-xs font-mono bg-[var(--color-surface-secondary)] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
+          <div className="text-[10px] text-[var(--color-text-disabled)] mt-1.5 text-right">{instructions.length} 字符</div>
 
           <div className="mt-4 mb-2">
             <div className="text-xs font-medium text-[var(--color-text-primary)]">调用规则补充</div>
@@ -403,8 +403,8 @@ function AgentWakePromptSection() {
           </div>
           <textarea value={toolDesc} onChange={e => setToolDesc(e.target.value)}
             rows={Math.max(3, toolDesc.split('\n').length + 1)}
-            className="w-full text-xs font-mono bg-[#FAFAF8] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
-          <div className="text-[10px] text-[#C0BBB5] mt-1.5 text-right">{toolDesc.length} 字符</div>
+            className="w-full text-xs font-mono bg-[var(--color-surface-secondary)] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
+          <div className="text-[10px] text-[var(--color-text-disabled)] mt-1.5 text-right">{toolDesc.length} 字符</div>
         </div>}
       </Card>
     </div>

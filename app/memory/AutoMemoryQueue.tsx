@@ -202,14 +202,14 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
     return (
       <div className="rounded-2xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-5 text-sm text-[var(--color-danger)]">
         <p>{error}</p>
-        <button onClick={() => loadItems()} className="mt-3 rounded-lg border border-[var(--color-danger-border)] bg-white px-3 py-1.5 font-medium">重试</button>
+        <button onClick={() => loadItems()} className="mt-3 rounded-lg border border-[var(--color-danger-border)] bg-[var(--color-surface)] px-3 py-1.5 font-medium">重试</button>
       </div>
     )
   }
 
   if (!item || !candidate || !draft) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white py-20 text-center text-sm text-[var(--color-text-disabled)]">
+      <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] py-20 text-center text-sm text-[var(--color-text-disabled)]">
         <p>🎉 没有待处理的自动记忆候选</p>
         {success && <p className="mt-2 text-[var(--color-digested)]">{success}</p>}
         <button onClick={() => loadItems()} className="mt-4 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-[var(--color-text-secondary)]">刷新</button>
@@ -227,35 +227,35 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
       {success && <div className="mb-3 rounded-xl border border-[var(--color-digested-border)] bg-[var(--color-digested-bg)] px-4 py-2 text-sm text-[var(--color-digested)]">{success}</div>}
       {error && <div className="mb-3 rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
 
-      <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm sm:p-6">
+      <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-6">
         {editing ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="sm:col-span-2 text-xs font-medium text-[var(--color-text-secondary)]">
               标题
               <input value={draft.title} maxLength={40} onChange={event => setDraft({ ...draft, title: event.target.value })}
-                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" />
+                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" />
             </label>
             <label className="sm:col-span-2 text-xs font-medium text-[var(--color-text-secondary)]">
               正文
               <textarea value={draft.content} rows={8} onChange={event => setDraft({ ...draft, content: event.target.value })}
-                className="mt-1.5 w-full resize-y rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" />
+                className="mt-1.5 w-full resize-y rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" />
             </label>
             <label className="text-xs font-medium text-[var(--color-text-secondary)]">
               类型
               <select value={draft.kind} onChange={event => setDraft({ ...draft, kind: event.target.value })}
-                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]">
+                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]">
                 {KIND_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
             <label className="text-xs font-medium text-[var(--color-text-secondary)]">
               域（逗号分隔）
               <input value={draft.domain} onChange={event => setDraft({ ...draft, domain: event.target.value })}
-                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
+                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
             </label>
             <label className="sm:col-span-2 text-xs font-medium text-[var(--color-text-secondary)]">
               标签（逗号分隔）
               <input value={draft.tags} onChange={event => setDraft({ ...draft, tags: event.target.value })}
-                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
+                className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
             </label>
             <label className="text-xs font-medium text-[var(--color-text-secondary)]">
               重要度：{draft.importance}
@@ -308,9 +308,9 @@ export default function AutoMemoryQueue({ onRefresh }: { onRefresh: () => void }
       {items.length > 1 && (
         <div className="mt-4 flex justify-between">
           <button onClick={() => selectItem(current - 1)} disabled={current === 0 || operating !== null}
-            className="rounded-lg border border-[var(--color-border)] bg-white px-5 py-2 text-sm text-[var(--color-text-secondary)] disabled:opacity-40">← 上一条</button>
+            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-2 text-sm text-[var(--color-text-secondary)] disabled:opacity-40">← 上一条</button>
           <button onClick={() => selectItem(current + 1)} disabled={current === items.length - 1 || operating !== null}
-            className="rounded-lg border border-[var(--color-border)] bg-white px-5 py-2 text-sm text-[var(--color-text-secondary)] disabled:opacity-40">下一条 →</button>
+            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-2 text-sm text-[var(--color-text-secondary)] disabled:opacity-40">下一条 →</button>
         </div>
       )}
     </div>
