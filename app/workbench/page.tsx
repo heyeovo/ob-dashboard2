@@ -14,6 +14,10 @@ import ContextAuditPanel from './ContextAuditPanel'
  * 调参 = 引擎在干什么。现有的 breath-sim 那五个 tab 不搬代码，这里给入口。
  */
 
+const BENCH_ENTRIES: Entry[] = [
+  { key: 'artifacts', label: '小作品', desc: '言之做过的页面、小游戏和图，点开就能玩', href: '/artifacts' },
+]
+
 const TUNE_ENTRIES: Entry[] = [
   { key: 'breath', label: '模拟 Breath', desc: 'Pipeline / 即时模拟 / 评分旋钮 / 命中统计 / 检索追溯', href: '/breath-sim' },
   { key: 'inject', label: '召回透镜', desc: '逐轮查看召回、拒绝、规则解释与系统降级', href: '/recall-lens' },
@@ -46,7 +50,10 @@ export default function WorkbenchPage() {
         </div>
 
         {tab === 'bench' ? (
-          <CcWorkbenchPanel />
+          <div className="space-y-4">
+            <EntryGrid entries={BENCH_ENTRIES} />
+            <CcWorkbenchPanel />
+          </div>
         ) : (
           <div className="space-y-4">
             <EntryGrid entries={TUNE_ENTRIES} />

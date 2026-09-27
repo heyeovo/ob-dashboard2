@@ -61,6 +61,7 @@ import {
   type TurnUsage,
   type CcCompactionEvent,
 } from '@/app/lib/ccSession'
+import { slimToolInputForStorage } from '@/app/lib/artifactMeta'
 import { buildCcOptions, cacheRelevantFingerprint, isWebTool, MAX_CC_TOOL_CALLS_PER_TURN, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
 import { writeSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
@@ -1094,7 +1095,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             const toolEvent = {
               name: block.name,
               id: block.id,
-              input: block.input,
+              input: slimToolInputForStorage(block.name, block.input),
               status: 'running',
               startedAt,
             }

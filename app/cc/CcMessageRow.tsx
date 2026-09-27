@@ -4,6 +4,8 @@ import CcMarkdown, { highlightSearchText } from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
 import { FALLBACK_PERSONA, type CcPersona } from './persona'
 import type { CcCompactionEvent, CcMessage, CcProcessEvent, CcToolEvent, CcTurnUsage } from './types'
+import CcArtifactCard from './CcArtifactCard'
+import { artifactFromToolCall } from '@/app/lib/artifactMeta'
 import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
 import { buildDisplaySegments, buildStableDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
@@ -651,6 +653,21 @@ export default function CcMessageRow({
     ? renderedSegments
     : message.displaySegments || []
   const openTool = openToolId ? tools.find(tool => tool.id === openToolId) || null : null
+  // 同一轮里同一个作品写了又改，只在最后一次成功调用下面出卡。
+  const artifactCardByToolId = new Map<string, NonNullable<ReturnType<typeof artifactFromToolCall>>>()
+  {
+    const latest = new Map<string, string>()
+    for (const tool of tools) {
+      if (tool.status === 'error' || tool.status === 'denied' || tool.status === 'running') continue
+      const artifact = artifactFromToolCall(tool.name, tool.input)
+      if (!artifact) continue
+      const previous = latest.get(artifact.name)
+      const previousTitle = previous ? artifactCardByToolId.get(previous)?.title : ''
+      if (previous) artifactCardByToolId.delete(previous)
+      latest.set(artifact.name, tool.id)
+      artifactCardByToolId.set(tool.id, { ...artifact, title: artifact.title || previousTitle || '' })
+    }
+  }
   return (
     <div
       className={`cc-row min-w-0 max-w-full flex items-start gap-2 ${selectMode && canSelect ? 'cursor-pointer' : ''}`}
@@ -756,6 +773,9 @@ export default function CcMessageRow({
                     </span>
                     <span className="cc-tool-chevron" aria-hidden="true">›</span>
                   </button>
+                  {artifactCardByToolId.has(tool.id) ? (
+                    <CcArtifactCard {...artifactCardByToolId.get(tool.id)!} />
+                  ) : null}
                 </div>
               )
             })}

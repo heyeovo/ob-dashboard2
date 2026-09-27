@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { isArtifactName, listArtifacts, parseArtifactHead, readArtifact } from '@/app/lib/artifacts'
+import { listArtifacts, readArtifact } from '@/app/lib/artifacts'
+import { artifactFromToolCall, isArtifactName, parseArtifactHead, slimToolInputForStorage } from '@/app/lib/artifactMeta'
 
 let root = ''
 
@@ -46,6 +47,26 @@ describe('artifacts', () => {
     await expect(readArtifact('link.html', root)).resolves.toBeNull()
     await expect(readArtifact('../secret.html', root)).resolves.toBeNull()
     expect((await readArtifact('old.html', root))?.body.toString()).toBe('<title>Old</title>')
+  })
+
+  it('recognizes artifact writes and patches from yanzhi files tool calls', () => {
+    expect(artifactFromToolCall('mcp__yanzhi__files', { action: 'write', path: 'artifacts/snake.html', content: '<title>贪吃蛇</title>' }))
+      .toEqual({ name: 'snake.html', action: 'write', title: '贪吃蛇' })
+    expect(artifactFromToolCall('mcp__yanzhi__files', { action: 'patch', path: './artifacts/snake.html', old_text: 'a', new_text: 'b' }))
+      .toEqual({ name: 'snake.html', action: 'patch', title: '' })
+    expect(artifactFromToolCall('mcp__yanzhi__files', { action: 'read', path: 'artifacts/snake.html' })).toBeNull()
+    expect(artifactFromToolCall('mcp__yanzhi__files', { action: 'write', path: 'notes/a.html', content: '' })).toBeNull()
+    expect(artifactFromToolCall('mcp__yanzhi__files', { action: 'write', path: 'artifacts/deep/a.html', content: '' })).toBeNull()
+    expect(artifactFromToolCall('Write', { file_path: 'artifacts/a.html' })).toBeNull()
+  })
+
+  it('slims stored artifact writes but leaves other tool inputs alone', () => {
+    const write = { action: 'write', path: 'artifacts/a.html', content: '<title>A</title><p>long</p>', overwrite: true }
+    const slim = slimToolInputForStorage('mcp__yanzhi__files', write)
+    expect(slim).toEqual({ action: 'write', path: 'artifacts/a.html', overwrite: true, title: 'A', content_chars: write.content.length })
+    expect(artifactFromToolCall('mcp__yanzhi__files', slim)).toEqual({ name: 'a.html', action: 'write', title: 'A' })
+    const note = { action: 'write', path: 'notes/a.md', content: 'keep' }
+    expect(slimToolInputForStorage('mcp__yanzhi__files', note)).toBe(note)
   })
 
   it('returns an empty list before the folder exists', async () => {
