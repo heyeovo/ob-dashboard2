@@ -12,7 +12,7 @@
 | KEEP-01 | Dashboard `cc-test` / `cc-hook-test` 回归对比路由 | 🟦 | — |
 | KEEP-02 | Haven `CLAUDE_PROMPT.md`、`docs/Tool Guide.md` 外部接入指引 | 🟦 | — |
 | H-01 | Haven 内置单文件 `dashboard.html`（355KB）要不要继续维护 | 🟨 产品决策 | — |
-| H-02 | Haven 根目录 `INTERNALS.md` / `BEHAVIOR_SPEC.md` 旧文档归档 | 🟨 随 Haven 文档梳理处理 | — |
+| H-02 | Haven 根目录 `INTERNALS.md` / `BEHAVIOR_SPEC.md` 旧文档归档 | 🟨 随 Haven 文档梳理处理 | `9c6c8cedd0ca4860` |
 | L-01 | 旧 session 诊断表补 profile 隔离 | ⬜ | — |
 | CC-02 | 缓存 usage 与中转站账单口径不一致 / 连续缓存写 | ⬜ | — |
 | CC-04 | Agent SDK MCP `tool_result` 后的续写边界 | ⬜ | — |
