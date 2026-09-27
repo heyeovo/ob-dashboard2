@@ -8,34 +8,17 @@
 > - 🟨 **待确认** —— 疑似废弃，但还没查实或涉及决策
 > - 🟦 **刻意保留** —— 明确为回退 / 对比 / 兜底保留，别当孤儿误删
 > - ✅ **已解决**
+>
+> **分工（2026-09-27 定）：**「想做的功能 / 活」统一放 OB Todo（`list_todos`），每条一句话；本文件只记代码层面的债务和需要细节的技术卡，OB Todo 的背景里引用这里的卡号。`docs/handoff/` 是历史档案，状态见 `docs/handoff/README.md`。
 
 ---
 
 ## dashboard（ob-dashboard2）
 
-### 🟨 测试断言待同步
+### ✅ 2026-09-27 清理
 
-| 项 | 说明 | 为什么待定 |
-|---|---|---|
-| `tests/cc-runTurn.test.ts` | 一处断言仍期待 `display_segments.version = 1`，运行代码已输出版本 2；2026-09-12 全量测试因此 1 项失败，其余 258 项通过 | 来自本次开始前拉取的既有改动，与当前对话列表/删除任务无关；应在维护 display segments 的独立窗口确认版本契约后修正 |
-
-### 🟥 4.6 导航重构死代码（用户已拍板删，等执行）
-
-| 项 | 说明 | 删除前置 |
-|---|---|---|
-| `app/components/NavBar.tsx` | 桌面顶部横条，被 `SideRail` 取代，无引用 | 已确认无 import，直接删 |
-| `app/components/MobileViewSwitch.tsx` | 两格切换，被 `MemoryViewSwitch` 取代，无引用 | 已确认无 import，直接删 |
-| `app/chat/` | 聊天旧页面，导航无入口，无引用 | 已确认无引用，直接删 |
-| `app/review/` | 审阅旧页面，导航无入口，无引用 | 已确认无引用，直接删 |
-
-> ⚠️ 关联：删 `review/` 页后，`app/api/review-status/route.ts` 会变成孤儿（它只有 review 页在用），届时一并处理。
-
-### 🟥 孤儿 API route（0 引用，已查实）
-
-| 项 | 说明 | 删除前置 |
-|---|---|---|
-| `app/api/provider-relay/route.ts` | 全项目无 fetch / 字符串引用 | 可能是早期 cc 方案遗留，删前确认不需要回归 |
-| `app/api/mcp-relay/[...path]/route.ts` | 全项目无引用 | 同上 |
+- 已删：4.6 导航重构死代码（`NavBar`、`MobileViewSwitch`、`app/chat/`、`app/review/` 及随之成为孤儿的 `api/review-status`）、孤儿 route（`api/provider-relay`、`api/mcp-relay`）、根目录调试残留（`cookiejar.txt`、`test.txt`、`tmp_headers.txt`）。需要回退从 git 历史取。
+- 测试恢复全绿（352 项）：召回规则 / 召回透镜文案两处断言对齐 9.13、9.20 的有意改动；滚动冷启动测试改用真实临时 cwd（Windows 假路径在 Linux 上与 SDK 算出不同 project key，生产不受影响）；登录篡改断言修掉末位恰为 `x` 时的随机失败。原「display_segments.version」断言项早已不再失败。
 
 ### 🟦 刻意保留（别删）
 
@@ -70,20 +53,15 @@
 
 > 这里只记录短期不处理、没有明确实施窗口的事项。已经安排给后续窗口的工作写入对应 handoff，不在这里重复维护。dashboard 的 CLAUDE.md 与 Haven 的 CLAUDE.md 都引用这份，以这里为准。
 
-- [ ] **重新脱水（redehydrate）** —— Fork 有 `/api/bucket/{id}/redehydrate` + redehydrate-commit
-- [ ] **控制台配置页** —— 多组 LLM profile、衰减权重 UI 调节。⚠️ 待确认：Haven 已做 `settings/upstream` 等 5 个配置子页，这条可能已实现
-- [ ] **自动备份** —— GitHub Actions 每天备份 buckets 到私有仓库
-- [ ] **情感唤起罗盘** —— 手机端 2D 心情坐标选记忆 + LLM 叙事
 - [ ] **旧 session 诊断表补 profile 隔离** —— `request_rounds`、`injected_buckets`、`injection_debug`、`recent_context_injections`、`upstream_usage`、`handoff_blocks` 只有 session_id；为避免跨 profile 误删，当前永久删除保留这些后台记录，后续迁移 profile_id 后再纳入清理。
 
-### LLM 自动唤醒（低优先级，未排期）
+### ✅ 已关闭（2026-09-27）
 
-- **设想：**由 Haven 服务端按规则/概率持久调度 LLM；醒来后可主动生成消息，并在受控权限下读取工具或 MCP。模型还可提出下一次唤醒时间，但必须经后端最小间隔、静默时段、每日次数、费用和循环保护校验后才能写入 `next_run_at`。
-- **已有规划基础：**每周 journey 候选将先建立通用 `automation_schedules`、`automation_runs`、`automation_candidates`。未来唤醒复用调度、运行记录、领取锁、幂等、错误恢复和人工审批，不在当前 journey 窗口实现唤醒专属逻辑。
-- **未来仍需新增：**后台 LLM 执行器、主动消息 outbox 与未读投递、后台 MCP 客户端、独立后台权限策略、token/费用/工具次数/运行时长限制，以及前端通知和运行历史。
-- **权限边界：**后台任务不能继承互动聊天中的临时 `allow`；只读工具可按用户配置自动允许，Haven 写入进入对应候选审批，外部发信、删除、付款、公开发布等高影响动作必须单独显式授权。
-- **部署边界：**唤醒调度必须运行在持续在线且有持久化的 Haven 服务端；浏览器/Vercel 前端只负责配置、状态、通知和审批，不能把前端计时器作为唯一调度来源。
-- **启动条件：**用户以后明确提高优先级并单独建立实施窗口；开工前先确定目标消息通道、Persona/会话归属、静默时间、权限白名单和每日预算。
+- **LLM 自动唤醒**：已由 Dashboard 侧 CC Agent Wake 实现并日常使用（2026-09-01 跑通，Bark 推送），不再走原设想的 Haven 服务端调度。事实源见 `docs/handoff/HANDOFF-cc-agent-wake.md`；唤醒时段自定义等后续需求在 OB Todo。
+- **重新脱水（redehydrate）**：现在基本由协作者直接写桶，不走脱水，不再需要。
+- **控制台配置页**：Haven 已有 `settings/*` 配置子页，视为已实现。
+- **自动备份**：VPS B2 每日备份已上线（见 `HANDOFF-cc-VPS迁移.md` §21）。
+- **情感唤起罗盘**：用户决定暂不做。
 
 ### cc v1 收口后的独立任务卡（均未排期）
 
@@ -109,9 +87,10 @@
 - **边界：**不记录请求正文、密钥或附件内容；不直接修改累计 / 覆盖规则；不把旧 cc 的 `getContextUsage()` 历史问题当成本问题；不安排无诊断的连续付费实验。
 - **验收：**能用一组原始帧解释 Dashboard 与账单差异；若改代码，新增对应回归测试，并在最少真实请求中确认读写数字与选定口径一致。
 
-#### CC-03｜cc 引擎 + 部分 Kiro 模型 `Invalid tool use format`
+#### ✅ CC-03｜cc 引擎 + 部分 Kiro 模型 `Invalid tool use format`（2026-09-27 关闭）
 
-- **状态：**未排期。localhost 的 cc 引擎曾在同一中转站 / 模型下返回 `400 REQUEST_BODY_INVALID / Invalid tool use format`，而 selfhost 成功。selfhost 10.6 中“空工具说明导致 breath 400”已经解决，不能把两者视为同一个问题。
+- **关闭原因：**用户已不再使用 Kiro 模型，cc 引擎主要走 Pro 订阅；以后若换回并复现，按下面的旧记录重开。
+- **原状态：**未排期。localhost 的 cc 引擎曾在同一中转站 / 模型下返回 `400 REQUEST_BODY_INVALID / Invalid tool use format`，而 selfhost 成功。selfhost 10.6 中“空工具说明导致 breath 400”已经解决，不能把两者视为同一个问题。
 - **开工第一步：**请用户用当前部署重新确认是否仍能复现，并提供本次模型、启用工具集合、错误时间和完整错误码；能在 1 分钟内人工确认时，不先追代码。
 - **定位入口：**若仍复现，先对照同端点 cc / selfhost 的实际工具清单和 schema；`rg -n "mcpServers|strictMcpConfig|disallowedTools|Invalid tool use" app/api/cc-chat app/lib`，只读决定工具注入的最小文件集。
 - **边界：**不修改 selfhost 已验收的 10.6 工具循环、thinking、权限或持久化；不预设是 Kiro、中转站或 SDK 的责任；不靠删工具长期规避。
@@ -144,6 +123,7 @@
 
 #### CC-07｜selfhost 跨引擎后历史图片占 token 但模型看不见
 
+- **关联 OB Todo：**`e87e2e85c3d545e0`「现在清除图片不起效」可能与本卡同源，开工时一起确认。
 - **状态：**已确认并接受保留。连续 selfhost 对话能看到历史图片；但“selfhost 发图 → cc 对话 → 切回 selfhost”时，图片仍在 Haven、仍占输入 token，模型却声称看不见。清除图片后 cache creation 从约 12k 降至 8.5k，证明图片确实被选入上下文。
 - **开工第一步：**用一个最小窗口重现，并抓取脱敏后的实际 `/v1/messages` 出站 content block 顺序；分别对照无 cc 中间轮次和有 cc 中间轮次两种路径。
 - **定位入口：**`rg -n "image|attachment|recent.*2|base64" app/api/cc-chat-selfhost app/lib/selfhost app/lib/havenAttachments.ts`，先确认 Dashboard 组装，不先猜中转缓存或模型行为。
@@ -163,6 +143,7 @@
 
 #### CC-P01｜UI 设置与聊天信息层级整理
 
+- **OB Todo：**已并入 `ea074ff139f64c54`「UI 重构（含工作台优化）」。
 - **现状：**聊天页已有 `--chat-*` 和全局设计 token；引擎、模型、上下文、usage 信息已可用，但整体信息偏多，用户目前接受现状。
 - **第一步：**先确认范围是“主题 / 字体 / 字号设置”还是“聊天页信息层级整理”，两者不要混成一轮。
 - **边界：**跨设备需要保留的设置存 Haven；换设备丢失也没关系的纯界面偏好才可存浏览器。涉及全局 token 时必须同步 `DESIGN.md` 与 `globals.css`。
@@ -170,6 +151,7 @@
 
 #### CC-P02｜纪念日
 
+- **OB Todo：**`876b8bc1482247f2`「纪念日功能」。
 - **现状：**只有入口设想，没有已确认的数据结构、提醒方式或页面形态。
 - **第一步：**先讨论“只展示日期”还是“包含提醒 / 记忆联动”，并确认数据是否需要跨设备长期保存；需要则必须存 Haven。
 - **边界：**不与照顾备忘、自动化设置或日记页面顺手合并。
