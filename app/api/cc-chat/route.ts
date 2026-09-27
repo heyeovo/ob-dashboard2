@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
+import { builtInWorkDirs, resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import type { CredMode } from '@/app/lib/ccEnv'
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
@@ -345,11 +345,14 @@ async function loadTurnInputs(body: ChatBody) {
 
   // 能读哪些目录：本机没配退回仓库根；production 没配只进 dashboard workspace。
   // 敏感文件的拦截跟这个无关，是 ccOptions 里 PreToolUse 那道硬规则。
-  const { cwd, additionalDirectories } = await resolveDirs(persona?.dirs)
+  const resolvedDirs = await resolveDirs(persona?.dirs)
+  const builtInDirs = await builtInWorkDirs(mode)
+  const cwd = resolvedDirs.cwd
+  const additionalDirectories = [...new Set([...resolvedDirs.additionalDirectories, ...builtInDirs])]
   // 能写哪些目录：另一份更窄的清单，**空 = 一个字都不许写**（跟读的规则相反）。
   // 每轮重存，所以配置改完立刻生效 —— 不像提示词要等新对话。
   const writeDirs = await resolveWriteDirs(persona?.write_dirs)
-  setWriteDirs(body.session_id || '', writeDirs)
+  setWriteDirs(body.session_id || '', [...new Set([...writeDirs, ...builtInDirs])])
 
   // 两个召回开关同样是 body 优先、协作者兜底，存进表让 runTurn 每轮重读
   setRecallPrefs(body.session_id || '', {

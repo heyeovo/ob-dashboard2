@@ -1,5 +1,7 @@
 import { lstat, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
+import { YANZHI_FILES_ROOT } from '@/app/lib/artifactMeta'
+import type { CcMode } from '@/app/lib/ccModes'
 
 // 协作者能读哪些目录，以及哪些文件一律不给读。
 //
@@ -99,6 +101,20 @@ export async function resolveWriteDirs(
   options: ResolveDirOptions = {},
 ): Promise<string[]> {
   return resolveConfiguredDirs(dirs, options, false)
+}
+
+/**
+ * 工作模式固定可读写 yanzhi's files（不走协作者配置，它不在 VPS workspace 白名单里）。
+ * 没挂载或挂载点是 symlink 时返回空，不 fail 整轮。
+ */
+export async function builtInWorkDirs(mode: CcMode, root = YANZHI_FILES_ROOT): Promise<string[]> {
+  if (mode !== 'work') return []
+  const lexical = path.resolve(root)
+  try {
+    return (await existingDirectory(lexical)) === lexical ? [lexical] : []
+  } catch {
+    return []
+  }
 }
 
 /**

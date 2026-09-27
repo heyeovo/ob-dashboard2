@@ -1,7 +1,6 @@
 import { lstat, readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { YANZHI_FILES_ROOT } from './cc/yanzhiFilesTool'
-import { ARTIFACTS_DIR, artifactBaseName, artifactKind, isArtifactName, parseArtifactHead, type ArtifactKind } from './artifactMeta'
+import { ARTIFACTS_DIR, YANZHI_FILES_ROOT, artifactBaseName, artifactKind, isArtifactName, parseArtifactHead, type ArtifactKind } from './artifactMeta'
 
 export { isArtifactName, parseArtifactHead }
 

@@ -60,6 +60,19 @@ describe('artifacts', () => {
     expect(artifactFromToolCall('Write', { file_path: 'artifacts/a.html' })).toBeNull()
   })
 
+  it('recognizes native Write/Edit on the mounted artifacts folder', () => {
+    expect(artifactFromToolCall('Write', { file_path: '/data/cc-chat-files/artifacts/rain.html', content: '<title>下雨天</title>' }))
+      .toEqual({ name: 'rain.html', action: 'write', title: '下雨天' })
+    expect(artifactFromToolCall('Edit', { file_path: '/data/cc-chat-files/artifacts/rain.html', old_string: 'a', new_string: 'b' }))
+      .toEqual({ name: 'rain.html', action: 'patch', title: '' })
+    expect(artifactFromToolCall('Read', { file_path: '/data/cc-chat-files/artifacts/rain.html' })).toBeNull()
+    expect(artifactFromToolCall('Write', { file_path: '/data/cc-chat-files/artifacts/../x.html', content: '' })).toBeNull()
+    expect(artifactFromToolCall('Write', { file_path: '/data/cc-chat-files/notes/a.html', content: '' })).toBeNull()
+    const write = { file_path: '/data/cc-chat-files/artifacts/rain.html', content: '<title>下雨天</title><p>long</p>' }
+    expect(slimToolInputForStorage('Write', write))
+      .toEqual({ file_path: write.file_path, title: '下雨天', content_chars: write.content.length })
+  })
+
   it('slims stored artifact writes but leaves other tool inputs alone', () => {
     const write = { action: 'write', path: 'artifacts/a.html', content: '<title>A</title><p>long</p>', overwrite: true }
     const slim = slimToolInputForStorage('mcp__yanzhi__files', write)

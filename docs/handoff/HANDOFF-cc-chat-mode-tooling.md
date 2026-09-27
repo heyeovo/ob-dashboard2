@@ -15,6 +15,7 @@
 - 已修复：闲聊顶层 tools 只保留既定 `WebSearch` / `WebFetch`，工作模式保持原工具；tools fingerprint 和上下文审计均按 mode 生成。`MODEL_SURFACE_FORMAT_VERSION` 保持 3，不触发 transcript rebase。
 - 已新增 chat-only 内置 MCP：内部 ID `yanzhi`，管理页显示 `yanzhi's files`，Claude 工具名为 `mcp__yanzhi__files`，默认开启且可手动关闭；只有一个 `files` 工具，无 server instructions，支持受限 `list` / `search` / `read` / `write` / `mkdir`。
 - 文件根目录固定为容器内 `/data/cc-chat-files`。部署前必须在 Coolify 将 VPS 宿主机持久目录挂载到该路径；未挂载时工具 fail closed，不会静默写入容器临时目录。
+- 2026-09-27：MCP 仍只挂闲聊。工作模式改为把同一挂载点内置追加进可读/可写目录，用原生工具操作；原生 Write/Edit 写 `artifacts/` 同样出卡片、存储瘦身。上线后工作窗口因 `additionalDirectories` 变化会有一次性 cache write。
 - 安全边界：只接受相对路径，拒绝绝对路径、`..` 和符号链接越界；不提供删除、移动或命令；覆盖既有文件必须显式 `overwrite=true`；列表、搜索、读取与写入均有体积上限。
 - 首次上线实测发现宿主机 `/srv/ob-data/yanzhi-files` 为 `root:root 755`，容器 `cc` 用户（UID/GID `10001:10001`）只能读、不能写。已在宿主机改为 `10001:10001 750`，无需再改挂载或协作者目录设置。
 - 首次实测还发现页面把所有内置 MCP 固定标为“自动允许”，但运行时只特判 Agent Wake，`mcp__yanzhi__files` 回落为每次询问。已改为 Agent Wake 固定自动允许，`yanzhi's files` 默认自动允许并可切换为每次询问；权限写入 Haven MCP JSON 的 `builtInPermissions`，不参与模型表面 hash。

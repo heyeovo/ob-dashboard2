@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  builtInWorkDirs,
   isPathWithinRoots,
   pathTargetFromToolInput,
   resolveDirs,
@@ -92,5 +93,16 @@ describe('cc workspace 路径边界', () => {
     expect(pathTargetFromToolInput('Write', { file_path: 'write.txt' }, dashboard)).toBe('write.txt')
     expect(pathTargetFromToolInput('Edit', { file_path: 'edit.txt' }, dashboard)).toBe('edit.txt')
     expect(pathTargetFromToolInput('NotebookEdit', { notebook_path: 'book.ipynb' }, dashboard)).toBe('book.ipynb')
+  })
+
+  it('工作模式内置 yanzhi files 目录；闲聊、未挂载和 symlink 挂载点都不加', async () => {
+    const files = path.join(await realpath(fixture), 'cc-chat-files')
+    await expect(builtInWorkDirs('work', files)).resolves.toEqual([])
+    await mkdir(files)
+    await expect(builtInWorkDirs('work', files)).resolves.toEqual([files])
+    await expect(builtInWorkDirs('chat', files)).resolves.toEqual([])
+    const linked = path.join(fixture, 'linked-files')
+    await symlink(files, linked)
+    await expect(builtInWorkDirs('work', linked)).resolves.toEqual([])
   })
 })

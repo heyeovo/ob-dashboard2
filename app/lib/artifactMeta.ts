@@ -1,5 +1,8 @@
 // artifacts 的纯函数部分：前端卡片和服务端路由共用，不碰 fs / SDK。
 
+/** yanzhi's files 在容器内的固定挂载点：闲聊经 MCP 访问，工作模式经原生工具访问。 */
+export const YANZHI_FILES_ROOT = '/data/cc-chat-files'
+
 /** 言之做的可交互页面放在 yanzhi's files 的这个子目录，由 /api/artifacts 托管。 */
 export const ARTIFACTS_DIR = 'artifacts'
 
@@ -40,21 +43,34 @@ export function parseArtifactHead(text: string): { title: string; description: s
   }
 }
 
+const NATIVE_ARTIFACT_PREFIX = `${YANZHI_FILES_ROOT}/${ARTIFACTS_DIR}/`
+
+function artifactTarget(name: string, record: Record<string, unknown>): { file: string; action: 'write' | 'patch' } | null {
+  if (name === 'mcp__yanzhi__files') {
+    const action = record.action
+    if (action !== 'write' && action !== 'patch') return null
+    const raw = String(record.path || '').trim().replace(/^\.?\/+/, '')
+    const prefix = `${ARTIFACTS_DIR}/`
+    return raw.startsWith(prefix) ? { file: raw.slice(prefix.length), action } : null
+  }
+  if (name === 'Write' || name === 'Edit') {
+    const raw = String(record.file_path || '').trim().replaceAll('\\', '/')
+    if (!raw.startsWith(NATIVE_ARTIFACT_PREFIX)) return null
+    return { file: raw.slice(NATIVE_ARTIFACT_PREFIX.length), action: name === 'Write' ? 'write' : 'patch' }
+  }
+  return null
+}
+
 /**
  * 这次工具调用是不是在写 / 改一个 artifact。是的话返回文件名，
  * 聊天里据此出卡片；工具本身会校验路径，这里只做识别。
  */
 export function artifactFromToolCall(name: string, input: unknown): { name: string; action: 'write' | 'patch'; title: string } | null {
-  if (name !== 'mcp__yanzhi__files') return null
   if (!input || typeof input !== 'object') return null
   const record = input as Record<string, unknown>
-  const action = record.action
-  if (action !== 'write' && action !== 'patch') return null
-  const raw = String(record.path || '').trim().replace(/^\.?\/+/, '')
-  const prefix = `${ARTIFACTS_DIR}/`
-  if (!raw.startsWith(prefix)) return null
-  const file = raw.slice(prefix.length)
-  if (!isArtifactName(file)) return null
+  const target = artifactTarget(name, record)
+  if (!target || !isArtifactName(target.file)) return null
+  const { file, action } = target
   const title = typeof record.title === 'string'
     ? record.title
     : action === 'write' && typeof record.content === 'string'

@@ -2,12 +2,11 @@ import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@
 import { lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { ARTIFACTS_DIR } from '@/app/lib/artifactMeta'
+import { ARTIFACTS_DIR, YANZHI_FILES_ROOT } from '@/app/lib/artifactMeta'
 
 export const YANZHI_FILES_SERVER_NAME = 'yanzhi'
 export const YANZHI_FILES_TOOL_NAME = 'files'
 export const YANZHI_FILES_MCP_VERSION = '1.1.0'
-export const YANZHI_FILES_ROOT = '/data/cc-chat-files'
 
 const MAX_LIST_ENTRIES = 100
 const MAX_READ_LINES = 500

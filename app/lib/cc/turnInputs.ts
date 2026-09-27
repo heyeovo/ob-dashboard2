@@ -1,4 +1,4 @@
-import { resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
+import { builtInWorkDirs, resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import { buildPersonaAppend, getPersona } from '@/app/lib/havenPersonas'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
 import { loadPermanentPermissionRules, permissionRuleStrings } from '@/app/lib/havenPermissions'
@@ -78,13 +78,14 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   })
   if (!lane || (!resumeHint && !isRolling)) throw new Error(`最后活跃 CC lane 没有可恢复的 resume id：${laneId}`)
 
-  const [mcpConfig, permissions, readDirs, writeDirs] = await Promise.all([
+  const [mcpConfig, permissions, readDirs, writeDirs, builtInDirs] = await Promise.all([
     loadMcpConfig(),
     loadPermanentPermissionRules(),
     resolveDirs(persona.dirs),
     resolveWriteDirs(persona.write_dirs),
+    builtInWorkDirs(session.mode),
   ])
-  setWriteDirs(sessionId, writeDirs)
+  setWriteDirs(sessionId, [...new Set([...writeDirs, ...builtInDirs])])
   const webSettings = {
     ...DEFAULT_WEB_SETTINGS,
     searchEnabled: false,
@@ -138,7 +139,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     }),
     builtInMcpStates: mcpConfig.builtIns,
     cwd: readDirs.cwd,
-    additionalDirectories: readDirs.additionalDirectories,
+    additionalDirectories: [...new Set([...readDirs.additionalDirectories, ...builtInDirs])],
     sdkModel: sdkModelForProvider(model, cred),
     effort,
     thinking,

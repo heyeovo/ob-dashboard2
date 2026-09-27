@@ -8,6 +8,7 @@ const deps = vi.hoisted(() => ({
 vi.mock('@/app/lib/ccDirs', () => ({
   resolveDirs: vi.fn(async () => ({ cwd: 'C:/workspace', additionalDirectories: [] })),
   resolveWriteDirs: vi.fn(async () => []),
+  builtInWorkDirs: vi.fn(async () => []),
 }))
 vi.mock('@/app/lib/havenPersonas', () => ({
   getPersona: vi.fn(async () => ({ persona: { id: 'ombre', dirs: [], write_dirs: [] } })),
