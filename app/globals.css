@@ -285,6 +285,13 @@ body::after {
 }
 
 @media (max-width: 767px) {
+  /* An uploaded photo receives its tint once, on the mobile canvas. */
+  :root[data-background="upload"] {
+    --color-bg: transparent;
+    --bg-photo-overlay: linear-gradient(rgb(255 255 255 / .84), rgb(255 255 255 / .84));
+    --mobile-chrome-fill: color-mix(in srgb, var(--glass-fill) 12%, transparent);
+  }
+
   .mobile-page-with-topbar { padding-top: var(--mobile-topbar-height); }
   .mobile-page-topbar {
     position: fixed;
@@ -305,6 +312,33 @@ body::after {
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
   }
+
+  :root[data-background="upload"] .mobile-page-topbar,
+  :root[data-background="upload"] .mobile-bottom-tabbar {
+    border-color: transparent;
+  }
+}
+
+.subpage-back-button {
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass-fill);
+  box-shadow: var(--glass-shadow);
+  color: var(--color-text-secondary);
+  font-size: 30px;
+  line-height: 1;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.subpage-back-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* In iOS standalone mode the CSS viewport can stop above the home-indicator
@@ -533,9 +567,15 @@ h1, h2 {
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 @media (max-width: 767px) {
+  .cc-page {
+    background: var(--color-bg);
+  }
   .cc-topbar {
     flex-shrink: 0;
     background: var(--mobile-chrome-fill);
+  }
+  :root[data-background="upload"] .cc-topbar {
+    border-color: transparent;
   }
 }
 .cc-rail-pane {

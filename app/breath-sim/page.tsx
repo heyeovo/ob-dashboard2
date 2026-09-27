@@ -1,4 +1,5 @@
 'use client'
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useEffect, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import StatusBadge, { statusLabel as getStatus } from '../components/StatusBadge'
@@ -78,6 +79,10 @@ export default function BreathSimPage() {
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
+        <div className="mb-6 md:hidden">
+          <SubpageBackButton href="/workbench" label="返回工作台" className="mb-5" />
+          <h1 className="text-2xl font-semibold text-[var(--color-text-heading)]">模拟 Breath</h1>
+        </div>
 
         <div className="flex gap-1 mb-6 bg-[var(--color-surface-tertiary)] rounded-xl p-1 w-fit">
           {([{ key: 'pipeline', label: '模拟 Pipeline' }, { key: 'sim', label: '即时模拟' }, { key: 'hitstats', label: '命中统计' }, { key: 'trace', label: '检索追溯' }] as const).map(t => (

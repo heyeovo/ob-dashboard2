@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -316,15 +317,9 @@ export default function MemoryProcessingSettingsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-28 text-[var(--color-text-primary)]">
-      <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 backdrop-blur-sm md:hidden">
-        <Link href="/settings" className="text-xs text-[var(--color-text-tertiary)]">
-          ← 设置
-        </Link>
-        <span className="text-sm font-semibold">记忆处理</span>
-      </header>
-
       <main className="mx-auto max-w-3xl px-3 pt-5 sm:px-6 sm:pt-10">
-        <div className="mb-6 hidden md:block">
+        <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
+        <div className="mb-6">
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
             记忆处理
           </h1>

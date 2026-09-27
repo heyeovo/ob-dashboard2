@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { ComponentProps, FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
@@ -101,8 +102,9 @@ export default function CarePage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-4 pb-24 pt-5 text-[var(--color-text-primary)] md:px-8 md:pt-8">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-6 flex items-start gap-3">
-          <Link href="/" className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>← Home</Link>
+        <header className="mb-6 flex flex-col items-start gap-4 md:flex-row md:gap-3">
+          <SubpageBackButton href="/" label="返回主页" className="md:hidden" />
+          <Link href="/" className={`${button} hidden border border-[var(--color-border)] bg-[var(--color-surface)] md:inline-flex`}>← Home</Link>
           <div>
             <h1 className="text-2xl font-semibold text-[var(--color-text-heading)]">照顾备忘</h1>
             <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">Reminder 与 Todo 分开保存、分开使用。</p>

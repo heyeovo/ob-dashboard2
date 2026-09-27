@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { readPolarisExport, type PolarisExportPreview } from '@/app/lib/polarisExport'
@@ -73,12 +74,13 @@ export default function PolarisImportPage() {
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-4 py-6 text-[var(--color-text-primary)] sm:px-6 sm:py-10">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-6 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+          <SubpageBackButton href="/cc" label="返回对话" className="md:hidden" />
           <div>
             <div className="text-xs text-[var(--color-text-tertiary)]">cc chat · 数据迁移</div>
             <h1 className="mt-1 text-2xl font-semibold">导入 Polaris 对话</h1>
           </div>
-          <Link href="/cc" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm hover:bg-[var(--color-surface-secondary)]">
+          <Link href="/cc" className="hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm hover:bg-[var(--color-surface-secondary)] md:inline-flex">
             返回对话
           </Link>
         </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useMemo, useState } from 'react'
 import Card from '../components/Card'
 import DataBadge from '../components/DataBadge'
@@ -236,10 +237,11 @@ export default function RecallLensPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg)]/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+      <header className="md:sticky md:top-0 md:z-20 md:border-b md:border-[var(--color-border)] md:bg-[var(--color-bg)]/90 md:backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl flex-col items-start gap-4 px-4 pb-4 pt-5 md:flex-row md:items-center md:justify-between md:py-3 sm:px-6">
           <div>
-            <h1 className="text-base font-semibold text-[var(--color-text-heading)] sm:text-lg">召回透镜</h1>
+            <SubpageBackButton href="/workbench" label="返回工作台" className="mb-4 md:hidden" />
+            <h1 className="text-2xl font-semibold text-[var(--color-text-heading)] md:text-lg">召回透镜</h1>
             <p className="text-xs text-[var(--color-text-tertiary)]">看清每一轮为什么召回、为什么拒绝</p>
           </div>
           {rounds.length > 0 && (

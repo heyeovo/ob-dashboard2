@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 import Card from '@/app/components/Card'
@@ -86,10 +87,11 @@ export default function AppearancePage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-28 text-[var(--color-text-primary)]">
-      <header className="appearance-glass sticky top-0 z-10 flex min-h-14 items-center border-b px-4">
-        <Link href="/settings" className="mr-3 text-sm text-[var(--color-text-secondary)]">← 设置</Link>
-        <h1 className="text-lg text-[var(--color-text-heading)]">外观</h1>
-        <span aria-live="polite" className="ml-auto text-xs text-[var(--color-text-tertiary)]">
+      <header className="flex flex-col items-start gap-4 px-4 pt-5 md:sticky md:top-0 md:z-10 md:min-h-14 md:flex-row md:items-center md:gap-0 md:border-b md:border-[var(--glass-border)] md:bg-[var(--glass-fill)] md:py-0 md:backdrop-blur-md">
+        <SubpageBackButton href="/settings" label="返回设置" className="md:hidden" />
+        <Link href="/settings" className="mr-3 hidden text-sm text-[var(--color-text-secondary)] md:inline-flex">← 设置</Link>
+        <h1 className="text-2xl text-[var(--color-text-heading)] md:text-lg">外观</h1>
+        <span aria-live="polite" className="text-xs text-[var(--color-text-tertiary)] md:ml-auto">
           {status === 'saving' ? '保存中…' : status === 'error' ? '保存失败，请再调整一次' : '已同步'}
         </span>
       </header>

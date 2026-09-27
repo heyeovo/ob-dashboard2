@@ -1,4 +1,5 @@
 'use client'
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import Link from 'next/link'
@@ -541,6 +542,10 @@ export default function GraphPage() {
       <div className="graph-page pb-24 md:pb-10">
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+          <div className="mb-5 md:hidden">
+            <SubpageBackButton href="/" label="返回主页" className="mb-5" />
+            <h1 className="text-2xl font-semibold text-[var(--color-text-heading)]">关系图谱</h1>
+          </div>
           {loadError ? (
             /* ---- 错误状态（全宽展示） ---- */
             <Card variant="outline" padding="lg" className="text-center max-w-lg mx-auto mt-12">

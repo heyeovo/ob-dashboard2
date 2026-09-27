@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Card from '../components/Card'
 
@@ -234,6 +235,7 @@ export default function ConversationSlicesPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl bg-[var(--color-bg)] px-4 pb-24 pt-5 text-[var(--color-text-primary)] sm:px-6 sm:pt-8">
+      <SubpageBackButton href="/workbench" label="返回工作台" className="mb-5 md:hidden" />
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-heading)] sm:text-3xl">聊天切片检查</h1>

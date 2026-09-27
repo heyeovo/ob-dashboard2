@@ -131,7 +131,7 @@
 
 | Token | 用途 |
 |-------|------|
-| `--bg-base`, `--bg-image`, `--bg-overlay` | 页面最底层纯色、主题渐变或上传图片、图片遮罩；背景可选 gradient / upload / none |
+| `--bg-base`, `--bg-image`, `--bg-overlay`, `--bg-photo-overlay` | 页面最底层纯色、主题渐变或上传图片、图片遮罩；背景可选 gradient / upload / none |
 | `--glass-fill`, `--glass-border`, `--glass-blur`, `--glass-shadow` | 固定外框的玻璃质感；滑条覆盖模糊与不透明度 |
 | `--font-display`, `--font-body`, `--font-scale` | 标题字体、正文黑体与整体字号缩放；标题可选 serif / sans |
 | `--label-tracking`, `--chat-bubble-alpha` | 小号大写标签字距、聊天表面透明度预留语义 |
@@ -139,7 +139,7 @@
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
 
-`backdrop-filter` 只放在固定外框等区域；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。手机主页面标题栏固定在状态栏下方，内容从标题栏下滚动；状态栏安全区域、标题栏与底部 5 Tab 共用 `--mobile-chrome-fill`（即外观设置的 `--glass-fill`），让上传的背景图继续透出，并随玻璃透明度/模糊度滑条变化。`--mobile-topbar-height` 与 `--mobile-tabbar-height` 是标题栏及底栏内容的统一高度；底栏另保留系统提供的底部安全区域。独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用 `linen` 底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
+`backdrop-filter` 只放在固定外框等区域；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。手机上传图片时，根画布用偏白的 `--bg-photo-overlay` 蒙一次图；页面的 `--color-bg` 透明，状态栏、主页面固定标题栏和底部 5 Tab 使用低覆盖率的 `--mobile-chrome-fill` 与玻璃模糊，避免不同页面重复叠色。默认渐变和桌面布局保持原有配色。手机主页面标题栏固定在状态栏下方，内容从标题栏下滚动；普通子页面使用 `SubpageBackButton` 圆形返回按钮及随正文滚动的大标题。聊天页消息独立滚动，页面背景延伸到底栏后方，输入区避开底栏与系统安全区域。`--mobile-topbar-height` 与 `--mobile-tabbar-height` 是主页面标题栏及底栏内容的统一高度；底栏另保留系统提供的底部安全区域。独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用 `linen` 底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
 
 ### CC 对话气泡
 
@@ -189,6 +189,7 @@
 | **BottomTabBar** | `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar |
 | **MemoryViewSwitch** | `MemoryViewSwitch.tsx` | 记忆库页内切换：时间线 / 记忆格 / 待处理（桌面与手机共用） |
 | **MobileShell** | `MobileShell.tsx` | 手机端布局容器（加底部间距） |
+| **SubpageBackButton** | `SubpageBackButton.tsx` | 手机子页面正文标题上方的圆形返回按钮 |
 
 ### 评分旋钮（breath-sim 专用）
 
@@ -216,6 +217,8 @@ BottomTabBar 在底部显示 5 个 Tab：
 - **设置** → `/settings`；外观在 `/settings/appearance`
 
 底栏内容高 56px，另加 `env(safe-area-inset-bottom)`；主页、记忆库、工作台和设置的手机顶栏固定在状态栏下方，聊天页的消息区域独立滚动。
+
+普通子页面的手机标题随正文自然滚动；返回按钮放在标题上方。小作品全屏查看器和登录页保留专用布局。五个主页面的顶栏内容随各自页面重设计阶段再定：聊天阶段 2，主页/记忆库阶段 3，工作台/设置阶段 4。
 
 记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格/待处理。
 

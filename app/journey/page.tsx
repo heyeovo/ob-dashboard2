@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import DetailPanel from '../components/DetailPanel'
@@ -248,11 +249,8 @@ export default function JourneyPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="sticky top-0 z-10 flex h-12 items-center border-b border-[var(--color-border)] bg-[var(--color-bg)]/85 px-3 backdrop-blur-sm md:hidden">
-        <span className="text-sm font-semibold">关系轨迹</span>
-      </header>
-
       <main className="mx-auto max-w-4xl px-3 pt-5 sm:px-6 sm:pt-10">
+        <SubpageBackButton href="/" label="返回主页" className="mb-5 md:hidden" />
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <p className="mb-1 text-xs tracking-[0.2em] text-[var(--color-text-tertiary)]">RELATIONSHIP JOURNEY</p>

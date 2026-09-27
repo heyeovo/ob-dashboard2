@@ -1,4 +1,5 @@
 'use client'
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useEffect, useState } from 'react'
 
 interface TrashItem {
@@ -68,6 +69,7 @@ export default function TrashPage() {
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
+        <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-[var(--color-text-heading)]">回收站</h1>

@@ -1,4 +1,5 @@
 'use client'
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import DetailPanel from '../components/DetailPanel'
 import SearchBar from '../components/SearchBar'
@@ -278,6 +279,7 @@ export default function JournalPage() {
 
         {/* ===== 头部 ===== */}
         <div className="pb-4 border-b border-[var(--color-border-light)] mb-5">
+          <SubpageBackButton href="/" label="返回主页" className="mb-5 md:hidden" />
           <h1 className="text-3xl font-bold text-[var(--color-text-heading)] tracking-tight">Journal</h1>
           <p className="text-sm text-[var(--color-text-tertiary)] mt-1">寻回时间的线索，点滴卡片皆当下。</p>
 

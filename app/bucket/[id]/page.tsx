@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
@@ -43,9 +44,10 @@ export default function BucketPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-dark-surface)] text-[var(--color-dark-text)] p-6 max-w-2xl mx-auto">
+      <SubpageBackButton onClick={() => router.back()} label="返回记忆库" className="mb-6 md:hidden" />
       <button
         onClick={() => router.back()}
-        className="text-[var(--color-text-tertiary)] hover:text-[var(--color-dark-text)] mb-6 flex items-center gap-1"
+        className="text-[var(--color-text-tertiary)] hover:text-[var(--color-dark-text)] mb-6 hidden items-center gap-1 md:flex"
       >
         ← 返回
       </button>

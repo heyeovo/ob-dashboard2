@@ -187,7 +187,7 @@ export default function CcSessionRail({
   if (variant === 'mobile-page') {
     if (mobileSection === 'historical') {
       return (
-        <div className="flex h-full flex-col bg-[var(--color-bg)]">
+        <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-4 py-3">
             <button type="button" onClick={() => setMobileSection('main')} className="rounded-full px-2 py-1 text-sm text-[var(--color-text-secondary)]">←</button>
             <h1 className="text-sm font-medium text-[var(--color-text-heading)]">历史聊天</h1>
@@ -211,7 +211,7 @@ export default function CcSessionRail({
     }
     if (mobileSection === 'deleted') {
       return (
-        <div className="flex h-full flex-col bg-[var(--color-bg)]">
+        <div className="flex h-full flex-col">
           <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-4 py-3">
             <button type="button" onClick={() => setMobileSection('main')} className="rounded-full px-2 py-1 text-sm text-[var(--color-text-secondary)]">←</button>
             <h1 className="text-sm font-medium text-[var(--color-text-heading)]">已删除窗口</h1>
@@ -243,7 +243,7 @@ export default function CcSessionRail({
       )
     }
     return (
-      <div className="flex h-full flex-col bg-[var(--color-bg)]">
+      <div className="flex h-full flex-col">
         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-3">
           <div>
             <h1 className="text-base font-medium text-[var(--color-text-heading)]">对话</h1>

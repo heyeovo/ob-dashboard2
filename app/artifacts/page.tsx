@@ -1,4 +1,5 @@
 'use client'
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Card from '../components/Card'
@@ -31,14 +32,10 @@ export default function ArtifactsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 backdrop-blur-sm md:hidden">
-        <Link href="/workbench" className="text-sm text-[var(--color-text-secondary)]">‹</Link>
-        <span className="text-sm font-semibold">小作品</span>
-      </header>
-
       <main className="mx-auto max-w-5xl px-3 pt-5 sm:px-6 sm:pt-10">
-        <div className="mb-6 hidden md:block">
-          <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">小作品</h1>
+        <SubpageBackButton href="/workbench" label="返回工作台" className="mb-5 md:hidden" />
+        <div className="mb-6">
+          <h1 className="mb-2 text-2xl font-bold tracking-tight text-[var(--color-text-heading)] md:text-3xl">小作品</h1>
           <p className="text-sm text-[var(--color-text-tertiary)]">言之做过的页面、小游戏和图，点开就能玩</p>
         </div>
 

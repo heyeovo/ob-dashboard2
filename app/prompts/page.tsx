@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useCallback, useEffect, useState } from 'react'
 import Card from '../components/Card'
 import DetailPanel from '../components/DetailPanel'
@@ -188,6 +189,7 @@ export default function PromptsPage() {
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] pb-20">
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
+        <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="mb-6 sm:mb-8">
           <h1 className="text-xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)]">Prompt 配置</h1>
           <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm mt-2">由 Haven 持久保存 · 保存后立即生效 · 重启和重新部署后继续保留</p>

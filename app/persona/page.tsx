@@ -1,5 +1,6 @@
 'use client'
 
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -277,13 +278,14 @@ function PersonaStateView() {
         .persona-orb-motion { animation: persona-breathe var(--persona-speed) ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .persona-orb-motion { animation: none; } }
       `}</style>
-      <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-bg)]/90 backdrop-blur-sm">
-        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5">← Home</Link>
+      <header className="md:sticky md:top-0 md:z-20 md:border-b md:border-[var(--color-border)] md:bg-[var(--color-bg)]/90 md:backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl flex-col items-start gap-3 px-4 pb-4 pt-5 md:min-h-14 md:flex-row md:flex-wrap md:items-center md:justify-between md:py-2 sm:px-6">
+          <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:gap-3">
+            <SubpageBackButton href="/" label="返回主页" className="md:hidden" />
+            <Link href="/" className="hidden rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5 md:inline-flex">← Home</Link>
             <div>
-              <h1 className="text-base font-semibold">Persona 中心</h1>
-              <p className="hidden text-xs text-[var(--color-text-disabled)] sm:block">内在状态由 Haven 管理</p>
+              <h1 className="text-2xl font-semibold md:text-base">Persona 中心</h1>
+              <p className="text-xs text-[var(--color-text-disabled)]">内在状态由 Haven 管理</p>
             </div>
           </div>
           <button

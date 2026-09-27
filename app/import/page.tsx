@@ -1,4 +1,5 @@
 'use client'
+import SubpageBackButton from '@/app/components/SubpageBackButton'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import Stat from '../components/Stat'
@@ -130,6 +131,7 @@ export default function ImportPage() {
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans pb-20">
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
+        <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <h1 className="text-2xl font-bold mb-2 text-[var(--color-text-heading)]">导入记忆</h1>
         <p className="text-sm text-[var(--color-text-tertiary)] mb-6">
           支持 Claude JSON、ChatGPT 导出、DeepSeek、Markdown、纯文本。LLM 会自动提取并脱水为记忆桶。
