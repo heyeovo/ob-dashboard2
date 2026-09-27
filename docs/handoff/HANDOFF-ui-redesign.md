@@ -115,7 +115,7 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
   - 1a 硬编码收编：dashboard `4d748e0`（61 个 TSX 文件的颜色引用归入语义 Token；`app/cc/persona.ts` 用户可选渐变保留）
   - 1b–1d 主题引擎与外观设置：dashboard `c3d39f9`；Haven `8762d84`
   - 本地验收：dashboard `npm run build` 通过；Haven 状态与外观测试共 47 项通过；dashboard Vitest 352 项通过、1 项跳过，另 2 项因 Windows 无符号链接权限报 `EPERM`（已在正常主机权限下定向复现）
-  - 9 月 28 日手机截图：上传背景下雨痕强度 100% 仍几乎不可见；顶部状态栏未延伸背景。雨痕对比度、PWA 主题回退色和全屏安全区域已调整，待新提交与 iPhone 实机复验。气泡半透明仍属阶段 2，不在本次改动内。
+  - 9 月 28 日手机截图：上传背景下雨痕强度 100% 仍几乎不可见；顶部状态栏未延伸背景。dashboard `0b9a9ba` 调整雨痕对比度、PWA 主题回退色和全屏安全区域，待部署与 iPhone 实机复验。气泡半透明仍属阶段 2，不在本次改动内。
 - [ ] 阶段 2
 - [ ] 阶段 3
 - [ ] 阶段 4
