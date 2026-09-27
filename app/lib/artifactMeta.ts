@@ -45,20 +45,24 @@ export function parseArtifactHead(text: string): { title: string; description: s
 
 const NATIVE_ARTIFACT_PREFIX = `${YANZHI_FILES_ROOT}/${ARTIFACTS_DIR}/`
 
-function artifactTarget(name: string, record: Record<string, unknown>): { file: string; action: 'write' | 'patch' } | null {
+const NATIVE_ARTIFACT_ACTIONS: Record<string, 'write' | 'patch' | 'read'> = { Write: 'write', Edit: 'patch', Read: 'read' }
+
+/** 工具调用碰的是哪个 artifact、做了什么；不是 artifact 返回 null。 */
+export function artifactToolTarget(name: string, input: unknown): { file: string; action: 'write' | 'patch' | 'read' } | null {
+  if (!input || typeof input !== 'object') return null
+  const record = input as Record<string, unknown>
+  let target: { file: string; action: 'write' | 'patch' | 'read' } | null = null
   if (name === 'mcp__yanzhi__files') {
     const action = record.action
-    if (action !== 'write' && action !== 'patch') return null
+    if (action !== 'write' && action !== 'patch' && action !== 'read') return null
     const raw = String(record.path || '').trim().replace(/^\.?\/+/, '')
     const prefix = `${ARTIFACTS_DIR}/`
-    return raw.startsWith(prefix) ? { file: raw.slice(prefix.length), action } : null
-  }
-  if (name === 'Write' || name === 'Edit') {
+    if (raw.startsWith(prefix)) target = { file: raw.slice(prefix.length), action }
+  } else if (NATIVE_ARTIFACT_ACTIONS[name]) {
     const raw = String(record.file_path || '').trim().replaceAll('\\', '/')
-    if (!raw.startsWith(NATIVE_ARTIFACT_PREFIX)) return null
-    return { file: raw.slice(NATIVE_ARTIFACT_PREFIX.length), action: name === 'Write' ? 'write' : 'patch' }
+    if (raw.startsWith(NATIVE_ARTIFACT_PREFIX)) target = { file: raw.slice(NATIVE_ARTIFACT_PREFIX.length), action: NATIVE_ARTIFACT_ACTIONS[name] }
   }
-  return null
+  return target && isArtifactName(target.file) ? target : null
 }
 
 /**
@@ -66,10 +70,9 @@ function artifactTarget(name: string, record: Record<string, unknown>): { file: 
  * 聊天里据此出卡片；工具本身会校验路径，这里只做识别。
  */
 export function artifactFromToolCall(name: string, input: unknown): { name: string; action: 'write' | 'patch'; title: string } | null {
-  if (!input || typeof input !== 'object') return null
+  const target = artifactToolTarget(name, input)
+  if (!target || target.action === 'read') return null
   const record = input as Record<string, unknown>
-  const target = artifactTarget(name, record)
-  if (!target || !isArtifactName(target.file)) return null
   const { file, action } = target
   const title = typeof record.title === 'string'
     ? record.title

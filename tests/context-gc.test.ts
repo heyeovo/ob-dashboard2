@@ -71,6 +71,51 @@ describe('Context GC transcript slimming', () => {
     expect(serialized).not.toContain('搜索原始结果搜索原始结果')
   })
 
+  it('slims artifact page writes and reads but keeps patches and other files', () => {
+    const page = '<html><head><title>下雨天</title></head><body>' + '雨'.repeat(3000) + '</body></html>'
+    const rows: Array<Record<string, unknown>> = [
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'a-1', name: 'mcp__yanzhi__files', input: { action: 'write', path: 'artifacts/rain.html', content: page } },
+            { type: 'tool_use', id: 'a-2', name: 'Write', input: { file_path: '/data/cc-chat-files/artifacts/snow.html', content: page } },
+            { type: 'tool_use', id: 'a-3', name: 'Read', input: { file_path: '/data/cc-chat-files/artifacts/rain.html' } },
+            { type: 'tool_use', id: 'a-4', name: 'mcp__yanzhi__files', input: { action: 'patch', path: 'artifacts/rain.html', old_text: '雨', new_text: '雪' } },
+            { type: 'tool_use', id: 'a-5', name: 'Write', input: { file_path: '/workspace/dashboard/x.html', content: '代码文件必须保留' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'a-1', content: '已写入 artifacts/rain.html' },
+            { type: 'tool_result', tool_use_id: 'a-2', content: 'File created' },
+            { type: 'tool_result', tool_use_id: 'a-3', content: [{ type: 'text', text: '1\t' + page }] },
+            { type: 'tool_result', tool_use_id: 'a-4', content: '已修改 artifacts/rain.html' },
+            { type: 'tool_result', tool_use_id: 'a-5', content: 'File created' },
+          ],
+        },
+      },
+    ]
+    const candidates = contextGcTest.collect(rows, new Set())
+    expect(candidates.map(item => item.kind)).toEqual(['artifact_write', 'artifact_write', 'artifact_read'])
+    expect(candidates[0].label).toBe('写入 artifacts/rain.html「下雨天」')
+    const result = contextGcTest.transform(rows, new Set(candidates.map(item => item.id)))
+    expect(result.candidateCount).toBe(3)
+    expect(result.counts.artifact_write).toBe(2)
+    const serialized = JSON.stringify(rows)
+    expect(serialized).not.toContain('雨雨雨')
+    expect(serialized).toContain(`已清理：写入 artifacts/rain.html · 下雨天 · ${page.length} 字`)
+    expect(serialized).toContain('已清理：曾读取 artifacts/rain.html')
+    expect(serialized).toContain('代码文件必须保留')
+    expect(serialized).toContain('"new_text":"雪"')
+    expect(contextGcTest.collect(rows, new Set()).every(item => item.cleared)).toBe(true)
+  })
+
   it('never offers non-ombre cards and marks protected buckets', () => {
     const rows = [{
       type: 'user',

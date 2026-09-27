@@ -4,13 +4,14 @@ import { dirname, join } from 'node:path'
 import { readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { forkSession } from '@anthropic-ai/claude-agent-sdk'
 import { estimateContextTokens } from './contextTokenEstimate'
+import { ARTIFACTS_DIR, artifactToolTarget, parseArtifactHead } from './artifactMeta'
 
 type JsonObject = Record<string, unknown>
 
 export type ContextGcCandidate = {
   id: string
   protectKey: string
-  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews' | 'hold' | 'comment_bucket'
+  kind: 'ob_recall' | 'search_chat' | 'breath' | 'web_search' | 'web_fetch' | 'read_bucket' | 'get_chat_context' | 'introspection' | 'read_daily_reviews' | 'hold' | 'comment_bucket' | 'artifact_write' | 'artifact_read'
   label: string
   detail: string
   estimatedTokens: number
@@ -143,6 +144,7 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
   const name = toolName(block)
   const bareName = name.split('__').at(-1)?.toLowerCase() || name.toLowerCase()
   const input = object(block.input) || {}
+  const artifact = artifactToolTarget(name, input)
   let kind: RecoverableToolKind
   let label = ''
   let replacement = ''
@@ -211,6 +213,20 @@ function recoverableCall(block: JsonObject, indexes: Record<RecoverableToolKind,
     label = `comment_bucket「${bucketId}」`
     replacement = `已清理：comment_bucket「${bucketId}」`
     writeField = 'content'
+  } else if (artifact?.action === 'write') {
+    const content = String(input.content || '')
+    if (!content) return null
+    kind = 'artifact_write'
+    const file = `${ARTIFACTS_DIR}/${artifact.file}`
+    const title = parseArtifactHead(content).title
+    label = `写入 ${file}${title ? `「${short(title, 40)}」` : ''}`
+    replacement = `已清理：写入 ${file}${title ? ` · ${title}` : ''} · ${content.length} 字。页面在文件里，要改先重新读取。`
+    writeField = 'content'
+  } else if (artifact?.action === 'read') {
+    kind = 'artifact_read'
+    const file = `${ARTIFACTS_DIR}/${artifact.file}`
+    label = `读取 ${file}`
+    replacement = `已清理：曾读取 ${file}。需要时重新读取。`
   } else {
     return null
   }
@@ -259,7 +275,7 @@ function collect(rows: JsonObject[], protectedKeys: Set<string>): ContextGcCandi
   const indexes: Record<RecoverableToolKind, number> = {
     search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
     read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
-    hold: 0, comment_bucket: 0,
+    hold: 0, comment_bucket: 0, artifact_write: 0, artifact_read: 0,
   }
   const recoverableCalls = new Map<string, RecoverableCall>()
   const writeContents = new Map<string, string>()
@@ -349,12 +365,12 @@ function transform(rows: JsonObject[], selectedIds: Set<string>): Omit<ContextGc
   const counts: Record<string, number> = {
     ob_recall: 0, search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
     read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
-    hold: 0, comment_bucket: 0,
+    hold: 0, comment_bucket: 0, artifact_write: 0, artifact_read: 0,
   }
   const indexes: Record<RecoverableToolKind, number> = {
     search_chat: 0, breath: 0, web_search: 0, web_fetch: 0,
     read_bucket: 0, get_chat_context: 0, introspection: 0, read_daily_reviews: 0,
-    hold: 0, comment_bucket: 0,
+    hold: 0, comment_bucket: 0, artifact_write: 0, artifact_read: 0,
   }
   const recoverableCalls = new Map<string, RecoverableCall>()
   const processedWrites = new Set<string>()

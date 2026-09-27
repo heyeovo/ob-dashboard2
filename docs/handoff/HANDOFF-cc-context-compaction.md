@@ -104,6 +104,7 @@
 - 持久化：Haven `conversation_sessions.context_gc_json` 保存默认关闭的自动开关、固定 05:30、保护 key、最近 20 次 GC 记录和释放 token 估算；`cc_lanes_json` 只替换对应 lane 的 Claude 内部 session 指针。
 - 自动边界：Dashboard Node 启动时注册香港时区分钟调度，05:30–05:59 内重试；默认关闭。启用后处理窗口各 CC lane 的未保护安全候选；Haven 日回顾/周轨迹任一最新 run/execution 仍为 running、本地 Pro runner 忙、窗口回复中或有工具待批准时跳过并等待下一分钟；状态接口不可读时 fail closed。Dashboard 进程未运行则当日不会补跑。
 - 验收：部署 Haven 与 Dashboard 后，先保持自动关闭；打开一个有 OB 召回或 `search_chat` 的窗口，扫描并只选一项执行，确认窗口 ID/正文/轮次不变、下一句能继续、列表释放量合理、始终保留项不会被选中。真实结果可接受后再按窗口开启 05:30 自动减负。
+- 2026-09-27 补充：新增“小作品”两类候选。`artifact_write` 把 `mcp__yanzhi__files` write 或原生 Write 写入 `artifacts/*.html|svg` 的整页 `content` 改成“已清理：写入 路径 · 标题 · N 字”；`artifact_read` 把读取同一目录页面的纯文字结果改成“已清理：曾读取 路径”。patch/Edit 与其他路径不动。只作用于固定窗口手动减负；滚动窗口仍按下方第 11 节硬禁，整页代码随日期退出 raw 自然离开上下文。
 - 发布顺序：用户分别 commit + push；先更新 Haven Coolify 的 `HAVEN_RELEASE_SHA` 为完整 Haven commit SHA 并 Deploy/Restart，确认 Brain/Gateway healthy，再部署 Dashboard。未部署 Haven 前不要在 Dashboard 执行减负。
 
 ## 11. 2026-09-12 下一窗口：滚动模式下的窗口减负复核
