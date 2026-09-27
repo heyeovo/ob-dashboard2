@@ -498,6 +498,8 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
       permissions: {
         allow: permanentAllowRules,
       },
+      // CC 记忆只放干活用的备忘；闲聊的记忆在 OB，不带这份索引。
+      ...(mode === 'chat' ? { autoMemoryEnabled: false } : {}),
     },
     // 回退点要它：把改动前的文件备份下来，rewindFiles 才有东西可还原。
     // ⚠️ 备份活在子进程里，进程被回收后这些点就失效了（界面上照实说）。

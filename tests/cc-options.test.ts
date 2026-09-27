@@ -76,6 +76,11 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(buildCcOptions(config('chat'), null).systemPrompt).toBe('统一的协作者基础提示词')
   })
 
+  it('CC 记忆只给工作模式，闲聊关掉', () => {
+    expect((buildCcOptions(config('chat'), null).settings as { autoMemoryEnabled?: boolean }).autoMemoryEnabled).toBe(false)
+    expect(buildCcOptions(config('work'), null).settings).not.toHaveProperty('autoMemoryEnabled')
+  })
+
   it('工作模式把同一份配置追加到 Claude Code 预设', () => {
     expect(buildCcOptions(config('work'), null).systemPrompt).toEqual({
       type: 'preset',
