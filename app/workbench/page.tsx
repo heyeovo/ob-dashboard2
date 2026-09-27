@@ -28,8 +28,8 @@ export default function WorkbenchPage() {
   const [tab, setTab] = useState<'bench' | 'tune'>('bench')
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 backdrop-blur-sm md:hidden">
+    <div className="mobile-page-with-topbar min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
+      <header className="mobile-page-topbar flex items-center justify-between px-3 md:hidden">
         <span className="text-sm font-semibold">{tab === 'bench' ? '工作台' : '调参'}</span>
         <Switch tab={tab} onPick={setTab} />
       </header>

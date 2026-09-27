@@ -42,10 +42,10 @@ export default function BottomTabBar() {
 
   return (
     <nav
-      className="appearance-glass fixed bottom-0 left-0 right-0 z-40 border-t pt-3"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0.5rem)' }}
+      className="mobile-bottom-tabbar fixed bottom-0 left-0 right-0 z-40 border-t pt-2"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="mx-auto flex max-w-lg items-start justify-around" style={{ minHeight: 64 }}>
+      <div className="mx-auto flex max-w-lg items-start justify-around" style={{ minHeight: 48 }}>
         {TABS.map(tab => {
           const isActive = active(tab.slug)
 
@@ -84,7 +84,7 @@ export default function BottomTabBar() {
             <button
               key={tab.slug}
               onClick={() => router.push(tab.href)}
-              className="group flex min-w-[64px] flex-col items-center gap-1.5 transition-all duration-200 active:scale-90"
+              className="group flex min-w-[64px] flex-col items-center gap-1 transition-all duration-200 active:scale-90"
             >
               <div className="flex h-6 w-6 items-center justify-center text-[var(--color-text-tertiary)] transition-all duration-200">
                 <TabIcon slug={tab.slug} active={isActive} />

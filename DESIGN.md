@@ -139,7 +139,7 @@
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
 
-`backdrop-filter` 只放在顶栏、输入栏、导航栏、抽屉或弹窗等固定外框；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。iOS 26 主屏幕 PWA 可能把顶部状态栏和底部一条安全区域交给系统绘制：上传背景时聊天顶栏从系统浅色渐变过渡到照片；独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用 `linen` 底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
+`backdrop-filter` 只放在固定外框等区域；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。手机主页面标题栏固定在状态栏下方，内容从标题栏下滚动；状态栏安全区域、标题栏与底部 5 Tab 共用高覆盖率的 `--mobile-chrome-fill`，保留玻璃透明度/模糊度滑条的作用，同时减轻不同页面内容透过底栏造成的深浅差异。`--mobile-topbar-height` 与 `--mobile-tabbar-height` 是标题栏及底栏内容的统一高度；底栏另保留系统提供的底部安全区域。独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用 `linen` 底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
 
 ### CC 对话气泡
 
@@ -215,7 +215,7 @@ BottomTabBar 在底部显示 5 个 Tab：
 - **工作台** → `/workbench`
 - **设置** → `/settings`；外观在 `/settings/appearance`
 
-底部间距：`pb-7` + `env(safe-area-inset-bottom)`。
+底栏内容高 56px，另加 `env(safe-area-inset-bottom)`；主页、记忆库、工作台和设置的手机顶栏固定在状态栏下方，聊天页的消息区域独立滚动。
 
 记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格/待处理。
 

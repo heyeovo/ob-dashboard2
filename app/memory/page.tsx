@@ -997,7 +997,7 @@ function HomeClient() {
   )
 
   return (
-    <div className={`min-h-screen ${activeTab === 'review' ? 'flex flex-col' : ''} bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-[var(--color-on-primary)] pb-20`}>
+    <div className={`mobile-page-with-topbar min-h-screen ${activeTab === 'review' ? 'flex flex-col' : ''} bg-[var(--color-bg)] text-[var(--color-text-primary)] font-sans selection:bg-[var(--color-primary)] selection:text-[var(--color-on-primary)] pb-20`}>
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1005,7 +1005,7 @@ function HomeClient() {
 
       {/* Mobile-only header。切换器改成三格（时间线/记忆格/待处理）——
           底部 Tab 里原来那个「审阅」格 4.6 之后没了，入口收进这里 */}
-      <header className="md:hidden sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-sm border-b border-[var(--color-border)] px-3 h-12 flex items-center justify-between">
+      <header className="mobile-page-topbar flex items-center justify-between px-3 md:hidden">
         <div className="flex items-center gap-1.5">
           <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">记忆库</span>

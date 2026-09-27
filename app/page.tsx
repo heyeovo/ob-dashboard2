@@ -38,9 +38,9 @@ export default function HomePage() {
   const [toolsOpen, setToolsOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
+    <div className="mobile-page-with-topbar min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
       {/* 手机端 mini header，跟记忆库那页一个样式 */}
-      <header className="sticky top-0 z-10 flex h-12 items-center gap-1.5 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 backdrop-blur-sm md:hidden">
+      <header className="mobile-page-topbar flex items-center gap-1.5 px-3 md:hidden">
         <button
           type="button"
           aria-label="打开家的功能"

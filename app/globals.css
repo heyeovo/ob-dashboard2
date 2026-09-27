@@ -127,6 +127,9 @@ html {
   --glass-border:          rgba(143, 113, 94, .18);
   --glass-blur:            12px;
   --glass-shadow:          0 8px 28px rgba(83, 60, 45, .08);
+  --mobile-topbar-height:   48px;
+  --mobile-tabbar-height:   56px;
+  --mobile-chrome-fill:     color-mix(in srgb, var(--color-surface-elevated) 85%, var(--glass-fill));
   --font-display:          var(--font-cormorant), var(--font-noto-serif-sc), Georgia, serif;
   --font-body:             var(--font-geist-sans), "Noto Sans SC", system-ui, sans-serif;
   --font-scale:            1;
@@ -276,9 +279,30 @@ body::after {
   height: env(safe-area-inset-top, 0px);
   z-index: 2;
   pointer-events: none;
-  background: var(--color-surface);
+  background: var(--mobile-chrome-fill);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+@media (max-width: 767px) {
+  .mobile-page-with-topbar { padding-top: var(--mobile-topbar-height); }
+  .mobile-page-topbar {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    height: var(--mobile-topbar-height);
+    background: var(--mobile-chrome-fill);
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .mobile-bottom-tabbar {
+    background: var(--mobile-chrome-fill);
+    border-top-color: var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
 }
 
 /* In iOS standalone mode the CSS viewport can stop above the home-indicator
@@ -493,7 +517,7 @@ h1, h2 {
   background-attachment: fixed;
 }
 .cc-mobile-overlay-clearance {
-  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px));
 }
 @media (min-width: 768px) {
   .cc-mobile-overlay-clearance {
@@ -506,10 +530,10 @@ h1, h2 {
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
-@media (display-mode: standalone) and (max-width: 767px) {
-  :root[data-background="upload"] .cc-topbar {
-    border-bottom-color: transparent;
-    background: linear-gradient(180deg, var(--color-surface-elevated), var(--glass-fill) 55%, transparent);
+@media (max-width: 767px) {
+  .cc-topbar {
+    flex-shrink: 0;
+    background: var(--mobile-chrome-fill);
   }
 }
 .cc-rail-pane {

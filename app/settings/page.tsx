@@ -58,8 +58,8 @@ const MODEL_ENTRIES: Entry[] = [
 
 export default function SettingsPage() {
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="sticky top-0 z-10 flex h-12 items-center border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 backdrop-blur-sm md:hidden">
+    <div className="mobile-page-with-topbar min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
+      <header className="mobile-page-topbar flex items-center px-3 md:hidden">
         <span className="text-sm font-semibold">设置</span>
       </header>
 
