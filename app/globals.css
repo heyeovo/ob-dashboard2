@@ -281,6 +281,19 @@ body::after {
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
+/* In iOS standalone mode the CSS viewport can stop above the home-indicator
+   area. Paint the full physical viewport on the document as well as the fixed
+   layer, so the chat page does not expose the fallback color below the tabs. */
+@media (display-mode: standalone) and (max-width: 767px) {
+  html:has(.cc-page) { min-height: 100vh; background-attachment: scroll; }
+  body.min-h-full:has(.cc-page) {
+    min-height: 100vh;
+    background-image: var(--bg-overlay), var(--bg-image);
+    background-size: cover;
+    background-position: center;
+  }
+}
+
 h1, h2 {
   font-family: var(--font-display);
 }
@@ -492,6 +505,12 @@ h1, h2 {
   background: var(--glass-fill);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+@media (display-mode: standalone) and (max-width: 767px) {
+  :root[data-background="upload"] .cc-topbar {
+    border-bottom-color: transparent;
+    background: linear-gradient(180deg, var(--color-surface-elevated), var(--glass-fill) 55%, transparent);
+  }
 }
 .cc-rail-pane {
   border-right: 1px solid var(--color-border-light);

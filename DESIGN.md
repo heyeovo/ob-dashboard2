@@ -139,7 +139,7 @@
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
 
-`backdrop-filter` 只放在顶栏、输入栏、导航栏、抽屉或弹窗等固定外框；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover` 让背景延伸到 iPhone 顶部状态栏下，交互内容避开安全区域；顶部状态栏下与顶栏用相近的玻璃底色衔接，根画布也绘制背景，避免底部安全区域露出纯色。清单和浏览器主题色使用 `linen` 底色作为回退。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
+`backdrop-filter` 只放在顶栏、输入栏、导航栏、抽屉或弹窗等固定外框；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。iOS 26 主屏幕 PWA 可能把顶部状态栏和底部一条安全区域交给系统绘制：上传背景时聊天顶栏从系统浅色渐变过渡到照片；独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用 `linen` 底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
 
 ### CC 对话气泡
 
