@@ -129,7 +129,7 @@ html {
   --glass-shadow:          0 8px 28px rgba(83, 60, 45, .08);
   --mobile-topbar-height:   48px;
   --mobile-tabbar-height:   56px;
-  --mobile-chrome-fill:     color-mix(in srgb, var(--color-surface-elevated) 85%, var(--glass-fill));
+  --mobile-chrome-fill:     var(--glass-fill);
   --font-display:          var(--font-cormorant), var(--font-noto-serif-sc), Georgia, serif;
   --font-body:             var(--font-geist-sans), "Noto Sans SC", system-ui, sans-serif;
   --font-scale:            1;
@@ -295,6 +295,8 @@ body::after {
     height: var(--mobile-topbar-height);
     background: var(--mobile-chrome-fill);
     border-bottom: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
   }
   .mobile-bottom-tabbar {
     background: var(--mobile-chrome-fill);
