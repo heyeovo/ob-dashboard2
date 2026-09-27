@@ -255,7 +255,7 @@ function CcScrollJumps({
               aria-label="搜索当前对话"
               title="搜索当前对话"
               onClick={onOpenSearch}
-              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95 md:hidden"
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm transition hover:opacity-95 md:hidden"
             >
               <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <circle cx="10.8" cy="10.8" r="6.3" />
@@ -269,7 +269,7 @@ function CcScrollJumps({
               aria-label="跳到对话顶部"
               title="跳到顶部"
               onClick={() => jump(0)}
-              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm transition hover:opacity-95"
             >
               <span aria-hidden="true" className="text-sm leading-none">↑</span>
             </button>
@@ -280,7 +280,7 @@ function CcScrollJumps({
               aria-label="跳到对话底部"
               title="跳到最新消息"
               onClick={() => jump(scrollRef.current?.scrollHeight || 0)}
-              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm backdrop-blur-sm transition hover:opacity-95"
+              className="pointer-events-auto flex size-8 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/75 text-[var(--color-text-tertiary)] opacity-60 shadow-sm transition hover:opacity-95"
             >
               <span aria-hidden="true" className="text-sm leading-none">↓</span>
             </button>

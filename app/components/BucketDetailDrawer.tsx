@@ -340,7 +340,7 @@ export default function BucketDetailDrawer({
 
             {/* 信息胶囊 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+              <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                 <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">IMP</div>
                 <div className="h-5 flex items-center justify-center">
                   <input
@@ -356,23 +356,23 @@ export default function BucketDetailDrawer({
                   />
                 </div>
               </div>
-                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">权重</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.score?.toFixed(2) ?? '—'}</div>
                 </div>
-                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">激活</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.activation_count ?? '—'}</div>
                 </div>
-                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">效价 V</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
                 </div>
-                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">唤醒 A</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
                 </div>
-                <div className="bg-[var(--color-surface)]/60 backdrop-blur-sm border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
+                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
                   <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">类型</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                     {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}

@@ -55,7 +55,8 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 - 弹窗统一 `DetailPanel`（`mode="drawer"` 右侧滑入，`mode="modal"` 居中）
 - 卡片统一 `Card`（variant: interactive / outline / ghost / empty）
 - 记忆详情用共享 `BucketDetailDrawer`（年轮可逐条编辑 / 确认后删除）
-- 导航：桌面 `SideRail`，手机 `BottomTabBar` 底部 5 Tab，全站 `MobileShell` 包裹；手机点聊天 Tab 回 `/cc` 对话列表，session deep link 直接进聊天
+- 导航：桌面 `SideRail`，手机 `BottomTabBar` 底部 5 Tab（主页 / 记忆库 / 聊天 / 工作台 / 设置），全站 `MobileShell` 包裹；手机点聊天 Tab 回 `/cc` 对话列表，session deep link 直接进聊天；设置 → 外观在 `/settings/appearance`
+- 全站外观由 `AppearanceProvider` 即时预览并保存到 Haven，`RainLayer` 在效果开启时挂载；背景图和配置均以 Haven 为事实源，`localStorage` 仅镜像缓存。固定导航外框可用玻璃模糊，长列表卡片和聊天气泡不逐项模糊
 - Next.js 16 动态路由 params 是 Promise：`const { id } = await params`。这版 Next.js 有破坏性变更，写之前查 `node_modules/next/dist/docs/` 里的对应文档
 
 ## cc 数据持久化（硬规矩）

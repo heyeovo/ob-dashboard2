@@ -1,7 +1,6 @@
 'use client'
 
 import EntryGrid, { type Entry } from '../components/EntryGrid'
-import { useChatDisplayPreferences } from '../lib/chatDisplayPreferences'
 
 /**
  * 设置 Tab（4.6 导航重构，右二格）。
@@ -54,17 +53,10 @@ const MODEL_ENTRIES: Entry[] = [
     desc: '主域哨兵 / 召回模型；已暂停的自动记忆；日回顾模型',
     href: '/settings/models',
   },
-  { key: 'ui', label: 'UI 设置', desc: '主题 / 字体 / 字号，等新风格铺开后做', todo: true },
+  { key: 'appearance', label: '外观', desc: '主题、背景、字体、字号与雨痕', href: '/settings/appearance' },
 ]
 
 export default function SettingsPage() {
-  const {
-    showRuntimeInfo,
-    showTokenInfo,
-    setShowRuntimeInfo,
-    setShowTokenInfo,
-  } = useChatDisplayPreferences()
-
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
       <header className="sticky top-0 z-10 flex h-12 items-center border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 backdrop-blur-sm md:hidden">
@@ -82,39 +74,6 @@ export default function SettingsPage() {
         <EntryGrid title="数据" entries={DATA_ENTRIES} />
         <EntryGrid title="引擎与记忆" entries={ENGINE_ENTRIES} />
         <EntryGrid title="模型与外观" entries={MODEL_ENTRIES} />
-
-        <section className="mt-8 border-t border-[var(--color-border)] pt-6">
-          <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">聊天显示</h2>
-          <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
-            只影响这台设备上的界面，不改变聊天内容和模型设置。
-          </p>
-          <div className="mt-3 divide-y divide-[var(--color-border-light)] rounded-[var(--radius-lg)] bg-[var(--color-surface)] px-4">
-            <label className="flex min-h-14 cursor-pointer items-center justify-between gap-4 py-3">
-              <span>
-                <span className="block text-sm text-[var(--color-text-primary)]">显示运行信息</span>
-                <span className="mt-0.5 block text-xs text-[var(--color-text-tertiary)]">引擎、Provider、模型与上下文入口</span>
-              </span>
-              <input
-                type="checkbox"
-                checked={showRuntimeInfo}
-                onChange={event => setShowRuntimeInfo(event.target.checked)}
-                className="h-4 w-4 shrink-0 accent-[var(--color-primary)]"
-              />
-            </label>
-            <label className="flex min-h-14 cursor-pointer items-center justify-between gap-4 py-3">
-              <span>
-                <span className="block text-sm text-[var(--color-text-primary)]">显示 Token 数</span>
-                <span className="mt-0.5 block text-xs text-[var(--color-text-tertiary)]">消息下方的 Token 总数与明细</span>
-              </span>
-              <input
-                type="checkbox"
-                checked={showTokenInfo}
-                onChange={event => setShowTokenInfo(event.target.checked)}
-                className="h-4 w-4 shrink-0 accent-[var(--color-primary)]"
-              />
-            </label>
-          </div>
-        </section>
 
         <section className="mt-8 border-t border-[var(--color-border)] pt-6">
           <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">登录状态</h2>

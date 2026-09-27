@@ -2,49 +2,51 @@
 
 ## 设计 Token
 
-所有视觉变量定义在 `app/globals.css` 的 `:root` 中。修改一处全局生效。
+所有视觉变量定义在 `app/globals.css`。基础值在 `:root`，当前默认主题 `linen` 在 `:root[data-theme="linen"]` 覆盖语义色；用户滑条的值由 `<html style>` 覆盖。下表颜色值以当前 `linen` 为准。
 
 ### 品牌色
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-primary` | `#D97757` | 主按钮、链接、强调 |
-| `--color-primary-hover` | `#C86645` | 悬停态 |
-| `--color-primary-soft` | `#FDF0ED` | 淡色背景（badge、标签底色） |
-| `--color-primary-muted` | `#FDF9F7` | 极淡背景 |
-| `--color-primary-gradient` | `#E8A58F` | 渐变终点（logo/头像） |
-| `--color-primary-hover-soft` | `#FBE5DE` | 淡色按钮 hover |
-| `--color-primary-light` | `#FFF5F2` | 极淡主色背景 |
+| `--color-primary` | `#C87458` | 主按钮、链接、强调 |
+| `--color-primary-hover` | `#B76549` | 悬停态 |
+| `--color-primary-soft` | `#F9EDE7` | 淡色背景（badge、标签底色） |
+| `--color-primary-muted` | `#FCF7F2` | 极淡背景 |
+| `--color-primary-gradient` | `#DEA48D` | 渐变终点（logo/头像） |
+| `--color-primary-hover-soft` | `#F4DFD5` | 淡色按钮 hover |
+| `--color-primary-light` | `#FEF4EE` | 极淡主色背景 |
+| `--color-on-primary` | `#FFFFFF` | 主色按钮上的字与图标 |
+| `--color-overlay` | `#000000` | 带透明度的遮罩基础色 |
 
 ### 表面层级
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-bg` | `#FCFAF8` | 页面底色 |
-| `--color-surface` | `#FFFFFF` | 卡片/弹窗白底 |
-| `--color-surface-elevated` | `#FDFCFB` | 高亮卡片 |
-| `--color-surface-secondary` | `#F9F8F6` | 次级背景 |
-| `--color-surface-tertiary` | `#F4F2EC` | 三级背景（chip/标签底） |
-| `--color-surface-hover` | `#E8E4DC` | 三级背景 hover |
+| `--color-bg` | `rgb(250 246 240 / .56)` | 页面氛围层上方的轻底色 |
+| `--color-surface` | `rgb(255 253 250 / .88)` | 卡片/弹窗半透明填充，无逐卡模糊 |
+| `--color-surface-elevated` | `#FFFCF8` | 高亮卡片 |
+| `--color-surface-secondary` | `#F8F3ED` | 次级背景 |
+| `--color-surface-tertiary` | `#F1E9E1` | 三级背景（chip/标签底） |
+| `--color-surface-hover` | `#E9DED3` | 三级背景 hover |
 
 ### 边框
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-border` | `#E8E6E1` | 默认边框 |
-| `--color-border-light` | `#F0EFEB` | 淡边框 |
-| `--color-border-subtle` | `#EEEAE4` | 极淡边框（滑条轨道） |
-| `--color-border-hover` | `#C4C1BC` | 边框 hover 加深 |
+| `--color-border` | `rgba(122, 95, 79, .21)` | 默认边框 |
+| `--color-border-light` | `rgba(122, 95, 79, .13)` | 淡边框 |
+| `--color-border-subtle` | `rgba(122, 95, 79, .10)` | 极淡边框（滑条轨道） |
+| `--color-border-hover` | `rgba(122, 95, 79, .38)` | 边框 hover 加深 |
 
 ### 文字层级
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-text-primary` | `#3A3836` | 正文 |
-| `--color-text-heading` | `#2B2927` | 标题 |
-| `--color-text-secondary` | `#6C6965` | 次要文字 |
-| `--color-text-tertiary` | `#8A8681` | 辅助文字 |
-| `--color-text-disabled` | `#A8A49D` | 禁用/占位 |
+| `--color-text-primary` | `#483D36` | 正文 |
+| `--color-text-heading` | `#342B26` | 标题 |
+| `--color-text-secondary` | `#71645C` | 次要文字 |
+| `--color-text-tertiary` | `#93847A` | 辅助文字 |
+| `--color-text-disabled` | `#B2A79F` | 禁用/占位 |
 | `--color-text-divider` | `#D0CEC9` | 分隔符 |
 
 ### 状态色
@@ -125,6 +127,20 @@
 |-------|-----|
 | `--page-width` | `1152px` |
 
+### 主题引擎与外观
+
+| Token | 用途 |
+|-------|------|
+| `--bg-base`, `--bg-image`, `--bg-overlay` | 页面最底层纯色、主题渐变或上传图片、图片遮罩；背景可选 gradient / upload / none |
+| `--glass-fill`, `--glass-border`, `--glass-blur`, `--glass-shadow` | 固定外框的玻璃质感；滑条覆盖模糊与不透明度 |
+| `--font-display`, `--font-body`, `--font-scale` | 标题字体、正文黑体与整体字号缩放；标题可选 serif / sans |
+| `--label-tracking`, `--chat-bubble-alpha` | 小号大写标签字距、聊天表面透明度预留语义 |
+| `--effect-rain-intensity` | 雨痕强度；默认关闭，页面不可见暂停，减少动态效果时静止 |
+| `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
+| `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
+
+`backdrop-filter` 只放在顶栏、输入栏、导航栏、抽屉或弹窗等固定外框；列表卡片和聊天气泡使用半透明填充。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
+
 ### CC 对话气泡
 
 - 用户消息使用 `--chat-user-fill` 的实心右侧气泡。
@@ -135,7 +151,7 @@
 - Thinking 使用无状态圆点、无左侧竖线的轻量折叠表面；生成完成后保持用户当前的展开状态。网页不伪装成设备触觉反馈。
 - 页面增量收到的后台完整消息按 360ms 间隔逐段显现；初次历史载入和已经完成的旧轮次不重播，系统启用“减少动态效果”时立即完整显示。
 - 代码、列表、表格、引用等原子 Markdown block 不套文字气泡，继续整宽展示，避免结构被切碎。
-- 设置首页「聊天显示」提供两个本设备全局偏好：运行信息（引擎、Provider、模型、上下文入口）默认关闭，Token 总数与明细默认开启；错误、保存状态和持久化核对入口不受开关影响。
+- 设置 → 外观里的「聊天显示」提供两个本设备全局偏好：运行信息（引擎、Provider、模型、上下文入口）默认关闭，Token 总数与明细默认开启；错误、保存状态和持久化核对入口不受开关影响。
 
 ---
 
@@ -193,11 +209,11 @@ SideRail 在左侧纵向排列页面入口，手机端隐藏。
 ### 手机端
 
 BottomTabBar 在底部显示 5 个 Tab：
-- **审阅** → `/?tab=review`
-- **日记** → `/journal`
-- **记忆**（中间突起）→ `/`
-- **Breath** → `/breath-sim`
-- **设置**（点击弹出菜单）→ 关系图谱 / 导入 / 回收站 / 权重配置
+- **主页** → `/`
+- **记忆库** → `/memory`
+- **聊天**（中间突起）→ `/cc`
+- **工作台** → `/workbench`
+- **设置** → `/settings`；外观在 `/settings/appearance`
 
 底部间距：`pb-7` + `env(safe-area-inset-bottom)`。
 
@@ -245,8 +261,8 @@ BottomTabBar 在底部显示 5 个 Tab：
 
 | variant | 样式 | 典型使用 |
 |---------|------|---------|
-| `interactive` | 白底 + 边框 + hover 上移 + 阴影 | 时间线卡片、结果列表 |
-| `outline` | 白底 + 边框 | 静态内容区 |
+| `interactive` | 半透明表面 + 边框 + hover 上移 + 阴影 | 时间线卡片、结果列表 |
+| `outline` | 半透明表面 + 边框 | 静态内容区 |
 | `ghost` | 淡底 + 细边框 | Graph 侧栏列表 |
 | `empty` | 虚线边框 | 空状态占位 |
 

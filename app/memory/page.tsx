@@ -1146,7 +1146,7 @@ function HomeClient() {
               )}
 
               {/* 时间选择器 */}
-              <div className="flex items-center gap-2 bg-[var(--color-surface)]/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--color-border)] shadow-sm">
+              <div className="flex items-center gap-2 bg-[var(--color-surface)]/40 rounded-lg px-3 py-1.5 border border-[var(--color-border)] shadow-sm">
                 <span className="text-xs text-[var(--color-text-disabled)] hidden sm:inline">时间</span>
                 <select
                   className="text-xs bg-transparent outline-none text-[var(--color-text-secondary)] cursor-pointer"
@@ -1168,16 +1168,16 @@ function HomeClient() {
               {activeTab === 'grid' && (
                 <>
                   <button onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]"
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]"
                   >{gridViewMode === 'list' ? '⧉' : '☰'}</button>
                   <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 backdrop-blur-sm text-[var(--color-text-secondary)] outline-none cursor-pointer">
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 text-[var(--color-text-secondary)] outline-none cursor-pointer">
                     <option value="score">权重</option>
                     <option value="importance">重要度</option>
                     <option value="created">时间</option>
                   </select>
                   <button onClick={() => setSortOrder(order => order === 'desc' ? 'asc' : 'desc')}
-                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-[var(--color-surface)]/60 backdrop-blur-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}
+                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-[var(--color-surface)]/60 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}
                   >{sortOrder === 'desc' ? '↓降序' : '↑升序'}</button>
                 </>
               )}

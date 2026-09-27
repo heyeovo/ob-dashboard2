@@ -42,7 +42,7 @@ export default function BottomTabBar() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--color-border-light)]/60 bg-[var(--color-surface)]/80 pt-3 backdrop-blur-md"
+      className="appearance-glass fixed bottom-0 left-0 right-0 z-40 border-t pt-3"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0.5rem)' }}
     >
       <div className="mx-auto flex max-w-lg items-start justify-around" style={{ minHeight: 64 }}>

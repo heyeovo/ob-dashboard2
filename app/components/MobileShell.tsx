@@ -17,7 +17,7 @@ export default function MobileShell({ children }: { children: ReactNode }) {
       <Suspense fallback={null}>
         <SideRail />
       </Suspense>
-      <div className="md:pl-[68px]">{children}</div>
+      <div className="relative z-[1] md:pl-[68px]">{children}</div>
       <div className="md:hidden">
         <Suspense fallback={null}>
           <BottomTabBar />

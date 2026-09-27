@@ -116,6 +116,24 @@ html {
   --color-chart-time:       #DFA882;
   --color-chart-importance: #C4B49A;
 
+  /* ---- Theme layers / 主题与背景 ---- */
+  --bg-base:               #FCFAF8;
+  --bg-gradient:           linear-gradient(180deg, #FCFAF8, #F8F1EA);
+  --bg-photo-overlay:      linear-gradient(rgba(249,244,238,.28), rgba(249,244,238,.42));
+  --bg-image:              var(--bg-gradient);
+  --bg-overlay:            none;
+  --glass-opacity:         .78;
+  --glass-fill:            rgb(255 253 250 / var(--glass-opacity));
+  --glass-border:          rgba(143, 113, 94, .18);
+  --glass-blur:            12px;
+  --glass-shadow:          0 8px 28px rgba(83, 60, 45, .08);
+  --font-display:          var(--font-cormorant), var(--font-noto-serif-sc), Georgia, serif;
+  --font-body:             var(--font-geist-sans), "Noto Sans SC", system-ui, sans-serif;
+  --font-scale:            1;
+  --label-tracking:        .12em;
+  --chat-bubble-alpha:     .9;
+  --effect-rain-intensity: .35;
+
   /* ---- Radius / 圆角层级 ---- */
   --radius-sm:              6px;
   --radius-md:              10px;
@@ -181,6 +199,43 @@ html {
   --chat-glass:             rgba(255, 253, 252, 0.78);
 }
 
+:root[data-theme="linen"] {
+  --color-primary:          #C87458;
+  --color-primary-hover:    #B76549;
+  --color-primary-soft:     #F9EDE7;
+  --color-primary-muted:    #FCF7F2;
+  --color-primary-gradient: #DEA48D;
+  --color-primary-hover-soft:#F4DFD5;
+  --color-primary-light:    #FEF4EE;
+  --color-bg:               rgb(250 246 240 / .56);
+  --color-surface:          rgb(255 253 250 / .88);
+  --color-surface-elevated: #FFFCF8;
+  --color-surface-secondary:#F8F3ED;
+  --color-surface-tertiary: #F1E9E1;
+  --color-surface-hover:    #E9DED3;
+  --color-border:           rgba(122, 95, 79, .21);
+  --color-border-light:     rgba(122, 95, 79, .13);
+  --color-border-subtle:    rgba(122, 95, 79, .10);
+  --color-border-hover:     rgba(122, 95, 79, .38);
+  --color-text-primary:     #483D36;
+  --color-text-heading:     #342B26;
+  --color-text-secondary:   #71645C;
+  --color-text-tertiary:    #93847A;
+  --color-text-disabled:    #B2A79F;
+  --bg-base:               #F7F1E9;
+  --bg-gradient:           radial-gradient(70% 55% at 12% 5%, rgba(228, 185, 155, .22), transparent 75%),
+                           linear-gradient(180deg, #FCF8F2 0%, #F6EFE7 58%, #F1E9E2 100%);
+}
+
+:root[data-font="sans"] {
+  --font-display: var(--font-body);
+}
+
+html {
+  font-size: calc(16px * var(--font-scale));
+  background-color: var(--bg-base);
+}
+
 /* ---- Tailwind theme bridge ---- */
 @theme inline {
   --color-background: var(--color-bg);
@@ -191,9 +246,46 @@ html {
 
 /* ---- Base ---- */
 body {
-  background: var(--color-bg);
   color: var(--color-text-primary);
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--bg-overlay), var(--bg-image);
+  background-size: cover;
+}
+
+h1, h2 {
+  font-family: var(--font-display);
+}
+
+.appearance-glass {
+  background: var(--glass-fill);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+}
+
+.rain-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: calc(var(--effect-rain-intensity) * .18);
+  background-image: repeating-linear-gradient(105deg, transparent 0 21px, rgba(92, 78, 70, .28) 22px, transparent 23px 59px);
+  background-size: 220px 220px;
+  animation: rain-drift 28s linear infinite;
+}
+
+.rain-layer[data-paused="true"] { animation-play-state: paused; }
+@keyframes rain-drift { to { background-position: -70px 220px; } }
+@media (prefers-reduced-motion: reduce) {
+  .rain-layer { animation: none; }
 }
 
 /* ---- Utility: hide scrollbar ---- */
@@ -287,9 +379,10 @@ body {
 /* 输入框外壳 */
 .cc-composer {
   border-radius: var(--chat-bubble-radius);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--chat-shadow-soft);
+  backdrop-filter: blur(var(--glass-blur));
   transition: border-color var(--duration-normal) var(--ease-standard);
 }
 .cc-composer:focus-within {
@@ -355,10 +448,10 @@ body {
   }
 }
 .cc-topbar {
-  border-bottom: 1px solid var(--color-border-light);
-  background: var(--chat-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 .cc-rail-pane {
   border-right: 1px solid var(--color-border-light);
@@ -392,6 +485,7 @@ body {
   flex-shrink: 0;
 }
 .cc-name {
+  font-family: var(--font-display);
   font-size: 12.5px;
   font-weight: 500;
   color: var(--color-text-heading);

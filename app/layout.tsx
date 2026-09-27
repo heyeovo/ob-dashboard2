@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from "next/font/google";
+import type { CSSProperties } from 'react'
+import { connection } from 'next/server'
+import { Cormorant_Garamond, Geist, Geist_Mono, Noto_Serif_SC } from "next/font/google";
 import MobileShell from "./components/MobileShell";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
+import { AppearanceProvider } from "./components/AppearanceProvider";
+import RainLayer from "./components/RainLayer";
+import { appearanceHtmlStyle } from "./lib/appearance";
+import { loadAppearance } from "./lib/havenAppearance";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,6 +18,18 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  preload: false,
+});
+
+const notoSerifSc = Noto_Serif_SC({
+  variable: "--font-noto-serif-sc",
+  weight: ["400", "600"],
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -31,19 +49,29 @@ export const viewport: Viewport = {
   maximumScale: 1,
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await connection()
+  const { appearance, fromHaven } = await loadAppearance()
   return (
     <html
       lang="zh"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} ${notoSerifSc.variable} h-full antialiased`}
+      data-theme={appearance.theme}
+      data-font={appearance.font.display}
+      data-rain={appearance.effects.rain.mode}
+      data-background={appearance.background.kind}
+      style={appearanceHtmlStyle(appearance) as CSSProperties}
     >
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />
-        <MobileShell>{children}</MobileShell>
+        <AppearanceProvider initial={appearance} initialFromHaven={fromHaven}>
+          <RainLayer />
+          <MobileShell>{children}</MobileShell>
+        </AppearanceProvider>
       </body>
     </html>
   );

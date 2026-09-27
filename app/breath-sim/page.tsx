@@ -23,7 +23,7 @@ interface BucketDetail {
   metadata: { name: string; domain: string[]; tags: string[]; valence: number; arousal: number; importance: number; pinned: boolean; resolved: boolean; digested?: boolean; type: string; created: string; last_active: string; activation_count?: number; event_time?: string }
 }
 
-const BAR_COLORS = { topic: 'var(--color-primary-hover)', emotion: 'var(--color-chart-emotion)', time: 'var(--color-chart-time)', importance: 'var(--color-chart-importance)' }
+const BAR_COLORS = { topic: 'var(--color-chart-topic)', emotion: 'var(--color-chart-emotion)', time: 'var(--color-chart-time)', importance: 'var(--color-chart-importance)' }
 const SLIDER_STYLE = `w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[var(--color-primary)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[var(--color-primary)] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-[var(--color-primary)] [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0`
 const SCORING_LS_KEY = 'breath-sim-scoring'
 
