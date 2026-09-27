@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { open, readFile, stat, unlink, utimes } from 'node:fs/promises'
+import { hostname } from 'node:os'
 import path from 'node:path'
 
 export type SessionTurnPriority = 'foreground' | 'background'
@@ -22,6 +23,8 @@ type SessionTurnQueue = {
 export type SessionTurnOptions = {
   /** Claude Pro OAuth is account-wide, so subscription model calls must not overlap. */
   subscription?: boolean
+  /** Stop waiting for an in-memory/file lock when the browser request is gone. */
+  signal?: AbortSignal
 }
 
 const COORDINATOR_KEY = '__ob2_cc_turn_coordinator__'
@@ -39,7 +42,85 @@ const subscriptionQueue: SessionTurnQueue =
   })
 
 const SUBSCRIPTION_LOCK_FILE = 'ob2-subscription-turn.lock'
-const SUBSCRIPTION_LOCK_STALE_MS = 30 * 60 * 1000
+// Heartbeat is every 30s. Four missed heartbeats recover legacy/orphaned locks
+// without making a briefly busy event loop look dead.
+const SUBSCRIPTION_LOCK_STALE_MS = 2 * 60 * 1000
+
+type SubscriptionLockOwner = {
+  token: string
+  pid: number
+  hostname: string
+}
+
+function abortError(): Error {
+  const error = new Error('请求已取消')
+  error.name = 'AbortError'
+  return error
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError()
+}
+
+function waitForPromise(promise: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) return promise
+  throwIfAborted(signal)
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort)
+      reject(abortError())
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    void promise.then(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    })
+  })
+}
+
+function waitForRetry(signal?: AbortSignal): Promise<void> {
+  if (!signal) return new Promise(resolve => setTimeout(resolve, 100))
+  throwIfAborted(signal)
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, 100)
+    const onAbort = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+      reject(abortError())
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function parseLockOwner(raw: string): SubscriptionLockOwner | null {
+  try {
+    const value = JSON.parse(raw) as Partial<SubscriptionLockOwner>
+    if (
+      typeof value.token === 'string'
+      && Number.isInteger(value.pid)
+      && Number(value.pid) > 0
+      && typeof value.hostname === 'string'
+    ) {
+      return { token: value.token, pid: Number(value.pid), hostname: value.hostname }
+    }
+  } catch {
+    // Older releases wrote "pid:uuid". Keep treating those as lease-only locks.
+  }
+  return null
+}
+
+function ownerProcessIsDead(owner: SubscriptionLockOwner | null): boolean {
+  if (!owner || owner.hostname !== hostname()) return false
+  try {
+    process.kill(owner.pid, 0)
+    return false
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ESRCH'
+  }
+}
 
 function subscriptionLockPath(): string {
   const testRoot = process.env.OB2_TEST_SUBSCRIPTION_LOCK_DIR?.trim()
@@ -49,16 +130,21 @@ function subscriptionLockPath(): string {
   return configRoot ? path.join(/*turbopackIgnore: true*/ configRoot, SUBSCRIPTION_LOCK_FILE) : ''
 }
 
-async function acquireSubscriptionFileLock(wait: boolean): Promise<(() => Promise<void>) | null> {
+async function acquireSubscriptionFileLock(
+  wait: boolean,
+  signal?: AbortSignal,
+): Promise<(() => Promise<void>) | null> {
   const lockPath = subscriptionLockPath()
   if (!lockPath) return async () => undefined
   const token = `${process.pid}:${randomUUID()}`
+  const owner: SubscriptionLockOwner = { token, pid: process.pid, hostname: hostname() }
 
   for (;;) {
+    throwIfAborted(signal)
     try {
       const handle = await open(/*turbopackIgnore: true*/ lockPath, 'wx', 0o600)
       try {
-        await handle.writeFile(token, 'utf8')
+        await handle.writeFile(JSON.stringify(owner), 'utf8')
       } finally {
         await handle.close()
       }
@@ -70,7 +156,8 @@ async function acquireSubscriptionFileLock(wait: boolean): Promise<(() => Promis
       return async () => {
         clearInterval(heartbeat)
         try {
-          if ((await readFile(/*turbopackIgnore: true*/ lockPath, 'utf8')).trim() === token) {
+          const current = parseLockOwner(await readFile(/*turbopackIgnore: true*/ lockPath, 'utf8'))
+          if (current?.token === token) {
             await unlink(/*turbopackIgnore: true*/ lockPath)
           }
         } catch {
@@ -81,8 +168,14 @@ async function acquireSubscriptionFileLock(wait: boolean): Promise<(() => Promis
       const code = (error as NodeJS.ErrnoException).code
       if (code !== 'EEXIST') throw error
       try {
-        const info = await stat(/*turbopackIgnore: true*/ lockPath)
-        if (Date.now() - info.mtimeMs > SUBSCRIPTION_LOCK_STALE_MS) {
+        const [info, rawOwner] = await Promise.all([
+          stat(/*turbopackIgnore: true*/ lockPath),
+          readFile(/*turbopackIgnore: true*/ lockPath, 'utf8'),
+        ])
+        if (
+          ownerProcessIsDead(parseLockOwner(rawOwner))
+          || Date.now() - info.mtimeMs > SUBSCRIPTION_LOCK_STALE_MS
+        ) {
           await unlink(/*turbopackIgnore: true*/ lockPath)
           continue
         }
@@ -91,14 +184,14 @@ async function acquireSubscriptionFileLock(wait: boolean): Promise<(() => Promis
         throw staleError
       }
       if (!wait) return null
-      await new Promise<void>(resolve => setTimeout(resolve, 100))
+      await waitForRetry(signal)
     }
   }
 }
 
-async function runWithSubscriptionFileLock<T>(run: () => Promise<T>): Promise<T> {
+async function runWithSubscriptionFileLock<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!subscriptionLockPath()) return run()
-  const release = await acquireSubscriptionFileLock(true)
+  const release = await acquireSubscriptionFileLock(true, signal)
   try {
     return await run()
   } finally {
@@ -106,12 +199,22 @@ async function runWithSubscriptionFileLock<T>(run: () => Promise<T>): Promise<T>
   }
 }
 
-async function runForegroundQueue<T>(queue: SessionTurnQueue, run: () => Promise<T>): Promise<T> {
+async function runForegroundQueue<T>(
+  queue: SessionTurnQueue,
+  run: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   queue.foregroundWaiting += 1
   const previous = queue.tail
   let release!: () => void
   queue.tail = new Promise<void>(resolve => { release = resolve })
-  await previous
+  try {
+    await waitForPromise(previous, signal)
+  } catch (error) {
+    queue.foregroundWaiting -= 1
+    void previous.then(release)
+    throw error
+  }
   queue.foregroundWaiting -= 1
   queue.active = true
   try {
@@ -144,10 +247,16 @@ export async function runForegroundSessionTurn<T>(
   run: () => Promise<T>,
   options: SessionTurnOptions = {},
 ): Promise<T> {
-  const queue = queueFor(sessionId)
-  const runForSession = () => runForegroundQueue(queue, run).finally(() => cleanup(sessionId, queue))
+  const runForSession = () => {
+    const queue = queueFor(sessionId)
+    return runForegroundQueue(queue, run, options.signal).finally(() => cleanup(sessionId, queue))
+  }
   return options.subscription
-    ? runForegroundQueue(subscriptionQueue, () => runWithSubscriptionFileLock(runForSession))
+    ? runForegroundQueue(
+      subscriptionQueue,
+      () => runWithSubscriptionFileLock(runForSession, options.signal),
+      options.signal,
+    )
     : runForSession()
 }
 

@@ -1334,6 +1334,12 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     // SSE 连接保持开着，等服务端把 done / after 推回来，这一轮才算真正收尾。
     if (stoppingRef.current) return
     stoppingRef.current = true
+    const activeController = abortRef.current
+    // 优雅停止依赖服务端继续回传 done。部署切流或请求还在等全局锁时，
+    // 服务端可能没有可 interrupt 的 SDK 会话；给它几秒收尾，随后强制断流解锁界面。
+    setTimeout(() => {
+      if (stoppingRef.current && abortRef.current === activeController) activeController?.abort()
+    }, 5_000)
     void fetch('/api/cc-stop', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

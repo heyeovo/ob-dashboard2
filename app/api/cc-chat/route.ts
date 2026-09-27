@@ -526,7 +526,7 @@ export async function POST(request: NextRequest) {
         close,
         stamp,
         resumeHint,
-      }), { subscription: config.cred === 'subscription' })
+      }), { subscription: config.cred === 'subscription', signal: request.signal })
     },
   })
 
