@@ -248,6 +248,7 @@ html {
 body {
   color: var(--color-text-primary);
   font-family: var(--font-body);
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 body::before {
@@ -276,8 +277,8 @@ h1, h2 {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: calc(var(--effect-rain-intensity) * .18);
-  background-image: repeating-linear-gradient(105deg, transparent 0 21px, rgba(92, 78, 70, .28) 22px, transparent 23px 59px);
+  opacity: calc(var(--effect-rain-intensity) * .6);
+  background-image: repeating-linear-gradient(105deg, transparent 0 21px, rgba(92, 78, 70, .5) 22px, transparent 23px 59px);
   background-size: 220px 220px;
   animation: rain-drift 28s linear infinite;
 }

@@ -1111,7 +1111,7 @@ export default function CcChatPage() {
       {/* 手机端：默认对话列表，点进窗口后才显示聊天。 */}
       <div
         className="cc-page flex flex-col md:hidden"
-        style={{ height: 'calc(100dvh - 76px - env(safe-area-inset-bottom, 0px))' }}
+        style={{ height: 'calc(100dvh - 76px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))' }}
       >
         {mobileView === 'list' ? sessionRail('mobile-page') : activeHistorical ? (
           <CcHistoricalChat
