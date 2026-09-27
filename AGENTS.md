@@ -29,7 +29,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 
 ## 待办去哪
 
-想做的功能 / 活 → OB Todo（`list_todos` / `create_todo`，一句话）；代码债和需要细节的技术卡 → `TECH_DEBT.md`，卡里写对应 Todo ID；handoff 只作历史档案。细则见 `MAINTENANCE_CONTRACT.md` 铁律 4。
+想做的功能 / 活 → OB Todo（`list_todos` / `create_todo`，一句话）；代码债和需要细节的技术卡 → `TECH_DEBT.md`，卡里写对应 Todo ID；handoff 只作历史档案。细则（含没有 OB 工具时怎么办）见 `MAINTENANCE_CONTRACT.md` 铁律 4。
 
 ## 协作规范
 
