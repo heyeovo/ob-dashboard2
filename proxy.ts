@@ -58,6 +58,20 @@ export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
   const auth = getDashboardAuthConfig()
 
+  // The iPhone development preview reads live Haven data. Keep every write
+  // behind an explicit read-only gate, including public automation endpoints.
+  if (
+    process.env.DASHBOARD_PREVIEW_READ_ONLY === '1'
+    && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+    && path !== '/api/auth/login'
+    && path !== '/api/auth/logout'
+  ) {
+    return noStore(NextResponse.json(
+      { ok: false, error: '开发预览为只读模式。' },
+      { status: 403 },
+    ))
+  }
+
   if (path === '/login' && !auth.enabled) {
     return NextResponse.redirect(new URL('/', request.url))
   }

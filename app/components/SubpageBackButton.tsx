@@ -11,10 +11,11 @@ type Props = {
 
 export default function SubpageBackButton({ label, href, onClick, className = '' }: Props) {
   const classes = `subpage-back-button inline-flex ${className}`.trim()
+  const icon = <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-[18px] w-[18px]" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m12.5 4.5-5.5 5.5 5.5 5.5" /></svg>
 
   if (href) {
-    return <Link href={href} aria-label={label} className={classes}><span aria-hidden="true">‹</span></Link>
+    return <Link href={href} aria-label={label} className={classes}>{icon}</Link>
   }
 
-  return <button type="button" onClick={onClick} aria-label={label} className={classes}><span aria-hidden="true">‹</span></button>
+  return <button type="button" onClick={onClick} aria-label={label} className={classes}>{icon}</button>
 }

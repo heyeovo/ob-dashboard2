@@ -214,7 +214,7 @@ function CcScrollJumps({
       <div
         ref={scrollRef}
         onScroll={update}
-        className="no-scrollbar h-full max-w-full overflow-x-hidden overflow-y-auto px-4 py-6"
+        className="cc-thread-scroll no-scrollbar h-full max-w-full overflow-x-hidden overflow-y-auto px-4 py-6"
       >
         {children}
       </div>
@@ -248,7 +248,7 @@ function CcScrollJumps({
         </div>
       ) : null}
       {onOpenSearch || canGoUp || canGoDown ? (
-        <div className="pointer-events-none absolute bottom-3 right-4 z-20 flex flex-col gap-1.5">
+        <div className="cc-scroll-actions pointer-events-none absolute bottom-3 right-4 z-20 flex flex-col gap-1.5">
           {onOpenSearch ? (
             <button
               type="button"
@@ -314,6 +314,25 @@ export default function CcChatPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
   const [cacheClock, setCacheClock] = useState(() => Date.now())
+  const mobilePageRef = useRef<HTMLDivElement>(null)
+  const mobileComposerRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (mobileView !== 'chat' || activeHistorical) return
+    const pageNode = mobilePageRef.current
+    const headerNode = pageNode?.querySelector<HTMLElement>('.cc-topbar')
+    const composerNode = mobileComposerRef.current
+    if (!pageNode || !headerNode || !composerNode) return
+    const updateHeight = () => {
+      pageNode.style.setProperty('--cc-header-height', `${headerNode.getBoundingClientRect().height}px`)
+      pageNode.style.setProperty('--cc-composer-height', `${composerNode.getBoundingClientRect().height}px`)
+    }
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(headerNode)
+    observer.observe(composerNode)
+    return () => observer.disconnect()
+  }, [mobileView, activeHistorical])
 
   useEffect(() => {
     const timer = window.setInterval(() => setCacheClock(Date.now()), 15_000)
@@ -1110,11 +1129,8 @@ export default function CcChatPage() {
 
       {/* 手机端：默认对话列表，点进窗口后才显示聊天。 */}
       <div
-        className="cc-page flex flex-col md:hidden"
-        style={{
-          height: 'calc(100dvh - env(safe-area-inset-top, 0px))',
-          paddingBottom: 'calc(var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px))',
-        }}
+        ref={mobilePageRef}
+        className={`cc-page cc-mobile-surface flex flex-col md:hidden ${mobileView === 'chat' && !activeHistorical ? 'cc-mobile-thread' : ''}`}
       >
         {mobileView === 'list' ? sessionRail('mobile-page') : activeHistorical ? (
           <CcHistoricalChat
@@ -1128,7 +1144,7 @@ export default function CcChatPage() {
           <>
             {header}
             {thread()}
-            {composer}
+            <div ref={mobileComposerRef} className="cc-mobile-composer-layer">{composer}</div>
           </>
         )}
       </div>

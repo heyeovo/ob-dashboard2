@@ -285,6 +285,36 @@ body::after {
 }
 
 @media (max-width: 767px) {
+  /* A single backdrop spans the iPhone status area and each page header. */
+  body:has(.mobile-page-topbar)::after,
+  body:has(.cc-page)::after {
+    content: none;
+  }
+
+  .cc-topbar,
+  .cc-mobile-list-topbar {
+    position: relative;
+    z-index: 1;
+  }
+  .mobile-page-topbar::before,
+  .cc-topbar::before,
+  .cc-mobile-list-topbar::before {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * env(safe-area-inset-top, 0px)) 0 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--mobile-chrome-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+  .mobile-page-topbar > *,
+  .cc-topbar > *,
+  .cc-mobile-list-topbar > * {
+    position: relative;
+    z-index: 1;
+  }
+
   /* An uploaded photo receives its tint once, on the mobile canvas. */
   :root[data-background="upload"] {
     --color-bg: transparent;
@@ -300,10 +330,8 @@ body::after {
     right: 0;
     z-index: 30;
     height: var(--mobile-topbar-height);
-    background: var(--mobile-chrome-fill);
+    background: transparent;
     border-bottom: 1px solid var(--glass-border);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
   }
   .mobile-bottom-tabbar {
     background: var(--mobile-chrome-fill);
@@ -317,9 +345,13 @@ body::after {
   :root[data-background="upload"] .mobile-bottom-tabbar {
     border-color: transparent;
   }
+  :root[data-background="upload"] .cc-mobile-list-topbar {
+    border-color: transparent;
+  }
 }
 
 .subpage-back-button {
+  position: relative;
   width: 44px;
   height: 44px;
   align-items: center;
@@ -330,10 +362,26 @@ body::after {
   background: var(--glass-fill);
   box-shadow: var(--glass-shadow);
   color: var(--color-text-secondary);
-  font-size: 30px;
-  line-height: 1;
+  line-height: 0;
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+@media (max-width: 767px) {
+  .subpage-back-button {
+    width: 36px;
+    height: 36px;
+    margin-top: -10px;
+    background: color-mix(in srgb, var(--glass-fill) 48%, transparent);
+  }
+  .subpage-back-button::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+  :root[data-background="upload"] .subpage-back-button {
+    border-color: var(--glass-border);
+  }
 }
 
 .subpage-back-button:focus-visible {
@@ -572,10 +620,60 @@ h1, h2 {
   }
   .cc-topbar {
     flex-shrink: 0;
-    background: var(--mobile-chrome-fill);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   :root[data-background="upload"] .cc-topbar {
     border-color: transparent;
+  }
+  .cc-mobile-thread {
+    position: relative;
+  }
+  /* The CC list, live thread, and historical thread share one full-viewport
+     scroll plane. Headers and controls float over it; padding keeps the last
+     item reachable without clipping the plane at either edge. */
+  .cc-mobile-surface {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    height: 100dvh;
+    min-height: 0;
+    padding: 0;
+  }
+  .cc-mobile-pane,
+  .cc-mobile-history-pane {
+    position: relative;
+    min-height: 0;
+    height: 100%;
+  }
+  .cc-mobile-surface .cc-topbar,
+  .cc-mobile-list-topbar {
+    position: absolute;
+    top: env(safe-area-inset-top, 0px);
+    inset-inline: 0;
+    z-index: 30;
+  }
+  .cc-mobile-pane .cc-mobile-list-scroll,
+  .cc-mobile-history-pane .cc-mobile-history-scroll {
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--cc-header-height, 64px) + 12px);
+    padding-bottom: calc(var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px) + 24px);
+  }
+  .cc-mobile-thread .cc-thread-scroll {
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--cc-header-height, 64px) + 12px);
+    padding-bottom: calc(var(--cc-composer-height, 100px) + var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+  .cc-mobile-composer-layer {
+    position: absolute;
+    inset-inline: 0;
+    bottom: calc(var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+  }
+  .cc-mobile-thread .cc-scroll-actions {
+    bottom: calc(var(--cc-composer-height, 100px) + var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+  .cc-mobile-history-pane .cc-mobile-history-scroll {
+    padding-bottom: calc(var(--cc-composer-height, 90px) + var(--mobile-tabbar-height) + env(safe-area-inset-bottom, 0px) + 12px);
   }
 }
 .cc-rail-pane {

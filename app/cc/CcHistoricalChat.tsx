@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import CcMessageRow from './CcMessageRow'
 import type { CcPersona } from './persona'
 import type { CcMessage } from './types'
@@ -42,6 +42,23 @@ function formatMessageTime(iso: string) {
 }
 
 export default function CcHistoricalChat({ conversation, persona, onOpenRail, onForward }: Props) {
+  const mobilePaneRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const pane = mobilePaneRef.current
+    const header = pane?.querySelector<HTMLElement>('.cc-topbar')
+    const footer = pane?.querySelector<HTMLElement>('.cc-mobile-composer-layer')
+    if (!pane || !header || !footer) return
+    const updateHeight = () => {
+      pane.style.setProperty('--cc-header-height', `${header.getBoundingClientRect().height}px`)
+      pane.style.setProperty('--cc-composer-height', `${footer.getBoundingClientRect().height}px`)
+    }
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(header)
+    observer.observe(footer)
+    return () => observer.disconnect()
+  }, [])
   const [messages, setMessages] = useState<HistoricalMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -187,7 +204,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={mobilePaneRef} className="cc-mobile-history-pane flex min-h-0 flex-1 flex-col">
       <div className="cc-topbar flex items-center gap-2 px-3 py-2.5 md:gap-3 md:px-4">
         {selectMode ? (
           <div className="flex min-w-0 flex-1 items-center justify-between md:hidden">
@@ -235,7 +252,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
         )}
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
+      <div ref={scrollRef} className="cc-mobile-history-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
         <div className="mx-auto flex max-w-[var(--chat-assistant-width)] flex-col gap-7">
           {loading ? (
             <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史聊天</div>
@@ -300,7 +317,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
         </div>
       </div>
 
-      <div className="px-4 pb-4 pt-1">
+      <div className="cc-mobile-composer-layer px-4 pb-4 pt-1">
         {selectMode ? (
           <div className="mx-auto flex max-w-[var(--chat-assistant-width)] items-center justify-between rounded-2xl border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-4 py-2.5 shadow-sm">
             <span className="text-xs text-[var(--color-primary)]">{selected.size > 0 ? `已选 ${selected.size} 条消息` : '请选择消息'}</span>

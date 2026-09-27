@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { CcSessionListItem } from './types'
 import {
@@ -74,6 +74,19 @@ export default function CcSessionRail({
   const [historical, setHistorical] = useState<HistoricalConversation[]>([])
   const [deletedOpen, setDeletedOpen] = useState(false)
   const [mobileSection, setMobileSection] = useState<'main' | 'historical' | 'deleted'>('main')
+  const mobilePaneRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (variant !== 'mobile-page') return
+    const pane = mobilePaneRef.current
+    const header = pane?.querySelector<HTMLElement>('.cc-mobile-list-topbar')
+    if (!pane || !header) return
+    const updateHeight = () => pane.style.setProperty('--cc-header-height', `${header.getBoundingClientRect().height}px`)
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [variant, mobileSection])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -187,12 +200,12 @@ export default function CcSessionRail({
   if (variant === 'mobile-page') {
     if (mobileSection === 'historical') {
       return (
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-4 py-3">
+        <div ref={mobilePaneRef} className="cc-mobile-pane flex h-full flex-col">
+          <div className="cc-mobile-list-topbar flex items-center gap-3 border-b border-[var(--color-border-light)] px-4 py-3">
             <button type="button" onClick={() => setMobileSection('main')} className="rounded-full px-2 py-1 text-sm text-[var(--color-text-secondary)]">←</button>
             <h1 className="text-sm font-medium text-[var(--color-text-heading)]">历史聊天</h1>
           </div>
-          <div className="no-scrollbar flex-1 overflow-y-auto px-3 py-3">
+          <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto px-3 py-3">
             {historicalLoading ? (
               <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史聊天</div>
             ) : historicalError ? (
@@ -211,12 +224,12 @@ export default function CcSessionRail({
     }
     if (mobileSection === 'deleted') {
       return (
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-4 py-3">
+        <div ref={mobilePaneRef} className="cc-mobile-pane flex h-full flex-col">
+          <div className="cc-mobile-list-topbar flex items-center gap-3 border-b border-[var(--color-border-light)] px-4 py-3">
             <button type="button" onClick={() => setMobileSection('main')} className="rounded-full px-2 py-1 text-sm text-[var(--color-text-secondary)]">←</button>
             <h1 className="text-sm font-medium text-[var(--color-text-heading)]">已删除窗口</h1>
           </div>
-          <div className="no-scrollbar flex-1 overflow-y-auto space-y-2 px-3 py-3">
+          <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto space-y-2 px-3 py-3">
             {deletedSessions.length === 0 ? (
               <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">没有已删除窗口</div>
             ) : deletedSessions.map(session => (
@@ -243,16 +256,16 @@ export default function CcSessionRail({
       )
     }
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-3">
+      <div ref={mobilePaneRef} className="cc-mobile-pane flex h-full flex-col">
+        <div className="cc-mobile-list-topbar flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-3">
           <div>
             <h1 className="text-base font-medium text-[var(--color-text-heading)]">对话</h1>
             <div className="mt-0.5 text-[10.5px] text-[var(--color-text-disabled)]">{loading ? '正在同步窗口…' : `${sessions.length} 个窗口`}</div>
           </div>
           <button type="button" onClick={onNew} className="rounded-full bg-[var(--color-primary)] px-3.5 py-2 text-xs font-medium text-[var(--color-on-primary)]">新对话</button>
         </div>
-        {notice ? <div className="mx-3 mt-3 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">{notice}</div> : null}
-        <div className="no-scrollbar flex-1 overflow-y-auto px-3 pb-5 pt-3">
+        <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto px-3 pb-5 pt-3">
+          {notice ? <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">{notice}</div> : null}
           <div className="mb-2 text-[10.5px] text-[var(--color-text-disabled)]">主窗</div>
           {pinnedSession ? sessionItem(pinnedSession, true) : (
             <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-4 text-center text-[11px] text-[var(--color-text-disabled)]">从任一对话右侧菜单中选择“置顶为主窗”</div>

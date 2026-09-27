@@ -17,6 +17,7 @@ production 必须配置以下六项：
 | `OMBRE_AGENT_WAKE_RUNNER_TOKEN` | Haven 主动唤醒 callback 的独立 Bearer 共享密钥；与 Brain 相同，不返回浏览器 |
 
 本机 `npm run dev` 继续兼容旧 `OMBRE_BASE_URL` / `NEXT_PUBLIC_OMBRE_*`。
+本机 `npm run dev:iphone` 从 `.env.local` 读取登录口令及 Haven 凭据，启动脚本仅在该进程设置 VPS HTTPS `HAVEN_GATEWAY_URL` 与 `DASHBOARD_PREVIEW_READ_ONLY=1`；`proxy.ts` 拦截预览中的非读取请求（登录、退出除外）。LAN 地址自动选择，也可作为脚本参数指定；VPS 公网入口变化时用 `DASHBOARD_PREVIEW_HAVEN_URL` 覆盖。该预览连接正式数据，只用于读取和 UI 验收。
 
 ## 文件结构速查
 
