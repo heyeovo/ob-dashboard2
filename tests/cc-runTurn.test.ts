@@ -435,6 +435,9 @@ describe('runTurn：普通回复', () => {
     const sessionId = 'ob2-test-rolling-seed'
     const config = makeConfig({
       sessionId,
+      // 原生 transcript 目录由真实 cwd 推导；Windows 假路径在 Linux 上会让
+      // 写入端（path.resolve 后）和 SDK 读取端算出不同的 project key。
+      cwd: rollingTestConfigDir,
       contextRevision: 3,
       rollingPreviousStrategy: 'fixed_window',
       allowFixedBodyRestore: true,

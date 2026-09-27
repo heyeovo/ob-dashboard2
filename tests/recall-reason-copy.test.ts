@@ -186,10 +186,11 @@ describe('recall lens Chinese explanations', () => {
     expect(unknown.title).not.toBe('尚未收录中文说明')
   })
 
-  it('describes historical exclusion without claiming the content is still in context', () => {
+  it('describes exclusions as content still present in the retained raw-text window', () => {
     const recall = getRecallRuleCopy('prior_session_recall')
-    expect(recall.title).toBe('之前有过召回记录')
-    expect(recall.description).toContain('不证明召回正文仍留在当前上下文')
-    expect(getRecallRuleCopy('prior_session_created').title).toBe('此前在本窗口创建')
+    expect(recall.title).toBe('当前上下文已自动召回')
+    expect(recall.description).toContain('仍在最新原文日的召回正文中')
+    expect(getRecallRuleCopy('prior_session_created').title).toBe('原文期在本窗口写入')
+    expect(getRecallRuleCopy('prior_session_breath').title).toBe('原文期已通过 breath 看过')
   })
 })
