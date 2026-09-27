@@ -84,7 +84,8 @@
 
 ### 阶段 5：扩展
 
-- 更多主题：樱粉、雾蓝、深色「夜」。
+- 更多主题：樱粉、雾蓝、深色「夜」。前提是先把剩下约 30 处低频硬编码色收编成 Token（graph 节点色、breath-sim 柱色、prompts 页、journal 滚动条、impressions 圆点、persona 渐变、import 边框等，清单见旧 `HANDOFF-ui-design-system.md` 第一步）；否则切到深色主题时这些地方不会跟着变。
+- 动效：页面切换淡入 / 滑入、列表卡片交错淡入、按钮按下微缩回弹、弹窗用 spring 曲线。按页面改造时顺手做，是否引入 Framer Motion 到时候再评估。
 - 雨痕 `weather` 模式：按城市查天气 API，下雨时才显示；需要确定城市配置和天气源。
 
 ## 进度
