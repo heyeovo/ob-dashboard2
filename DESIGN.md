@@ -169,9 +169,9 @@
 
 | 组件 | 文件 | 用途 |
 |------|------|------|
-| **NavBar** | `NavBar.tsx` | 桌面端顶部导航栏（`hidden md:block`），全站 8 页共用 |
+| **SideRail** | `SideRail.tsx` | 桌面端左侧导航栏（4.6 取代原顶部 NavBar） |
 | **BottomTabBar** | `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar |
-| **MobileViewSwitch** | `MobileViewSwitch.tsx` | 手机端记忆页时间线/记忆格切换 |
+| **MemoryViewSwitch** | `MemoryViewSwitch.tsx` | 记忆库页内切换：时间线 / 记忆格 / 待处理（桌面与手机共用） |
 | **MobileShell** | `MobileShell.tsx` | 手机端布局容器（加底部间距） |
 
 ### 评分旋钮（breath-sim 专用）
@@ -188,7 +188,7 @@
 
 ### 桌面端
 
-NavBar 横向排列所有页面入口。`hidden md:block` 在手机端隐藏。
+SideRail 在左侧纵向排列页面入口，手机端隐藏。
 
 ### 手机端
 
@@ -201,7 +201,7 @@ BottomTabBar 在底部显示 5 个 Tab：
 
 底部间距：`pb-7` + `env(safe-area-inset-bottom)`。
 
-记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MobileViewSwitch 切换时间线/记忆格。
+记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格/待处理。
 
 ### 新增按钮
 
@@ -212,7 +212,7 @@ BottomTabBar 在底部显示 5 个 Tab：
 
 ### 全站布局
 
-所有页面的主内容区和 NavBar 均为 `max-w-6xl mx-auto px-4 sm:px-6`。
+所有页面的主内容区均为 `max-w-6xl mx-auto px-4 sm:px-6`。
 
 ---
 

@@ -75,8 +75,6 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `breath-debug/route.ts` | GET — 模拟 breath 四维评分 |
 | `gateway/[...path]/route.ts` | cc 生态总代理 → OB Gateway |
 | `haven/[...path]/route.ts` | 通用 OB 后端代理（Haven Brain `/api/*`） |
-| `mcp-relay/[...path]/route.ts` | cc MCP 工具调用中继 |
-| `provider-relay/route.ts` | 上游 provider 测试中继 |
 | `cc-chat/route.ts` | cc 聊天主入口：SSE 流式执行，幂等预检/重放，写入成功后才完成 |
 | `cc-chat-selfhost/route.ts` | 自建聊天入口：无状态链路，服务端读取配置/历史/MCP，直连 SSE |
 | `cc-attachments/route.ts` + `[id]/route.ts` | 图片/文件上传、私有读取与分类清除 |
@@ -104,7 +102,7 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | `auth/login/route.ts` + `auth/logout/route.ts` | 公网登录/退出 |
 | `health/route.ts` | 公开存活检查 |
 
-其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、review-status、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理。
+其余 route（buckets、bucket/[id]、add-bucket、journal、to-journal、config、prompts、touch、archive、import-*、trash、scoring-config、hit-stats、recent-searches 等）均为透传代理。
 
 ## 页面
 

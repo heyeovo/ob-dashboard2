@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
  * 4.6 之前这三格长在桌面端顶部横条 NavBar 上，横条撤掉后搬进页面里。
  * 手机端也换成这个（原来的 MobileViewSwitch 只有两格，没有「待处理」；
  * 底部 Tab 里那个「审阅」格 4.6 之后没了，入口必须收进切换器）。
- * MobileViewSwitch.tsx / NavBar.tsx 都留在仓库里没删，方便回退。
+ * MobileViewSwitch.tsx / NavBar.tsx 已于 2026-09-27 删除，需要回退从 git 历史取。
  *
  * 「待处理」= 原来的「审阅」。改名理由：审阅 + 自动记忆候选对用户是同一个动作
  * （有东西等我拍板）。这一版内容和逻辑不动，只改名 + 挪位置。
