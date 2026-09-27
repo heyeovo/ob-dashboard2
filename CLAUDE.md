@@ -75,7 +75,7 @@ production 必须配置以下六项：
 - 排障用假设→验证，先问用户再翻代码
 - 结论导向，不贴大段代码走查
 - Git：CC 可直接 commit + push；`main` push 后由 Coolify 自动部署，需确认 deployment 成功
-- 换窗交接：一个窗口一个问题，换窗前更新 handoff
+- 换窗交接：一个窗口一个问题，换窗前按下方「待办去哪」把未完成事项落盘
 
 ## Token 控制
 
@@ -112,7 +112,7 @@ Pro 额度有限（200k context），工作窗口必须节省 token：
 ## 文档与部署
 
 - 代码改动完成后按 `MAINTENANCE_CONTRACT.md` 确认需同步的文档
-- 排入后续窗口的工作写入 handoff；短期不处理的遗留写入 `TECH_DEBT.md`
+- 待办去哪：想做的功能 / 活 → OB Todo（`list_todos`）；代码债和技术卡 → `TECH_DEBT.md`；`docs/handoff/` 是历史档案，状态看 `docs/handoff/README.md`（细则见 `MAINTENANCE_CONTRACT.md` 铁律 4）
 - `main` push 后由 Coolify 自动部署；需确认最新 deployment 对应目标 commit 且健康，未触发或失败时再手动 Redeploy
 - 每次任务收尾主动告知是否需要上线
 
