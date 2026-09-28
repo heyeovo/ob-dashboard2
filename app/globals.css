@@ -286,7 +286,7 @@ html {
 /* 照片模式：文字带一圈与玻璃同色的淡光晕，压在花背景上的字（时间戳、列表标题、日期线）被隔开；
    气泡、卡片、浮层和强调色实底里有自己的底托，光晕反而让字发虚，一律去掉。 */
 :root[data-background="upload"] body {
-  text-shadow: 0 0 2px rgb(var(--theme-tint) / .9), 0 0 7px rgb(var(--theme-tint) / .55);
+  text-shadow: 0 0 1px rgb(var(--theme-tint) / .8), 0 0 3px rgb(var(--theme-tint) / .5);
 }
 :root[data-background="upload"] [class*="bg-[var(--color-primary)]"],
 :root[data-background="upload"] [class*="bg-[var(--theme-accent)]"],
@@ -305,7 +305,11 @@ html {
 :root[data-background="upload"] .appearance-glass,
 :root[data-background="upload"] .cc-composer,
 :root[data-background="upload"] .cc-think,
-:root[data-background="upload"] .cc-md code {
+:root[data-background="upload"] .cc-md code,
+:root[data-background="upload"] h1,
+:root[data-background="upload"] h2,
+:root[data-background="upload"] h3,
+:root[data-background="upload"] .cc-name {
   text-shadow: none;
 }
 
