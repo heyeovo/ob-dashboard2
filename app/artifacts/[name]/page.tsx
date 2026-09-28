@@ -23,10 +23,12 @@ export default function ArtifactViewPage({ params }: { params: Promise<{ name: s
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-bg)]">
+    <div
+      className="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-[var(--color-bg)]"
+      style={{ top: 'env(safe-area-inset-top, 0px)' }}
+    >
       <header
         className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2"
-        style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <button
           type="button"
