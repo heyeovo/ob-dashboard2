@@ -26,7 +26,8 @@ html {
   --color-overlay:          #000000;
 
   /* ---- Color: surface / 表面层级 ---- */
-  --color-bg:               color-mix(in srgb, var(--theme-base) 56%, transparent);
+  /* html 已铺底色 + 渐变；页面根容器不再叠半透明底色，否则会把渐变冲淡一半 */
+  --color-bg:               transparent;
   --color-surface:          rgb(var(--theme-tint) / var(--glass-opacity));
   --color-surface-elevated: rgb(var(--theme-tint) / .94);
   --color-surface-secondary:color-mix(in srgb, var(--theme-ink) 4%, transparent);
@@ -206,7 +207,7 @@ html {
 
 :root[data-theme="apricot"], .theme-preview[data-preview-theme="apricot"] {
   --theme-base: #F5EBE3;
-  --theme-mesh: radial-gradient(55% 45% at 0% 0%,#F1C9AE,transparent 70%), radial-gradient(60% 50% at 100% 100%,#E3D7E6,transparent 70%), radial-gradient(50% 40% at 80% 20%,#FBF1E6,transparent 70%), linear-gradient(160deg,#F8EEE5,#EFE6E8);
+  --theme-mesh: radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%), radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%), radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%), linear-gradient(160deg,#F8EEE5,#EEE3E4);
   --theme-accent: #C27B63;
   --theme-on-accent: #FFFFFF;
   --theme-ink: #3F3634;
@@ -218,7 +219,7 @@ html {
 
 :root[data-theme="sakura"], .theme-preview[data-preview-theme="sakura"] {
   --theme-base: #F6E8EA;
-  --theme-mesh: radial-gradient(60% 45% at 85% 5%,#F0C6CF,transparent 70%), radial-gradient(55% 45% at 5% 55%,#F7DDD2,transparent 70%), radial-gradient(60% 45% at 70% 100%,#EDD2DC,transparent 70%), linear-gradient(180deg,#FAF0EF,#F3E3E6);
+  --theme-mesh: radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%), radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%), radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%), linear-gradient(180deg,#FAF0EF,#F1DEE3);
   --theme-accent: #C0707F;
   --theme-on-accent: #FFFFFF;
   --theme-ink: #3F3236;
@@ -230,7 +231,7 @@ html {
 
 :root[data-theme="mist"], .theme-preview[data-preview-theme="mist"] {
   --theme-base: #E8EDF1;
-  --theme-mesh: radial-gradient(60% 45% at 10% 0%,#CCDAE6,transparent 70%), radial-gradient(55% 45% at 100% 45%,#F2EFEA,transparent 70%), radial-gradient(60% 50% at 20% 100%,#D6E1E4,transparent 70%), linear-gradient(180deg,#EEF2F4,#E3E9EE);
+  --theme-mesh: radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%), radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%), radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%), linear-gradient(180deg,#EEF2F4,#E0E7EC);
   --theme-accent: #5F7F98;
   --theme-on-accent: #FFFFFF;
   --theme-ink: #2F3940;
@@ -243,7 +244,7 @@ html {
 :root[data-theme="dusk"], .theme-preview[data-preview-theme="dusk"] {
   color-scheme: dark;
   --theme-base: #1E1C23;
-  --theme-mesh: radial-gradient(55% 40% at 100% 0%,#3B3148,transparent 70%), radial-gradient(60% 45% at 0% 70%,#27303E,transparent 70%), radial-gradient(45% 35% at 85% 95%,#4A3833,transparent 70%), linear-gradient(180deg,#221F28,#1A1A20);
+  --theme-mesh: radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%), radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%), radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%), linear-gradient(180deg,#221F28,#1A1A20);
   --theme-accent: #D9A08A;
   --theme-on-accent: #231D1C;
   --theme-ink: #EDE6E1;

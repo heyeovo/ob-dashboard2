@@ -37,7 +37,7 @@
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--color-bg` | `rgb(250 246 240 / .56)` | 页面氛围层上方的轻底色 |
+| `--color-bg` | `transparent` | 页面根容器底色；背景由 `html` 的底色 + 渐变 / 照片负责，页面不再叠半透明层 |
 | `--color-surface` | `rgb(255 253 250 / .88)` | 卡片/弹窗半透明填充，无逐卡模糊 |
 | `--color-surface-elevated` | `#FFFCF8` | 高亮卡片 |
 | `--color-surface-secondary` | `#F8F3ED` | 次级背景 |
