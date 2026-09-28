@@ -116,7 +116,7 @@ function DrawerPanel({
 
       {/* Desktop: right-side panel */}
       <div
-        className={`hidden md:block absolute right-0 top-0 h-full ${width} bg-[var(--color-surface)] shadow-2xl
+        className={`hidden md:block absolute right-0 top-0 h-full ${width} float-surface shadow-2xl
           transition-transform duration-300 translate-x-0`}
         onClick={e => e.stopPropagation()}
         style={{ animation: 'dpSlideIn 0.22s cubic-bezier(.2,.8,.2,1)' }}
@@ -130,7 +130,7 @@ function DrawerPanel({
 
       {/* Mobile: bottom sheet */}
       <div
-        className={`md:hidden absolute left-0 right-0 bottom-0 bg-[var(--color-surface)] rounded-t-2xl shadow-2xl flex flex-col
+        className={`md:hidden absolute left-0 right-0 bottom-0 float-surface rounded-t-2xl shadow-2xl flex flex-col
           transition-transform duration-300 ease-out`}
         onClick={e => e.stopPropagation()}
         style={{
@@ -199,7 +199,7 @@ function ModalPanel({
       {/* Panel */}
       <div
         onClick={e => e.stopPropagation()}
-        className={`absolute left-3 right-3 sm:inset-0 sm:m-auto top-1/2 sm:top-0 -translate-y-1/2 sm:translate-y-0 h-fit max-h-[85vh] ${width} bg-[var(--color-surface)] rounded-2xl shadow-2xl
+        className={`absolute left-3 right-3 sm:inset-0 sm:m-auto top-1/2 sm:top-0 -translate-y-1/2 sm:translate-y-0 h-fit max-h-[85vh] ${width} float-surface rounded-2xl shadow-2xl
           overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden`}
         style={{ animation: 'dpPop 0.22s cubic-bezier(.2,.8,.2,1)' }}
       >

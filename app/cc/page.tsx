@@ -1078,7 +1078,7 @@ export default function CcChatPage() {
         onClick={() => setPersonaRailOpen(false)}
         className="absolute inset-0 bg-[var(--color-overlay)]/20"
       />
-      <div className="absolute left-0 top-0 h-full w-[78%] max-w-[300px] bg-[var(--color-surface)] shadow-xl">
+      <div className="absolute left-0 top-0 h-full w-[78%] max-w-[300px] float-surface shadow-xl">
         <CcPersonaRail
           personas={people.personas}
           activeId={people.activeId}

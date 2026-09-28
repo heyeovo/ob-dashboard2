@@ -123,14 +123,14 @@ export function AppearanceProvider({
     if (!response.ok || !payload.assetId) throw new Error(payload.error || '背景图上传失败')
     update(current => ({
       ...current,
-      background: { kind: 'upload', assetId: payload.assetId },
+      background: { ...current.background, kind: 'upload', assetId: payload.assetId },
     }))
   }, [update])
 
   const deleteBackground = useCallback(async () => {
     const response = await fetch('/api/appearance/background', { method: 'DELETE' })
     if (!response.ok) throw new Error('背景图删除失败')
-    update(current => ({ ...current, background: { kind: 'gradient' } }))
+    update(current => ({ ...current, background: { kind: 'gradient', intensity: current.background.intensity } }))
   }, [update])
 
   return (

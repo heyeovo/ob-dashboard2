@@ -120,11 +120,17 @@ html {
   /* ---- Theme layers / 主题与背景 ---- */
   --bg-base:               var(--theme-base);
   --bg-gradient:           var(--theme-mesh);
-  --bg-photo-overlay:      linear-gradient(rgb(var(--theme-tint) / .28), rgb(var(--theme-tint) / .42));
+  /* 背景浓度滑条（--bg-intensity，外观设置写到 <html style>）：渐变上盖主题底色、照片上盖玻璃色，浓度越低盖得越厚 */
+  --bg-intensity:          .7;
+  --bg-gradient-veil:      linear-gradient(color-mix(in srgb, var(--theme-base) calc((1 - var(--bg-intensity)) * 100%), transparent), color-mix(in srgb, var(--theme-base) calc((1 - var(--bg-intensity)) * 100%), transparent));
+  --bg-photo-overlay:      linear-gradient(rgb(var(--theme-tint) / min(.9, calc((1 - var(--bg-intensity)) * 2.8))), rgb(var(--theme-tint) / min(.9, calc((1 - var(--bg-intensity)) * 2.8))));
   --bg-image:              var(--bg-gradient);
   --bg-overlay:            none;
   --glass-opacity:         .78;
   --glass-fill:            rgb(var(--theme-tint) / var(--glass-opacity));
+  /* 浮层（弹窗 / 抽屉 / 底部菜单 / 长按菜单）：不随毛玻璃滑条变透，至少 94% 并自带模糊，保证叠在内容上仍可读 */
+  --float-fill:            rgb(var(--theme-tint) / max(var(--glass-opacity), .94));
+  --float-blur:            24px;
   --glass-border:          var(--theme-edge);
   --glass-blur:            12px;
   --glass-shadow:          0 8px 28px color-mix(in srgb, var(--theme-ink) 8%, transparent);
@@ -374,9 +380,8 @@ body::after {
     z-index: 1;
   }
 
-  /* An uploaded photo receives its tint once, on the mobile canvas. */
+  /* An uploaded photo receives its tint once, on the mobile canvas (strength = 背景浓度). */
   :root[data-background="upload"] {
-    --bg-photo-overlay: linear-gradient(rgb(var(--theme-tint) / .84), rgb(var(--theme-tint) / .84));
     --mobile-chrome-fill: color-mix(in srgb, var(--glass-fill) 12%, transparent);
   }
 
@@ -920,10 +925,18 @@ h1, h2 {
 }
 
 /* ---- 用户气泡的长按菜单 ---- */
+.float-surface {
+  background: var(--float-fill);
+  -webkit-backdrop-filter: blur(var(--float-blur)) saturate(1.1);
+  backdrop-filter: blur(var(--float-blur)) saturate(1.1);
+}
+
 .cc-popmenu {
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border-light);
-  background: var(--color-surface);
+  background: var(--float-fill);
+  -webkit-backdrop-filter: blur(var(--float-blur)) saturate(1.1);
+  backdrop-filter: blur(var(--float-blur)) saturate(1.1);
   padding: 4px;
   box-shadow: var(--chat-shadow-soft);
 }
@@ -939,7 +952,9 @@ h1, h2 {
 .cc-modal-scrim { background: color-mix(in srgb, var(--color-overlay) 22%, transparent); backdrop-filter: blur(2px); }
 .cc-modal {
   border-radius: var(--radius-xl);
-  background: var(--color-surface);
+  background: var(--float-fill);
+  -webkit-backdrop-filter: blur(var(--float-blur)) saturate(1.1);
+  backdrop-filter: blur(var(--float-blur)) saturate(1.1);
   box-shadow: var(--chat-modal-shadow);
   overflow: hidden;
 }

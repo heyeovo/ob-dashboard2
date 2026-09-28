@@ -60,7 +60,7 @@ export default function HomeToolDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="家的功能导航"
-        className="home-nav-drawer absolute inset-y-0 left-0 flex w-[82vw] max-w-[360px] flex-col overflow-hidden border-r border-[var(--color-surface)]/60 bg-[var(--color-bg)] shadow-2xl"
+        className="home-nav-drawer absolute inset-y-0 left-0 flex w-[82vw] max-w-[360px] flex-col overflow-hidden border-r border-[var(--color-surface)]/60 float-surface shadow-2xl"
       >
         <header className="flex h-16 shrink-0 items-center border-b border-[var(--color-border)] bg-[var(--color-surface)]/55 px-5 backdrop-blur-md">
           <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />

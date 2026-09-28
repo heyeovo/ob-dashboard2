@@ -320,7 +320,7 @@ export default function CcComposer({
 
       {menuOpen ? (
         <div className="fixed inset-0 z-50 bg-[var(--color-overlay)]/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[28px] bg-[var(--color-surface)] px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[28px] float-surface px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
             <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--color-overlay)]/15" />
             {menuView === 'main' ? (
               <>

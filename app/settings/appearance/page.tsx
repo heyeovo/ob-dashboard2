@@ -135,7 +135,7 @@ export default function AppearancePage() {
           <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">图片会同步到 Haven；当前只保留一张。</p>
           <div className="mt-4 grid grid-cols-3 gap-2">
             <button type="button" className={optionClass(appearance.background.kind === 'gradient')} onClick={() => change(current => ({ ...current, background: { ...current.background, kind: 'gradient' } }))}>渐变</button>
-            <button type="button" className={optionClass(appearance.background.kind === 'upload')} onClick={() => appearance.background.assetId ? change(current => ({ ...current, background: { kind: 'upload', assetId: current.background.assetId } })) : fileInput.current?.click()}>我的图片</button>
+            <button type="button" className={optionClass(appearance.background.kind === 'upload')} onClick={() => appearance.background.assetId ? change(current => ({ ...current, background: { ...current.background, kind: 'upload', assetId: current.background.assetId } })) : fileInput.current?.click()}>我的图片</button>
             <button type="button" className={optionClass(appearance.background.kind === 'none')} onClick={() => change(current => ({ ...current, background: { ...current.background, kind: 'none' } }))}>纯色</button>
           </div>
           <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={event => void onFile(event.target.files?.[0])} />
@@ -146,6 +146,7 @@ export default function AppearancePage() {
             {appearance.background.assetId && <button type="button" onClick={() => void removeImage()} className="min-h-11 text-sm text-[var(--color-danger)]">删除已上传图片</button>}
           </div>
           <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">支持 JPEG、PNG、WebP，最大 5 MB。</p>
+          {appearance.background.kind !== 'none' && <div className="mt-4"><Slider label="背景浓度" value={appearance.background.intensity} min={0.2} max={1} step={0.05} display={`${Math.round(appearance.background.intensity * 100)}%`} onChange={intensity => change(current => ({ ...current, background: { ...current.background, intensity } }))} /></div>}
           {error && <p role="alert" className="mt-2 text-sm text-[var(--color-danger)]">{error}</p>}
         </section>
 
