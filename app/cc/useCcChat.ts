@@ -1720,6 +1720,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
               return {
                 ...m,
                 id: savedAssistantMessageId || m.id,
+                renderKey: m.renderKey || m.id,
                 process,
                 streaming: false,
                 usage: usage || m.usage,
@@ -1747,7 +1748,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             })
             if (!retry && savedUserMessageId) {
               setMessages(previous => previous.map(message => (
-                message.id === userMsg.id ? { ...message, id: savedUserMessageId } : message
+                message.id === userMsg.id ? { ...message, id: savedUserMessageId, renderKey: message.renderKey || message.id } : message
               )))
             }
             if (doneStats) setStats(doneStats)

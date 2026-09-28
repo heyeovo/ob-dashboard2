@@ -302,7 +302,7 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
           </div>
         ) : (
           conversationMessages.map((m, index) => (
-              <div key={m.id}>
+              <div key={m.renderKey || m.id}>
                 {index === 0 || visibleChatDay(conversationMessages[index - 1]) !== visibleChatDay(m) ? (
                   <div id={`chat-day-${visibleChatDay(m)}`} className="mb-5 flex items-center gap-3 pt-2 text-[10.5px] text-[var(--color-text-disabled)]">
                     <span className="h-px flex-1 bg-[var(--color-border-light)]" />

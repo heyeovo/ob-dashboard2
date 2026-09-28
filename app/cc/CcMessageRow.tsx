@@ -745,7 +745,7 @@ export default function CcMessageRow({
                   <AssistantSegments
                     key={event.id}
                     segments={buildDisplaySegments(event.text).segments}
-                    messageId={message.id}
+                    messageId={message.renderKey || message.id}
                     keyPrefix={event.id}
                   />
                 )
@@ -786,7 +786,7 @@ export default function CcMessageRow({
         {finalSegments.length ? (
           <AssistantSegments
             segments={finalSegments.slice(0, visibleSegmentCount)}
-            messageId={message.id}
+            messageId={message.renderKey || message.id}
             keyPrefix="final"
             animate={shouldRevealSegments}
             searchQuery={searchQuery}

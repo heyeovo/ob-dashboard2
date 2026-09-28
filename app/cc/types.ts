@@ -189,6 +189,11 @@ export type CcMessage = {
   displaySegments?: DisplaySegment[]
   /** 仅用于本次增量收到的后台消息；初次历史载入不重播逐段显现。 */
   revealDisplaySegments?: boolean
+  /**
+   * presentation-only：React 渲染用的稳定 key。存进 Haven 后 id 会从临时 id 换成正式 id，
+   * 如果拿 id 当 key，整条消息会被重新挂载、逐段显现从头重播。换 id 时保留原来的值。
+   */
+  renderKey?: string
   wakeEvent?: { cause: string; at: string; status?: string }
   nextWake?: { at: string; reason: string }
   requestId?: string
