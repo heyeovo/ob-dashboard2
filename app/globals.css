@@ -284,12 +284,19 @@ html {
 :root[data-theme="dusk"] { --photo-l: 72%; }
 
 /* 照片模式：文字带一圈与玻璃同色的淡光晕，压在花背景上的字（时间戳、列表标题、日期线）被隔开；
-   卡片 / 气泡里光晕与底色同色几乎不可见。强调色实底上的字不加，避免白字发虚。 */
+   气泡、卡片、浮层和强调色实底里有自己的底托，光晕反而让字发虚，一律去掉。 */
 :root[data-background="upload"] body {
   text-shadow: 0 0 2px rgb(var(--theme-tint) / .9), 0 0 7px rgb(var(--theme-tint) / .55);
 }
 :root[data-background="upload"] [class*="bg-[var(--color-primary)]"],
-:root[data-background="upload"] [class*="bg-[var(--theme-accent)]"] {
+:root[data-background="upload"] [class*="bg-[var(--theme-accent)]"],
+:root[data-background="upload"] .cc-bubble-user,
+:root[data-background="upload"] .cc-bubble-assistant,
+:root[data-background="upload"] .cc-bubble-assistant-segment,
+:root[data-background="upload"] .cc-modal,
+:root[data-background="upload"] .cc-popmenu,
+:root[data-background="upload"] .float-surface,
+:root[data-background="upload"] [class*="bg-[var(--color-surface"] {
   text-shadow: none;
 }
 

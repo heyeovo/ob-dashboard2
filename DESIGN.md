@@ -23,7 +23,7 @@
 
 照片强调色：照片模式可选「跟随主题 / 跟随图片」（`background.accentMode`，上传新图默认跟随图片）。`app/lib/photoAccent.ts` 在浏览器端把图缩到 48×48，跳过灰 / 白 / 黑，取面积大又有颜色的色相，饱和度压到 25–50%，存进 `background.accent {h, s}` 同步到 Haven。生效时 `<html data-accent="photo">`，`--theme-accent` = `hsl(--photo-h --photo-s (--photo-l + --photo-l-shift))`：浅色主题亮度 44%、夜 72%，黄绿色相再压 6% 保证白字对比度；其余强调派生 Token 自动跟随。取不出颜色时回落主题强调色。文字色仍用主题 ink。
 
-照片模式文字可读性：`secondary / tertiary / disabled` 文字与 base 的混合比提到 82 / 68 / 50；`body` 继承一层与 tint 同色的双层淡光晕（`text-shadow`），把直接压在照片上的字和花纹隔开，强调色实底（`bg-[var(--color-primary)]` / `--theme-accent`）上的字不加光晕。
+照片模式文字可读性：`secondary / tertiary / disabled` 文字与 base 的混合比提到 82 / 68 / 50；`body` 继承一层与 tint 同色的双层淡光晕（`text-shadow`），把直接压在照片上的字和花纹隔开，气泡（`.cc-bubble-*`）、卡片（`bg-[var(--color-surface*)]`）、浮层（`.float-surface` / `.cc-modal` / `.cc-popmenu`）和强调色实底里的字不加光晕，只给直接压在照片上的字。
 
 浮层（`DetailPanel`、`.cc-modal` 系列弹窗 / 底部 sheet、`.cc-popmenu`、聊天「+」菜单、历史抽屉、主页侧边抽屉）统一用 `.float-surface` / `--float-fill`：tint 不透明度取 `max(玻璃不透明度, .94)` 并自带 `--float-blur` 模糊，不随毛玻璃滑条变透。新增浮层必须用它，不要用 `--color-surface`。
 
