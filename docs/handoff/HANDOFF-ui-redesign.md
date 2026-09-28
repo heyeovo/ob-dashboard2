@@ -2,7 +2,7 @@
 
 > 2026-09-27 开。取代 `HANDOFF-ui-design-system.md`（其第一步“清理硬编码”已完成，其余草案以本文件为准）。对应 OB Todo `ea074ff139f64c54`，TECH_DEBT `CC-P01` 并入本文件。
 > 执行者：Codex（GPT）为主，CC 负责方案和验收。每个阶段单独开窗、单独 commit，完成后在下方「进度」勾掉并写 commit。
-> **阶段 1 规格已定，可以直接开工。阶段 2–4 只写了方向**：每个阶段开工前，由用户和 CC 先讨论具体布局，把定案补进对应小节并标「✅ 布局已定」后才能动手；没有这个标记的阶段不许开工。
+> **阶段 1、1.5 规格已定，可以直接开工。阶段 2–4 只写了方向**：每个阶段开工前，由用户和 CC 先讨论具体布局，把定案补进对应小节并标「✅ 布局已定」后才能动手；没有这个标记的阶段不许开工。
 
 ## 问题（用户原话归纳）
 
@@ -12,7 +12,7 @@
 
 ## 已定决定
 
-- **默认主题 = 暖白升级版**（id `linen`），其他主题后续再加。
+- **主题**：2026-09-28 起默认 `apricot`（杏雾），首批另带 `sakura` 樱粉、`mist` 雾蓝、`dusk` 夜；原暖白 `linen` 并入 `apricot`（见阶段 1.5）。
 - **外观设置跨设备同步**：用户手机和电脑换着用，外观配置和背景图存 Haven。`localStorage` 只做首屏缓存镜像，不是事实源。
 - **自定义三层，互相独立**：
   - 主题预设：配色、玻璃质感、阴影。不做自由取色器，用预设加少量滑条，保证好看的下限。
@@ -83,6 +83,54 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
 - 这一阶段现有页面布局不动，只换 Token 带来的观感；`npm run build` 和测试通过，Haven 的 GitHub Actions `Tests` 通过。
 - 上线后用户截图给 CC，微调 `linen` 的具体色值。
 
+### 阶段 1.5：材质统一 + 首批主题（✅ 已定，可开工）
+
+2026-09-28 定。问题：换成上传图后，卡片底色、边框、选中 / 按下色仍是暖白主题写死的米色和陶土色，像在照片上贴了米色纸片。原因是 `:root[data-theme="linen"]` 里的材质色（surface / border / primary-soft 等）都是只为暖白调过的固定值。**本阶段只改 Token 层，不逐页修细节、不动布局**；页面里零散的对齐 / 间距问题留到阶段 2–4 对应页面一起做。
+
+**1. 主题只提供少量输入变量，其余全部推导**
+
+每个主题块只写这些输入：`--theme-base`（底色）、`--theme-mesh`（背景渐变）、`--theme-accent`（强调色）、`--theme-on-accent`（强调色上的文字）、`--theme-ink`（正文色）、`--theme-tint`（玻璃底色，写成 `R G B` 三个数）、`--theme-edge`（玻璃高光描边）、`--theme-grain`（颗粒强度）、`--theme-grain-blend`。
+
+`:root` 里用 `color-mix()` 从输入推导全部现有语义 Token，主题块里**不再直接写** `--color-surface*` / `--color-border*` / `--color-primary-*` / `--color-text-*`：
+- 强调：`primary` = accent；`primary-hover` = accent 与 ink 88:12；`primary-soft` / `primary-light` / `primary-muted` / `primary-hover-soft` = accent 分别以约 14% / 10% / 7% / 20% 混透明；`on-primary` = on-accent。
+- 表面：`surface` = tint 配 `--glass-opacity`；`surface-secondary` / `tertiary` / `hover` = ink 以约 4% / 7% / 10% 混透明（叠在玻璃上，任何底色都成立）。
+- 边框：`border` / `border-light` / `border-subtle` / `border-hover` = ink 以约 14% / 9% / 6% / 26% 混透明。
+- 文字：`text-heading` = ink；`text-primary` / `secondary` / `tertiary` / `disabled` / `divider` = ink 与 base 约 92 / 72 / 55 / 38 / 22 混合。
+- 状态色（pending / danger / digested / resolved / wish 等）前景保留原色相，`*-bg` / `*-border` / `*-hover` 改成前景以约 12% / 28% / 18% 混透明，这样浅色、深色、照片上都成立。深色主题下前景整体提亮一档（在 `dusk` 块里覆盖前景即可）。
+- 百分比是初值，实现后按截图微调；要改就改推导公式，不要回到给每个主题写死色值。
+
+**2. 首批 4 个主题**（值来自 CC 做的预览页，用户已确认）
+
+| id | 名字 | 默认 | base | accent | ink | tint | edge |
+|---|---|---|---|---|---|---|---|
+| `apricot` | 杏雾 | ✅ | `#F5EBE3` | `#C27B63` | `#3F3634` | `255 249 245` | `rgba(255,255,255,.7)` |
+| `sakura` | 樱粉 | | `#F6E8EA` | `#C0707F` | `#3F3236` | `255 247 248` | `rgba(255,255,255,.72)` |
+| `mist` | 雾蓝 | | `#E8EDF1` | `#5F7F98` | `#2F3940` | `250 252 253` | `rgba(255,255,255,.75)` |
+| `dusk` | 夜 | | `#1E1C23` | `#D9A08A` | `#EDE6E1` | `40 36 46` | `rgba(255,255,255,.08)` |
+
+浅色主题 `on-accent` 为 `#FFFFFF`，`dusk` 为 `#231D1C`。浅色主题 grain 强度 .07、`multiply`；`dusk` 为 .10、`soft-light`。`dusk` 同时设 `color-scheme: dark`。
+
+背景渐变（`--theme-mesh`）用「三团淡色晕开 + 一层底色线性渐变」：
+- `apricot`：`radial-gradient(55% 45% at 0% 0%,#F1C9AE,transparent 70%), radial-gradient(60% 50% at 100% 100%,#E3D7E6,transparent 70%), radial-gradient(50% 40% at 80% 20%,#FBF1E6,transparent 70%), linear-gradient(160deg,#F8EEE5,#EFE6E8)`
+- `sakura`：`radial-gradient(60% 45% at 85% 5%,#F0C6CF,transparent 70%), radial-gradient(55% 45% at 5% 55%,#F7DDD2,transparent 70%), radial-gradient(60% 45% at 70% 100%,#EDD2DC,transparent 70%), linear-gradient(180deg,#FAF0EF,#F3E3E6)`
+- `mist`：`radial-gradient(60% 45% at 10% 0%,#CCDAE6,transparent 70%), radial-gradient(55% 45% at 100% 45%,#F2EFEA,transparent 70%), radial-gradient(60% 50% at 20% 100%,#D6E1E4,transparent 70%), linear-gradient(180deg,#EEF2F4,#E3E9EE)`
+- `dusk`：`radial-gradient(55% 40% at 100% 0%,#3B3148,transparent 70%), radial-gradient(60% 45% at 0% 70%,#27303E,transparent 70%), radial-gradient(45% 35% at 85% 95%,#4A3833,transparent 70%), linear-gradient(180deg,#221F28,#1A1A20)`
+
+**3. 颗粒层**：在 `html` 背景最上层加一层 SVG `feTurbulence` 噪点（data URI，`baseFrequency≈.9`、灰度），强度和混合模式取 `--theme-grain` / `--theme-grain-blend`，用来消除渐变色带。背景为 `none`（纯色）时也保留。
+
+**4. 上传图模式**：`<html data-bg="upload">` 时覆盖为中性玻璃，不带主题的暖色：浅色主题 `--theme-tint: 255 255 255`、`--theme-edge: rgba(255,255,255,.55)`；`dusk` 为 `24 22 28` / `rgba(255,255,255,.1)`。强调色仍用当前主题的 accent。从照片取主色作为强调色**以后再说**，本阶段不做。
+
+**5. 兼容和设置页**
+- 原来的 `linen` 不再作为主题：Haven 已存的 `theme: "linen"` 在 dashboard `normalize` 和 Haven normalize 两边都映射成 `apricot`；默认值改成 `apricot`。
+- 外观设置页的主题卡片换成这 4 个，每张卡片用该主题自己的 mesh 做缩略预览。
+- 允许保留、不参与推导的：`app/cc/persona.ts` 的头像渐变、`--color-chart-*` 图表色、`--color-field-*` 字段命中色（这些是数据色，不是材质色）。
+
+**验收**
+- 4 个主题 × 背景（渐变 / 上传图）各截一次：对话列表、聊天页、记忆库、设置，共 32 张。上传图时看不到米色或陶土色的底块和描边；选中 / 按下状态跟着主题强调色走。
+- `grep -n "data-theme=" app/globals.css` 下每个主题块只出现第 1 条列出的输入变量（`dusk` 允许多一组状态前景色覆盖）。
+- `dusk` 下正文与背景对比度 ≥ 4.5:1，小字 / 辅助文字 ≥ 3:1。
+- 雨滴、气泡形状、布局一律不动；`npm run build` 和测试通过。
+
 ### 阶段 2：聊天页 + 对话列表（布局待讨论）
 
 - 言之目前没有头像。正式头像另外设计，这之前先用衬线「言」字的圆形字标占位。
@@ -124,6 +172,7 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
   - 下一窗口范围：仅 dashboard 移动端的顶部状态栏/聊天标题栏、底部 5 Tab 与背景层的叠放和滚动关系；先确认各页面在相同位置的实际底层，再设计统一的透图方案。保留顶部固定、底栏高度与系统安全区域；不要改玻璃水珠、气泡、阶段 2–5 或 Haven。验收用同一台 iOS 26.6.2 主屏幕 PWA、同一张上传背景图：聊天/主页/记忆库底栏并排比较，聊天顶部可见背景，主页下滑标题栏固定，底栏下不出现额外米色条。需要用户截图确认后才算完成。
   - 9 月 28 日本窗口（待 iPhone 验收）：用户将阶段 1 的手机布局范围扩至全站共同背景与 23 个子页面标题；确认上传图片上使用连续的偏白蒙层，子页面用圆形返回按钮加随正文滚动的大标题，五个主页面保留固定顶栏和现有功能，具体顶栏内容随阶段 2–4 分页设计。已在 dashboard 本地实现：上传图手机背景只在根画布蒙一次，聊天页背景延伸到底栏后方，对话列表移除重复底色，23 个子页面统一返回入口；玻璃水珠、气泡、Haven 未动。`npm run build` 通过。待提交、部署后，用同一台 iOS 26.6.2 主屏幕 PWA 和同一张图比较聊天/主页/记忆库底栏及顶栏，检查子页面下拉、上滑时标题自然滚动、底栏下无额外色条；用户截图确认后才勾选阶段 1。
   - 9 月 28 日后续开发版 PWA 实测：Safari 标签页不足以复刻独立模式，已加 `npm run dev:iphone` 局域网只读预览，使用 HTTPS VPS Haven 入口读取正式数据与已上传背景，拦截写请求；本机 `.env.local` 保存独立预览登录口令，不提交。用户截图指出状态栏/标题栏交界、聊天消息顶部和底部、对话列表顶部和底部均有截断；现将 CC 列表、普通聊天、历史聊天统一为全视口滚动层，标题、输入框和底部 5 Tab 叠在其上，首尾留白按实际栏高测量。子页面共用返回按钮上移、缩为 36px 可见圆形、约 44px 点击范围，换居中 SVG 箭头并提高小按钮玻璃填充；底栏尺寸与玻璃水珠不变。最新 `npm run build` 通过，用户同意先推送。下一窗口先用同一台 iOS 26.6.2、同一张图验收正式主屏幕 PWA：状态栏到标题栏无色带，聊天/列表内容可从顶部和底部自然滚过固定栏，输入框与底栏不遮住最后一条，子页面返回按钮清楚且标题位置合适；通过后勾选阶段 1，再讨论阶段 2 聊天页/对话列表的具体布局并标「✅ 布局已定」后才动手。不要改气泡内容、阶段 3–5 或 Haven。
+- [ ] 阶段 1.5：材质统一 + 首批 4 个主题
 - [ ] 阶段 2
 - [ ] 阶段 3
 - [ ] 阶段 4
