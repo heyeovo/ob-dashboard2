@@ -273,11 +273,25 @@ html {
 
 :root[data-background="upload"] {
   --color-bg: transparent;
+  /* 照片上的辅助小字没有底托，比渐变模式加深一档 */
+  --color-text-secondary: color-mix(in srgb, var(--theme-ink) 82%, var(--theme-base));
+  --color-text-tertiary:  color-mix(in srgb, var(--theme-ink) 68%, var(--theme-base));
+  --color-text-disabled:  color-mix(in srgb, var(--theme-ink) 50%, var(--theme-base));
   --theme-tint: 255 255 255;
   --theme-edge: rgba(255,255,255,.55);
 }
 
 :root[data-theme="dusk"] { --photo-l: 72%; }
+
+/* 照片模式：文字带一圈与玻璃同色的淡光晕，压在花背景上的字（时间戳、列表标题、日期线）被隔开；
+   卡片 / 气泡里光晕与底色同色几乎不可见。强调色实底上的字不加，避免白字发虚。 */
+:root[data-background="upload"] body {
+  text-shadow: 0 0 2px rgb(var(--theme-tint) / .9), 0 0 7px rgb(var(--theme-tint) / .55);
+}
+:root[data-background="upload"] [class*="bg-[var(--color-primary)]"],
+:root[data-background="upload"] [class*="bg-[var(--theme-accent)]"] {
+  text-shadow: none;
+}
 
 :root[data-background="upload"][data-accent="photo"] {
   --theme-accent: hsl(var(--photo-h) var(--photo-s) calc(var(--photo-l) + var(--photo-l-shift)));
