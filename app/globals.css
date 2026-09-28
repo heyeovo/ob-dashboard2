@@ -341,11 +341,13 @@ html {
   background-attachment: fixed;
 }
 
+/* 层级：装饰层（背景 -3 / 雨痕 -2 / 颗粒 -1）< 页面内容（auto）< 固定外框（20–40）< 浮层（50+）。
+   装饰层用负值沉到内容下方，页面外壳不加 z-index，否则浮层会被关进外壳、压到底部 Tab 下面。 */
 html::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: -1;
   pointer-events: none;
   opacity: var(--theme-grain);
   mix-blend-mode: var(--theme-grain-blend);
@@ -372,7 +374,7 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -3;
   pointer-events: none;
   background-image: var(--bg-overlay), var(--bg-image);
   background-size: cover;
@@ -521,7 +523,7 @@ h1, h2 {
 .rain-layer {
   position: fixed;
   inset: -8px 0;
-  z-index: 0;
+  z-index: -2;
   pointer-events: none;
   animation: rain-drift 28s ease-in-out infinite alternate;
 }

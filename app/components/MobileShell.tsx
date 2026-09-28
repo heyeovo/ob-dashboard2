@@ -17,7 +17,9 @@ export default function MobileShell({ children }: { children: ReactNode }) {
       <Suspense fallback={null}>
         <SideRail />
       </Suspense>
-      <div className="relative z-[1] md:pl-[68px]">{children}</div>
+      {/* 不要给这层加 z-index：会把页面里的弹窗 / 抽屉关进同一层级，压到底部 Tab 下面。
+          背景、雨痕、颗粒用负 z-index 沉到内容下方（见 globals.css「层级」）。 */}
+      <div className="relative md:pl-[68px]">{children}</div>
       <div className="md:hidden">
         <Suspense fallback={null}>
           <BottomTabBar />
