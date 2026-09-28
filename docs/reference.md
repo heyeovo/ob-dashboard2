@@ -30,7 +30,7 @@ production 必须配置以下六项：
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页及子页 |
-| `app/settings/appearance/` | 外观设置：杏雾/樱粉/雾蓝/夜四主题、背景（含背景浓度）、玻璃强度、标题字体、字号、雨痕；「聊天显示」两个本机开关语义不变 |
+| `app/settings/appearance/` | 外观设置：杏雾/樱粉/雾蓝/夜四主题、背景（含背景浓度、照片强调色跟随主题 / 图片）、玻璃强度、标题字体、字号、雨痕；「聊天显示」两个本机开关语义不变 |
 | `app/impressions/` | 日回顾月历 |
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |

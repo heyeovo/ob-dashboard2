@@ -122,6 +122,8 @@ html {
   --bg-gradient:           var(--theme-mesh);
   /* 背景浓度滑条（--bg-intensity，外观设置写到 <html style>）：渐变上盖主题底色、照片上盖玻璃色，浓度越低盖得越厚 */
   --bg-intensity:          .7;
+  /* 照片强调色：色相 / 饱和度来自 background.accent，亮度由主题定（夜主题见下方覆盖） */
+  --photo-l:               44%;
   --bg-gradient-veil:      linear-gradient(color-mix(in srgb, var(--theme-base) calc((1 - var(--bg-intensity)) * 100%), transparent), color-mix(in srgb, var(--theme-base) calc((1 - var(--bg-intensity)) * 100%), transparent));
   --bg-photo-overlay:      linear-gradient(rgb(var(--theme-tint) / min(.9, calc((1 - var(--bg-intensity)) * 2.8))), rgb(var(--theme-tint) / min(.9, calc((1 - var(--bg-intensity)) * 2.8))));
   --bg-image:              var(--bg-gradient);
@@ -273,6 +275,12 @@ html {
   --color-bg: transparent;
   --theme-tint: 255 255 255;
   --theme-edge: rgba(255,255,255,.55);
+}
+
+:root[data-theme="dusk"] { --photo-l: 72%; }
+
+:root[data-background="upload"][data-accent="photo"] {
+  --theme-accent: hsl(var(--photo-h) var(--photo-s) calc(var(--photo-l) + var(--photo-l-shift)));
 }
 
 :root[data-theme="dusk"][data-background="upload"] {

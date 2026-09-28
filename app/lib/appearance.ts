@@ -1,7 +1,14 @@
 export type Appearance = {
   version: 1
   theme: 'apricot' | 'sakura' | 'mist' | 'dusk'
-  background: { kind: 'gradient' | 'upload' | 'none'; assetId?: string; intensity: number }
+  background: {
+    kind: 'gradient' | 'upload' | 'none'
+    assetId?: string
+    intensity: number
+    // 照片模式下强调色跟随主题还是跟随图片；accent 是从照片取出的色相 / 饱和度
+    accentMode: 'theme' | 'photo'
+    accent?: { h: number; s: number }
+  }
   glass: { blur: number; opacity: number }
   font: { display: 'serif' | 'sans'; scale: number }
   effects: { rain: { mode: 'off' | 'on' | 'weather'; intensity: number } }
@@ -10,7 +17,7 @@ export type Appearance = {
 export const DEFAULT_APPEARANCE: Appearance = {
   version: 1,
   theme: 'apricot',
-  background: { kind: 'gradient', intensity: 0.7 },
+  background: { kind: 'gradient', intensity: 0.7, accentMode: 'theme' },
   glass: { blur: 12, opacity: 0.78 },
   font: { display: 'serif', scale: 1 },
   effects: { rain: { mode: 'off', intensity: 0.35 } },
@@ -31,6 +38,19 @@ function number(value: unknown, fallback: number, min: number, max: number, prec
     : fallback
 }
 
+function normalizePhotoAccent(value: unknown): { accent?: { h: number; s: number } } {
+  const accent = record(value)
+  const h = Number(accent.h)
+  const s = Number(accent.s)
+  if (!Number.isFinite(h) || !Number.isFinite(s)) return {}
+  return { accent: { h: Math.round(((h % 360) + 360) % 360), s: Math.round(Math.max(25, Math.min(50, s))) } }
+}
+
+export function photoAccentActive(appearance: Appearance): boolean {
+  const background = appearance.background
+  return background.kind === 'upload' && background.accentMode === 'photo' && Boolean(background.accent)
+}
+
 export function normalizeAppearance(value: unknown): Appearance {
   const input = record(value)
   const background = record(input.background)
@@ -48,6 +68,8 @@ export function normalizeAppearance(value: unknown): Appearance {
       kind,
       ...(typeof background.assetId === 'string' && background.assetId ? { assetId: background.assetId } : {}),
       intensity: number(background.intensity, 0.7, 0.2, 1, 2),
+      accentMode: background.accentMode === 'photo' ? 'photo' : 'theme',
+      ...normalizePhotoAccent(background.accent),
     },
     glass: {
       blur: number(glass.blur, 12, 0, 30, 1),
@@ -79,6 +101,10 @@ export function appearanceHtmlStyle(appearance: Appearance): Record<string, stri
       ? `url("/api/appearance/background?assetId=${encodeURIComponent(background.assetId || '')}")`
       : background.kind === 'none' ? 'none' : 'var(--bg-gradient)',
     '--bg-intensity': String(background.intensity),
+    '--photo-h': String(background.accent?.h ?? 0),
+    '--photo-s': `${background.accent?.s ?? 0}%`,
+    // 黄绿色相同亮度下更亮，压暗一点保证强调色上的白字对比度
+    '--photo-l-shift': background.accent && background.accent.h >= 35 && background.accent.h <= 170 ? '-6%' : '0%',
     '--bg-overlay': background.kind === 'upload' ? 'var(--bg-photo-overlay)'
       : background.kind === 'gradient' ? 'var(--bg-gradient-veil)' : 'none',
   }

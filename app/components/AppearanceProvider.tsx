@@ -6,8 +6,10 @@ import {
   DEFAULT_APPEARANCE,
   appearanceHtmlStyle,
   normalizeAppearance,
+  photoAccentActive,
   type Appearance,
 } from '@/app/lib/appearance'
+import { extractPhotoAccent, type PhotoAccent } from '@/app/lib/photoAccent'
 
 type SaveStatus = 'saved' | 'saving' | 'error'
 type AppearanceContextValue = {
@@ -16,6 +18,7 @@ type AppearanceContextValue = {
   update: (change: (current: Appearance) => Appearance) => void
   uploadBackground: (file: File) => Promise<void>
   deleteBackground: () => Promise<void>
+  setAccentMode: (mode: 'theme' | 'photo') => Promise<void>
 }
 
 const AppearanceContext = createContext<AppearanceContextValue | null>(null)
@@ -26,6 +29,7 @@ function applyToDocument(value: Appearance) {
   html.dataset.font = value.font.display
   html.dataset.rain = value.effects.rain.mode
   html.dataset.background = value.background.kind
+  html.dataset.accent = photoAccentActive(value) ? 'photo' : 'theme'
   for (const [key, entry] of Object.entries(appearanceHtmlStyle(value))) {
     html.style.setProperty(key, entry)
   }
@@ -121,20 +125,40 @@ export function AppearanceProvider({
     const response = await fetch('/api/appearance/background', { method: 'POST', body: form })
     const payload = await response.json() as { assetId?: string; error?: string }
     if (!response.ok || !payload.assetId) throw new Error(payload.error || '背景图上传失败')
+    // 取色失败不影响换背景，只是强调色继续跟随主题
+    const accent: PhotoAccent | null = await extractPhotoAccent(file).catch(() => null)
     update(current => ({
       ...current,
-      background: { ...current.background, kind: 'upload', assetId: payload.assetId },
+      background: {
+        ...current.background,
+        kind: 'upload',
+        assetId: payload.assetId,
+        accentMode: accent ? 'photo' : 'theme',
+        accent: accent || undefined,
+      },
     }))
   }, [update])
+
+  // 切到「跟随图片」时，旧图还没取过色就当场从 Haven 拉图补取一次
+  const setAccentMode = useCallback(async (mode: 'theme' | 'photo') => {
+    let accent = appearance.background.accent
+    if (mode === 'photo' && !accent && appearance.background.assetId) {
+      const response = await fetch(`/api/appearance/background?assetId=${encodeURIComponent(appearance.background.assetId)}`)
+      if (!response.ok) throw new Error('读取背景图失败')
+      accent = (await extractPhotoAccent(await response.blob())) || undefined
+      if (!accent) throw new Error('这张图颜色太少，取不出强调色')
+    }
+    update(current => ({ ...current, background: { ...current.background, accentMode: mode, accent } }))
+  }, [appearance.background.accent, appearance.background.assetId, update])
 
   const deleteBackground = useCallback(async () => {
     const response = await fetch('/api/appearance/background', { method: 'DELETE' })
     if (!response.ok) throw new Error('背景图删除失败')
-    update(current => ({ ...current, background: { kind: 'gradient', intensity: current.background.intensity } }))
+    update(current => ({ ...current, background: { kind: 'gradient', intensity: current.background.intensity, accentMode: 'theme' } }))
   }, [update])
 
   return (
-    <AppearanceContext.Provider value={{ appearance, status, update, uploadBackground, deleteBackground }}>
+    <AppearanceContext.Provider value={{ appearance, status, update, uploadBackground, deleteBackground, setAccentMode }}>
       {children}
     </AppearanceContext.Provider>
   )

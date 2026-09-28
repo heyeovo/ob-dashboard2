@@ -21,6 +21,8 @@
 
 「背景浓度」滑条（`background.intensity`，0.2–1，默认 0.7，存 Haven）写到 `<html style>` 的 `--bg-intensity`：渐变模式用 `--bg-gradient-veil` 盖一层 `(1 - 浓度)` 的主题底色，照片模式用 `--bg-photo-overlay` 盖一层 `min(.9, (1 - 浓度) × 2.8)` 的 tint，纯色模式不生效。页面根容器 `--color-bg` 为透明，不再额外叠底色。
 
+照片强调色：照片模式可选「跟随主题 / 跟随图片」（`background.accentMode`，上传新图默认跟随图片）。`app/lib/photoAccent.ts` 在浏览器端把图缩到 48×48，跳过灰 / 白 / 黑，取面积大又有颜色的色相，饱和度压到 25–50%，存进 `background.accent {h, s}` 同步到 Haven。生效时 `<html data-accent="photo">`，`--theme-accent` = `hsl(--photo-h --photo-s (--photo-l + --photo-l-shift))`：浅色主题亮度 44%、夜 72%，黄绿色相再压 6% 保证白字对比度；其余强调派生 Token 自动跟随。取不出颜色时回落主题强调色。文字色仍用主题 ink。
+
 浮层（`DetailPanel`、`.cc-modal` 系列弹窗 / 底部 sheet、`.cc-popmenu`、聊天「+」菜单、历史抽屉、主页侧边抽屉）统一用 `.float-surface` / `--float-fill`：tint 不透明度取 `max(玻璃不透明度, .94)` 并自带 `--float-blur` 模糊，不随毛玻璃滑条变透。新增浮层必须用它，不要用 `--color-surface`。
 
 ### 品牌色

@@ -58,7 +58,7 @@ function Slider({
 }
 
 export default function AppearancePage() {
-  const { appearance, status, update, uploadBackground, deleteBackground } = useAppearance()
+  const { appearance, status, update, uploadBackground, deleteBackground, setAccentMode } = useAppearance()
   const {
     showRuntimeInfo, showTokenInfo, setShowRuntimeInfo, setShowTokenInfo,
   } = useChatDisplayPreferences()
@@ -146,6 +146,15 @@ export default function AppearancePage() {
             {appearance.background.assetId && <button type="button" onClick={() => void removeImage()} className="min-h-11 text-sm text-[var(--color-danger)]">删除已上传图片</button>}
           </div>
           <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">支持 JPEG、PNG、WebP，最大 5 MB。</p>
+          {appearance.background.kind === 'upload' && (
+            <div className="mt-4">
+              <p className="text-sm text-[var(--color-text-primary)]">强调色</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button type="button" className={optionClass(appearance.background.accentMode !== 'photo')} onClick={() => void setAccentMode('theme').catch(err => setError(err instanceof Error ? err.message : String(err)))}>跟随主题</button>
+                <button type="button" className={optionClass(appearance.background.accentMode === 'photo')} onClick={() => void setAccentMode('photo').catch(err => setError(err instanceof Error ? err.message : String(err)))}>跟随图片</button>
+              </div>
+            </div>
+          )}
           {appearance.background.kind !== 'none' && <div className="mt-4"><Slider label="背景浓度" value={appearance.background.intensity} min={0.2} max={1} step={0.05} display={`${Math.round(appearance.background.intensity * 100)}%`} onChange={intensity => change(current => ({ ...current, background: { ...current.background, intensity } }))} /></div>}
           {error && <p role="alert" className="mt-2 text-sm text-[var(--color-danger)]">{error}</p>}
         </section>

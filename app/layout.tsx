@@ -6,7 +6,7 @@ import MobileShell from "./components/MobileShell";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
 import { AppearanceProvider } from "./components/AppearanceProvider";
 import RainLayer from "./components/RainLayer";
-import { appearanceHtmlStyle } from "./lib/appearance";
+import { appearanceHtmlStyle, photoAccentActive } from "./lib/appearance";
 import { loadAppearance } from "./lib/havenAppearance";
 import "./globals.css";
 
@@ -66,6 +66,7 @@ export default async function RootLayout({
       data-font={appearance.font.display}
       data-rain={appearance.effects.rain.mode}
       data-background={appearance.background.kind}
+      data-accent={photoAccentActive(appearance) ? 'photo' : 'theme'}
       style={appearanceHtmlStyle(appearance) as CSSProperties}
     >
       <body className="min-h-full flex flex-col">
