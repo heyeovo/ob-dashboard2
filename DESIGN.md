@@ -2,7 +2,22 @@
 
 ## 设计 Token
 
-所有视觉变量定义在 `app/globals.css`。基础值在 `:root`，当前默认主题 `linen` 在 `:root[data-theme="linen"]` 覆盖语义色；用户滑条的值由 `<html style>` 覆盖。下表颜色值以当前 `linen` 为准。
+所有视觉变量定义在 `app/globals.css`。默认主题为 `apricot`（杏雾）；`sakura`（樱粉）、`mist`（雾蓝）、`dusk`（夜）为首批主题。主题块只提供 `--theme-base`、`--theme-mesh`、`--theme-accent`、`--theme-on-accent`、`--theme-ink`、`--theme-tint`、`--theme-edge`、`--theme-grain`、`--theme-grain-blend`；`:root` 用 `color-mix()` 推导下列语义 Token。下表旧暖白数值仅用于辨认 Token 用途，实际值以 `globals.css` 的推导式为准。用户滑条的值由 `<html style>` 覆盖。
+
+### 阶段 1.5 主题与材质
+
+| 主题 | base | accent | ink | tint (RGB) | edge | 颗粒 |
+|---|---|---|---|---|---|---|
+| 杏雾 `apricot` | `#F5EBE3` | `#C27B63` | `#3F3634` | `255 249 245` | 白色 .70 | .07 / multiply |
+| 樱粉 `sakura` | `#F6E8EA` | `#C0707F` | `#3F3236` | `255 247 248` | 白色 .72 | .07 / multiply |
+| 雾蓝 `mist` | `#E8EDF1` | `#5F7F98` | `#2F3940` | `250 252 253` | 白色 .75 | .07 / multiply |
+| 夜 `dusk` | `#1E1C23` | `#D9A08A` | `#EDE6E1` | `40 36 46` | 白色 .08 | .10 / soft-light |
+
+`--bg-gradient` 取主题的 mesh；html 上的灰度 SVG `feTurbulence` 颗粒层覆盖渐变与纯色背景。浅色主题的强调色文字为白色，夜主题为 `#231D1C` 并使用 `color-scheme: dark`。旧 `linen` 配置由前后端归一化为 `apricot`。
+
+强调色淡底按 accent 的 7%–20% 透明混合推导；表面以 tint 配玻璃不透明度，次级表面以 ink 的 4%–10% 透明混合推导；边框以 ink 的 6%–26% 透明混合推导；文字以 ink 与 base 混合，正文 92%、次要 72%、辅助 55%。状态背景、边框和 hover 分别由状态前景色的 12%、28%、18% 透明混合推导；夜主题的状态前景色提亮。头像预设、图表分类色和字段命中色是数据色，不参与材质推导。
+
+上传图片沿用 `<html data-background="upload">`：浅色主题玻璃 tint 改为 `255 255 255`、edge 改为白色 .55；夜主题改为 `24 22 28`、白色 .10。`--bg-photo-overlay` 也由 tint 推导，手机端仍只在根画布蒙一次图，不再用固定暖米色。
 
 ### 品牌色
 
@@ -139,7 +154,7 @@
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
 
-`backdrop-filter` 只放在固定外框等区域；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。手机上传图片时，根画布用偏白的 `--bg-photo-overlay` 蒙一次图；页面的 `--color-bg` 透明，状态栏与主页面标题栏共用连续的顶部玻璃层，底部 5 Tab 使用低覆盖率的 `--mobile-chrome-fill` 与玻璃模糊，避免不同页面重复叠色。默认渐变和桌面布局保持原有配色。手机主页面的内容画布与滚动层贯穿整个视口，标题栏和底部 5 Tab 浮在其上；滚动内容用顶部和底部内边距保证首尾内容可读，不通过缩短页面高度截断背景或消息。聊天页的独立滚动、对话列表和历史聊天遵循同一规则；输入区浮在消息上方并避开底栏与系统安全区域。普通子页面使用 `SubpageBackButton` 圆形返回按钮及随正文滚动的大标题；手机端可见圆形为 36px、点击范围至少 44px，沿用底栏的玻璃色系但提高小圆按钮自身的填充强度以保证辨识度，箭头居中，按钮与标题一同靠近页面顶部。`--mobile-topbar-height` 与 `--mobile-tabbar-height` 是主页面标题栏及底栏内容的统一高度；底栏另保留系统提供的底部安全区域。独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用 `linen` 底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
+`backdrop-filter` 只放在固定外框等区域；聊天气泡的半透明填充留到阶段 2，当前仍使用实色。PWA 使用 `viewport-fit=cover`，交互内容避开安全区域。手机上传图片时，根画布用由 tint 推导的 `--bg-photo-overlay` 蒙一次图；页面的 `--color-bg` 透明，状态栏与主页面标题栏共用连续的顶部玻璃层，底部 5 Tab 使用低覆盖率的 `--mobile-chrome-fill` 与玻璃模糊，避免不同页面重复叠色。手机主页面的内容画布与滚动层贯穿整个视口，标题栏和底部 5 Tab 浮在其上；滚动内容用顶部和底部内边距保证首尾内容可读，不通过缩短页面高度截断背景或消息。聊天页的独立滚动、对话列表和历史聊天遵循同一规则；输入区浮在消息上方并避开底栏与系统安全区域。普通子页面使用 `SubpageBackButton` 圆形返回按钮及随正文滚动的大标题；手机端可见圆形为 36px、点击范围至少 44px，沿用底栏的玻璃色系但提高小圆按钮自身的填充强度以保证辨识度，箭头居中，按钮与标题一同靠近页面顶部。`--mobile-topbar-height` 与 `--mobile-tabbar-height` 是主页面标题栏及底栏内容的统一高度；底栏另保留系统提供的底部安全区域。独立模式下根画布与 body 至少绘制到 `100vh`，避免聊天页的短 `100dvh` 留白。清单和浏览器主题色使用杏雾底色作为回退；最终效果以 iPhone 实机截图为准。旧 Tailwind 调色板色和组件内联颜色已收编为语义 Token，`app/cc/persona.ts` 的用户可选头像渐变属于数据，不跟主题改色。
 
 ### CC 对话气泡
 

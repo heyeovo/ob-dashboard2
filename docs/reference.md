@@ -30,7 +30,7 @@ production 必须配置以下六项：
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页及子页 |
-| `app/settings/appearance/` | 外观设置：暖白主题、背景、玻璃强度、标题字体、字号、雨痕；原「聊天显示」两个本机开关移入此页，语义不变 |
+| `app/settings/appearance/` | 外观设置：杏雾/樱粉/雾蓝/夜四主题、背景、玻璃强度、标题字体、字号、雨痕；「聊天显示」两个本机开关语义不变 |
 | `app/impressions/` | 日回顾月历 |
 | `app/journal/` | 日记页 |
 | `app/journey/` | 关系轨迹页 |
@@ -46,7 +46,7 @@ production 必须配置以下六项：
 
 > 通用硬规矩（Haven 持久化、localStorage、密钥掩码）见 `AGENTS.md`。以下是各机制的具体契约。
 
-- 外观配置与当前背景图在 Haven `gateway_state.db` 持久化，Dashboard 根布局逐请求从 Haven 读取，渲染前把主题、字体、雨痕和滑条变量写入 `<html>`；Haven 不可用时用 `linen` 默认值。客户端只用 `localStorage` 保存镜像以应对慢请求，保存结果以 Haven 为准。设置 → 外观里的「聊天显示」仍是本机开关。
+- 外观配置与当前背景图在 Haven `gateway_state.db` 持久化，Dashboard 根布局逐请求从 Haven 读取，渲染前把主题、字体、雨痕和滑条变量写入 `<html>`；Haven 不可用时用 `apricot` 默认值，旧 `linen` 映射为 `apricot`。客户端只用 `localStorage` 保存镜像以应对慢请求，保存结果以 Haven 为准。设置 → 外观里的「聊天显示」仍是本机开关。
 
 - CC 只把窗口创建时选定的统一 handoff 固定在 Haven；没有 handoff 的历史窗口才读取旧独立日回顾快照，二者不同时注入。协作者基础 system、定位、提示词模块及 session 静态信息每轮按最新配置重组，不从旧 `frozen_persona_append` 恢复整串。
 - 每个已保存 user/assistant 消息使用 Haven 分配的永久 `msg_*` ID，并保存按窗口日界线计算的 `chat_day`。滚动配置、revision 和保存时的 turn watermark 均持久化在 Haven；CC 的原生 resume key 必须包含 revision，禁止新配置续接旧 revision。滚动原文不再序列化进 `rolling_window_context`：CC 冷启动先把持久 RollingSeedStore 物化到真实 `CLAUDE_CONFIG_DIR/projects` 原生 transcript，再只用普通 `resume` 启动；禁止把 `SessionStore` 传给长期 query，避免 SDK 临时配置目录中的 OAuth 凭证副本缺少 refresh token。成功轮次把原生 transcript 原子同步回 RollingSeedStore，跨部署仍可恢复；前台用户 turn 和后台 wake 在 Haven 成功事务中同时保存本轮原生 user UUID，revision 重建优先用该 UUID 精确绑定 Haven turn，并把 turn ID 固化进新 transcript，禁止恢复后新增轮次再次退化为正文/时间猜测。普通轮保持真实 `user/assistant`，Haven 中 assistant-only 的 `agent_wake` 还原为隐藏 `<agent_wake/>` 输入再接原 assistant 消息；selfhost 直接以原生 messages 重建。日回顾、钉选桶和日记仍属于背景 Context。所有新 seed 都必须在 SDK 启动及 Haven 发布新 session ID 前原子落盘，并在每个生成的 envelope 写入对应 Haven turn ID；同 revision 冷恢复若专用 RollingSeedStore 缺失，先以 SDK 官方 `importSessionToStore` 原样补回默认 transcript，标记为 `legacy_transcript_recovery`，两份原生来源都不存在时 fail closed，禁止静默用 Haven 正文重建。前台用户 turn 与后台 wake/cache keepalive 必须使用同一套 rolling revision/source 判定；只有当次确实为 fixed→rolling 且用户已明确同意时，才允许 Haven 正文生成 `new_seed`，其他任何有历史的滚动冷启动无完整 seed 均立即停止。首次 fixed→rolling 同样读取固定窗口默认 transcript，再按完整轮次和 Haven `chat_day` 迁入 RollingSeedStore，保留 raw 日期的召回、工具调用/结果和顺序；每次生成新 revision seed 时只保留最新一个有消息的 raw `chat_day` 的 `thinking` / `redacted_thinking` 和动态召回正文，较早 raw 日期删除已完成轮次的 thinking 与 `<记忆召回>` / `<之前的记忆>` / `<memory_card>` 块，不留占位文本；未闭合工具链保持不动。旧 transcript 缺失或部分 raw 轮次无法对齐时，只有用户在设置保存时明确允许，才可对缺失部分使用 Haven 正文恢复。同 revision 跨进程从持久 RollingSeedStore 恢复；后续 revision 变化只删除退出 raw 的整轮，并按上述 thinking/召回规则保留其余轮次。Haven 同时记录上一 revision 的策略和日期模式；上一版 review/omit→本版 raw 的日期允许正文恢复；重建 user 消息时按正常位置在正文尾部补 Haven `created_at` 对应的北京时间戳，`agent_wake` 优先使用 `raw_json.agent_wake.at`，模型正文不显示恢复提示。重建对齐依次使用 envelope 的 Haven turn ID、Haven 原子保存的原生 user UUID；只有两者都不存在的真正旧记录才允许用 transcript 用户进入时间与 Haven 完成时间消除重复正文歧义，仍不唯一则 fail closed。daily→daily、迁移类型未知、旧 session/持久 transcript 缺失、轮次无法唯一对应，或任一 raw→raw 轮次缺失时均 fail closed；成功重建的来源、条数、工具/剩余召回数量、正文恢复数与 thinking/召回清理 block 数随首轮写入 Haven，审计页可长期复核。设置页明确提示重新加入日期的降级，并在日期卡显示已剥离的 thinking/召回 token。召回隔离集合分为原文期 `hold` 写入、原文期 `breath` 已看、最新 raw 日/当前 revision 后已自动召回三类；对应内容离开当前 Context 后，若无其他原因则重新获得召回资格。钉选桶每轮从 Haven 读取最新正文，不冻结进 handoff。

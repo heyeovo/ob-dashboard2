@@ -1,6 +1,6 @@
 export type Appearance = {
   version: 1
-  theme: 'linen'
+  theme: 'apricot' | 'sakura' | 'mist' | 'dusk'
   background: { kind: 'gradient' | 'upload' | 'none'; assetId?: string }
   glass: { blur: number; opacity: number }
   font: { display: 'serif' | 'sans'; scale: number }
@@ -9,7 +9,7 @@ export type Appearance = {
 
 export const DEFAULT_APPEARANCE: Appearance = {
   version: 1,
-  theme: 'linen',
+  theme: 'apricot',
   background: { kind: 'gradient' },
   glass: { blur: 12, opacity: 0.78 },
   font: { display: 'serif', scale: 1 },
@@ -42,7 +42,8 @@ export function normalizeAppearance(value: unknown): Appearance {
     : background.kind === 'none' ? 'none' : 'gradient'
   return {
     version: 1,
-    theme: 'linen',
+    theme: input.theme === 'sakura' || input.theme === 'mist' || input.theme === 'dusk'
+      ? input.theme : 'apricot',
     background: typeof background.assetId === 'string' && background.assetId
       ? { kind, assetId: background.assetId }
       : { kind },

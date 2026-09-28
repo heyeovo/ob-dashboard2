@@ -12,66 +12,66 @@ html {
 
 :root {
   /* ---- Color: brand / 品牌色 ---- */
-  --color-primary:          #D97757;
-  --color-primary-hover:    #C86645;
-  --color-primary-soft:     #FDF0ED;
-  --color-primary-muted:    #FDF9F7;
-  --color-primary-gradient: #E8A58F;
-  --color-primary-hover-soft:#FBE5DE;
-  --color-primary-light:    #FFF5F2;
-  --color-primary-border:   #F5D5CB;
-  --color-primary-caption:  #C4896A;
-  --color-on-primary:       #FFFFFF;
-  --color-on-solid:         #FFFFFF;
+  --color-primary:          var(--theme-accent);
+  --color-primary-hover:    color-mix(in srgb, var(--theme-accent) 88%, var(--theme-ink));
+  --color-primary-soft:     color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  --color-primary-muted:    color-mix(in srgb, var(--theme-accent) 7%, transparent);
+  --color-primary-gradient: color-mix(in srgb, var(--theme-accent) 72%, var(--theme-base));
+  --color-primary-hover-soft:color-mix(in srgb, var(--theme-accent) 20%, transparent);
+  --color-primary-light:    color-mix(in srgb, var(--theme-accent) 10%, transparent);
+  --color-primary-border:   color-mix(in srgb, var(--theme-accent) 28%, transparent);
+  --color-primary-caption:  color-mix(in srgb, var(--theme-accent) 75%, var(--theme-ink));
+  --color-on-primary:       var(--theme-on-accent);
+  --color-on-solid:         var(--theme-on-accent);
   --color-overlay:          #000000;
 
   /* ---- Color: surface / 表面层级 ---- */
-  --color-bg:               #FCFAF8;
-  --color-surface:          #FFFFFF;
-  --color-surface-elevated: #FDFCFB;
-  --color-surface-secondary:#F9F8F6;
-  --color-surface-tertiary: #F4F2EC;
+  --color-bg:               color-mix(in srgb, var(--theme-base) 56%, transparent);
+  --color-surface:          rgb(var(--theme-tint) / var(--glass-opacity));
+  --color-surface-elevated: rgb(var(--theme-tint) / .94);
+  --color-surface-secondary:color-mix(in srgb, var(--theme-ink) 4%, transparent);
+  --color-surface-tertiary: color-mix(in srgb, var(--theme-ink) 7%, transparent);
 
   /* ---- Color: border / 边框 ---- */
-  --color-border:           #E8E6E1;
-  --color-border-light:     #F0EFEB;
-  --color-border-subtle:    #EEEAE4;
-  --color-border-hover:     #C4C1BC;
+  --color-border:           color-mix(in srgb, var(--theme-ink) 14%, transparent);
+  --color-border-light:     color-mix(in srgb, var(--theme-ink) 9%, transparent);
+  --color-border-subtle:    color-mix(in srgb, var(--theme-ink) 6%, transparent);
+  --color-border-hover:     color-mix(in srgb, var(--theme-ink) 26%, transparent);
 
   /* ---- Color: surface 扩展 ---- */
-  --color-surface-hover:    #E8E4DC;
+  --color-surface-hover:    color-mix(in srgb, var(--theme-ink) 10%, transparent);
 
   /* ---- Color: text / 文字层级 ---- */
-  --color-text-primary:     #3A3836;
-  --color-text-heading:     #2B2927;
-  --color-text-secondary:   #6C6965;
-  --color-text-tertiary:    #8A8681;
-  --color-text-disabled:    #A8A49D;
-  --color-text-divider:     #D0CEC9;
+  --color-text-primary:     color-mix(in srgb, var(--theme-ink) 92%, var(--theme-base));
+  --color-text-heading:     var(--theme-ink);
+  --color-text-secondary:   color-mix(in srgb, var(--theme-ink) 72%, var(--theme-base));
+  --color-text-tertiary:    color-mix(in srgb, var(--theme-ink) 55%, var(--theme-base));
+  --color-text-disabled:    color-mix(in srgb, var(--theme-ink) 38%, var(--theme-base));
+  --color-text-divider:     color-mix(in srgb, var(--theme-ink) 22%, var(--theme-base));
 
   /* ---- Color: status / 状态色 ---- */
-  --color-pinned:           #D97757;
-  --color-pinned-bg:        #FDF0ED;
+  --color-pinned:           var(--theme-accent);
+  --color-pinned-bg:        color-mix(in srgb, var(--color-pinned) 12%, transparent);
   --color-resolved:         #3B72B9;
-  --color-resolved-bg:      #EDF4FC;
+  --color-resolved-bg:      color-mix(in srgb, var(--color-resolved) 12%, transparent);
   --color-digested:         #478B4A;
-  --color-digested-bg:      #EAF5E9;
-  --color-feel:             #D97757;
-  --color-feel-bg:          #FDF0ED;
+  --color-digested-bg:      color-mix(in srgb, var(--color-digested) 12%, transparent);
+  --color-feel:             var(--theme-accent);
+  --color-feel-bg:          color-mix(in srgb, var(--color-feel) 12%, transparent);
   --color-wish:             #B8860B;
-  --color-wish-bg:          #FDF3E7;
+  --color-wish-bg:          color-mix(in srgb, var(--color-wish) 12%, transparent);
   --color-archived:         #8A8681;
-  --color-archived-bg:      #F4F2EC;
+  --color-archived-bg:      color-mix(in srgb, var(--color-archived) 12%, transparent);
   --color-noise:            #8A8681;
-  --color-noise-bg:         #F4F2EC;
+  --color-noise-bg:         color-mix(in srgb, var(--color-noise) 12%, transparent);
   --color-danger:           #C64B45;
-  --color-danger-bg:        #FCEEED;
-  --color-danger-border:    #F0C0BF;
-  --color-danger-hover:     #FADAD9;
+  --color-danger-bg:        color-mix(in srgb, var(--color-danger) 12%, transparent);
+  --color-danger-border:    color-mix(in srgb, var(--color-danger) 28%, transparent);
+  --color-danger-hover:     color-mix(in srgb, var(--color-danger) 18%, transparent);
   --color-danger-strong:    #EF4444;
   --color-success:          #047857;
-  --color-success-bg:       #ECFDF5;
-  --color-success-border:   #A7F3D0;
+  --color-success-bg:       color-mix(in srgb, var(--color-success) 12%, transparent);
+  --color-success-border:   color-mix(in srgb, var(--color-success) 28%, transparent);
   --color-success-strong:   #10B981;
   --color-warning-strong:   #FCD34D;
   --color-dark-surface:     #030712;
@@ -90,21 +90,21 @@ html {
 
   /* ---- Color: pending / 待处理黄 ---- */
   --color-pending:          #C97E2C;
-  --color-pending-bg:       #FDF3E4;
-  --color-pending-border:   #F2D9B6;
-  --color-pending-hover:    #FBE9D0;
+  --color-pending-bg:       color-mix(in srgb, var(--color-pending) 12%, transparent);
+  --color-pending-border:   color-mix(in srgb, var(--color-pending) 28%, transparent);
+  --color-pending-hover:    color-mix(in srgb, var(--color-pending) 18%, transparent);
 
   /* ---- Color: status 扩展 / 边框·hover ---- */
-  --color-digested-border:  #C5E0C3;
-  --color-digested-hover:   #D4EAD2;
-  --color-resolved-border:  #C8DAF0;
-  --color-resolved-hover:   #E0ECF8;
+  --color-digested-border:  color-mix(in srgb, var(--color-digested) 28%, transparent);
+  --color-digested-hover:   color-mix(in srgb, var(--color-digested) 18%, transparent);
+  --color-resolved-border:  color-mix(in srgb, var(--color-resolved) 28%, transparent);
+  --color-resolved-hover:   color-mix(in srgb, var(--color-resolved) 18%, transparent);
 
   /* ---- Color: semantic channel / 即时模拟双栏 ---- */
-  --color-keyword:          #D97757;
-  --color-keyword-bg:       #FDF0ED;
+  --color-keyword:          var(--theme-accent);
+  --color-keyword-bg:       color-mix(in srgb, var(--color-keyword) 12%, transparent);
   --color-semantic:         #478B4A;
-  --color-semantic-bg:      #EAF5E9;
+  --color-semantic-bg:      color-mix(in srgb, var(--color-semantic) 12%, transparent);
 
   /* ---- Color: field-match / 字段命中色 ---- */
   --color-field-name:       #D97757;
@@ -117,16 +117,16 @@ html {
   --color-chart-importance: #C4B49A;
 
   /* ---- Theme layers / 主题与背景 ---- */
-  --bg-base:               #FCFAF8;
-  --bg-gradient:           linear-gradient(180deg, #FCFAF8, #F8F1EA);
-  --bg-photo-overlay:      linear-gradient(rgba(249,244,238,.28), rgba(249,244,238,.42));
+  --bg-base:               var(--theme-base);
+  --bg-gradient:           var(--theme-mesh);
+  --bg-photo-overlay:      linear-gradient(rgb(var(--theme-tint) / .28), rgb(var(--theme-tint) / .42));
   --bg-image:              var(--bg-gradient);
   --bg-overlay:            none;
   --glass-opacity:         .78;
-  --glass-fill:            rgb(255 253 250 / var(--glass-opacity));
-  --glass-border:          rgba(143, 113, 94, .18);
+  --glass-fill:            rgb(var(--theme-tint) / var(--glass-opacity));
+  --glass-border:          var(--theme-edge);
   --glass-blur:            12px;
-  --glass-shadow:          0 8px 28px rgba(83, 60, 45, .08);
+  --glass-shadow:          0 8px 28px color-mix(in srgb, var(--theme-ink) 8%, transparent);
   --mobile-topbar-height:   48px;
   --mobile-tabbar-height:   56px;
   --mobile-chrome-fill:     var(--glass-fill);
@@ -164,9 +164,9 @@ html {
   --duration-slow:          0.26s;
 
   /* ---- Shadow / 阴影 ---- */
-  --shadow-sm:              0 2px 6px rgba(58, 56, 54, 0.04);
-  --shadow-md:              0 4px 14px rgba(58, 56, 54, 0.06);
-  --shadow-hover:           0 4px 18px rgba(217, 119, 87, 0.10);
+  --shadow-sm:              0 2px 6px color-mix(in srgb, var(--theme-ink) 4%, transparent);
+  --shadow-md:              0 4px 14px color-mix(in srgb, var(--theme-ink) 6%, transparent);
+  --shadow-hover:           0 4px 18px color-mix(in srgb, var(--theme-accent) 10%, transparent);
   --shadow-card-hover:      0 8px 30px rgba(0, 0, 0, 0.02);
   --shadow-timeline-dot:    0 0 6px rgba(217, 119, 87, 0.15);
   --shadow-danger-hover:    0 2px 8px rgba(198, 75, 69, .08);
@@ -181,12 +181,12 @@ html {
      现有页面偏"工具风"（小圆角 + 到处是边框），聊天这块先按新尺度做，
      以后整体调整时反过来照它改别的页面。 */
   --chat-bubble-radius:     20px;
-  --chat-user-fill:         #F2EAE4;
-  --chat-user-text:         #3A3836;
-  --chat-assistant-fill:    #F3EFEB;
+  --chat-user-fill:         color-mix(in srgb, var(--theme-accent) 12%, rgb(var(--theme-tint) / var(--glass-opacity)));
+  --chat-user-text:         var(--color-text-primary);
+  --chat-assistant-fill:    color-mix(in srgb, var(--theme-ink) 5%, rgb(var(--theme-tint) / var(--glass-opacity)));
   --chat-assistant-width:   760px;
   --chat-line-height:       1.72;
-  --chat-stream-bar:        linear-gradient(180deg, rgba(217,119,87,.62), rgba(217,119,87,.18));
+  --chat-stream-bar:        linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 62%, transparent), color-mix(in srgb, var(--theme-accent) 18%, transparent));
   --chat-rail-width:        264px;
   --chat-composer-max-h:    120px;
   --chat-shadow-soft:       0 8px 28px rgba(58, 56, 54, 0.05);
@@ -195,41 +195,87 @@ html {
   --chat-page-tint:         radial-gradient(120% 78% at 12% -8%, rgba(217, 119, 87, 0.045) 0%, rgba(217, 119, 87, 0) 58%),
                             radial-gradient(96% 62% at 96% 4%, rgba(140, 152, 168, 0.05) 0%, rgba(140, 152, 168, 0) 62%);
   --chat-avatar-tint:       linear-gradient(150deg, #E6A886, #D97757);
-  --chat-code-bg:           #FAF7F5;
-  --chat-code-border:       rgba(58, 56, 54, 0.08);
-  --chat-inline-code-bg:    rgba(217, 119, 87, 0.08);
-  --chat-think-bg:          rgba(140, 152, 168, 0.06);
-  --chat-think-bar:         rgba(140, 152, 168, 0.32);
+  --chat-code-bg:           rgb(var(--theme-tint) / .88);
+  --chat-code-border:       color-mix(in srgb, var(--theme-ink) 8%, transparent);
+  --chat-inline-code-bg:    color-mix(in srgb, var(--theme-accent) 8%, transparent);
+  --chat-think-bg:          color-mix(in srgb, var(--theme-ink) 6%, transparent);
+  --chat-think-bar:         color-mix(in srgb, var(--theme-ink) 32%, transparent);
   --chat-modal-shadow:      0 24px 64px rgba(58, 56, 54, 0.16);
-  --chat-glass:             rgba(255, 253, 252, 0.78);
+  --chat-glass:             rgb(var(--theme-tint) / .78);
 }
 
-:root[data-theme="linen"] {
-  --color-primary:          #C87458;
-  --color-primary-hover:    #B76549;
-  --color-primary-soft:     #F9EDE7;
-  --color-primary-muted:    #FCF7F2;
-  --color-primary-gradient: #DEA48D;
-  --color-primary-hover-soft:#F4DFD5;
-  --color-primary-light:    #FEF4EE;
-  --color-bg:               rgb(250 246 240 / .56);
-  --color-surface:          rgb(255 253 250 / .88);
-  --color-surface-elevated: #FFFCF8;
-  --color-surface-secondary:#F8F3ED;
-  --color-surface-tertiary: #F1E9E1;
-  --color-surface-hover:    #E9DED3;
-  --color-border:           rgba(122, 95, 79, .21);
-  --color-border-light:     rgba(122, 95, 79, .13);
-  --color-border-subtle:    rgba(122, 95, 79, .10);
-  --color-border-hover:     rgba(122, 95, 79, .38);
-  --color-text-primary:     #483D36;
-  --color-text-heading:     #342B26;
-  --color-text-secondary:   #71645C;
-  --color-text-tertiary:    #93847A;
-  --color-text-disabled:    #B2A79F;
-  --bg-base:               #F7F1E9;
-  --bg-gradient:           radial-gradient(70% 55% at 12% 5%, rgba(228, 185, 155, .22), transparent 75%),
-                           linear-gradient(180deg, #FCF8F2 0%, #F6EFE7 58%, #F1E9E2 100%);
+:root[data-theme="apricot"], .theme-preview[data-preview-theme="apricot"] {
+  --theme-base: #F5EBE3;
+  --theme-mesh: radial-gradient(55% 45% at 0% 0%,#F1C9AE,transparent 70%), radial-gradient(60% 50% at 100% 100%,#E3D7E6,transparent 70%), radial-gradient(50% 40% at 80% 20%,#FBF1E6,transparent 70%), linear-gradient(160deg,#F8EEE5,#EFE6E8);
+  --theme-accent: #C27B63;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #3F3634;
+  --theme-tint: 255 249 245;
+  --theme-edge: rgba(255,255,255,.7);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
+:root[data-theme="sakura"], .theme-preview[data-preview-theme="sakura"] {
+  --theme-base: #F6E8EA;
+  --theme-mesh: radial-gradient(60% 45% at 85% 5%,#F0C6CF,transparent 70%), radial-gradient(55% 45% at 5% 55%,#F7DDD2,transparent 70%), radial-gradient(60% 45% at 70% 100%,#EDD2DC,transparent 70%), linear-gradient(180deg,#FAF0EF,#F3E3E6);
+  --theme-accent: #C0707F;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #3F3236;
+  --theme-tint: 255 247 248;
+  --theme-edge: rgba(255,255,255,.72);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
+:root[data-theme="mist"], .theme-preview[data-preview-theme="mist"] {
+  --theme-base: #E8EDF1;
+  --theme-mesh: radial-gradient(60% 45% at 10% 0%,#CCDAE6,transparent 70%), radial-gradient(55% 45% at 100% 45%,#F2EFEA,transparent 70%), radial-gradient(60% 50% at 20% 100%,#D6E1E4,transparent 70%), linear-gradient(180deg,#EEF2F4,#E3E9EE);
+  --theme-accent: #5F7F98;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #2F3940;
+  --theme-tint: 250 252 253;
+  --theme-edge: rgba(255,255,255,.75);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
+:root[data-theme="dusk"], .theme-preview[data-preview-theme="dusk"] {
+  color-scheme: dark;
+  --theme-base: #1E1C23;
+  --theme-mesh: radial-gradient(55% 40% at 100% 0%,#3B3148,transparent 70%), radial-gradient(60% 45% at 0% 70%,#27303E,transparent 70%), radial-gradient(45% 35% at 85% 95%,#4A3833,transparent 70%), linear-gradient(180deg,#221F28,#1A1A20);
+  --theme-accent: #D9A08A;
+  --theme-on-accent: #231D1C;
+  --theme-ink: #EDE6E1;
+  --theme-tint: 40 36 46;
+  --theme-edge: rgba(255,255,255,.08);
+  --theme-grain: .10;
+  --theme-grain-blend: soft-light;
+  --color-resolved: #8EB5E8;
+  --color-digested: #8FCB91;
+  --color-wish: #E3C06B;
+  --color-archived: #B7B2AE;
+  --color-noise: #B7B2AE;
+  --color-danger: #F08E88;
+  --color-success: #7BD3AE;
+  --color-pending: #E8B46E;
+  --color-semantic: #8FCB91;
+}
+
+:root[data-background="upload"] {
+  --color-bg: transparent;
+  --theme-tint: 255 255 255;
+  --theme-edge: rgba(255,255,255,.55);
+}
+
+:root[data-theme="dusk"][data-background="upload"] {
+  --theme-tint: 24 22 28;
+  --theme-edge: rgba(255,255,255,.1);
+}
+
+.theme-preview {
+  --glass-fill: rgb(var(--theme-tint) / var(--glass-opacity));
+  background-image: var(--theme-mesh);
 }
 
 :root[data-font="sans"] {
@@ -244,6 +290,18 @@ html {
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
+}
+
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--theme-grain);
+  mix-blend-mode: var(--theme-grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 /* ---- Tailwind theme bridge ---- */
@@ -317,8 +375,7 @@ body::after {
 
   /* An uploaded photo receives its tint once, on the mobile canvas. */
   :root[data-background="upload"] {
-    --color-bg: transparent;
-    --bg-photo-overlay: linear-gradient(rgb(255 255 255 / .84), rgb(255 255 255 / .84));
+    --bg-photo-overlay: linear-gradient(rgb(var(--theme-tint) / .84), rgb(var(--theme-tint) / .84));
     --mobile-chrome-fill: color-mix(in srgb, var(--glass-fill) 12%, transparent);
   }
 

@@ -3,7 +3,6 @@
 import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
-import Card from '@/app/components/Card'
 import { useAppearance } from '@/app/components/AppearanceProvider'
 import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 import type { Appearance } from '@/app/lib/appearance'
@@ -14,6 +13,13 @@ const optionClass = (active: boolean) =>
       ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
       : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
   }`
+
+const themes = [
+  { id: 'apricot', name: '杏雾', detail: '柔和杏色与暖棕文字' },
+  { id: 'sakura', name: '樱粉', detail: '轻粉色与柔和玻璃' },
+  { id: 'mist', name: '雾蓝', detail: '清冷蓝灰与浅色玻璃' },
+  { id: 'dusk', name: '夜', detail: '深色背景与暖色强调' },
+] as const
 
 function Slider({
   label,
@@ -100,21 +106,28 @@ export default function AppearancePage() {
         <section>
           <p className="text-[10px] font-semibold uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">Theme</p>
           <h2 className="mt-1 text-2xl text-[var(--color-text-heading)]">主题</h2>
-          <Card className="mt-4 overflow-hidden" padding="none">
-            <div className="h-24 p-4" style={{ backgroundImage: 'var(--bg-gradient)' }}>
-              <div className="h-full rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-[var(--glass-fill)] p-3 shadow-[var(--glass-shadow)]">
-                <div className="h-2 w-24 rounded-full bg-[var(--color-primary)]/70" />
-                <div className="mt-3 h-2 w-40 rounded-full bg-[var(--color-text-tertiary)]/25" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 p-4">
-              <div>
-                <p className="font-medium text-[var(--color-text-heading)]">暖白 · Linen</p>
-                <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">柔和纸色、暖棕文字和轻玻璃</p>
-              </div>
-              <span className="rounded-full bg-[var(--color-primary-soft)] px-3 py-1 text-xs text-[var(--color-primary)]">当前主题</span>
-            </div>
-          </Card>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {themes.map(theme => (
+              <button
+                key={theme.id}
+                type="button"
+                aria-pressed={appearance.theme === theme.id}
+                onClick={() => change(current => ({ ...current, theme: theme.id }))}
+                className={`overflow-hidden rounded-[var(--radius-lg)] border text-left transition-colors ${appearance.theme === theme.id ? 'border-[var(--color-primary)]' : 'border-[var(--color-border)]'}`}
+              >
+                <div className="theme-preview h-24 p-3" data-preview-theme={theme.id}>
+                  <div className="h-full rounded-[var(--radius-md)] border border-[var(--theme-edge)] bg-[var(--glass-fill)] p-3 shadow-[var(--glass-shadow)]">
+                    <div className="h-2 w-16 rounded-full bg-[var(--theme-accent)]" />
+                    <div className="mt-3 h-2 w-24 rounded-full bg-[var(--theme-ink)]/25" />
+                  </div>
+                </div>
+                <div className="bg-[var(--color-surface)] p-3">
+                  <p className="font-medium text-[var(--color-text-heading)]">{theme.name}{appearance.theme === theme.id ? ' · 当前主题' : ''}</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{theme.detail}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </section>
 
         <section>
