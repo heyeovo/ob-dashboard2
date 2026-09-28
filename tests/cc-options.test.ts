@@ -73,7 +73,11 @@ describe('cc 基础提示词渠道一致性', () => {
   })
 
   it('闲聊模式只注入一次协作者配置', () => {
-    expect(buildCcOptions(config('chat'), null).systemPrompt).toBe('统一的协作者基础提示词')
+    expect(buildCcOptions(config('chat'), null).systemPrompt).toEqual({
+      type: 'custom',
+      prompt: '统一的协作者基础提示词',
+      snapshot: false,
+    })
   })
 
   it('CC 记忆只给工作模式，闲聊关掉', () => {
@@ -86,7 +90,19 @@ describe('cc 基础提示词渠道一致性', () => {
       type: 'preset',
       preset: 'claude_code',
       append: '统一的协作者基础提示词',
+      snapshot: false,
     })
+  })
+
+  it('续接原会话时仍允许两种模式读取最新提示词', () => {
+    for (const mode of ['chat', 'work'] as const) {
+      const next = config(mode)
+      next.personaAppend = '更新后的协作者提示词'
+      expect(buildCcOptions(next, 'existing-claude-session')).toMatchObject({
+        resume: 'existing-claude-session',
+        systemPrompt: { snapshot: false },
+      })
+    }
   })
 
   it('固定注入进程内 wake 工具，不随普通 MCP 清单变化', () => {

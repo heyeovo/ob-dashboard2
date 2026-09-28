@@ -465,12 +465,13 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     //   那段里有工具怎么用、路径怎么写，换掉工具就废了。
     // 闲聊模式：只使用协作者统一配置；不再额外注入一份写死的闲聊提示词。
     // 同一份 personaAppend 也会用于工作模式和 selfhost，前端只需维护一次。
+    // SDK 默认会把首轮 system prompt 固定到 transcript；关闭快照才能在 resume 后热更新。
     systemPrompt:
       mode === 'chat'
-        ? personaAppend
+        ? { type: 'custom', prompt: personaAppend, snapshot: false }
         : personaAppend
-          ? { type: 'preset', preset: 'claude_code', append: personaAppend }
-          : { type: 'preset', preset: 'claude_code' },
+          ? { type: 'preset', preset: 'claude_code', append: personaAppend, snapshot: false }
+          : { type: 'preset', preset: 'claude_code', snapshot: false },
     cwd,
     additionalDirectories,
     // Web 工具 schema 永远保留，确保 foreground / background wake 共用同一 cache prefix。
