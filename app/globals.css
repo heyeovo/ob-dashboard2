@@ -296,7 +296,16 @@ html {
 :root[data-background="upload"] .cc-modal,
 :root[data-background="upload"] .cc-popmenu,
 :root[data-background="upload"] .float-surface,
-:root[data-background="upload"] [class*="bg-[var(--color-surface"] {
+:root[data-background="upload"] [class*="bg-[var(--color-surface"],
+:root[data-background="upload"] .cc-topbar,
+:root[data-background="upload"] .mobile-page-topbar,
+:root[data-background="upload"] .cc-mobile-list-topbar,
+:root[data-background="upload"] .mobile-bottom-tabbar,
+:root[data-background="upload"] .subpage-back-button,
+:root[data-background="upload"] .appearance-glass,
+:root[data-background="upload"] .cc-composer,
+:root[data-background="upload"] .cc-think,
+:root[data-background="upload"] .cc-md code {
   text-shadow: none;
 }
 
