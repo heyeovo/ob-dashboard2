@@ -118,7 +118,7 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
 
 **3. 颗粒层**：在 `html` 背景最上层加一层 SVG `feTurbulence` 噪点（data URI，`baseFrequency≈.9`、灰度），强度和混合模式取 `--theme-grain` / `--theme-grain-blend`，用来消除渐变色带。背景为 `none`（纯色）时也保留。
 
-**4. 上传图模式**：`<html data-bg="upload">` 时覆盖为中性玻璃，不带主题的暖色：浅色主题 `--theme-tint: 255 255 255`、`--theme-edge: rgba(255,255,255,.55)`；`dusk` 为 `24 22 28` / `rgba(255,255,255,.1)`。强调色仍用当前主题的 accent。从照片取主色作为强调色**以后再说**，本阶段不做。
+**4. 上传图模式**：沿用现有属性 `<html data-background="upload">`（`layout.tsx` / `AppearanceProvider` 已在写，不要另加 `data-bg`）时覆盖为中性玻璃，不带主题的暖色：浅色主题 `--theme-tint: 255 255 255`、`--theme-edge: rgba(255,255,255,.55)`；`dusk` 为 `24 22 28` / `rgba(255,255,255,.1)`。强调色仍用当前主题的 accent。现有 `--bg-photo-overlay` 是写死的暖米色蒙层（`rgba(249,244,238,…)`），也要改成由 tint 推导，否则照片上仍会蒙一层米色；`--bg-gradient` 改为取 `--theme-mesh`。从照片取主色作为强调色**以后再说**，本阶段不做。
 
 **5. 兼容和设置页**
 - 原来的 `linen` 不再作为主题：Haven 已存的 `theme: "linen"` 在 dashboard `normalize` 和 Haven normalize 两边都映射成 `apricot`；默认值改成 `apricot`。
