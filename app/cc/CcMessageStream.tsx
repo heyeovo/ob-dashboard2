@@ -268,10 +268,10 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
       <div className="mx-auto flex min-w-0 max-w-[var(--chat-assistant-width)] flex-col gap-7">
         {chat.handoffTranscript && !chat.isRolling ? (
           <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-4 py-3.5">
-            <div className="mb-2 text-[10.5px] font-medium text-[var(--color-text-disabled)]">
+            <div className="mb-2 text-2xs font-medium text-[var(--color-text-disabled)]">
               换窗带入 · 最近对话
             </div>
-            <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[var(--color-text-secondary)]">
+            <div className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--color-text-secondary)]">
               {chat.handoffTranscript}
             </div>
           </section>
@@ -292,11 +292,11 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
           <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史</div>
         ) : conversationMessages.length === 0 ? (
           <div className="py-16 text-center">
-            <div className="text-[13.5px] font-medium text-[var(--color-text-heading)]">开始一段对话</div>
-            <div className="mt-1.5 text-[11.5px] text-[var(--color-text-disabled)]">
+            <div className="text-note font-medium text-[var(--color-text-heading)]">开始一段对话</div>
+            <div className="mt-1.5 text-meta text-[var(--color-text-disabled)]">
               记忆会在你发言时自动注入，回复下方能看到召回了什么
             </div>
-            <div className="mt-2 text-[11px] text-[var(--color-text-disabled)]">
+            <div className="mt-2 text-meta text-[var(--color-text-disabled)]">
               当前：{MODE_LABEL[chat.mode]}模式
             </div>
           </div>
@@ -304,7 +304,7 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
           conversationMessages.map((m, index) => (
               <div key={m.renderKey || m.id}>
                 {index === 0 || visibleChatDay(conversationMessages[index - 1]) !== visibleChatDay(m) ? (
-                  <div id={`chat-day-${visibleChatDay(m)}`} className="mb-5 flex items-center gap-3 pt-2 text-[10.5px] text-[var(--color-text-disabled)]">
+                  <div id={`chat-day-${visibleChatDay(m)}`} className="mb-5 flex items-center gap-3 pt-2 text-2xs text-[var(--color-text-disabled)]">
                     <span className="h-px flex-1 bg-[var(--color-border-light)]" />
                     <span>{visibleChatDay(m)}</span>
                     <span className="h-px flex-1 bg-[var(--color-border-light)]" />

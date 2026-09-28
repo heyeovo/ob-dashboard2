@@ -358,7 +358,7 @@ const updateStatus = useCallback(async (targetId: string, status: Status) => {
                   : 'bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
               }`}
             >
-              <span className={`text-[10px] ${
+              <span className={`text-2xs ${
                 f === '待办' ? 'text-[var(--color-warning-strong)]' :
                 f === '存疑' ? 'text-[var(--color-danger-strong)]' :
                 f === '已精修' ? 'text-[var(--color-success-strong)]' : 'text-[var(--color-text-disabled)]'

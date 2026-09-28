@@ -604,10 +604,10 @@ export default function GraphPage() {
                                 <span className="text-xs font-medium text-[var(--color-text-primary)] truncate">{b.name}</span>
                                 {!inGraph && (
                                   <button onClick={e => { e.stopPropagation(); toggleNodeInGraph(b.id) }}
-                                    className="text-[10px] text-[var(--color-primary)] flex-shrink-0 hover:underline whitespace-nowrap">加入图谱</button>
+                                    className="text-2xs text-[var(--color-primary)] flex-shrink-0 hover:underline whitespace-nowrap">加入图谱</button>
                                 )}
                               </div>
-                              <p className="text-[11px] text-[var(--color-text-tertiary)] truncate mt-0.5">{b.content_preview}</p>
+                              <p className="text-meta text-[var(--color-text-tertiary)] truncate mt-0.5">{b.content_preview}</p>
                             </Card>
                           )
                         })}
@@ -712,7 +712,7 @@ export default function GraphPage() {
                         {selectedNode.pinned && <span className="text-xs" style={{ color: 'var(--color-wish)' }}>★钉选</span>}
                         {selectedNode.wish && <span className="text-xs" style={{ color: 'var(--color-wish)' }}>✦悬念</span>}
                       </div>
-                      <div className="text-[11px] text-[var(--text-dim)] mb-3">
+                      <div className="text-meta text-[var(--text-dim)] mb-3">
                         {TYPE_LABEL[selectedNode.type] ?? selectedNode.type} · 重要度 {selectedNode.importance}
                         {!selectedInGraph && <span className="ml-2 text-[var(--accent)]">未在图谱中</span>}
                       </div>
@@ -738,13 +738,13 @@ export default function GraphPage() {
                               <div key={rid} className="border border-[var(--color-border)] rounded-xl bg-[var(--color-surface-secondary)] px-2.5 py-2 flex items-center justify-between gap-2">
                                 <div className="min-w-0 cursor-pointer" onClick={() => setSelectedId(rid)}>
                                   <div className="text-xs font-medium text-[var(--text)] truncate">{rb.name}</div>
-                                  <div className="text-[11px] text-[var(--text-dim)] truncate">{rb.content_preview}</div>
+                                  <div className="text-meta text-[var(--text-dim)] truncate">{rb.content_preview}</div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   {!rInGraph && (
-                                    <button onClick={() => toggleNodeInGraph(rid)} className="text-[10px] text-[var(--accent)] hover:underline whitespace-nowrap">加入</button>
+                                    <button onClick={() => toggleNodeInGraph(rid)} className="text-2xs text-[var(--accent)] hover:underline whitespace-nowrap">加入</button>
                                   )}
-                                  <button onClick={() => toggleEdge(selectedNode.id, rid)} className="text-[10px] text-[var(--color-text-disabled)] hover:text-[var(--color-danger)] hover:underline">✕</button>
+                                  <button onClick={() => toggleEdge(selectedNode.id, rid)} className="text-2xs text-[var(--color-text-disabled)] hover:text-[var(--color-danger)] hover:underline">✕</button>
                                 </div>
                               </div>
                             )

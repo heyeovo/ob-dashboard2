@@ -176,7 +176,7 @@ export default function PortraitEditor({
               <EvidenceLine evidence={[{ bucket_id: selfAnchorEntry.bucket_id }]} />
             )}
           </div>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+          <p className="mt-1.5 text-meta leading-relaxed text-[var(--color-text-disabled)]">
             原始核心保持第一人称原文且不会被后台改写；这里只编辑它后来长出的「现在的我」。
           </p>
         </div>
@@ -221,7 +221,7 @@ export default function PortraitEditor({
                   key={targetRevision}
                   className="rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/45 p-3"
                 >
-                  <div className="text-[11px] text-[var(--color-text-disabled)]">
+                  <div className="text-meta text-[var(--color-text-disabled)]">
                     revision {targetRevision} · {row.source || 'unknown'} ·{' '}
                     {formatTs(row.updated_at)}
                   </div>

@@ -191,11 +191,11 @@ export default function PortraitProposalsSection({
                 <div className="mt-1.5 text-xs text-[var(--color-text-secondary)]">
                   object: {item.object || '—'}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-disabled)]">
+                <div className="text-meta text-[var(--color-text-disabled)]">
                   evidence: {item.evidence_bucket_id || ''}
                   {item.evidence_moment_id ? ` · ${item.evidence_moment_id}` : ''}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-disabled)]">
+                <div className="text-meta text-[var(--color-text-disabled)]">
                   reason: {item.reason || '—'}
                 </div>
                 <div className="mt-2">
@@ -252,13 +252,13 @@ export default function PortraitProposalsSection({
                   <Chip>confidence {Number(item.confidence || 0).toFixed(2)}</Chip>
                   {(anchorBucketName || item.bucket_id) && <Chip>{anchorBucketName || item.bucket_id}</Chip>}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-disabled)]">
+                <div className="text-meta text-[var(--color-text-disabled)]">
                   bucket: {item.bucket_id || '—'}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-disabled)]">
+                <div className="text-meta text-[var(--color-text-disabled)]">
                   reason: {item.reason || '—'}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-disabled)]">
+                <div className="text-meta text-[var(--color-text-disabled)]">
                   future: {item.future_use || '—'}
                 </div>
                 <div className="mt-2">

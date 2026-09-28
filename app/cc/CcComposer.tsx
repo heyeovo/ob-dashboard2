@@ -279,12 +279,12 @@ export default function CcComposer({
       {forwardedBlock && forwardedBlock.lines.length > 0 ? (
         <div className="mb-2 ml-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
+            <span className="text-meta font-medium text-[var(--color-text-secondary)]">
               转发 · {forwardedBlock.title} · {forwardedBlock.lines.length} 条
             </span>
             <button type="button" onClick={onClearForward} className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]" aria-label="移除转发">×</button>
           </div>
-          <div className="mt-1 max-h-24 overflow-y-auto text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+          <div className="mt-1 max-h-24 overflow-y-auto text-meta leading-relaxed text-[var(--color-text-tertiary)]">
             {forwardedBlock.lines.slice(0, 3).map((line, i) => (
               <div key={i} className="truncate">{line}</div>
             ))}
@@ -304,13 +304,13 @@ export default function CcComposer({
               ) : (
                 <div className="flex h-16 w-44 items-center gap-2 rounded-xl bg-[var(--color-surface-secondary)] px-3 text-[var(--color-text-secondary)]">
                   <FileIcon small />
-                  <div className="min-w-0"><div className="truncate text-xs font-medium">{attachment.filename}</div><div className="text-[10px] text-[var(--color-text-tertiary)]">{attachment.textTruncated ? '已截断' : '已读取'}</div></div>
+                  <div className="min-w-0"><div className="truncate text-xs font-medium">{attachment.filename}</div><div className="text-2xs text-[var(--color-text-tertiary)]">{attachment.textTruncated ? '已截断' : '已读取'}</div></div>
                 </div>
               )}
               <button type="button" aria-label={`移除 ${attachment.filename}`} className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-[var(--color-overlay)]/55 text-xs text-[var(--color-on-primary)]" onClick={() => void removeAttachment(attachment)}>×</button>
             </div>
           ))}
-          {uploading ? <div className="flex h-16 min-w-20 items-center justify-center rounded-xl bg-[var(--color-surface-secondary)] px-3 text-[10px] text-[var(--color-text-tertiary)]">解析上传中</div> : null}
+          {uploading ? <div className="flex h-16 min-w-20 items-center justify-center rounded-xl bg-[var(--color-surface-secondary)] px-3 text-2xs text-[var(--color-text-tertiary)]">解析上传中</div> : null}
         </div>
       ) : null}
 

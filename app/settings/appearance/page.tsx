@@ -104,7 +104,7 @@ export default function AppearancePage() {
 
       <main className="mx-auto max-w-2xl space-y-8 px-4 pt-7 sm:px-6">
         <section>
-          <p className="text-[10px] font-semibold uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">Theme</p>
+          <p className="text-2xs font-semibold uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">Theme</p>
           <h2 className="mt-1 text-2xl text-[var(--color-text-heading)]">主题</h2>
           <div className="mt-4 grid grid-cols-2 gap-3">
             {themes.map(theme => (
@@ -174,6 +174,11 @@ export default function AppearancePage() {
           </div>
           <div className="mt-5">
             <Slider label="整体字号" value={appearance.font.scale} min={0.85} max={1.3} step={0.05} display={`${Math.round(appearance.font.scale * 100)}%`} onChange={scale => change(current => ({ ...current, font: { ...current.font, scale } }))} />
+            <div className="mt-4 space-y-4">
+              <Slider label="标题大小" value={appearance.font.titleScale} min={0.85} max={1.4} step={0.05} display={`${Math.round(appearance.font.titleScale * 100)}%`} onChange={titleScale => change(current => ({ ...current, font: { ...current.font, titleScale } }))} />
+              <Slider label="正文大小" value={appearance.font.bodyScale} min={0.85} max={1.4} step={0.05} display={`${Math.round(appearance.font.bodyScale * 100)}%`} onChange={bodyScale => change(current => ({ ...current, font: { ...current.font, bodyScale } }))} />
+              <Slider label="小字大小" value={appearance.font.metaScale} min={0.85} max={1.4} step={0.05} display={`${Math.round(appearance.font.metaScale * 100)}%`} onChange={metaScale => change(current => ({ ...current, font: { ...current.font, metaScale } }))} />
+            </div>
           </div>
         </section>
 

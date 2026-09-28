@@ -70,7 +70,7 @@ export default function SideRail() {
         }`}
       >
         <Icon name={item.icon} />
-        <span className={`leading-none tracking-wide ${small ? 'text-[9px]' : 'text-[10px]'} ${active ? 'font-semibold' : ''}`}>
+        <span className={`leading-none tracking-wide ${small ? 'text-3xs' : 'text-2xs'} ${active ? 'font-semibold' : ''}`}>
           {item.label}
         </span>
         {active && <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--color-primary)]" />}

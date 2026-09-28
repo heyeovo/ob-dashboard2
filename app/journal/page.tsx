@@ -371,13 +371,13 @@ export default function JournalPage() {
                             onClick={() => openDetail(e)}>
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>
+                            <span className={`text-meta px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>
                               {e.author}
                             </span>
                             <span className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{e.name}</span>
                             {e.locked && <span className="text-xs flex-shrink-0 opacity-60">🔒</span>}
                           </div>
-                          <span className="text-[11px] text-[var(--color-text-tertiary)] font-mono flex-shrink-0 whitespace-nowrap">{s.chars}字·~{s.tokens}tok</span>
+                          <span className="text-meta text-[var(--color-text-tertiary)] font-mono flex-shrink-0 whitespace-nowrap">{s.chars}字·~{s.tokens}tok</span>
                         </div>
                         {e.locked ? (
                           <p className="text-sm text-[var(--color-text-disabled)] italic leading-relaxed">
@@ -412,7 +412,7 @@ export default function JournalPage() {
                     <div className="min-w-0 flex-1">
                       <h2 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">{detail.entry.name}</h2>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--color-text-tertiary)]">
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${authorColor(detail.entry.author)}`}>
+                        <span className={`text-meta px-2 py-0.5 rounded-full font-medium ${authorColor(detail.entry.author)}`}>
                           {detail.entry.author}
                         </span>
                         <span>日记: {formatBeijingDateTime(detail.entry.event_time || detail.entry.created)}</span>
@@ -483,7 +483,7 @@ export default function JournalPage() {
                 {/* 底部操作区 */}
                 <div className="flex-shrink-0 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] px-5 py-3 sm:px-7">
                   <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="text-[11px] text-[var(--color-text-tertiary)] font-mono">
+                    <div className="text-meta text-[var(--color-text-tertiary)] font-mono">
                       {stats(editing ? editContent : detail.fullContent).chars} 字 · ~{stats(editing ? editContent : detail.fullContent).tokens} tokens
                     </div>
                     <div className="flex items-center gap-3">
@@ -521,9 +521,9 @@ export default function JournalPage() {
                   </div>
 
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="text-[11px] text-[var(--color-text-disabled)] font-mono">bucket_id: {detail.entry.id}</span>
+                    <span className="text-meta text-[var(--color-text-disabled)] font-mono">bucket_id: {detail.entry.id}</span>
                     <button onClick={copyId}
-                      className="text-[11px] text-[var(--color-primary)] hover:underline flex-shrink-0">
+                      className="text-meta text-[var(--color-primary)] hover:underline flex-shrink-0">
                       {copied ? '已复制' : '复制'}
                     </button>
                   </div>

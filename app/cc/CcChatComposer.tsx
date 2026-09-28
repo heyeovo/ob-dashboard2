@@ -60,7 +60,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
                   aria-label="上一个匹配结果"
                   className="flex size-7 items-center justify-center rounded-full text-xs text-[var(--color-text-secondary)] disabled:opacity-30"
                 >↑</button>
-                <span className="min-w-10 px-1 text-center text-[10px] tabular-nums text-[var(--color-text-tertiary)]">
+                <span className="min-w-10 px-1 text-center text-2xs tabular-nums text-[var(--color-text-tertiary)]">
                   {searchResults.length > 0 ? `${Math.max(activeSearchIndex, 0) + 1}/${searchResults.length}` : '0/0'}
                 </span>
                 <button
@@ -83,7 +83,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
                 type="button"
                 onClick={() => void chat.loadEarlierHistory()}
                 disabled={chat.earlierHistoryLoading}
-                className="mt-1.5 w-full text-center text-[11px] text-[var(--color-primary)] disabled:opacity-50"
+                className="mt-1.5 w-full text-center text-meta text-[var(--color-primary)] disabled:opacity-50"
               >
                 {chat.earlierHistoryLoading ? '正在搜索更早消息…' : '继续搜索更早消息'}
               </button>
@@ -91,7 +91,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
           </div>
         ) : null}
         {chat.isRemote === true ? (
-          <div className="mb-2 rounded-xl bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">
+          <div className="mb-2 rounded-xl bg-[var(--color-primary-soft)] px-3 py-2 text-meta text-[var(--color-primary)]">
             Vercel 环境仅支持自建引擎；你的本地引擎首选没有被修改。
           </div>
         ) : null}

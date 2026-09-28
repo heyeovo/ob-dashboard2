@@ -39,7 +39,7 @@ export default function StatusBadge({ type, label, size = 'sm', onClick }: {
   const text = label ?? s.label
   return (
     <span
-      className={`rounded-full font-medium inline-block whitespace-nowrap ${size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'} ${onClick ? 'cursor-pointer hover:opacity-70 active:scale-95 transition-all' : ''}`}
+      className={`rounded-full font-medium inline-block whitespace-nowrap ${size === 'xs' ? 'text-2xs px-1.5 py-0.5' : 'text-xs px-2 py-0.5'} ${onClick ? 'cursor-pointer hover:opacity-70 active:scale-95 transition-all' : ''}`}
       style={{ backgroundColor: s.bg, color: s.fg }}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : undefined}
     >

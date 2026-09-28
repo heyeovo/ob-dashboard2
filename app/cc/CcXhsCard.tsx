@@ -35,7 +35,7 @@ function SkeletonCard({ text }: { text: string }) {
         <div className="h-4 w-3/4 rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
         <div className="mt-2 h-3 w-full rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
         <div className="mt-1.5 h-3 w-2/3 rounded bg-[var(--color-surface-tertiary)] animate-pulse" />
-        <div className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">{text}</div>
+        <div className="mt-3 text-meta text-[var(--color-text-tertiary)]">{text}</div>
       </div>
     </div>
   )
@@ -49,7 +49,7 @@ export default function CcXhsCard({ state }: { state: CardState }) {
   if (state.status === 'error') {
     return (
       <div className="xhs-card xhs-card-error">
-        <div className="px-4 py-3 text-[12px] text-[var(--color-text-tertiary)]">
+        <div className="px-4 py-3 text-xs text-[var(--color-text-tertiary)]">
           小红书笔记加载失败：{state.error || '未知错误'}
         </div>
       </div>

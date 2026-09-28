@@ -9,7 +9,7 @@ export default function DataBadge({ label, value, size = 'sm' }: {
 }) {
   const display = typeof value === 'number' ? value.toFixed(1) : value
   return (
-    <span className={`bg-[var(--color-primary-soft)] rounded-full inline-flex items-center justify-center whitespace-nowrap ${size === 'xs' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-0.5 text-xs'}`}>
+    <span className={`bg-[var(--color-primary-soft)] rounded-full inline-flex items-center justify-center whitespace-nowrap ${size === 'xs' ? 'px-2 py-0.5 text-meta' : 'px-2.5 py-0.5 text-xs'}`}>
       <span className="text-[var(--color-primary)] font-medium">
         {label} {display}
       </span>

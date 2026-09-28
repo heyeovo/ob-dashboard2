@@ -53,15 +53,15 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
             const title = window.prompt('修改窗口标题', chat.sessionTitle === '新对话' ? '' : chat.sessionTitle)
             if (title?.trim()) void chat.renameSession(chat.sessionId, title)
           }}
-          className="block max-w-full truncate text-left text-[13px] font-medium text-[var(--color-text-primary)] hover:text-[var(--color-primary)]"
+          className="block max-w-full truncate text-left text-note font-medium text-[var(--color-text-primary)] hover:text-[var(--color-primary)]"
         >
           {chat.sessionTitle}
         </button>
-        <div className="mt-0.5 whitespace-nowrap text-[11px] text-[var(--color-text-disabled)] md:hidden">
+        <div className="mt-0.5 whitespace-nowrap text-meta text-[var(--color-text-disabled)] md:hidden">
           {chat.effectiveEngine === 'selfhost' ? '纯聊天' : `${MODE_LABEL[chat.mode]}模式`}
         </div>
         {/* 完整运行信息只在桌面显示；手机去「本窗」查看，避免顶栏拥挤。 */}
-        <div className="mt-0.5 hidden items-center gap-x-2 overflow-hidden whitespace-nowrap text-[11px] text-[var(--color-text-disabled)] md:flex">
+        <div className="mt-0.5 hidden items-center gap-x-2 overflow-hidden whitespace-nowrap text-meta text-[var(--color-text-disabled)] md:flex">
           <span>{chat.effectiveEngine === 'selfhost' ? '纯聊天' : `${MODE_LABEL[chat.mode]}模式`}</span>
           <span>·</span>
           <span>{chat.latestTurn?.engine === 'selfhost' || (!chat.latestTurn && chat.effectiveEngine === 'selfhost') ? '自建引擎' : 'cc'}</span>
@@ -114,7 +114,7 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
         <button
           type="button"
           onClick={() => selectMode ? stopSelecting() : startSelecting()}
-          className="hidden rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex"
+          className="hidden rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-2xs text-[var(--color-text-tertiary)] md:inline-flex"
         >
           {selectMode ? '取消选择' : '选择'}
         </button>
@@ -153,7 +153,7 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
             <path d="m15.5 15.5 4 4" />
           </svg>
         </button>
-        <div className="flex rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-[10px]">
+        <div className="flex rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-2xs">
           {(['cc', 'selfhost'] as const).map(engine => (
             <button
               key={engine}

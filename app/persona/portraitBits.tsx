@@ -7,7 +7,7 @@ export function Chip({ children, title }: { children: ReactNode; title?: string 
   return (
     <span
       title={title}
-      className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-2 py-0.5 text-[11px] text-[var(--color-text-tertiary)]"
+      className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-2 py-0.5 text-meta text-[var(--color-text-tertiary)]"
     >
       {children}
     </span>
@@ -80,7 +80,7 @@ export function EvidenceLine({ evidence }: { evidence?: PortraitEvidence[] }) {
   )
   if (!rows.length) return null
   return (
-    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--color-text-disabled)]">
+    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-meta text-[var(--color-text-disabled)]">
       {rows.slice(0, 4).map((item, index) => {
         const bucketId = item.bucket_id || ''
         const labels = [

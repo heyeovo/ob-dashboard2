@@ -64,7 +64,7 @@ export default function ArtifactsPage() {
                       {item.description ? (
                         <div className="mt-0.5 line-clamp-2 text-xs text-[var(--color-text-secondary)]">{item.description}</div>
                       ) : null}
-                      <div className="mt-1.5 text-[11px] text-[var(--color-text-tertiary)]">
+                      <div className="mt-1.5 text-meta text-[var(--color-text-tertiary)]">
                         {shortDate(item.updated_at)} · {item.name}
                       </div>
                     </div>

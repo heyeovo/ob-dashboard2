@@ -33,7 +33,7 @@ type Payload = {
   }
 }
 
-const BUTTON = 'rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
+const BUTTON = 'rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-2xs text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
 
 const KIND_GROUPS: Array<{ key: string; label: string; kinds: Set<Candidate['kind']> }> = [
   { key: 'memory', label: 'OB 记忆', kinds: new Set(['ob_recall', 'read_bucket', 'breath', 'introspection', 'read_daily_reviews', 'hold', 'comment_bucket']) },
@@ -144,7 +144,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
 
   const available = candidates.filter(item => !item.protected && !item.cleared)
   return (
-    <div className="text-[11px] text-[var(--color-text-secondary)]">
+    <div className="text-meta text-[var(--color-text-secondary)]">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
         只清理可重新获取的 OB 记忆读取、聊天搜索、WebSearch 和 WebFetch 结果。用户与助手正文、日期召回都不会改。实际执行时会复制 Claude 会话，旧副本暂时保留。
       </div>
@@ -152,7 +152,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
       <div className="my-3 flex items-center justify-between gap-2">
         <div>
           <div className="font-medium text-[var(--color-text-heading)]">可清理内容</div>
-          <div className="mt-0.5 text-[10px] text-[var(--color-text-disabled)]">默认不选择，由你决定本次清哪些。</div>
+          <div className="mt-0.5 text-2xs text-[var(--color-text-disabled)]">默认不选择，由你决定本次清哪些。</div>
         </div>
         <button type="button" className={BUTTON} disabled={loading || running} onClick={() => void scan()}>{loading ? '扫描中…' : '重新扫描'}</button>
       </div>
@@ -168,7 +168,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
           const sorted = [...items].sort((a, b) => (a.cleared ? 1 : 0) - (b.cleared ? 1 : 0))
           return (
             <div key={group.key}>
-              <div className="mb-1.5 text-[10px] font-medium text-[var(--color-text-tertiary)]">{group.label}</div>
+              <div className="mb-1.5 text-2xs font-medium text-[var(--color-text-tertiary)]">{group.label}</div>
               <div className="space-y-2">
                 {sorted.map(item => (
                   <div key={item.id} className={`rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-2.5 ${item.cleared ? 'opacity-40' : ''}`}>
@@ -186,7 +186,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
                       />
                       <div className="min-w-0 flex-1">
                         <div className="break-words text-[var(--color-text-heading)]">{item.label}</div>
-                        <div className="mt-0.5 break-all text-[9.5px] text-[var(--color-text-disabled)]">
+                        <div className="mt-0.5 break-all text-3xs text-[var(--color-text-disabled)]">
                           {item.detail}{!item.cleared && <> · 可释放 {fmtTokens(item.estimatedTokens)}</>}
                         </div>
                       </div>
@@ -208,7 +208,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" className={BUTTON} disabled={running} onClick={() => setSelected(new Set(available.map(item => item.id)))}>全选可清理项</button>
           <button type="button" className={BUTTON} disabled={selected.size === 0 || running} onClick={() => setSelected(new Set())}>清空选择</button>
-          <span className="ml-auto text-[10px] text-[var(--color-text-tertiary)]">已选 {selected.size} 项 · {fmtTokens(selectedTokens)}</span>
+          <span className="ml-auto text-2xs text-[var(--color-text-tertiary)]">已选 {selected.size} 项 · {fmtTokens(selectedTokens)}</span>
         </div>
       ) : null}
 
@@ -216,7 +216,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
         type="button"
         disabled={busy || running || selected.size === 0}
         onClick={() => void run()}
-        className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--color-primary)] bg-[var(--color-primary-muted)] px-3 py-2 text-[11.5px] text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--color-primary)] bg-[var(--color-primary-muted)] px-3 py-2 text-meta text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {running ? '正在减负…' : busy ? '回复结束后可减负' : '清理所选内容'}
       </button>
@@ -225,7 +225,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="font-medium text-[var(--color-text-heading)]">每天 05:30 自动减负</div>
-          <div className="mt-0.5 text-[10px] leading-relaxed text-[var(--color-text-disabled)]">默认关闭。开启后会等 04:30 日回顾和周一 05:00 轨迹桶结束；窗口忙碌或有待批准工具时跳过。</div>
+          <div className="mt-0.5 text-2xs leading-relaxed text-[var(--color-text-disabled)]">默认关闭。开启后会等 04:30 日回顾和周一 05:00 轨迹桶结束；窗口忙碌或有待批准工具时跳过。</div>
         </div>
         <button
           type="button"
@@ -241,7 +241,7 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
           <div className="mb-2 font-medium text-[var(--color-text-heading)]">最近记录</div>
           <div className="space-y-1.5">
             {[...history].reverse().slice(0, 5).map((item, index) => (
-              <div key={`${item.at}-${index}`} className="flex justify-between gap-3 text-[10px] text-[var(--color-text-tertiary)]">
+              <div key={`${item.at}-${index}`} className="flex justify-between gap-3 text-2xs text-[var(--color-text-tertiary)]">
                 <span>{new Date(item.at).toLocaleString('zh-HK', { hour12: false })} · {item.mode === 'auto' ? '自动' : '手动'}</span>
                 <span>{item.candidate_count} 项 · 约 {Number(item.released_tokens || 0).toLocaleString()} token</span>
               </div>
@@ -250,8 +250,8 @@ export default function CcContextGc({ sessionId, laneId, busy }: {
         </>
       ) : null}
 
-      {note ? <div className="mt-3 text-[10.5px] text-[var(--color-digested)]">{note}</div> : null}
-      {error ? <div className="mt-3 text-[10.5px] leading-relaxed text-[var(--color-danger)]">{error}</div> : null}
+      {note ? <div className="mt-3 text-2xs text-[var(--color-digested)]">{note}</div> : null}
+      {error ? <div className="mt-3 text-2xs leading-relaxed text-[var(--color-danger)]">{error}</div> : null}
     </div>
   )
 }

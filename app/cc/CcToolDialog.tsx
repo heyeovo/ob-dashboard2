@@ -71,24 +71,24 @@ export default function CcToolDialog({
           <span className="cc-tool-wrench mt-0.5" aria-hidden="true">⌁</span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[15px] font-semibold text-[var(--color-text-heading)]">
+              <h2 className="text-md font-semibold text-[var(--color-text-heading)]">
                 调用工具：{shortToolName(tool.name)}
               </h2>
               <span className={`cc-tool-status ${tool.status || 'completed'}`}>{status}</span>
               {tool.durationMs != null && (
-                <span className="text-[10px] tabular-nums text-[var(--color-text-disabled)]">
+                <span className="text-2xs tabular-nums text-[var(--color-text-disabled)]">
                   {(tool.durationMs / 1000).toFixed(1)}s
                 </span>
               )}
             </div>
-            <p className="mt-1 truncate font-mono text-[10px] text-[var(--color-text-disabled)]">
+            <p className="mt-1 truncate font-mono text-2xs text-[var(--color-text-disabled)]">
               {tool.name}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+            className="text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
           >
             关闭
           </button>
@@ -104,11 +104,11 @@ export default function CcToolDialog({
           ) : result ? (
             <pre className="cc-modal-pre">{result}</pre>
           ) : tool.status === 'running' ? (
-            <p className="mt-2 text-[11px] text-[var(--color-text-tertiary)]">
+            <p className="mt-2 text-meta text-[var(--color-text-tertiary)]">
               工具正在执行，结果返回后会自动更新这里。
             </p>
           ) : (
-            <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+            <p className="mt-1.5 text-meta leading-relaxed text-[var(--color-text-disabled)]">
               本次没有保留输出。日常 MCP 工具会保存结果；文件、搜索和命令等工作工具
               仍只记录调用参数，避免把大段内容塞进聊天历史。
             </p>

@@ -83,16 +83,16 @@ function fmtCache(ms: number) {
   return minutes >= 60 ? `${Math.ceil(minutes / 60)}h` : `${minutes}m`
 }
 
-const ROW = 'flex items-center justify-between gap-3 py-1.5 text-[11.5px]'
+const ROW = 'flex items-center justify-between gap-3 py-1.5 text-meta'
 const KEY = 'shrink-0 text-[var(--color-text-tertiary)]'
 const VAL = 'truncate text-right text-[var(--color-text-secondary)]'
-const LABEL = 'mb-1.5 text-[11px] text-[var(--color-text-disabled)]'
-const HINT = 'mb-2 text-[10.5px] leading-relaxed text-[var(--color-text-disabled)]'
+const LABEL = 'mb-1.5 text-meta text-[var(--color-text-disabled)]'
+const HINT = 'mb-2 text-2xs leading-relaxed text-[var(--color-text-disabled)]'
 const SELECT =
-  'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11.5px] text-[var(--color-text-secondary)]'
+  'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-meta text-[var(--color-text-secondary)]'
 
 function seg(on: boolean) {
-  return `flex-1 rounded-[var(--radius-md)] border px-2 py-1.5 text-[11.5px] transition-colors disabled:opacity-50 ${
+  return `flex-1 rounded-[var(--radius-md)] border px-2 py-1.5 text-meta transition-colors disabled:opacity-50 ${
     on
       ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)] text-[var(--color-text-heading)]'
       : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
@@ -177,13 +177,13 @@ export default function CcWindowSettings({
         {/* 头 */}
         <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-5 py-3.5">
           <div className="min-w-0">
-            <div className="text-[13px] font-medium text-[var(--color-text-heading)]">本窗口设置</div>
-            <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">只影响这一个对话</div>
+            <div className="text-note font-medium text-[var(--color-text-heading)]">本窗口设置</div>
+            <div className="mt-0.5 text-meta text-[var(--color-text-disabled)]">只影响这一个对话</div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+            className="ml-auto text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
           >
             关闭
           </button>
@@ -201,7 +201,7 @@ export default function CcWindowSettings({
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[11.5px] transition-colors ${
+              className={`shrink-0 rounded-full px-3 py-1.5 text-meta transition-colors ${
                 activeTab === tab
                   ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary)]'
                   : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
@@ -238,7 +238,7 @@ export default function CcWindowSettings({
           <div className="mb-1">
             <div className={ROW}>
               <span className={KEY}>会话 id</span>
-              <code className={`${VAL} font-mono text-[10.5px]`}>{sessionId || '—'}</code>
+              <code className={`${VAL} font-mono text-2xs`}>{sessionId || '—'}</code>
             </div>
             <div className={ROW}>
               <span className={KEY}>轮次 / 字数</span>
@@ -250,7 +250,7 @@ export default function CcWindowSettings({
             {activeUpstream ? (
               <div className={ROW}>
                 <span className={KEY}>正在用</span>
-                <span className={`${VAL} font-mono text-[10.5px]`} title={activeUpstream}>
+                <span className={`${VAL} font-mono text-2xs`} title={activeUpstream}>
                   {activeUpstream}
                 </span>
               </div>
@@ -334,15 +334,15 @@ export default function CcWindowSettings({
                   type="button"
                   disabled={!stats.live || stats.busy || stats.compacting}
                   onClick={() => void requestCompact()}
-                  className="rounded-full border border-[var(--color-pending-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-pending)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-[var(--color-pending-border)] bg-[var(--color-surface)] px-2.5 py-1 text-2xs text-[var(--color-pending)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {stats.compacting ? '压缩中…' : '立即压缩'}
                 </button>
               </div>
-              <div className="text-[10px] leading-relaxed text-[var(--color-pending)]/70">
+              <div className="text-2xs leading-relaxed text-[var(--color-pending)]/70">
                 仅复用当前在线且空闲的 CC 工作会话；不会唤醒已回收会话。会额外调用一次模型生成摘要。
               </div>
-              {compactNote ? <div className="mt-1 text-[10px] text-[var(--color-pending)]">{compactNote}</div> : null}
+              {compactNote ? <div className="mt-1 text-2xs text-[var(--color-pending)]">{compactNote}</div> : null}
             </div>
           ) : null}
 
@@ -407,7 +407,7 @@ export default function CcWindowSettings({
             <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-2.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className={KEY}>Pro 额度</span>
-                <button type="button" onClick={onRefreshProUsage} className="text-[10.5px] text-[var(--color-primary)]">
+                <button type="button" onClick={onRefreshProUsage} className="text-2xs text-[var(--color-primary)]">
                   刷新
                 </button>
               </div>
@@ -424,7 +424,7 @@ export default function CcWindowSettings({
                   : '未知'
                 return (
                   <div key={label} className="mb-2 last:mb-0">
-                    <div className="mb-1 flex justify-between text-[10.5px] text-[var(--color-text-secondary)]">
+                    <div className="mb-1 flex justify-between text-2xs text-[var(--color-text-secondary)]">
                       <span>{label}</span><span>剩余 {remaining.toFixed(0)}% · {reset} 重置</span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-border-light)]">
@@ -435,7 +435,7 @@ export default function CcWindowSettings({
               }) : (
                 <div className={HINT}>{proUsage?.note || '使用 Pro 线路完成一轮后可读取额度'}</div>
               )}
-              <div className="mt-1 text-[9.5px] text-[var(--color-text-disabled)]">
+              <div className="mt-1 text-3xs text-[var(--color-text-disabled)]">
                 {proUsage?.stale ? '上次读取值 · ' : ''}
                 {proUsage?.updatedAt
                   ? `${new Date(proUsage.updatedAt).toLocaleString('zh-HK', { hour12: false })} · `
@@ -476,7 +476,7 @@ export default function CcWindowSettings({
               <button
                 key={o.id}
                 type="button"
-                className={`${seg(pick.effort === o.id)} px-1 text-[11px]`}
+                className={`${seg(pick.effort === o.id)} px-1 text-meta`}
                 onClick={() => onPick({ effort: o.id })}
               >
                 {o.label}
@@ -491,7 +491,7 @@ export default function CcWindowSettings({
           >
             <span className={KEY}>深度思考</span>
             <span
-              className={`rounded-full px-2 py-0.5 text-[10.5px] ${
+              className={`rounded-full px-2 py-0.5 text-2xs ${
                 pick.thinking
                   ? 'bg-[var(--color-primary-muted)] text-[var(--color-primary)]'
                   : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-disabled)]'
@@ -527,7 +527,7 @@ export default function CcWindowSettings({
           ) : null}
 
           <details className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3 py-2.5">
-            <summary className="cursor-pointer text-[11.5px] text-[var(--color-text-secondary)]">
+            <summary className="cursor-pointer text-meta text-[var(--color-text-secondary)]">
               高级选项
             </summary>
             <div className="mt-3 space-y-3">
@@ -571,7 +571,7 @@ export default function CcWindowSettings({
                     <option key={value} value={value}>约 {fmtK(value)} tokens</option>
                   ))}
                 </select>
-                <span className="mt-1 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+                <span className="mt-1 block text-2xs leading-relaxed text-[var(--color-text-disabled)]">
                   这是附加给 Web Fetch 的目标说明，不是 SDK 硬上限；历史保存会另外硬截断。
                 </span>
               </label>
@@ -608,7 +608,7 @@ export default function CcWindowSettings({
                 </select>
                 {web.domainMode !== 'all' ? (
                   <textarea
-                    className={`${SELECT} min-h-20 resize-y font-mono text-[10.5px]`}
+                    className={`${SELECT} min-h-20 resize-y font-mono text-2xs`}
                     disabled={webLocked}
                     value={web.domains.join('\n')}
                     placeholder={'example.com\ndocs.example.org'}
@@ -619,7 +619,7 @@ export default function CcWindowSettings({
                     }
                   />
                 ) : null}
-                <span className="mt-1 block text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+                <span className="mt-1 block text-2xs leading-relaxed text-[var(--color-text-disabled)]">
                   只填域名，不填 https://；同时约束 Search 和 Fetch。
                 </span>
               </label>
@@ -630,13 +630,13 @@ export default function CcWindowSettings({
             type="button"
             disabled={webSaving}
             onClick={onSaveWebDefaults}
-            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-[11.5px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)]/40 disabled:opacity-50"
+            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-meta text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)]/40 disabled:opacity-50"
           >
             {webSaving ? '保存中…' : '保存为新窗口默认'}
           </button>
 
           {note ? (
-            <div className="mt-2 text-[10.5px] leading-relaxed text-[var(--color-primary)]">{note}</div>
+            <div className="mt-2 text-2xs leading-relaxed text-[var(--color-primary)]">{note}</div>
           ) : null}
 
           {/* ── 换窗 ── */}
@@ -644,7 +644,7 @@ export default function CcWindowSettings({
           <button
             type="button"
             onClick={onHandoff}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-[11.5px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-text-heading)]"
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 text-meta text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-text-heading)]"
           >
             换窗
           </button>

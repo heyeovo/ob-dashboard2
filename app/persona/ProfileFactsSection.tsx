@@ -222,7 +222,7 @@ export default function ProfileFactsSection({
                   </div>
                 </div>
 
-                <div className="mt-2 space-y-0.5 text-[11px] text-[var(--color-text-disabled)]">
+                <div className="mt-2 space-y-0.5 text-meta text-[var(--color-text-disabled)]">
                   {(fact.evidence || []).length ? (
                     fact.evidence!.map((item, index) => {
                       const bucketId = item.bucket_id || ''

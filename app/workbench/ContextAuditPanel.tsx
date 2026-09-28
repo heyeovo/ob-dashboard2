@@ -272,7 +272,7 @@ export default function ContextAuditPanel() {
               <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">日期模式</div>
               <div className="flex flex-wrap gap-1.5">
                 {data.days.filter(day => day.turn_count > 0).map(day => (
-                  <span key={day.day} className={`rounded-full px-2.5 py-1 text-[11px] ${day.mode === 'raw' ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : day.mode === 'review' ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'bg-[var(--color-archived-bg)] text-[var(--color-archived)]'}`}>
+                  <span key={day.day} className={`rounded-full px-2.5 py-1 text-meta ${day.mode === 'raw' ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : day.mode === 'review' ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'bg-[var(--color-archived-bg)] text-[var(--color-archived)]'}`}>
                     {day.day} · {day.mode} · {day.turn_count}轮
                   </span>
                 ))}
@@ -284,7 +284,7 @@ export default function ContextAuditPanel() {
               <div className="max-h-[36rem] space-y-2 overflow-auto border-t border-[var(--color-border)] p-3">
                 {data.rolling.messages.length ? data.rolling.messages.map(message => (
                   <article key={`${message.turn_id}-${message.role}`} className="rounded-lg bg-[var(--color-bg)] p-3">
-                    <div className="mb-2 text-[11px] text-[var(--color-text-tertiary)]">{message.day} · {message.role} · turn {message.turn_id} · {message.id} · {number(message.chars)} 字符</div>
+                    <div className="mb-2 text-meta text-[var(--color-text-tertiary)]">{message.day} · {message.role} · turn {message.turn_id} · {message.id} · {number(message.chars)} 字符</div>
                     <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-5 text-[var(--color-text-secondary)]">{message.content}</pre>
                   </article>
                 )) : <p className="text-xs text-[var(--color-text-tertiary)]">没有原文被选入。固定窗口也不会在这里重建滚动种子。</p>}
@@ -355,7 +355,7 @@ export default function ContextAuditPanel() {
                   </div>
                 ) : null}
                 {data.transcript.available ? (
-                  <div className="space-y-1 text-[11px] text-[var(--color-text-tertiary)]">
+                  <div className="space-y-1 text-meta text-[var(--color-text-tertiary)]">
                     <div>SessionStore 共 {number(data.transcript.entry_count)} 条记录，其中 {number(data.transcript.message_count)} 条可审计消息。以下内容直接来自持久 transcript，不是按 Haven 配置推算。</div>
                     <div>工具调用 {number(data.transcript.tool_use_messages)} 条 · 工具结果 {number(data.transcript.tool_result_messages)} 条 · 召回包装 {number(data.transcript.memory_recall_messages)} 条 · 正文恢复标记 {number(data.transcript.body_restored_messages)} 条</div>
                     {data.rolling_seed ? <div>最近一次重建凭据：{JSON.stringify(data.rolling_seed)}</div> : <div>最近 50 轮没有找到持久化的重建凭据。</div>}
@@ -364,7 +364,7 @@ export default function ContextAuditPanel() {
                 <div className="max-h-[36rem] space-y-2 overflow-auto">
                   {data.transcript.messages.map(message => (
                     <article key={`${message.index}-${message.uuid}`} className={`rounded-lg p-3 ${message.containsRollingWindowContext ? 'bg-[var(--color-danger-bg)]' : 'bg-[var(--color-bg)]'}`}>
-                      <div className={`mb-2 text-[11px] ${message.containsRollingWindowContext ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-tertiary)]'}`}>#{message.index} · {message.role} · {number(message.chars)} 字符 · {message.blockTypes.join('+') || 'unknown'}{message.toolNames.length ? ` · ${message.toolNames.join(', ')}` : ''}{message.containsMemoryRecall ? ' · 记忆召回' : ''}{message.bodyRestored ? ' · 正文恢复' : ''}{message.containsRollingWindowContext ? ' · 命中 rolling_window_context' : ''}</div>
+                      <div className={`mb-2 text-meta ${message.containsRollingWindowContext ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-tertiary)]'}`}>#{message.index} · {message.role} · {number(message.chars)} 字符 · {message.blockTypes.join('+') || 'unknown'}{message.toolNames.length ? ` · ${message.toolNames.join(', ')}` : ''}{message.containsMemoryRecall ? ' · 记忆召回' : ''}{message.bodyRestored ? ' · 正文恢复' : ''}{message.containsRollingWindowContext ? ' · 命中 rolling_window_context' : ''}</div>
                       <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-5 text-[var(--color-text-secondary)]">{message.content}</pre>
                     </article>
                   ))}
@@ -392,7 +392,7 @@ export default function ContextAuditPanel() {
                   <div className="mb-2 font-medium text-[var(--color-text-secondary)]">当前 Prompt 模块</div>
                   <div className="flex flex-wrap gap-1.5">
                     {data.system_prompt.current.modules.map(module => (
-                      <span key={module.id} className={`rounded-full px-2.5 py-1 text-[11px] ${module.enabled ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-archived-bg)] text-[var(--color-archived)]'}`}>{module.name} · {module.enabled ? '启用' : '关闭'} · {number(module.chars)}字</span>
+                      <span key={module.id} className={`rounded-full px-2.5 py-1 text-meta ${module.enabled ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-archived-bg)] text-[var(--color-archived)]'}`}>{module.name} · {module.enabled ? '启用' : '关闭'} · {number(module.chars)}字</span>
                     ))}
                   </div>
                 </div>
@@ -406,7 +406,7 @@ export default function ContextAuditPanel() {
                   <pre className="max-h-[36rem] overflow-auto whitespace-pre-wrap break-words border-t border-[var(--color-border)] p-3 font-sans leading-5 text-[var(--color-text-secondary)]">{data.system_prompt.current.dashboard_append || '当前没有 Dashboard 追加正文'}</pre>
                 </details>
 
-                <p className="text-[11px] leading-5 text-[var(--color-text-tertiary)]">闲聊模式的 custom 正文就是 Dashboard 提交的 system prompt。工作模式显示的是 Dashboard 追加到 Claude Code preset 后面的正文；SDK 内置 preset 的原文不由 Dashboard 提供，因此不伪造显示。</p>
+                <p className="text-meta leading-5 text-[var(--color-text-tertiary)]">闲聊模式的 custom 正文就是 Dashboard 提交的 system prompt。工作模式显示的是 Dashboard 追加到 Claude Code preset 后面的正文；SDK 内置 preset 的原文不由 Dashboard 提供，因此不伪造显示。</p>
               </div>
             </details>
 
@@ -417,7 +417,7 @@ export default function ContextAuditPanel() {
                   <div className="mb-2 font-medium text-[var(--color-text-secondary)]">长期层选择</div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {data.rolling.long_term_groups.map(group => (
-                      <div key={group.id} className="rounded-lg bg-[var(--color-bg)] p-2.5 text-[11px] leading-5">
+                      <div key={group.id} className="rounded-lg bg-[var(--color-bg)] p-2.5 text-meta leading-5">
                         <div className="font-medium text-[var(--color-text-secondary)]">{group.label}</div>
                         <div className="break-all text-[var(--color-text-tertiary)]">已保存：{group.saved_ids === null ? '未单独保存（使用兼容默认）' : group.saved_ids.join('、') || '无'}</div>
                         <div className="break-all text-[var(--color-text-tertiary)]">本轮有效：{group.effective_ids.join('、') || '无'}</div>
@@ -450,9 +450,9 @@ export default function ContextAuditPanel() {
                   <summary className="cursor-pointer px-3 py-2 font-medium text-[var(--color-text-secondary)]">Claude Code 工具（{data.tooling.current.tools.length} 个）</summary>
                   <div className="border-t border-[var(--color-border)] p-3">
                     <div className="flex flex-wrap gap-1.5">
-                      {data.tooling.current.tools.map(tool => <span key={tool.name} className="rounded-full bg-[var(--color-surface-secondary)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">{tool.name}</span>)}
+                      {data.tooling.current.tools.map(tool => <span key={tool.name} className="rounded-full bg-[var(--color-surface-secondary)] px-2 py-1 text-meta text-[var(--color-text-secondary)]">{tool.name}</span>)}
                     </div>
-                    <p className="mt-2 text-[11px] leading-5 text-[var(--color-text-tertiary)]">这些工具的 description 和 input schema 由 Claude Code SDK preset 内部提供，Dashboard 只能确认传入的启用名称，不伪造定义。</p>
+                    <p className="mt-2 text-meta leading-5 text-[var(--color-text-tertiary)]">这些工具的 description 和 input schema 由 Claude Code SDK preset 内部提供，Dashboard 只能确认传入的启用名称，不伪造定义。</p>
                   </div>
                 </details>
 
@@ -465,25 +465,25 @@ export default function ContextAuditPanel() {
                       </summary>
                       <div className="space-y-3 border-t border-[var(--color-border)] p-3">
                         <div>
-                          <div className="mb-1 text-[11px] font-medium text-[var(--color-text-secondary)]">Server instructions</div>
+                          <div className="mb-1 text-meta font-medium text-[var(--color-text-secondary)]">Server instructions</div>
                           <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--color-surface-secondary)] p-2.5 font-sans leading-5 text-[var(--color-text-secondary)]">{server.instructions || '该 MCP 配置没有可由 Dashboard 审计的 server instructions。'}</pre>
                         </div>
                         {server.tools.map(tool => (
                           <div key={tool.name} className="rounded-lg border border-[var(--color-border-light)] p-2.5">
                             <div className="font-medium text-[var(--color-text-secondary)]">{tool.name}{tool.title ? ` · ${tool.title}` : ''}{server.name === 'ombre_agent_wake' ? ` · description hash ${data.tooling.current.agent_wake_instructions_hash}` : ''}</div>
                             <div className="mt-1 whitespace-pre-wrap text-[var(--color-text-tertiary)]">{tool.description || '没有 description'}</div>
-                            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--color-surface-secondary)] p-2 text-[10px] leading-4 text-[var(--color-text-secondary)]">{JSON.stringify(tool.inputSchema || {}, null, 2)}</pre>
+                            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--color-surface-secondary)] p-2 text-2xs leading-4 text-[var(--color-text-secondary)]">{JSON.stringify(tool.inputSchema || {}, null, 2)}</pre>
                           </div>
                         ))}
                       </div>
                     </details>
                   ))}
-                  {data.tooling.current.disabled_mcp_tools.length ? <div className="text-[11px] text-[var(--color-text-tertiary)]">当前关闭的 MCP 工具：{data.tooling.current.disabled_mcp_tools.join('、')}</div> : null}
+                  {data.tooling.current.disabled_mcp_tools.length ? <div className="text-meta text-[var(--color-text-tertiary)]">当前关闭的 MCP 工具：{data.tooling.current.disabled_mcp_tools.join('、')}</div> : null}
                 </div>
               </div>
             </details>
 
-            <p className="text-[11px] leading-5 text-[var(--color-text-tertiary)]">这里显示 Dashboard 可验证的 SDK 输入：滚动种子原文、滚动背景，以及 SDK 回报的最近一轮 token/cache 数据。它不会拦截 OAuth，也不会显示密钥；SDK 内部最终 HTTP 封包不在可见范围内。</p>
+            <p className="text-meta leading-5 text-[var(--color-text-tertiary)]">这里显示 Dashboard 可验证的 SDK 输入：滚动种子原文、滚动背景，以及 SDK 回报的最近一轮 token/cache 数据。它不会拦截 OAuth，也不会显示密钥；SDK 内部最终 HTTP 封包不在可见范围内。</p>
           </div>
         ) : null}
       </div>

@@ -163,7 +163,7 @@ function MetricCard({ title, pace, fields, values }: {
     <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="font-semibold text-[var(--color-text-heading)]">{title}</h2>
-        <span className="text-[11px] text-[var(--color-text-disabled)]">{pace}</span>
+        <span className="text-meta text-[var(--color-text-disabled)]">{pace}</span>
       </div>
       <div className="space-y-3.5">
         {fields.map(([key, label]) => <Metric key={key} label={label} value={values[key]} />)}
@@ -178,7 +178,7 @@ function StatusPill({ label, ok, paused }: { label: string; ok: boolean; paused?
     : paused
       ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
       : 'border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger)]'
-  return <span className={`rounded-full border px-2.5 py-1 text-[11px] ${tone}`}>{label}</span>
+  return <span className={`rounded-full border px-2.5 py-1 text-meta ${tone}`}>{label}</span>
 }
 
 function DeltaList({ event }: { event: PersonaEvent }) {
@@ -200,7 +200,7 @@ function DeltaList({ event }: { event: PersonaEvent }) {
       {deltas.map(({ group, key, value }) => (
         <span
           key={`${group}-${key}`}
-          className={`rounded-full px-2 py-1 text-[11px] tabular-nums ${value > 0 ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' : 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]'}`}
+          className={`rounded-full px-2 py-1 text-meta tabular-nums ${value > 0 ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' : 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]'}`}
           title={`${group}.${key}`}
         >
           {group}·{FIELD_LABELS[key] || key} {value > 0 ? '+' : ''}{value.toFixed(3)}
@@ -361,13 +361,13 @@ function PersonaStateView() {
                   <p className="mt-1 text-xs tabular-nums text-[var(--color-text-tertiary)]">V {numeric(affect.valence).toFixed(2)} · A {numeric(affect.arousal).toFixed(2)}</p>
                 </div>
                 <div className="mt-6 rounded-2xl bg-[var(--color-surface-secondary)] p-4">
-                  <p className="text-[11px] font-medium text-[var(--color-text-disabled)]">内在余味</p>
+                  <p className="text-meta font-medium text-[var(--color-text-disabled)]">内在余味</p>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-secondary)]">{residue}</p>
                 </div>
                 {activeSession?.title && (
                   <p className="mt-4 truncate text-center text-xs font-medium text-[var(--color-text-tertiary)]" title={activeSession.title}>{activeSession.title}</p>
                 )}
-                <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11px] text-[var(--color-text-disabled)]">
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-meta text-[var(--color-text-disabled)]">
                   {activeSession?.updated_at && <span>更新于 {formatTime(activeSession.updated_at)}</span>}
                   <code className="max-w-full truncate rounded bg-[var(--color-surface-secondary)] px-2 py-1" title={sessionId || '未指定'}>Session ID: {sessionId || '未指定'}</code>
                   {sessionId && (
@@ -443,12 +443,12 @@ function PersonaStateView() {
                           return (
                             <article key={`${event.created_at || index}-${event.message_hash || index}`} className="rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/45 p-4">
                               <div className="flex flex-wrap items-start justify-between gap-2">
-                                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)]">{event.event_type || 'unknown'}</span>
-                                <time className="text-[11px] text-[var(--color-text-disabled)]">{formatTime(event.created_at)}</time>
+                                <span className="rounded-full bg-[var(--color-surface)] px-2 py-1 text-meta font-medium text-[var(--color-text-secondary)]">{event.event_type || 'unknown'}</span>
+                                <time className="text-meta text-[var(--color-text-disabled)]">{formatTime(event.created_at)}</time>
                               </div>
                               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">{thought}</p>
                               {trigger && trigger !== thought && <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">{trigger}</p>}
-                              <div className="mt-2 flex flex-wrap gap-x-3 text-[11px] text-[var(--color-text-disabled)]">
+                              <div className="mt-2 flex flex-wrap gap-x-3 text-meta text-[var(--color-text-disabled)]">
                                 <span>{event.mood_label || '心情未设置'}</span>
                                 <span>confidence {numeric(event.confidence).toFixed(2)}</span>
                                 {event.message_hash && <span>#{event.message_hash}</span>}

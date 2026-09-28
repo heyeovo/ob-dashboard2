@@ -74,8 +74,8 @@ function TokenCard({
   return (
     <Card variant="outline" padding="sm">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-[11px] font-medium text-[var(--color-text-heading)]">{title}</span>
-        <span className="text-right text-[9.5px] text-[var(--color-text-disabled)]">{hint}</span>
+        <span className="text-meta font-medium text-[var(--color-text-heading)]">{title}</span>
+        <span className="text-right text-3xs text-[var(--color-text-disabled)]">{hint}</span>
       </div>
       <div className="mb-2.5 flex h-2 overflow-hidden rounded-full bg-[var(--color-border-light)]">
         {rows.map(row => (
@@ -88,7 +88,7 @@ function TokenCard({
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
         {rows.map(row => (
-          <div key={row.label} className="flex min-w-0 items-center gap-1.5 text-[9.5px]">
+          <div key={row.label} className="flex min-w-0 items-center gap-1.5 text-3xs">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
             <span className="min-w-0 flex-1 truncate text-[var(--color-text-tertiary)]">{row.label}</span>
             <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
@@ -213,8 +213,8 @@ export default function CcContextAnalysis(props: Props) {
       <Card variant="outline" padding="sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[11px] font-medium text-[var(--color-text-heading)]">SDK 官方精确分析</div>
-            <div className="mt-1 text-[9.5px] leading-relaxed text-[var(--color-text-disabled)]">
+            <div className="text-meta font-medium text-[var(--color-text-heading)]">SDK 官方精确分析</div>
+            <div className="mt-1 text-3xs leading-relaxed text-[var(--color-text-disabled)]">
               手动调用 Agent SDK 的 Context 接口；可能产生额外 Pro/API 请求，不会自动刷新。
             </div>
           </div>
@@ -222,21 +222,21 @@ export default function CcContextAnalysis(props: Props) {
             type="button"
             disabled={loading || Boolean(disabledReason)}
             onClick={() => void readExact(Boolean(analysis))}
-            className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-2xs text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? '读取中…' : analysis ? '重新读取' : '读取官方分析'}
           </button>
         </div>
-        {disabledReason ? <div className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">{disabledReason}</div> : null}
-        {error ? <div className="mt-2 text-[10px] text-[var(--color-primary)]">{error}</div> : null}
+        {disabledReason ? <div className="mt-2 text-2xs text-[var(--color-text-tertiary)]">{disabledReason}</div> : null}
+        {error ? <div className="mt-2 text-2xs text-[var(--color-primary)]">{error}</div> : null}
         {analysis ? (
           <div className="mt-3">
             <div className="mb-2 flex items-end justify-between gap-3">
-              <div className="text-[18px] tabular-nums text-[var(--color-text-heading)]">
+              <div className="text-lg tabular-nums text-[var(--color-text-heading)]">
                 {fmtK(analysis.totalTokens)}
-                <span className="ml-1 text-[10px] text-[var(--color-text-disabled)]">/ {fmtK(analysis.maxTokens)}</span>
+                <span className="ml-1 text-2xs text-[var(--color-text-disabled)]">/ {fmtK(analysis.maxTokens)}</span>
               </div>
-              <div className="text-right text-[9.5px] text-[var(--color-text-disabled)]">
+              <div className="text-right text-3xs text-[var(--color-text-disabled)]">
                 {cached ? '本进程缓存 · ' : ''}{analysis.model}<br />
                 {new Date(analysis.updatedAt).toLocaleString('zh-HK', { hour12: false })}
               </div>
@@ -244,10 +244,10 @@ export default function CcContextAnalysis(props: Props) {
             <TokenCard title="SDK 官方分类" hint="当前总量 / 分类估算" rows={exactRows} base={analysis.totalTokens} />
             {detailRows.length > 0 ? (
               <div className="mt-3">
-                <div className="mb-1.5 text-[10.5px] font-medium text-[var(--color-text-secondary)]">前缀明细</div>
+                <div className="mb-1.5 text-2xs font-medium text-[var(--color-text-secondary)]">前缀明细</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   {detailRows.map(([label, tokens]) => (
-                    <div key={label} className="flex justify-between gap-2 text-[9.5px]">
+                    <div key={label} className="flex justify-between gap-2 text-3xs">
                       <span className="text-[var(--color-text-tertiary)]">{label}</span>
                       <span className="tabular-nums text-[var(--color-text-secondary)]">{fmtK(tokens)}</span>
                     </div>
@@ -257,9 +257,9 @@ export default function CcContextAnalysis(props: Props) {
             ) : null}
             {conversationEstimate > 0 ? (
               <div className="mt-3">
-                <div className="mb-1.5 text-[10.5px] font-medium text-[var(--color-text-secondary)]">消息正文</div>
+                <div className="mb-1.5 text-2xs font-medium text-[var(--color-text-secondary)]">消息正文</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  <div className="flex justify-between gap-2 text-[9.5px]">
+                  <div className="flex justify-between gap-2 text-3xs">
                     <span className="text-[var(--color-text-tertiary)]">当前已加载对话（预估）</span>
                     <span className="tabular-nums text-[var(--color-text-secondary)]">{fmtK(conversationEstimate)}</span>
                   </div>
@@ -276,7 +276,7 @@ export default function CcContextAnalysis(props: Props) {
         rows={estimated.rows}
         base={estimated.base}
       />
-      <div className="text-[9.5px] leading-relaxed text-[var(--color-text-disabled)]">
+      <div className="text-3xs leading-relaxed text-[var(--color-text-disabled)]">
         “未归因差额”只是预估口径未覆盖的部分。要定位工具结果、附件、隐藏消息等真实来源，请以上面的 SDK 官方明细为准。
       </div>
     </div>

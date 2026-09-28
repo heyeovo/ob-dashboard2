@@ -500,11 +500,11 @@ export default function AutomationSettingsPage() {
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 {toggle('personaEnabled', '启用')}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   关闭后 Gateway 不再注入 Persona 状态，也不再做回复后的 Persona 更新
                 </div>
                 {toggle('personaEventRecording', '记录事件', !form.personaEnabled)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   关闭后仍评估数值状态，但不新增 Recent Persona Events
                 </div>
                 <Field label="Model">
@@ -536,17 +536,17 @@ export default function AutomationSettingsPage() {
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 {toggle('dreamEnabled', '做梦引擎')}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   总开关；关闭后不生成新梦，也不做梦境浮现
                 </div>
                 {toggle('dreamAutoEnabled', '后台做梦', !form.dreamEnabled)}
                 {toggle('dreamSurfaceEnabled', '自动浮现', !form.dreamEnabled)}
                 {toggle('dreamInjectEnabled', 'Gateway 注入', !form.dreamEnabled)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   开启后 Gateway 可能把一次共振梦境作为 Dream Context 给模型静默参考
                 </div>
                 {toggle('dreamRetainEnabled', '浮现后保留', !form.dreamEnabled)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   开启后梦境仍只浮现一次，但原梦会保留在梦境记录里供人翻开
                 </div>
                 <Field label="Model">
@@ -639,15 +639,15 @@ export default function AutomationSettingsPage() {
                   旧日印象、旧自动记忆及其每日汇总已由后端暂停；历史数据和原配置保留。
                 </div>
                 {toggle('reflectionEnabled', '整理引擎')}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   总开关；关闭后此区域的关系整理、日印象、自动记忆都不运行
                 </div>
                 {toggle('reflectionAutoEnabled', '自动整理', !form.reflectionEnabled)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   后台定时任务；当前只继续关系整理和已有记忆的 tags、affect_anchor、边关系补全
                 </div>
                 {toggle('reflectionDailyEnabled', '旧日印象（已暂停）', true)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   关闭后不再自动生成 daily relationship_weather
                 </div>
                 <Field label="最少记忆数" hint="默认 5；只数当天普通记忆/更新项，persona events 不计入门槛">
@@ -705,11 +705,11 @@ export default function AutomationSettingsPage() {
                   />
                 </Field>
                 {toggle('reflectionMemoryAnchorEnabled', '普通记忆和弦', !form.reflectionEnabled)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   关闭后普通 bucket 不再自动追加 affect_anchor
                 </div>
                 {toggle('reflectionWeatherAnchorEnabled', '旧日印象和弦（已暂停）', true)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   控制日印象/关系天气正文里的 affect_anchor
                 </div>
               </div>
@@ -722,12 +722,12 @@ export default function AutomationSettingsPage() {
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 {toggle('portraitEnabled', '画像引擎')}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   总开关；只维护 state/portrait_state.json，不自动写 profile_fact、anchor 或 Core Memory
                 </div>
                 {toggle('portraitAutoEnabled', '自动维护', !form.portraitEnabled)}
                 {toggle('portraitAutoInitialEnabled', '自动首次生成', !form.portraitEnabled)}
-                <div className="sm:col-span-2 -mt-1 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                <div className="sm:col-span-2 -mt-1 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                   默认关闭；新安装或空 state 时，第一次画像需要手动点击生成
                 </div>
                 {toggle('portraitDailyEnabled', '每日维护', !form.portraitEnabled)}

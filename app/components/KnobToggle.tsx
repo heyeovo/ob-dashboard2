@@ -28,10 +28,10 @@ export default function KnobToggle({ label, desc, checked, onChange }: {
         className="flex items-center gap-1 cursor-pointer hover:opacity-70 transition-opacity"
       >
         <span className="text-xs font-medium text-[var(--color-text-primary)]">{label}</span>
-        <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-[var(--color-border)] text-[9px] text-[var(--color-text-tertiary)] leading-none">?</span>
+        <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-[var(--color-border)] text-3xs text-[var(--color-text-tertiary)] leading-none">?</span>
       </button>
       {showTip && (
-        <div className="absolute left-0 top-6 z-20 bg-[var(--color-text-primary)] text-[var(--color-on-primary)] text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap
+        <div className="absolute left-0 top-6 z-20 bg-[var(--color-text-primary)] text-[var(--color-on-primary)] text-2xs px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap
           before:content-[''] before:absolute before:-top-1 before:left-3 before:w-2 before:h-2 before:bg-[var(--color-text-primary)] before:rotate-45">
           {desc}
         </div>

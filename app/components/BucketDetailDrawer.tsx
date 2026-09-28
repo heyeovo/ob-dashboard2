@@ -341,7 +341,7 @@ export default function BucketDetailDrawer({
             {/* 信息胶囊 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">IMP</div>
+                <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">IMP</div>
                 <div className="h-5 flex items-center justify-center">
                   <input
                     type="number" min="0" max="10"
@@ -357,23 +357,23 @@ export default function BucketDetailDrawer({
                 </div>
               </div>
                 <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">权重</div>
+                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">权重</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.score?.toFixed(2) ?? '—'}</div>
                 </div>
                 <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">激活</div>
+                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">激活</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.activation_count ?? '—'}</div>
                 </div>
                 <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">效价 V</div>
+                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">效价 V</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
                 </div>
                 <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">唤醒 A</div>
+                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">唤醒 A</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
                 </div>
                 <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-[10px] text-[var(--color-text-tertiary)] mb-0.5">类型</div>
+                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">类型</div>
                   <div className="text-sm font-semibold text-[var(--color-text-primary)]">
                     {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}
                   </div>
@@ -464,7 +464,7 @@ export default function BucketDetailDrawer({
                 <div className="flex justify-between items-center px-5 pt-3 pb-2 border-b border-[var(--color-border-light)]">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">内容</span>
-                    <span className="text-[10px] text-[var(--color-primary-caption)] font-mono">
+                    <span className="text-2xs text-[var(--color-primary-caption)] font-mono">
                       {selected.content.length} 字 · ~{Math.ceil(selected.content.length * 1.3)} tokens
                     </span>
                   </div>
@@ -493,7 +493,7 @@ export default function BucketDetailDrawer({
                   onChange={e => onStartEdit(e.target.value)}
                 />
                 <div className="flex justify-between items-center mt-3">
-                  <span className="text-[10px] text-[var(--color-primary-caption)] font-mono">
+                  <span className="text-2xs text-[var(--color-primary-caption)] font-mono">
                     {editContent.length} 字 · ~{Math.ceil(editContent.length * 1.3)} tokens
                   </span>
                   <div className="flex gap-2">
@@ -578,8 +578,8 @@ export default function BucketDetailDrawer({
                   {(momentData?.moments || []).map(moment => (
                     <div key={moment.moment_id} className="rounded-lg border border-[var(--color-border-light)] px-3 py-2">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-[11px] font-medium text-[var(--color-primary)]">{moment.section || 'moment'}</span>
-                        <span className="text-[10px] text-[var(--color-text-disabled)] font-mono truncate">{moment.moment_id}</span>
+                        <span className="text-meta font-medium text-[var(--color-primary)]">{moment.section || 'moment'}</span>
+                        <span className="text-2xs text-[var(--color-text-disabled)] font-mono truncate">{moment.moment_id}</span>
                       </div>
                       <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap break-words">{moment.text}</div>
                     </div>
@@ -633,13 +633,13 @@ export default function BucketDetailDrawer({
                     {comments.map((comment, index) => (
                       <div key={comment.id || index} className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
                         <div className="flex items-start justify-between gap-3 mb-1">
-                          <div className="flex flex-wrap gap-x-2 text-[10px] text-[var(--color-text-disabled)]">
+                          <div className="flex flex-wrap gap-x-2 text-2xs text-[var(--color-text-disabled)]">
                             <span>{comment.created ? formatBeijingDateTime(comment.created) : '时间未知'}</span>
                             <span>{comment.author || '作者未知'}</span>
                             <span>{comment.kind || 'comment'}</span>
                           </div>
                           {comment.id ? (
-                            <div className="flex shrink-0 gap-2 text-[10px]">
+                            <div className="flex shrink-0 gap-2 text-2xs">
                               <button
                                 type="button"
                                 disabled={Boolean(commentOperatingId)}
@@ -666,11 +666,11 @@ export default function BucketDetailDrawer({
                               autoFocus
                             />
                             <div className="flex justify-end gap-2">
-                              <button type="button" className="text-[10px] text-[var(--color-text-tertiary)]" onClick={() => { setEditingCommentId(''); setCommentDraft('') }}>取消</button>
+                              <button type="button" className="text-2xs text-[var(--color-text-tertiary)]" onClick={() => { setEditingCommentId(''); setCommentDraft('') }}>取消</button>
                               <button
                                 type="button"
                                 disabled={!commentDraft.trim() || Boolean(commentOperatingId)}
-                                className="rounded bg-[var(--color-primary)] px-2 py-1 text-[10px] text-[var(--color-on-primary)] disabled:opacity-40"
+                                className="rounded bg-[var(--color-primary)] px-2 py-1 text-2xs text-[var(--color-on-primary)] disabled:opacity-40"
                                 onClick={() => { if (comment.id) void mutateComment(comment.id, 'PATCH', commentDraft.trim()) }}
                               >{commentOperatingId === comment.id ? '保存中…' : '保存'}</button>
                             </div>

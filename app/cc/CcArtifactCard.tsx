@@ -17,10 +17,10 @@ export default function CcArtifactCard({ name, title, action }: { name: string; 
           ✦
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium text-[var(--color-text-heading)]">
+          <span className="block truncate text-note font-medium text-[var(--color-text-heading)]">
             {title || artifactBaseName(name)}
           </span>
-          <span className="block truncate text-[11px] text-[var(--color-text-tertiary)]">
+          <span className="block truncate text-meta text-[var(--color-text-tertiary)]">
             {action === 'patch' ? '改好了' : '做好了'} · 点开玩
           </span>
         </span>

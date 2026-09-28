@@ -120,12 +120,12 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
         <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" aria-label="关闭" className="absolute inset-0" onClick={() => setHistoryDateOpen(false)} />
           <div className="cc-modal relative w-full max-w-xs p-5" role="dialog" aria-label="查看历史消息">
-            <div className="text-[13px] font-medium text-[var(--color-text-heading)]">跳到某一天</div>
-            <div className="mt-1 text-[10.5px] text-[var(--color-text-disabled)]">仍在当前聊天页内；上下滚动可以继续进入相邻日期。</div>
-            <input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="mt-4 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[12px]" />
+            <div className="text-note font-medium text-[var(--color-text-heading)]">跳到某一天</div>
+            <div className="mt-1 text-2xs text-[var(--color-text-disabled)]">仍在当前聊天页内；上下滚动可以继续进入相邻日期。</div>
+            <input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="mt-4 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs" />
             <button
               type="button"
-              className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-[var(--color-on-primary)]"
+              className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-meta text-[var(--color-on-primary)]"
               onClick={() => {
                 void (async () => {
                   const found = await chat.loadHistoryDay(historyDate)
@@ -181,13 +181,13 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
           >
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
             <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-4">
-              <h2 className="text-[15px] font-semibold text-[var(--color-text-heading)]">
+              <h2 className="text-md font-semibold text-[var(--color-text-heading)]">
                 转发到…
               </h2>
               <button
                 type="button"
                 onClick={() => { setPendingForward(null); stopSelecting() }}
-                className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+                className="text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
               >
                 取消
               </button>
@@ -204,10 +204,10 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
                       className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-surface-secondary)] ${s.session_id === chat.sessionId ? 'bg-[var(--color-primary-soft)]' : ''}`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
+                        <div className="truncate text-note font-medium text-[var(--color-text-primary)]">
                           {s.title || '新对话'}
                         </div>
-                        <div className="mt-0.5 text-[10px] text-[var(--color-text-disabled)]">
+                        <div className="mt-0.5 text-2xs text-[var(--color-text-disabled)]">
                           {s.turn_count} 轮
                           {s.session_id === chat.sessionId ? ' · 当前窗口' : ''}
                         </div>
@@ -217,7 +217,7 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
                   ))}
               </div>
             </div>
-            <div className="border-t border-[var(--color-border-light)] px-5 py-3 text-center text-[10px] text-[var(--color-text-disabled)]">
+            <div className="border-t border-[var(--color-border-light)] px-5 py-3 text-center text-2xs text-[var(--color-text-disabled)]">
               已选 {pendingForward.lines.length} 条消息
             </div>
           </div>

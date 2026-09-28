@@ -130,7 +130,7 @@ export default function BreathSimPage() {
               >
                 <span className="text-xs font-medium text-[var(--color-text-primary)]">评分旋钮</span>
                 <span className="flex items-center gap-2">
-                  {knobsOpen && <button onClick={(e) => { e.stopPropagation(); resetScoringConfig() }} className="text-[10px] text-[var(--color-danger-strong)] hover:text-[var(--color-danger)]">重置</button>}
+                  {knobsOpen && <button onClick={(e) => { e.stopPropagation(); resetScoringConfig() }} className="text-2xs text-[var(--color-danger-strong)] hover:text-[var(--color-danger)]">重置</button>}
                   <span className="text-[var(--color-text-disabled)] text-xs transition-transform duration-200" style={{ transform: knobsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                 </span>
               </div>
@@ -161,7 +161,7 @@ export default function BreathSimPage() {
                   {/* Keyword hits */}
                   <div className="space-y-1">
                     <div className="text-xs font-medium text-[var(--color-text-secondary)] px-1">Keyword Matches ({kw.length})</div>
-                    {kw.length === 0 ? <Card variant="empty" padding="sm" className="py-4 text-center text-xs text-[var(--color-text-disabled)]">No keyword matches</Card> : kw.map((b: any) => { const meta = bucketMeta.get(b.id); return (<Card key={b.id} variant="interactive" padding="sm" onClick={() => openBucket(b.id)} className="flex items-center gap-2 hover:border-[var(--color-primary)]/40"><span className="text-xs font-medium text-[var(--color-text-primary)] truncate flex-1">{b.name || b.id}</span>{badgeFor(meta)}<span className="text-xs font-bold text-[var(--color-primary)] flex-shrink-0">{b.score}</span><div className="flex gap-1 flex-shrink-0">{b.matched_fields?.matched_in?.map((f: string) => { const v = b.matched_fields[f]; return <span key={f} className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium" style={{ borderColor: FC[f] || 'var(--color-text-disabled)', color: FC[f], background: `${FC[f]}15` }}>{f} {v.toFixed(0)}%</span> })}</div></Card>)})}
+                    {kw.length === 0 ? <Card variant="empty" padding="sm" className="py-4 text-center text-xs text-[var(--color-text-disabled)]">No keyword matches</Card> : kw.map((b: any) => { const meta = bucketMeta.get(b.id); return (<Card key={b.id} variant="interactive" padding="sm" onClick={() => openBucket(b.id)} className="flex items-center gap-2 hover:border-[var(--color-primary)]/40"><span className="text-xs font-medium text-[var(--color-text-primary)] truncate flex-1">{b.name || b.id}</span>{badgeFor(meta)}<span className="text-xs font-bold text-[var(--color-primary)] flex-shrink-0">{b.score}</span><div className="flex gap-1 flex-shrink-0">{b.matched_fields?.matched_in?.map((f: string) => { const v = b.matched_fields[f]; return <span key={f} className="text-2xs px-1.5 py-0.5 rounded-full border font-medium" style={{ borderColor: FC[f] || 'var(--color-text-disabled)', color: FC[f], background: `${FC[f]}15` }}>{f} {v.toFixed(0)}%</span> })}</div></Card>)})}
                   </div>
                   {/* Semantic recall */}
                   <div className="space-y-1">

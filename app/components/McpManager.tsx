@@ -491,7 +491,7 @@ export default function McpManager() {
             }}
             placeholder="例如 Ombre Brain"
           />
-          <span className="mt-1 block text-[10px] text-[var(--color-text-disabled)]">
+          <span className="mt-1 block text-2xs text-[var(--color-text-disabled)]">
             只用于页面展示，可以随时修改。
           </span>
         </label>
@@ -507,7 +507,7 @@ export default function McpManager() {
             }
             placeholder="例如 ombre_brain"
           />
-          <span className="mt-1 block text-[10px] text-[var(--color-text-disabled)]">
+          <span className="mt-1 block text-2xs text-[var(--color-text-disabled)]">
             {draft.originalName
               ? '工具会使用这个固定标识；保存后不可修改。'
               : '自动生成，只使用小写字母、数字和下划线。保存后不可修改。'}
@@ -680,7 +680,7 @@ export default function McpManager() {
       <div className="mb-4 rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-4 py-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-disabled)]">
+            <div className="text-2xs font-semibold uppercase tracking-wider text-[var(--color-text-disabled)]">
               下轮 MCP Context 预估
             </div>
             <div className="mt-1 text-xl font-semibold tabular-nums text-[var(--color-text-heading)]">
@@ -688,7 +688,7 @@ export default function McpManager() {
               <span className="text-xs font-normal text-[var(--color-text-tertiary)]">token</span>
             </div>
           </div>
-          <div className="max-w-[15rem] text-right text-[10px] leading-relaxed text-[var(--color-text-disabled)]">
+          <div className="max-w-[15rem] text-right text-2xs leading-relaxed text-[var(--color-text-disabled)]">
             按已开启工具的名称、说明和参数结构估算；开关后立即变化，下一句话生效。
             {missingSchemaCount ? ` 还有 ${missingSchemaCount} 个工具缺参数结构，请刷新工具清单。` : ''}
           </div>
@@ -710,7 +710,7 @@ export default function McpManager() {
         <section className="mb-5 space-y-3">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">Dashboard 内置 MCP</h4>
-            <p className="mt-1 text-[10px] text-[var(--color-text-disabled)]">由 Dashboard 进程直接提供，不需要 URL 或启动命令。</p>
+            <p className="mt-1 text-2xs text-[var(--color-text-disabled)]">由 Dashboard 进程直接提供，不需要 URL 或启动命令。</p>
           </div>
           {builtIn.map(server => {
             const tokens = server.enabled
@@ -731,11 +731,11 @@ export default function McpManager() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-sm font-semibold text-[var(--color-text-heading)]">{server.label}</h4>
-                      <span className="font-mono text-[10px] text-[var(--color-text-disabled)]">{server.name}</span>
-                      <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">内置 · 无链接</span>
+                      <span className="font-mono text-2xs text-[var(--color-text-disabled)]">{server.name}</span>
+                      <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-2xs text-[var(--color-text-tertiary)]">内置 · 无链接</span>
                       {server.permissionConfigurable ? (
                         <select
-                          className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[10px] text-[var(--color-primary)] outline-none"
+                          className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-2xs text-[var(--color-primary)] outline-none"
                           value={server.permission}
                           disabled={saving || !server.enabled}
                           onChange={event => void setBuiltInPermission(server.name, event.target.value as 'allow' | 'ask')}
@@ -745,24 +745,24 @@ export default function McpManager() {
                           <option value="ask">每次询问</option>
                         </select>
                       ) : (
-                        <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] text-[var(--color-primary)]">自动允许</span>
+                        <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-2xs text-[var(--color-primary)]">自动允许</span>
                       )}
                     </div>
-                    <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                    <p className="mt-1 text-2xs text-[var(--color-text-tertiary)]">
                       v{server.version} · {server.tools.length} 个工具 · {server.enabled ? `预估 ${tokens.toLocaleString()} token` : `开启后约 ${server.tools.reduce((sum, tool) => sum + estimateMcpToolTokens(tool), 0).toLocaleString()} token`}
                     </p>
                   </div>
                 </div>
                 <details className="group mt-3 border-t border-[var(--color-border-light)] pt-3">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] [&::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-2xs font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] [&::-webkit-details-marker]:hidden">
                     顶层工具定义
                     <span aria-hidden="true" className="text-xs transition-transform group-open:rotate-180">⌄</span>
                   </summary>
                   <div className="mt-2 space-y-2">
                     {server.tools.map(tool => (
                       <div key={tool.name} className="rounded-xl bg-[var(--color-surface-secondary)] px-3 py-2.5">
-                        <div className="font-mono text-[11px] font-medium text-[var(--color-text-secondary)]">{shortToolName(tool.name)}</div>
-                        <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">{toolDisplayDescription(tool)}</pre>
+                        <div className="font-mono text-meta font-medium text-[var(--color-text-secondary)]">{shortToolName(tool.name)}</div>
+                        <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words font-sans text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{toolDisplayDescription(tool)}</pre>
                       </div>
                     ))}
                   </div>
@@ -807,18 +807,18 @@ export default function McpManager() {
                     <h4 className="text-sm font-semibold text-[var(--color-text-heading)]">
                       {server.label}
                     </h4>
-                    <span className="font-mono text-[10px] text-[var(--color-text-disabled)]">
+                    <span className="font-mono text-2xs text-[var(--color-text-disabled)]">
                       {server.name}
                     </span>
-                    <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">
+                    <span className="rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-2xs text-[var(--color-text-tertiary)]">
                       {server.transport.toUpperCase()}
                     </span>
-                    <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] text-[var(--color-primary)]">
+                    <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-2xs text-[var(--color-primary)]">
                       {permissionLabel(server.permission)}
                     </span>
                     {status && (
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] ${
+                        className={`rounded-full px-2 py-0.5 text-2xs ${
                           status.status === 'connected'
                             ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
                             : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
@@ -828,12 +828,12 @@ export default function McpManager() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 truncate font-mono text-[11px] text-[var(--color-text-disabled)]">
+                  <p className="mt-1 truncate font-mono text-meta text-[var(--color-text-disabled)]">
                     {server.transport === 'stdio'
                       ? [server.command, ...(server.args || [])].filter(Boolean).join(' ')
                       : server.url}
                   </p>
-                  <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                  <p className="mt-1 text-2xs text-[var(--color-text-tertiary)]">
                     {server.saveResults ? '保留 MCP 返回结果' : '不保存返回结果'}
                     {tools.length ? ` · 已开启 ${enabledCount}/${tools.length} 个工具` : ''}
                     {` · 预估 ${serverTokens.toLocaleString()} token · MCP ${serverShare.toFixed(0)}%`}
@@ -864,10 +864,10 @@ export default function McpManager() {
               {tools.length > 0 ? (
                 <details className="group mt-3 border-t border-[var(--color-border-light)] pt-3">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-1 text-[var(--color-text-tertiary)] transition hover:text-[var(--color-text-secondary)] [&::-webkit-details-marker]:hidden">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider">
+                    <span className="text-2xs font-semibold uppercase tracking-wider">
                       工具与权限
                     </span>
-                    <span className="flex items-center gap-2 text-[10px]">
+                    <span className="flex items-center gap-2 text-2xs">
                       已开启 {enabledCount}/{tools.length}
                       <span
                         aria-hidden="true"
@@ -912,27 +912,27 @@ export default function McpManager() {
                           </label>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="font-mono text-[11px] font-medium text-[var(--color-text-secondary)]">
+                              <span className="font-mono text-meta font-medium text-[var(--color-text-secondary)]">
                                 {tool.title || shortToolName(tool.name)}
                               </span>
                               {tool.destructive && (
-                                <span className="text-[9px] text-[var(--color-danger)]">可能有破坏性</span>
+                                <span className="text-3xs text-[var(--color-danger)]">可能有破坏性</span>
                               )}
                               {tool.openWorld && (
-                                <span className="text-[9px] text-[var(--color-pending)]">访问外部</span>
+                                <span className="text-3xs text-[var(--color-pending)]">访问外部</span>
                               )}
-                              <span className="text-[9px] tabular-nums text-[var(--color-text-disabled)]">
+                              <span className="text-3xs tabular-nums text-[var(--color-text-disabled)]">
                                 {server.enabled && tool.enabled
                                   ? `预估 ${toolTokens.toLocaleString()} token · MCP ${toolShare.toFixed(1)}%`
                                   : `开启后约 ${toolTokens.toLocaleString()} token`}
                               </span>
                             </div>
-                            <p className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-[var(--color-text-tertiary)]">
+                            <p className="mt-0.5 line-clamp-2 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
                               {toolDisplayDescription(tool)}
                             </p>
                           </div>
                           <select
-                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[10px]"
+                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-2xs"
                             value={server.toolPermissions?.[tool.name] || ''}
                             disabled={saving || !tool.enabled}
                             onChange={event =>
@@ -955,7 +955,7 @@ export default function McpManager() {
                   </div>
                 </details>
               ) : (
-                <p className="mt-3 border-t border-[var(--color-border-light)] pt-3 text-[10px] text-[var(--color-text-disabled)]">
+                <p className="mt-3 border-t border-[var(--color-border-light)] pt-3 text-2xs text-[var(--color-text-disabled)]">
                   尚未读取工具。编辑并保存，或点击“刷新工具清单”连接这个 MCP。
                 </p>
               )}

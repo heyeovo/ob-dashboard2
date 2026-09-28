@@ -11,7 +11,7 @@ export default function McpPage() {
           <Link href="/" className="hidden h-8 w-8 items-center justify-center rounded-lg text-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-overlay)]/5 md:flex" aria-label="返回主页">←</Link>
           <div>
             <h1 className="text-2xl font-semibold text-[var(--color-text-heading)] md:text-sm">工具 · MCP</h1>
-            <p className="text-xs text-[var(--color-text-tertiary)] md:text-[10px]">连接服务并决定哪些工具交给协作者</p>
+            <p className="text-xs text-[var(--color-text-tertiary)] md:text-2xs">连接服务并决定哪些工具交给协作者</p>
           </div>
         </div>
       </header>

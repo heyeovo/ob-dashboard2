@@ -71,7 +71,7 @@ export default function BottomTabBar() {
                     <path d="M3.5 9.5c0-3 2.9-5.5 6.5-5.5s6.5 2.5 6.5 5.5S13.6 15 10 15c-.8 0-1.6-.1-2.3-.3L4 16l.9-2.6c-.9-1-1.4-2.3-1.4-3.9Z" />
                   </svg>
                 </div>
-                <span className={`text-[11px] leading-none tracking-wide ${
+                <span className={`text-meta leading-none tracking-wide ${
                   isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'
                 }`}>
                   {tab.label}
@@ -89,7 +89,7 @@ export default function BottomTabBar() {
               <div className="flex h-6 w-6 items-center justify-center text-[var(--color-text-tertiary)] transition-all duration-200">
                 <TabIcon slug={tab.slug} active={isActive} />
               </div>
-              <span className={`text-[11px] leading-none tracking-wide transition-all duration-200 ${
+              <span className={`text-meta leading-none tracking-wide transition-all duration-200 ${
                 isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'
               }`}>
                 {tab.label}

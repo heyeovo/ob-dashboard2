@@ -159,17 +159,17 @@ export default function CcSessionRail({
         <div className="flex items-start gap-1">
           <button type="button" onClick={() => onPick(session.session_id)} className="min-w-0 flex-1 text-left">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">{session.title || session.session_id}</span>
+              <span className="truncate text-note font-medium text-[var(--color-text-primary)]">{session.title || session.session_id}</span>
               {featured ? (
-                <span className="shrink-0 rounded-full bg-[var(--color-primary-soft)] px-1.5 py-px text-[10px] text-[var(--color-primary)]">主窗</span>
+                <span className="shrink-0 rounded-full bg-[var(--color-primary-soft)] px-1.5 py-px text-2xs text-[var(--color-primary)]">主窗</span>
               ) : null}
               {!isCc ? (
-                <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
+                <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-2xs text-[var(--color-text-tertiary)]">
                   {session.source === 'gateway' || session.source === 'polaris' ? 'Polaris' : session.source}
                 </span>
               ) : null}
             </div>
-            <div className="mt-1 text-[11px] text-[var(--color-text-disabled)]">{session.turn_count} 轮 · {relativeTime(session.last_at)}</div>
+            <div className="mt-1 text-meta text-[var(--color-text-disabled)]">{session.turn_count} 轮 · {relativeTime(session.last_at)}</div>
           </button>
           <button
             type="button"
@@ -214,8 +214,8 @@ export default function CcSessionRail({
               <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">没有历史聊天</div>
             ) : historical.map(item => (
               <button key={historicalKey(item)} type="button" onClick={() => onPickHistorical(item)} className="cc-rail-item mb-1 block w-full px-3 py-3 text-left">
-                <div className="truncate text-[13px] text-[var(--color-text-primary)]">{item.title || '未命名历史窗口'}</div>
-                <div className="mt-1 text-[11px] text-[var(--color-text-disabled)]">{historicalSourceLabel(item.source, item.client)} · {item.message_count} 条 · {relativeTime(item.last_at)}</div>
+                <div className="truncate text-note text-[var(--color-text-primary)]">{item.title || '未命名历史窗口'}</div>
+                <div className="mt-1 text-meta text-[var(--color-text-disabled)]">{historicalSourceLabel(item.source, item.client)} · {item.message_count} 条 · {relativeTime(item.last_at)}</div>
               </button>
             ))}
           </div>
@@ -234,10 +234,10 @@ export default function CcSessionRail({
               <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">没有已删除窗口</div>
             ) : deletedSessions.map(session => (
               <div key={session.session_id} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3">
-                <div className="truncate text-[13px] text-[var(--color-text-primary)]">{session.title || session.session_id}</div>
+                <div className="truncate text-note text-[var(--color-text-primary)]">{session.title || session.session_id}</div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[9px] text-[var(--color-text-disabled)]">{session.session_id}</span>
-                  <button type="button" onClick={() => void permanentlyRemove(session)} className="shrink-0 text-[11px] text-[var(--color-danger)]">永久删除</button>
+                  <span className="truncate font-mono text-3xs text-[var(--color-text-disabled)]">{session.session_id}</span>
+                  <button type="button" onClick={() => void permanentlyRemove(session)} className="shrink-0 text-meta text-[var(--color-danger)]">永久删除</button>
                 </div>
               </div>
             ))}
@@ -260,17 +260,17 @@ export default function CcSessionRail({
         <div className="cc-mobile-list-topbar flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-3">
           <div>
             <h1 className="text-base font-medium text-[var(--color-text-heading)]">对话</h1>
-            <div className="mt-0.5 text-[10.5px] text-[var(--color-text-disabled)]">{loading ? '正在同步窗口…' : `${sessions.length} 个窗口`}</div>
+            <div className="mt-0.5 text-2xs text-[var(--color-text-disabled)]">{loading ? '正在同步窗口…' : `${sessions.length} 个窗口`}</div>
           </div>
           <button type="button" onClick={onNew} className="rounded-full bg-[var(--color-primary)] px-3.5 py-2 text-xs font-medium text-[var(--color-on-primary)]">新对话</button>
         </div>
         <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto px-3 pb-5 pt-3">
-          {notice ? <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-3 py-2 text-[11px] text-[var(--color-primary)]">{notice}</div> : null}
-          <div className="mb-2 text-[10.5px] text-[var(--color-text-disabled)]">主窗</div>
+          {notice ? <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-3 py-2 text-meta text-[var(--color-primary)]">{notice}</div> : null}
+          <div className="mb-2 text-2xs text-[var(--color-text-disabled)]">主窗</div>
           {pinnedSession ? sessionItem(pinnedSession, true) : (
-            <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-4 text-center text-[11px] text-[var(--color-text-disabled)]">从任一对话右侧菜单中选择“置顶为主窗”</div>
+            <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-4 text-center text-meta text-[var(--color-text-disabled)]">从任一对话右侧菜单中选择“置顶为主窗”</div>
           )}
-          <div className="mb-2 mt-5 text-[10.5px] text-[var(--color-text-disabled)]">最近对话</div>
+          <div className="mb-2 mt-5 text-2xs text-[var(--color-text-disabled)]">最近对话</div>
           {regularSessions.length === 0 ? (
             <div className="py-8 text-center text-xs text-[var(--color-text-disabled)]">还没有其他对话</div>
           ) : regularSessions.map(session => sessionItem(session))}
@@ -292,18 +292,18 @@ export default function CcSessionRail({
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <span className="text-xs font-medium text-[var(--color-text-tertiary)]">对话</span>
         <div className="flex items-center gap-1.5">
-          <Link href="/cc/import" className="rounded-full px-2 py-1 text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]">导入</Link>
+          <Link href="/cc/import" className="rounded-full px-2 py-1 text-meta text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]">导入</Link>
           <button
             type="button"
             onClick={onNew}
-            className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-hover-soft)]"
+            className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-meta font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-hover-soft)]"
           >
             新对话
           </button>
         </div>
       </div>
 
-      {notice ? <div className="mx-2 mb-2 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-2.5 py-2 text-[10.5px] text-[var(--color-primary)]">{notice}</div> : null}
+      {notice ? <div className="mx-2 mb-2 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-2.5 py-2 text-2xs text-[var(--color-primary)]">{notice}</div> : null}
 
       <div className="no-scrollbar flex-1 overflow-y-auto px-2 pb-3">
         {loading && sessions.length === 0 ? (
@@ -320,7 +320,7 @@ export default function CcSessionRail({
           <button
             type="button"
             onClick={() => setHistoricalOpen(value => !value)}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-meta text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
           >
             <span>历史聊天</span>
             <span>{historicalLoading ? '…' : historical.length} {historicalOpen ? '⌃' : '⌄'}</span>
@@ -328,11 +328,11 @@ export default function CcSessionRail({
           {historicalOpen ? (
             <div className="mt-1 space-y-0.5">
               {historicalLoading ? (
-                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--color-text-disabled)]">读取历史窗口</div>
+                <div className="px-2.5 py-3 text-center text-meta text-[var(--color-text-disabled)]">读取历史窗口</div>
               ) : historicalError ? (
-                <div className="px-2.5 py-3 text-[11px] text-[var(--color-danger)]">{historicalError}</div>
+                <div className="px-2.5 py-3 text-meta text-[var(--color-danger)]">{historicalError}</div>
               ) : historical.length === 0 ? (
-                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--color-text-disabled)]">没有历史聊天</div>
+                <div className="px-2.5 py-3 text-center text-meta text-[var(--color-text-disabled)]">没有历史聊天</div>
               ) : historical.map(item => {
                 const key = historicalKey(item)
                 return (
@@ -343,14 +343,14 @@ export default function CcSessionRail({
                     className={`cc-rail-item block w-full px-2.5 py-2 text-left ${key === activeHistoricalKey ? 'active' : ''}`}
                   >
                     <div className="flex items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--color-text-primary)]">
+                      <span className="min-w-0 flex-1 truncate text-note text-[var(--color-text-primary)]">
                         {item.title || '未命名历史窗口'}
                       </span>
-                      <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
+                      <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-2xs text-[var(--color-text-tertiary)]">
                         {historicalSourceLabel(item.source, item.client)}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">
+                    <div className="mt-0.5 text-meta text-[var(--color-text-disabled)]">
                       {item.message_count} 条 · {relativeTime(item.last_at)}
                     </div>
                   </button>
@@ -364,7 +364,7 @@ export default function CcSessionRail({
           <button
             type="button"
             onClick={() => setDeletedOpen(value => !value)}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-meta text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
           >
             <span>已删除窗口</span>
             <span>{deletedSessionsTotal} {deletedOpen ? '⌃' : '⌄'}</span>
@@ -372,16 +372,16 @@ export default function CcSessionRail({
           {deletedOpen ? (
             <div className="mt-1 space-y-1">
               {deletedSessions.length === 0 ? (
-                <div className="px-2.5 py-3 text-center text-[11px] text-[var(--color-text-disabled)]">没有已删除窗口</div>
+                <div className="px-2.5 py-3 text-center text-meta text-[var(--color-text-disabled)]">没有已删除窗口</div>
               ) : deletedSessions.map(session => (
                 <div key={session.session_id} className="rounded-lg bg-[var(--color-surface-secondary)] px-2.5 py-2">
-                  <div className="truncate text-[11px] text-[var(--color-text-secondary)]">{session.title || session.session_id}</div>
+                  <div className="truncate text-meta text-[var(--color-text-secondary)]">{session.title || session.session_id}</div>
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[9px] text-[var(--color-text-disabled)]">{session.session_id}</span>
+                    <span className="truncate font-mono text-3xs text-[var(--color-text-disabled)]">{session.session_id}</span>
                     <button
                       type="button"
                       onClick={() => void permanentlyRemove(session)}
-                      className="shrink-0 text-[10px] text-[var(--color-danger)] hover:underline"
+                      className="shrink-0 text-2xs text-[var(--color-danger)] hover:underline"
                     >
                       永久删除
                     </button>
@@ -393,7 +393,7 @@ export default function CcSessionRail({
                   type="button"
                   disabled={deletedSessionsLoadingMore}
                   onClick={() => void onLoadMoreDeleted()}
-                  className="w-full rounded-[var(--radius-md)] px-2.5 py-2 text-[11px] text-[var(--color-primary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-50"
+                  className="w-full rounded-[var(--radius-md)] px-2.5 py-2 text-meta text-[var(--color-primary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-50"
                 >
                   {deletedSessionsLoadingMore ? '加载中…' : `加载更多（还有 ${deletedSessionsTotal - deletedSessions.length} 个）`}
                 </button>

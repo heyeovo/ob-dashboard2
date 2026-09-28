@@ -37,7 +37,7 @@ export default function CcPersonaRail({
         <button
           type="button"
           onClick={onNew}
-          className="ml-auto rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-hover-soft)]"
+          className="ml-auto rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-meta font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-hover-soft)]"
         >
           新建
         </button>
@@ -45,7 +45,7 @@ export default function CcPersonaRail({
           type="button"
           onClick={onClose}
           aria-label="收起协作者列表"
-          className="rounded-[var(--radius-md)] px-1.5 py-1 text-[11px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
+          className="rounded-[var(--radius-md)] px-1.5 py-1 text-meta text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]"
         >
           收起
         </button>
@@ -75,10 +75,10 @@ export default function CcPersonaRail({
                 {p.initial}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] text-[var(--color-text-primary)]">
+                <span className="block truncate text-note text-[var(--color-text-primary)]">
                   {p.name}
                 </span>
-                <span className="mt-0.5 block truncate text-[11px] text-[var(--color-text-disabled)]">
+                <span className="mt-0.5 block truncate text-meta text-[var(--color-text-disabled)]">
                   {p.description || ENGINE_LABEL[p.engine] || p.engine}
                 </span>
               </span>
@@ -87,7 +87,7 @@ export default function CcPersonaRail({
         )}
       </div>
 
-      <p className="border-t border-[var(--color-border-light)] px-3 py-2.5 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+      <p className="border-t border-[var(--color-border-light)] px-3 py-2.5 text-meta leading-relaxed text-[var(--color-text-disabled)]">
         每个协作者有自己的一套对话。换人会开一个新对话，原来那个留在上一个人名下。
       </p>
     </div>

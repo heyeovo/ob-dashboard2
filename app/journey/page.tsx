@@ -288,14 +288,14 @@ export default function JourneyPage() {
                     <span className="text-xs text-[var(--color-text-tertiary)]">
                       {displayDate(stage.journey_start)} → {stage.journey_status === 'open' ? '至今' : displayDate(stage.journey_end)}
                     </span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[11px] ${statusClass(stage.journey_status)}`}>
+                    <span className={`rounded-full border px-2 py-0.5 text-meta ${statusClass(stage.journey_status)}`}>
                       {statusText(stage.journey_status)}
                     </span>
                   </span>
                   <span className="block font-medium text-[var(--color-text-primary)]">{stage.name}</span>
                   <span className="mt-2 line-clamp-3 block text-sm leading-relaxed text-[var(--color-text-secondary)]">{stage.journey_summary}</span>
                   {stage.missing_fields.length > 0 && (
-                    <span className="mt-3 block text-[11px] text-[var(--color-pending)]">旧阶段有 {stage.missing_fields.length} 项结构字段未标注</span>
+                    <span className="mt-3 block text-meta text-[var(--color-pending)]">旧阶段有 {stage.missing_fields.length} 项结构字段未标注</span>
                   )}
                 </span>
               </button>
@@ -349,7 +349,7 @@ export default function JourneyPage() {
                             className="rounded-xl border border-[var(--color-border)] p-3 text-left transition-colors hover:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <div className="text-sm font-medium">{bucket.name}</div>
-                            <div className="mt-1 font-mono text-[11px] text-[var(--color-text-tertiary)]">{bucket.id}</div>
+                            <div className="mt-1 font-mono text-meta text-[var(--color-text-tertiary)]">{bucket.id}</div>
                           </button>
                         ))}
                       </div>
@@ -400,7 +400,7 @@ export default function JourneyPage() {
                         <div key={bucket.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{bucket.name}</div>
-                            <div className="truncate font-mono text-[11px] text-[var(--color-text-tertiary)]">{bucket.id}</div>
+                            <div className="truncate font-mono text-meta text-[var(--color-text-tertiary)]">{bucket.id}</div>
                           </div>
                           <button onClick={() => setEditEvidence(current => current.filter(item => item.id !== bucket.id))} className="flex-none text-xs text-[var(--color-danger-strong)]">移除</button>
                         </div>
@@ -421,7 +421,7 @@ export default function JourneyPage() {
                         {evidenceResults.map(bucket => (
                           <button key={bucket.id} onClick={() => addEvidence(bucket)} className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-[var(--color-surface-secondary)]">
                             <span className="truncate text-sm">{bucket.name || bucket.id}</span>
-                            <span className="flex-none font-mono text-[10px] text-[var(--color-text-tertiary)]">{bucket.id}</span>
+                            <span className="flex-none font-mono text-2xs text-[var(--color-text-tertiary)]">{bucket.id}</span>
                           </button>
                         ))}
                       </div>

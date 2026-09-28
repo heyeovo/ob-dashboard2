@@ -157,6 +157,7 @@
 | `--bg-base`, `--bg-image`, `--bg-overlay`, `--bg-photo-overlay` | 页面最底层纯色、主题渐变或上传图片、图片遮罩；背景可选 gradient / upload / none |
 | `--glass-fill`, `--glass-border`, `--glass-blur`, `--glass-shadow` | 固定外框的玻璃质感；滑条覆盖模糊与不透明度 |
 | `--font-display`, `--font-body`, `--font-scale` | 标题字体、正文黑体与整体字号缩放；标题可选 serif / sans |
+| `--type-title-scale`, `--type-body-scale`, `--type-meta-scale` | 标题、正文、小字的独立字号系数，默认均为 1；与整体字号相乘 |
 | `--label-tracking`, `--chat-bubble-alpha` | 小号大写标签字距、聊天表面透明度预留语义 |
 | `--effect-rain-intensity` | 透明玻璃水珠的数量与可见度；低强度水珠较少且较淡，高强度叠加更多水珠；默认关闭，页面不可见暂停，减少动态效果时静止 |
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
@@ -178,6 +179,16 @@
 - 设置 → 外观里的「聊天显示」提供两个本设备全局偏好：运行信息（引擎、Provider、模型、上下文入口）默认关闭，Token 总数与明细默认开启；错误、保存状态和持久化核对入口不受开关影响。
 
 ---
+
+### 字号档位
+
+| 层级 | 类名 | 100% 时基准字号 |
+|---|---|---|
+| 小字 | `text-3xs` / `text-2xs` / `text-meta` / `text-xs` | 9 / 10 / 11 / 12px |
+| 正文 | `text-note` / `text-sm` / `text-md` / `text-base` | 13 / 14 / 15 / 16px |
+| 标题 | `text-lg` / `text-xl` / `text-2xl` / `text-3xl` / `text-4xl` | 18 / 20 / 24 / 30 / 36px |
+
+所有档位以 rem 定义，先受「整体字号」影响，再乘所属层级的系数；新档位也有对应的行高 Token。以后使用命名档位类，不再写 `text-[Npx]`。`globals.css` 的固定字号也引用同一组 Token；Markdown 标题等相对字号保持 `em`。手机端输入框、textarea 和 select 的实际字号至少 16px，避免 iPhone 聚焦时页面自动放大。
 
 ## 组件映射
 

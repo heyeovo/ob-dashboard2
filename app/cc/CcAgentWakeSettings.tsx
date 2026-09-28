@@ -12,8 +12,8 @@ type NotificationPayload = {
   error?: string
 }
 
-const BUTTON = 'rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
-const ROW = 'flex items-center justify-between gap-3 py-2 text-[11px]'
+const BUTTON = 'rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-2xs text-[var(--color-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
+const ROW = 'flex items-center justify-between gap-3 py-2 text-meta'
 
 function fmt(value: string) {
   if (!value) return '—'
@@ -100,11 +100,11 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
     }
   }
 
-  if (loading) return <div className="text-[11px] text-[var(--color-text-tertiary)]">正在读取主动唤醒状态…</div>
-  if (!schedule) return <div className="text-[11px] text-[var(--color-danger)]">{error || '主动唤醒状态不可用'}</div>
+  if (loading) return <div className="text-meta text-[var(--color-text-tertiary)]">正在读取主动唤醒状态…</div>
+  if (!schedule) return <div className="text-meta text-[var(--color-danger)]">{error || '主动唤醒状态不可用'}</div>
 
   return (
-    <div className="space-y-3 text-[11px] text-[var(--color-text-secondary)]">
+    <div className="space-y-3 text-meta text-[var(--color-text-secondary)]">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
         只影响当前 CC 线路。暂停后，下一条用户消息或 Claude 正式主动消息会恢复固定保活；24 小时没有用户活动也会自动暂停，但不会删除 Claude 已安排的未来 wake。
       </div>
@@ -127,7 +127,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           <input type="checkbox" checked={schedule.bark_notification_enabled} disabled={saving || busy || !notificationReady} onChange={event => void save({ bark_notification_enabled: event.target.checked })} />
         </label>
         {!notificationReady ? (
-          <div className="border-t border-[var(--color-border-light)] py-2 text-[10px] text-[var(--color-text-tertiary)]">
+          <div className="border-t border-[var(--color-border-light)] py-2 text-2xs text-[var(--color-text-tertiary)]">
             请先到 <Link href="/settings/notifications" className="underline">设置 → 通知</Link> 完成 Bark 配置。
           </div>
         ) : null}
@@ -156,7 +156,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
         ) : null}
         {schedule.followup_at ? (
           <div className="mt-2 pt-2 border-t border-[var(--color-border-light)]">
-            <div className="text-[10px] text-[var(--color-text-tertiary)]">Followup · {fmt(schedule.followup_at)} · 她回复后自动取消 · {schedule.followup_count ?? 0}/{schedule.followup_max_count ?? 3}</div>
+            <div className="text-2xs text-[var(--color-text-tertiary)]">Followup · {fmt(schedule.followup_at)} · 她回复后自动取消 · {schedule.followup_count ?? 0}/{schedule.followup_max_count ?? 3}</div>
           </div>
         ) : null}
       </div>
@@ -200,7 +200,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
       {schedule.last_error || error ? <div className="text-[var(--color-danger)]">{error || schedule.last_error}</div> : null}
       <button
         type="button"
-        className="w-full rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-[11px] text-[var(--color-danger)] disabled:opacity-50"
+        className="w-full rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-meta text-[var(--color-danger)] disabled:opacity-50"
         disabled={saving || busy}
         onClick={() => { if (window.confirm('立即停止当前窗口的所有后台唤醒？')) void save({}, 'stop_all') }}
       >

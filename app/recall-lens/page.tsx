@@ -340,7 +340,7 @@ function StatTile({ label, value, note }: { label: string; value: number; note?:
     <Card variant="ghost" padding="sm">
       <p className="text-xs text-[var(--color-text-tertiary)]">{label}</p>
       <p className="mt-1 text-xl font-semibold text-[var(--color-text-heading)]">{value}</p>
-      {note && <p className="mt-0.5 text-[11px] text-[var(--color-pending)]">{note}</p>}
+      {note && <p className="mt-0.5 text-meta text-[var(--color-pending)]">{note}</p>}
     </Card>
   )
 }
@@ -362,7 +362,7 @@ function RoundListCard({ round, selected, onSelect }: { round: DebugRound; selec
       >
         <div className="mb-1.5 flex items-center justify-between gap-2">
           <span className="text-xs font-semibold text-[var(--color-text-heading)]">Round {round.round_id}</span>
-          <span className="text-[11px] text-[var(--color-text-disabled)]">{formatTime(round.created_at)}</span>
+          <span className="text-meta text-[var(--color-text-disabled)]">{formatTime(round.created_at)}</span>
         </div>
         <p className="line-clamp-2 text-xs leading-5 text-[var(--color-text-secondary)]">
           {round.payload.query_preview || '没有 query preview'}
@@ -583,14 +583,14 @@ function RoundDetail({ round }: { round: DebugRound }) {
               return (
                 <div key={bucket.bucket_id} className="rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-3">
                   <p className="text-xs font-medium text-[var(--color-text-primary)]">{bucket.bucket_name || bucket.bucket_id}</p>
-                  <p className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{bucket.bucket_id}</p>
+                  <p className="mt-0.5 text-meta text-[var(--color-text-disabled)]">{bucket.bucket_id}</p>
                   <div className="mt-2 space-y-1.5">
                     {(reasons.length ? reasons : ['session_hard_exclude']).map((reason) => (
                       <RuleExplanation key={reason} code={reason} compact />
                     ))}
                   </div>
                   {history.length > 0 && (
-                    <p className="mt-2 text-[11px] text-[var(--color-text-tertiary)]">
+                    <p className="mt-2 text-meta text-[var(--color-text-tertiary)]">
                       记录日期：{[...new Set(history.map((entry) => entry.chat_day).filter(Boolean))].sort().join(' · ')}
                     </p>
                   )}
@@ -731,7 +731,7 @@ function CandidateCard({
             </MiniStatus>
           </div>
           {candidate.bucket_id && (
-            <p className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">{candidate.bucket_id}</p>
+            <p className="mt-0.5 text-meta text-[var(--color-text-disabled)]">{candidate.bucket_id}</p>
           )}
         </div>
         <div className="flex flex-wrap justify-end gap-1">
@@ -778,18 +778,18 @@ function CandidateCard({
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
           <span>语义状态</span>
           <MiniStatus effect={semanticCopy.effect}>{semanticCopy.title}</MiniStatus>
-          <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{semanticStatus}</span>
+          <span className="font-mono text-meta text-[var(--color-text-disabled)]">{semanticStatus}</span>
         </div>
       )}
 
       <div className="mt-3">
-        <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">统一相关性判断</p>
+        <p className="mb-1 text-meta font-medium text-[var(--color-text-tertiary)]">统一相关性判断</p>
         <RuleExplanation code={shadowReason} />
       </div>
 
       {shadow && (
         <div className="mt-2">
-          <p className="mb-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">
+          <p className="mb-1 text-meta font-medium text-[var(--color-text-tertiary)]">
             召回价值 Utility
           </p>
           {utility ? (
@@ -890,16 +890,16 @@ function UtilityDecisionBlock({
         <MiniStatus effect={copy.effect}>{copy.title}</MiniStatus>
         {identity && <span className="text-xs font-medium text-[var(--color-text-primary)]">{identity}</span>}
         {resolvedBucketName && utility.bucket_id && resolvedBucketName !== utility.bucket_id && (
-          <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{utility.bucket_id}</span>
+          <span className="font-mono text-meta text-[var(--color-text-disabled)]">{utility.bucket_id}</span>
         )}
         {utility.status && (
-          <span className="font-mono text-[11px] text-[var(--color-text-disabled)]">{utility.status}</span>
+          <span className="font-mono text-meta text-[var(--color-text-disabled)]">{utility.status}</span>
         )}
       </div>
       <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">{copy.description}</p>
       {(reasons.length > 0 || utility.context_available !== undefined || utility.contract) && (
         <details className="mt-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)]/60 px-2.5 py-1.5">
-          <summary className="cursor-pointer text-[11px] font-medium text-[var(--color-text-secondary)]">
+          <summary className="cursor-pointer text-meta font-medium text-[var(--color-text-secondary)]">
             查看 Utility 原因与上下文
           </summary>
           <div className="mt-2 space-y-2">
@@ -928,14 +928,14 @@ function RuleExplanation({ code, compact = false }: { code: string; compact?: bo
         </div>
       </summary>
       <p className="mt-2 text-xs leading-5 text-[var(--color-text-secondary)]">{copy.description}</p>
-      <p className="mt-1 text-[11px] text-[var(--color-text-disabled)]">内部规则：{code}</p>
+      <p className="mt-1 text-meta text-[var(--color-text-disabled)]">内部规则：{code}</p>
     </details>
   )
 }
 
 function MiniStatus({ effect, children }: { effect: RecallRuleEffect; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${effectBadge(effect)}`}>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-meta font-medium ${effectBadge(effect)}`}>
       {children}
     </span>
   )

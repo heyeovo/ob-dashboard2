@@ -140,7 +140,7 @@ export default function CcWorkbenchPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
+      <div className="flex flex-wrap items-center gap-2 text-meta text-[var(--color-text-tertiary)]">
         <span className="font-mono">{sessionId}</span>
         <span
           className={`cc-wb-count${data.live ? ' hot' : ''}`}
@@ -154,7 +154,7 @@ export default function CcWorkbenchPanel() {
       </div>
 
       {error ? (
-        <div className="rounded-[var(--radius-md)] bg-[var(--color-danger-bg)] px-3 py-2 text-[11px] text-[var(--color-danger)]">
+        <div className="rounded-[var(--radius-md)] bg-[var(--color-danger-bg)] px-3 py-2 text-meta text-[var(--color-danger)]">
           {error}
         </div>
       ) : null}
@@ -168,7 +168,7 @@ export default function CcWorkbenchPanel() {
               {data.pending.length}
             </span>
             {data.auto_allow_edits ? (
-              <span className="ml-auto text-[10.5px] text-[var(--color-text-tertiary)]">
+              <span className="ml-auto text-2xs text-[var(--color-text-tertiary)]">
                 改文件已放行（跑命令仍每次问）
               </span>
             ) : null}
@@ -281,11 +281,11 @@ export default function CcWorkbenchPanel() {
                   </div>
                 ))}
                 {rewindNote ? (
-                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                  <p className="mt-2 text-meta leading-relaxed text-[var(--color-text-secondary)]">
                     {rewindNote}
                   </p>
                 ) : null}
-                <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--color-text-disabled)]">
+                <p className="mt-2 text-2xs leading-relaxed text-[var(--color-text-disabled)]">
                   只还原文件，不会撤掉对话 —— 模型还记得它做过什么。
                 </p>
               </>
@@ -313,7 +313,7 @@ export default function CcWorkbenchPanel() {
                   </div>
                   <div className="cc-wb-pre">{c.output || '（没有输出）'}</div>
                   {c.truncated ? (
-                    <p className="mt-1 text-[10.5px] text-[var(--color-text-disabled)]">
+                    <p className="mt-1 text-2xs text-[var(--color-text-disabled)]">
                       输出太长，只留了前面 4000 字
                     </p>
                   ) : null}

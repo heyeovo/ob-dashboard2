@@ -159,15 +159,15 @@ export default function CcPersonaDialog({
             {draft.initial}
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-medium text-[var(--color-text-heading)]">
+            <div className="truncate text-note font-medium text-[var(--color-text-heading)]">
               {draft.name || '未命名'}
             </div>
-            <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">协作者设置</div>
+            <div className="mt-0.5 text-meta text-[var(--color-text-disabled)]">协作者设置</div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+            className="ml-auto text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
           >
             关闭
           </button>
@@ -271,7 +271,7 @@ export default function CcPersonaDialog({
                   ) : (
                     draft.dirs.map((dir, i) => (
                       <div key={`${i}-${dir.slice(-12)}`} className="cc-entry-row">
-                        <span className="min-w-0 flex-1 break-all font-mono text-[11px]">{dir}</span>
+                        <span className="min-w-0 flex-1 break-all font-mono text-meta">{dir}</span>
                         <button
                           type="button"
                           aria-label="删掉这个目录"
@@ -286,7 +286,7 @@ export default function CcPersonaDialog({
                 </div>
                 <div className="mt-2 flex gap-2">
                   <input
-                    className="cc-input flex-1 font-mono text-[11px]"
+                    className="cc-input flex-1 font-mono text-meta"
                     value={dirInput}
                     onChange={e => setDirInput(e.target.value)}
                     onKeyDown={e => {
@@ -321,7 +321,7 @@ export default function CcPersonaDialog({
                   ) : (
                     draft.writeDirs.map((dir, i) => (
                       <div key={`w${i}-${dir.slice(-12)}`} className="cc-entry-row">
-                        <span className="min-w-0 flex-1 break-all font-mono text-[11px]">{dir}</span>
+                        <span className="min-w-0 flex-1 break-all font-mono text-meta">{dir}</span>
                         <button
                           type="button"
                           aria-label="删掉这个目录"
@@ -338,7 +338,7 @@ export default function CcPersonaDialog({
                 </div>
                 <div className="mt-2 flex gap-2">
                   <input
-                    className="cc-input flex-1 font-mono text-[11px]"
+                    className="cc-input flex-1 font-mono text-meta"
                     value={writeDirInput}
                     onChange={e => setWriteDirInput(e.target.value)}
                     onKeyDown={e => {
@@ -368,7 +368,7 @@ export default function CcPersonaDialog({
                 <div className="border-t border-[var(--color-border-light)] pt-3.5">
                   {confirmDelete ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-[var(--color-text-secondary)]">
+                      <span className="text-meta text-[var(--color-text-secondary)]">
                         删掉「{draft.name}」？历史对话会保留
                       </span>
                       <button
@@ -447,7 +447,7 @@ export default function CcPersonaDialog({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="cc-field-label">提示词模块</div>
-                      <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">默认开启的模块会用于每个新窗口</div>
+                      <div className="mt-1 text-meta text-[var(--color-text-tertiary)]">默认开启的模块会用于每个新窗口</div>
                     </div>
                     <button type="button" className="cc-btn-ghost" onClick={addPromptModule}>＋ 新增</button>
                   </div>
@@ -581,15 +581,15 @@ export default function CcPersonaDialog({
                 >
                   <span className="cc-engine-radio" aria-hidden="true" />
                   <span className="min-w-0">
-                    <span className="block text-[13px] text-[var(--color-text-primary)]">
+                    <span className="block text-note text-[var(--color-text-primary)]">
                       {opt.label}
                       {opt.disabled ? (
-                        <span className="ml-1.5 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
+                        <span className="ml-1.5 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-2xs text-[var(--color-text-tertiary)]">
                           第 7 步
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                    <span className="mt-0.5 block text-meta leading-relaxed text-[var(--color-text-disabled)]">
                       {opt.hint}
                     </span>
                   </span>
@@ -607,7 +607,7 @@ export default function CcPersonaDialog({
 
         {/* 底 */}
         <div className="flex items-center gap-3 border-t border-[var(--color-border-light)] px-5 py-3">
-          <span className="text-[11px] text-[var(--color-text-disabled)]">{hint}</span>
+          <span className="text-meta text-[var(--color-text-disabled)]">{hint}</span>
           <button
             type="button"
             className="cc-btn-primary ml-auto"

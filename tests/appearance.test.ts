@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_APPEARANCE, normalizeAppearance, photoAccentActive } from '../app/lib/appearance'
+import { DEFAULT_APPEARANCE, appearanceHtmlStyle, normalizeAppearance, photoAccentActive } from '../app/lib/appearance'
 import { pickAccent } from '../app/lib/photoAccent'
 
 describe('appearance theme normalization', () => {
@@ -13,6 +13,17 @@ describe('appearance theme normalization', () => {
     expect(DEFAULT_APPEARANCE.theme).toBe('apricot')
     expect(normalizeAppearance({ theme: 'linen' }).theme).toBe('apricot')
     expect(normalizeAppearance({ theme: 'unknown' }).theme).toBe('apricot')
+  })
+
+  it('defaults, clamps and emits independent type scales', () => {
+    expect(normalizeAppearance({ font: { display: 'sans', scale: 1.1 } }).font).toEqual({
+      display: 'sans', scale: 1.1, titleScale: 1, bodyScale: 1, metaScale: 1,
+    })
+    const appearance = normalizeAppearance({ font: { titleScale: 1.8, bodyScale: 0.5, metaScale: 1.3 } })
+    expect(appearance.font).toEqual({ display: 'serif', scale: 1, titleScale: 1.4, bodyScale: 0.85, metaScale: 1.3 })
+    expect(appearanceHtmlStyle(appearance)).toMatchObject({
+      '--font-scale': '1', '--type-title-scale': '1.4', '--type-body-scale': '0.85', '--type-meta-scale': '1.3',
+    })
   })
 
   it('clamps background intensity and keeps it across kinds', () => {

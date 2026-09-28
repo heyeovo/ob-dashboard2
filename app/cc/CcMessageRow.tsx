@@ -42,8 +42,8 @@ function UsageTokenButton({ usage, onClick }: { usage: CcTurnUsage; onClick: () 
 function UsageDetails({ usage }: { usage: CcTurnUsage }) {
   return (
     <div className="mt-1 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left">
-      <div className="mb-1.5 text-[11px] font-medium text-[var(--color-text-secondary)]">本轮累计消耗</div>
-      <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-2.5 gap-y-1 text-[11px] text-[var(--color-text-tertiary)]">
+      <div className="mb-1.5 text-meta font-medium text-[var(--color-text-secondary)]">本轮累计消耗</div>
+      <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-2.5 gap-y-1 text-meta text-[var(--color-text-tertiary)]">
         <span>↑ 输入</span>
         <b className={USAGE_NUM}>{usage.inputTokens.toLocaleString()}</b>
         <span>↓ 输出</span>
@@ -91,7 +91,7 @@ function compactTokenLabel(tokens: number | null) {
 function CompactionDivider({ compaction }: { compaction: CcCompactionEvent }) {
   const trigger = compaction.trigger === 'manual' ? '手动压缩已完成' : '自动压缩已完成'
   return (
-    <div className="my-4 flex w-full items-center gap-3 text-[11px] text-[var(--color-pending)]/80" role="separator">
+    <div className="my-4 flex w-full items-center gap-3 text-meta text-[var(--color-pending)]/80" role="separator">
       <span className="h-px flex-1 bg-[var(--color-warning-strong)]/60" />
       <span className="shrink-0 tabular-nums">
         {trigger} · {compactTokenLabel(compaction.preTokens)} → {compactTokenLabel(compaction.postTokens)}
@@ -316,12 +316,12 @@ export default function CcMessageRow({
   if (message.role === 'system' && message.wakeEvent) {
     return (
       <div className="my-3 w-full" data-role="agent-wake-event">
-        <div className="flex items-center gap-3 text-[10.5px] text-[var(--color-text-tertiary)]" role="separator">
+        <div className="flex items-center gap-3 text-2xs text-[var(--color-text-tertiary)]" role="separator">
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
           <span className="shrink-0">{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次</span>
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
         </div>
-        <div className="mx-auto mt-1 max-w-md space-y-0.5 px-3 text-center text-[10.5px] text-[var(--color-text-tertiary)]">
+        <div className="mx-auto mt-1 max-w-md space-y-0.5 px-3 text-center text-2xs text-[var(--color-text-tertiary)]">
           {message.wakeEvent.status ? (
             <div className="text-[var(--color-text-secondary)]">这次没有发消息 · {message.wakeEvent.status}</div>
           ) : null}
@@ -332,7 +332,7 @@ export default function CcMessageRow({
           ) : null}
         </div>
         {message.thinking ? (
-          <div className="mt-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[11px]">
+          <div className="mt-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-meta">
             <button
               type="button"
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
@@ -350,7 +350,7 @@ export default function CcMessageRow({
           </div>
         ) : null}
         {usage ? (
-          <div className="mt-1 flex items-center text-[11px] text-[var(--color-text-tertiary)]">
+          <div className="mt-1 flex items-center text-meta text-[var(--color-text-tertiary)]">
             <UsageTokenButton usage={usage} onClick={() => setUsageOpen(open => !open)} />
           </div>
         ) : null}
@@ -487,7 +487,7 @@ export default function CcMessageRow({
                           </span>
                           <span className="min-w-0">
                             <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">{attachment.filename}</span>
-                            <span className="mt-0.5 block text-[10px] text-[var(--color-text-tertiary)]">
+                            <span className="mt-0.5 block text-2xs text-[var(--color-text-tertiary)]">
                               {formatBytes(attachment.byteSize)}{attachment.textTruncated ? ' · 内容已截断' : ' · 已读取'}
                             </span>
                           </span>
@@ -529,12 +529,12 @@ export default function CcMessageRow({
                 }}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-[11px] font-medium text-[var(--color-text-secondary)]">
+                  <span className="min-w-0 truncate text-meta font-medium text-[var(--color-text-secondary)]">
                     转发 · {forwardedMessage.title} · {forwardedMessage.lines.length} 条
                   </span>
                   <span className="shrink-0 text-sm text-[var(--color-text-tertiary)]" aria-hidden="true">›</span>
                 </div>
-                <div className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                <div className="mt-1 text-meta leading-relaxed text-[var(--color-text-tertiary)]">
                   {forwardedMessage.lines.slice(0, 3).map((line, index) => (
                     <div key={index} className="truncate">{line}</div>
                   ))}
@@ -588,19 +588,19 @@ export default function CcMessageRow({
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
             <div className="flex items-start gap-3 border-b border-[var(--color-border-light)] px-5 py-4">
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-[15px] font-semibold text-[var(--color-text-heading)]">
+                <h2 className="truncate text-md font-semibold text-[var(--color-text-heading)]">
                   转发 · {forwardedMessage.title}
                 </h2>
-                <p className="mt-1 text-[10px] text-[var(--color-text-disabled)]">共 {forwardedMessage.lines.length} 条消息</p>
+                <p className="mt-1 text-2xs text-[var(--color-text-disabled)]">共 {forwardedMessage.lines.length} 条消息</p>
               </div>
-              <button type="button" onClick={() => setForwardOpen(false)} className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">
+              <button type="button" onClick={() => setForwardOpen(false)} className="text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">
                 关闭
               </button>
             </div>
             <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
               <div className="space-y-3">
                 {forwardedMessage.lines.map((line, index) => (
-                  <div key={index} className="whitespace-pre-wrap break-words rounded-xl bg-[var(--color-surface-secondary)] px-3 py-2.5 text-[12.5px] leading-relaxed text-[var(--color-text-secondary)]">
+                  <div key={index} className="whitespace-pre-wrap break-words rounded-xl bg-[var(--color-surface-secondary)] px-3 py-2.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
                     {line}
                   </div>
                 ))}
@@ -809,21 +809,21 @@ export default function CcMessageRow({
         ) : null}
 
         {message.nextWake ? (
-          <div className="mt-1 text-[10.5px] text-[var(--color-text-tertiary)]">
+          <div className="mt-1 text-2xs text-[var(--color-text-tertiary)]">
             ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
           </div>
         ) : null}
 
         {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
         {message.interrupted && !message.streaming ? (
-          <div className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+          <div className="mt-1 text-meta text-[var(--color-text-tertiary)]">
             {message.interruptedReason === 'pro_limit' ? 'Pro 额度中断' : '已停止生成'}
           </div>
         ) : null}
 
         {/* 开发者模式：引擎/模型/Provider */}
         {!message.streaming && showRuntimeInfo && (message.engine || message.providerLabel || shownModel) ? (
-          <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)]/70 px-3 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+          <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)]/70 px-3 py-2 text-2xs text-[var(--color-text-tertiary)]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
@@ -834,7 +834,7 @@ export default function CcMessageRow({
 
         {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}
         {!message.streaming && message.text ? (
-          <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
+          <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-meta text-[var(--color-text-tertiary)]">
             <button
               type="button"
               className="hover:text-[var(--color-text-secondary)]"
@@ -907,7 +907,7 @@ export default function CcMessageRow({
                   <div
                     role="dialog"
                     aria-label="上下文详情"
-                    className="absolute bottom-full left-0 z-30 mb-1.5 w-64 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3 text-[11px] text-[var(--color-text-tertiary)] shadow-lg"
+                    className="absolute bottom-full left-0 z-30 mb-1.5 w-64 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3 text-meta text-[var(--color-text-tertiary)] shadow-lg"
                   >
                     <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
                     <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">

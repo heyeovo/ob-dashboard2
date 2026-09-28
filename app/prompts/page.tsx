@@ -75,7 +75,7 @@ function TestModal({ item, draft, onClose }: { item: PromptItem; draft: string; 
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)]">
         <div>
           <div className="text-sm font-medium text-[var(--color-text-primary)]">安全测试 · {PROMPT_META[item.name].label}</div>
-          <div className="text-[10px] text-[var(--color-text-disabled)] mt-1">只使用当前草稿试跑，不保存、不修改正式运行实例</div>
+          <div className="text-2xs text-[var(--color-text-disabled)] mt-1">只使用当前草稿试跑，不保存、不修改正式运行实例</div>
         </div>
         <button onClick={onClose} className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] text-xl">×</button>
       </div>
@@ -193,7 +193,7 @@ export default function PromptsPage() {
         <div className="mb-6 sm:mb-8">
           <h1 className="text-xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)]">Prompt 配置</h1>
           <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm mt-2">由 Haven 持久保存 · 保存后立即生效 · 重启和重新部署后继续保留</p>
-          <p className="text-[11px] text-[var(--color-text-disabled)] mt-1">这里只调整文风、关注重点、判断尺度和篇幅；结构协议、证据边界与写入安全规则不可覆盖。</p>
+          <p className="text-meta text-[var(--color-text-disabled)] mt-1">这里只调整文风、关注重点、判断尺度和篇幅；结构协议、证据边界与写入安全规则不可覆盖。</p>
         </div>
 
         <div className="space-y-4">
@@ -207,14 +207,14 @@ export default function PromptsPage() {
                 <button className="text-left flex-1" onClick={() => setCollapsed(prev => ({ ...prev, [name]: !prev[name] }))}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium">{PROMPT_META[name].label}</span>
-                    <span className="text-[10px] font-mono text-[var(--color-text-disabled)]">{name}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${item.customized ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+                    <span className="text-2xs font-mono text-[var(--color-text-disabled)]">{name}</span>
+                    <span className={`text-2xs px-2 py-0.5 rounded-full ${item.customized ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
                       {item.customized ? '用户自定义' : '系统默认'}
                     </span>
-                    {dirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
+                    {dirty && <span className="text-2xs text-[var(--color-primary)]">未保存</span>}
                   </div>
-                  <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">{PROMPT_META[name].description}</p>
-                  {item.updated_at && <p className="text-[10px] text-[var(--color-text-disabled)] mt-1">更新于 {item.updated_at}</p>}
+                  <p className="text-meta text-[var(--color-text-tertiary)] mt-1">{PROMPT_META[name].description}</p>
+                  {item.updated_at && <p className="text-2xs text-[var(--color-text-disabled)] mt-1">更新于 {item.updated_at}</p>}
                 </button>
                 <div className="flex gap-2 flex-wrap items-center">
                   {item.test_supported && <button onClick={() => setTestName(name)} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg">测试</button>}
@@ -229,22 +229,22 @@ export default function PromptsPage() {
                 <div className="mt-4 mb-2 flex items-center justify-between gap-3">
                   <div>
                     <div className="text-xs font-medium text-[var(--color-text-primary)]">可编辑的产品提示词</div>
-                    <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">控制文风、关注重点、判断尺度和篇幅</div>
+                    <div className="text-2xs text-[var(--color-text-disabled)] mt-0.5">控制文风、关注重点、判断尺度和篇幅</div>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]">可编辑</span>
+                  <span className="text-2xs px-2 py-0.5 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]">可编辑</span>
                 </div>
                 <textarea value={editing[name] || ''} onChange={e => setEditing(prev => ({ ...prev, [name]: e.target.value }))}
                   rows={Math.max(7, (editing[name] || '').split('\n').length + 2)}
                   className="w-full text-xs font-mono bg-[var(--color-surface-secondary)] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
-                <div className="text-[10px] text-[var(--color-text-disabled)] mt-1.5 text-right">{(editing[name] || '').length} 字符</div>
+                <div className="text-2xs text-[var(--color-text-disabled)] mt-1.5 text-right">{(editing[name] || '').length} 字符</div>
 
                 <div className="mt-5 grid gap-3">
                   <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] p-3.5">
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="text-xs font-medium text-[var(--color-text-primary)]">运行时自动叠加</div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                      <span className="text-2xs px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
                     </div>
-                    <ul className="space-y-1.5 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                    <ul className="space-y-1.5 text-meta leading-relaxed text-[var(--color-text-tertiary)]">
                       {(item.runtime_layers || []).map((line, index) => <li key={index} className="flex gap-2"><span>•</span><span>{line}</span></li>)}
                     </ul>
                   </div>
@@ -253,22 +253,22 @@ export default function PromptsPage() {
                     <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-medium text-[var(--color-text-primary)]">模型不可覆盖的固定约束</div>
-                        <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">实际发送给模型，始终生效，不会被上方内容覆盖</div>
+                        <div className="text-2xs text-[var(--color-text-disabled)] mt-0.5">实际发送给模型，始终生效，不会被上方内容覆盖</div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                      <span className="text-2xs px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
                     </summary>
-                    <pre className="mx-3.5 mb-3.5 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--color-surface)] border border-[var(--color-border-light)] p-3 text-[11px] font-mono leading-relaxed text-[var(--color-text-tertiary)]">{item.model_hard_constraints}</pre>
+                    <pre className="mx-3.5 mb-3.5 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--color-surface)] border border-[var(--color-border-light)] p-3 text-meta font-mono leading-relaxed text-[var(--color-text-tertiary)]">{item.model_hard_constraints}</pre>
                   </details>
 
                   <details open className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-tertiary)] overflow-hidden">
                     <summary className="cursor-pointer list-none px-3.5 py-3 flex items-center justify-between gap-3">
                       <div>
                         <div className="text-xs font-medium text-[var(--color-text-primary)]">模型返回后的服务端校验</div>
-                        <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">这些不是 Prompt 文字，而是 Haven 程序继续执行的安全边界</div>
+                        <div className="text-2xs text-[var(--color-text-disabled)] mt-0.5">这些不是 Prompt 文字，而是 Haven 程序继续执行的安全边界</div>
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
+                      <span className="text-2xs px-2 py-0.5 rounded-full bg-[var(--color-surface)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]">只读</span>
                     </summary>
-                    <ul className="mx-3.5 mb-3.5 space-y-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border-light)] p-3 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+                    <ul className="mx-3.5 mb-3.5 space-y-1.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border-light)] p-3 text-meta leading-relaxed text-[var(--color-text-tertiary)]">
                       {(item.server_validations || []).map((line, index) => <li key={index} className="flex gap-2"><span>•</span><span>{line}</span></li>)}
                     </ul>
                   </details>
@@ -372,14 +372,14 @@ function AgentWakePromptSection() {
           <button className="text-left flex-1" onClick={() => setCollapsed(!collapsed)}>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium">主动唤醒</span>
-              <span className="text-[10px] font-mono text-[var(--color-text-disabled)]">agent_wake_instructions</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full ${config.customized ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+              <span className="text-2xs font-mono text-[var(--color-text-disabled)]">agent_wake_instructions</span>
+              <span className={`text-2xs px-2 py-0.5 rounded-full ${config.customized ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
                 {config.customized ? '用户自定义' : '系统默认'}
               </span>
-              {dirty && <span className="text-[10px] text-[var(--color-primary)]">未保存</span>}
+              {dirty && <span className="text-2xs text-[var(--color-primary)]">未保存</span>}
             </div>
-            <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">两段内容会合并为 set_agent_wake 唯一的顶层工具 description，不再注入对话流</p>
-            {config.updated_at && <p className="text-[10px] text-[var(--color-text-disabled)] mt-1">更新于 {config.updated_at}</p>}
+            <p className="text-meta text-[var(--color-text-tertiary)] mt-1">两段内容会合并为 set_agent_wake 唯一的顶层工具 description，不再注入对话流</p>
+            {config.updated_at && <p className="text-2xs text-[var(--color-text-disabled)] mt-1">更新于 {config.updated_at}</p>}
           </button>
           <div className="flex gap-2 flex-wrap items-center">
             {dirty && <button onClick={() => { setInstructions(config.instructions); setToolDesc(config.tool_description) }} className="text-xs px-3 py-1.5 border border-[var(--color-border)] rounded-lg">还原未保存修改</button>}
@@ -392,21 +392,21 @@ function AgentWakePromptSection() {
         {!collapsed && <div className="px-4 sm:px-6 pb-5 border-t border-[var(--color-border-light)]">
           <div className="mt-4 mb-2">
             <div className="text-xs font-medium text-[var(--color-text-primary)]">Wake 行为说明</div>
-            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">作为 set_agent_wake 顶层工具 description 的主体，始终位于固定工具前缀</div>
+            <div className="text-2xs text-[var(--color-text-disabled)] mt-0.5">作为 set_agent_wake 顶层工具 description 的主体，始终位于固定工具前缀</div>
           </div>
           <textarea value={instructions} onChange={e => setInstructions(e.target.value)}
             rows={Math.max(6, instructions.split('\n').length + 2)}
             className="w-full text-xs font-mono bg-[var(--color-surface-secondary)] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
-          <div className="text-[10px] text-[var(--color-text-disabled)] mt-1.5 text-right">{instructions.length} 字符</div>
+          <div className="text-2xs text-[var(--color-text-disabled)] mt-1.5 text-right">{instructions.length} 字符</div>
 
           <div className="mt-4 mb-2">
             <div className="text-xs font-medium text-[var(--color-text-primary)]">调用规则补充</div>
-            <div className="text-[10px] text-[var(--color-text-disabled)] mt-0.5">接在同一个 set_agent_wake description 尾部，不会生成 server instructions</div>
+            <div className="text-2xs text-[var(--color-text-disabled)] mt-0.5">接在同一个 set_agent_wake description 尾部，不会生成 server instructions</div>
           </div>
           <textarea value={toolDesc} onChange={e => setToolDesc(e.target.value)}
             rows={Math.max(3, toolDesc.split('\n').length + 1)}
             className="w-full text-xs font-mono bg-[var(--color-surface-secondary)] border border-[var(--color-border-subtle)] rounded-lg p-3 outline-none focus:border-[var(--color-primary)] resize-y leading-relaxed" />
-          <div className="text-[10px] text-[var(--color-text-disabled)] mt-1.5 text-right">{toolDesc.length} 字符</div>
+          <div className="text-2xs text-[var(--color-text-disabled)] mt-1.5 text-right">{toolDesc.length} 字符</div>
         </div>}
       </Card>
     </div>

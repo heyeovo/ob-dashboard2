@@ -10,7 +10,7 @@ export type Appearance = {
     accent?: { h: number; s: number }
   }
   glass: { blur: number; opacity: number }
-  font: { display: 'serif' | 'sans'; scale: number }
+  font: { display: 'serif' | 'sans'; scale: number; titleScale: number; bodyScale: number; metaScale: number }
   effects: { rain: { mode: 'off' | 'on' | 'weather'; intensity: number } }
 }
 
@@ -19,7 +19,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   theme: 'apricot',
   background: { kind: 'gradient', intensity: 0.7, accentMode: 'theme' },
   glass: { blur: 12, opacity: 0.78 },
-  font: { display: 'serif', scale: 1 },
+  font: { display: 'serif', scale: 1, titleScale: 1, bodyScale: 1, metaScale: 1 },
   effects: { rain: { mode: 'off', intensity: 0.35 } },
 }
 
@@ -78,6 +78,9 @@ export function normalizeAppearance(value: unknown): Appearance {
     font: {
       display: font.display === 'sans' ? 'sans' : 'serif',
       scale: number(font.scale, 1, 0.85, 1.3, 2),
+      titleScale: number(font.titleScale, 1, 0.85, 1.4, 2),
+      bodyScale: number(font.bodyScale, 1, 0.85, 1.4, 2),
+      metaScale: number(font.metaScale, 1, 0.85, 1.4, 2),
     },
     effects: {
       rain: {
@@ -94,6 +97,9 @@ export function appearanceHtmlStyle(appearance: Appearance): Record<string, stri
     '--glass-blur': `${appearance.glass.blur}px`,
     '--glass-opacity': String(appearance.glass.opacity),
     '--font-scale': String(appearance.font.scale),
+    '--type-title-scale': String(appearance.font.titleScale),
+    '--type-body-scale': String(appearance.font.bodyScale),
+    '--type-meta-scale': String(appearance.font.metaScale),
     '--effect-rain-intensity': String(appearance.effects.rain.intensity),
     '--rain-base-opacity': String(Number((appearance.effects.rain.intensity * 0.7).toFixed(3))),
     '--rain-extra-opacity': String(Number(Math.min(0.9, Math.max(0, (appearance.effects.rain.intensity - 0.3) * 1.3)).toFixed(3))),

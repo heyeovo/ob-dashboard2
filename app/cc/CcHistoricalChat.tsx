@@ -225,14 +225,14 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
+            <span className="truncate text-note font-medium text-[var(--color-text-primary)]">
               {conversation.title || '未命名历史窗口'}
             </span>
-            <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-[10px] text-[var(--color-text-tertiary)]">
+            <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-2xs text-[var(--color-text-tertiary)]">
               {historicalSourceLabel(conversation.source, conversation.client)}
             </span>
           </div>
-          <div className="mt-0.5 truncate text-[11px] text-[var(--color-text-disabled)]">
+          <div className="mt-0.5 truncate text-meta text-[var(--color-text-disabled)]">
             历史聊天 · {formatDate(conversation.first_at)} · {conversation.message_count} 条消息
           </div>
         </div>
@@ -241,12 +241,12 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
           <button
             type="button"
             onClick={() => { setSelectMode(prev => !prev); setSelected(new Set()) }}
-            className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-[10px] md:inline-flex ${selectMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-tertiary)]'}`}
+            className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-2xs md:inline-flex ${selectMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-tertiary)]'}`}
           >
             {selectMode ? '取消选择' : '选择'}
           </button>
         ) : (
-          <span className="hidden shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[10px] text-[var(--color-text-tertiary)] md:inline-flex">
+          <span className="hidden shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-2xs text-[var(--color-text-tertiary)] md:inline-flex">
             只读
           </span>
         )}
@@ -310,7 +310,7 @@ export default function CcHistoricalChat({ conversation, persona, onOpenRail, on
               {loadingMore ? '正在加载后续消息…' : '继续向下滚动加载'}
             </div>
           ) : !loading && uiMessages.length > 0 ? (
-            <div className="py-2 text-center text-[11px] text-[var(--color-text-disabled)]">
+            <div className="py-2 text-center text-meta text-[var(--color-text-disabled)]">
               已显示全部 {total} 条{query ? '匹配消息' : '消息'}
             </div>
           ) : null}

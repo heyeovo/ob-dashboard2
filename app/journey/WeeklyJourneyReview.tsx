@@ -50,7 +50,7 @@ function displayTime(value?: string) {
 
 function JsonPreview({ value }: { value: Record<string, unknown> | undefined }) {
   return (
-    <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--color-dark-surface)] p-3 text-[11px] leading-5 text-[var(--color-dark-text)]">
+    <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-[var(--color-dark-surface)] p-3 text-meta leading-5 text-[var(--color-dark-text)]">
       {JSON.stringify(value || {}, null, 2)}
     </pre>
   )
@@ -250,7 +250,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
           <div className="flex items-center gap-2">
             <h2 className="font-semibold">每周关系轨迹候选</h2>
             {pendingCount > 0 && (
-              <span className="rounded-full bg-[var(--color-pending-bg)] px-2 py-0.5 text-[11px] text-[var(--color-pending)]">{pendingCount} 条待确认</span>
+              <span className="rounded-full bg-[var(--color-pending-bg)] px-2 py-0.5 text-meta text-[var(--color-pending)]">{pendingCount} 条待确认</span>
             )}
           </div>
           <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">只在这里人工确认后才会修改 journey；关闭页面不会写入。</p>
@@ -286,9 +286,9 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-sm font-medium">{TYPE_LABELS[item.candidate_type] || item.candidate_type}</span>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${statusClass(item.status)}`}>{journeyCandidateStatusText(item.status)}</span>
+                <span className={`rounded-full border px-2 py-0.5 text-2xs ${statusClass(item.status)}`}>{journeyCandidateStatusText(item.status)}</span>
               </div>
-              <div className="mt-2 flex justify-between text-[11px] text-[var(--color-text-tertiary)]">
+              <div className="mt-2 flex justify-between text-meta text-[var(--color-text-tertiary)]">
                 <span>revision {item.revision}</span>
                 <span>{displayTime(item.updated_at || item.created_at)}</span>
               </div>
@@ -315,10 +315,10 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
               </div>
 
               <div className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">状态</div><div className="mt-1 text-sm">{journeyCandidateStatusText(current.status)}</div></div>
-                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">revision</div><div className="mt-1 font-mono text-sm">{current.revision}</div></div>
-                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">日回顾</div><div className="mt-1 text-sm">{input?.daily_review_count ?? 0} 天</div></div>
-                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-[10px] text-[var(--color-text-tertiary)]">输入材料</div><div className="mt-1 text-sm">{input?.material_count ?? 0} 个桶</div></div>
+                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-2xs text-[var(--color-text-tertiary)]">状态</div><div className="mt-1 text-sm">{journeyCandidateStatusText(current.status)}</div></div>
+                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-2xs text-[var(--color-text-tertiary)]">revision</div><div className="mt-1 font-mono text-sm">{current.revision}</div></div>
+                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-2xs text-[var(--color-text-tertiary)]">日回顾</div><div className="mt-1 text-sm">{input?.daily_review_count ?? 0} 天</div></div>
+                <div className="rounded-xl bg-[var(--color-surface-secondary)] p-3"><div className="text-2xs text-[var(--color-text-tertiary)]">输入材料</div><div className="mt-1 text-sm">{input?.material_count ?? 0} 个桶</div></div>
               </div>
 
               <section>
@@ -341,7 +341,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
               {!editing ? (
                 <>
                   <section>
-                    <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold text-[var(--color-text-tertiary)]">当前 draft</h3><span className="text-[10px] text-[var(--color-text-disabled)]">服务端规范化版本</span></div>
+                    <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold text-[var(--color-text-tertiary)]">当前 draft</h3><span className="text-2xs text-[var(--color-text-disabled)]">服务端规范化版本</span></div>
                     <JsonPreview value={current.draft} />
                   </section>
                   <section>
@@ -369,7 +369,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
 
               {current.candidate_type !== 'no_change' && (
                 <section>
-                  <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold text-[var(--color-text-tertiary)]">证据桶</h3><span className="text-[10px] text-[var(--color-text-disabled)]">只能选择本次固定输入快照内的桶</span></div>
+                  <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-semibold text-[var(--color-text-tertiary)]">证据桶</h3><span className="text-2xs text-[var(--color-text-disabled)]">只能选择本次固定输入快照内的桶</span></div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {(editing ? availableEvidence : currentEvidence).map(bucket => {
                       const selected = selectedEvidenceIds.includes(bucket.id)
@@ -378,7 +378,7 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
                           {editing && <input type="checkbox" checked={selected} onChange={() => setSelectedEvidenceIds(ids => selected ? ids.filter(id => id !== bucket.id) : [...ids, bucket.id])} />}
                           <button type="button" onClick={() => onOpenEvidence(bucket.id)} className="min-w-0 flex-1 text-left">
                             <div className="truncate text-sm font-medium">{bucket.name}</div>
-                            <div className="truncate font-mono text-[10px] text-[var(--color-text-tertiary)]">{bucket.id}</div>
+                            <div className="truncate font-mono text-2xs text-[var(--color-text-tertiary)]">{bucket.id}</div>
                           </button>
                         </div>
                       )
@@ -394,8 +394,8 @@ export default function WeeklyJourneyReview({ onOpenEvidence, onJourneyChanged }
               </section>
 
               <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] p-3">
-                <div className="text-[10px] text-[var(--color-text-tertiary)]">当前批准 hash</div>
-                <div className="mt-1 break-all font-mono text-[11px]">{current.draft_payload_hash || current.approved_payload_hash || '当前状态无可确认 hash'}</div>
+                <div className="text-2xs text-[var(--color-text-tertiary)]">当前批准 hash</div>
+                <div className="mt-1 break-all font-mono text-meta">{current.draft_payload_hash || current.approved_payload_hash || '当前状态无可确认 hash'}</div>
               </section>
 
               {current.error && <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">{current.error}</div>}

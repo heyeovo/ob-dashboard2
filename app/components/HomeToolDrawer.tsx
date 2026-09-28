@@ -66,7 +66,7 @@ export default function HomeToolDrawer({
           <span className="h-4 w-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
           <div className="ml-2.5">
             <h2 className="text-sm font-semibold text-[var(--color-text-heading)]">小言&小羊的家</h2>
-            <p className="text-[10px] text-[var(--color-text-tertiary)]">功能导航</p>
+            <p className="text-2xs text-[var(--color-text-tertiary)]">功能导航</p>
           </div>
           <button
             type="button"
@@ -81,7 +81,7 @@ export default function HomeToolDrawer({
         <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
           {GROUPS.map(group => (
             <section key={group.label} className="mb-6">
-              <h3 className="mb-2 px-3 text-[10px] font-medium tracking-[0.16em] text-[var(--color-text-disabled)]">
+              <h3 className="mb-2 px-3 text-2xs font-medium tracking-[0.16em] text-[var(--color-text-disabled)]">
                 {group.label}
               </h3>
               <div className="space-y-1">
@@ -106,7 +106,7 @@ export default function HomeToolDrawer({
                     >
                       <span className="flex h-7 w-7 items-center justify-center text-lg">{item.icon}</span>
                       <span>{item.label}</span>
-                      <span className="ml-auto text-[9px]">以后</span>
+                      <span className="ml-auto text-3xs">以后</span>
                     </div>
                   ),
                 )}

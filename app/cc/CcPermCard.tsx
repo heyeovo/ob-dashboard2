@@ -88,7 +88,7 @@ export function CcPermCard({
           <div className="cc-perm-title">{request.title}</div>
           {request.filePath ? <div className="cc-perm-path">{request.filePath}</div> : null}
           {request.description ? (
-            <div className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-tertiary)]">
+            <div className="mt-1 text-meta leading-relaxed text-[var(--color-text-tertiary)]">
               {request.description}
             </div>
           ) : null}
@@ -104,7 +104,7 @@ export function CcPermCard({
       {diff ? (
         <div className="cc-perm-body">
           {diff.note ? (
-            <div className="mb-1.5 text-[10.5px] text-[var(--color-text-disabled)]">{diff.note}</div>
+            <div className="mb-1.5 text-2xs text-[var(--color-text-disabled)]">{diff.note}</div>
           ) : null}
           {diff.lines.map((line, i) => (
             <div
@@ -118,7 +118,7 @@ export function CcPermCard({
             </div>
           ))}
           {diff.truncated ? (
-            <div className="mt-1.5 text-[10.5px] text-[var(--color-text-disabled)]">
+            <div className="mt-1.5 text-2xs text-[var(--color-text-disabled)]">
               改动太长，这里只显示前面一段
             </div>
           ) : null}
@@ -126,7 +126,7 @@ export function CcPermCard({
       ) : null}
 
       {hasReusableRule ? (
-        <div className="mt-2 rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-[11px] text-[var(--color-text-secondary)]">
+        <div className="mt-2 rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-meta text-[var(--color-text-secondary)]">
           {ruleLabel}
         </div>
       ) : null}

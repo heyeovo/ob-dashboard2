@@ -24,7 +24,7 @@ export function EntryCard({ entry }: { entry: Entry }) {
           {entry.label}
         </span>
         {entry.todo ? (
-          <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[10px] text-[var(--color-text-tertiary)]">
+          <span className="shrink-0 rounded-full bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-2xs text-[var(--color-text-tertiary)]">
             待做
           </span>
         ) : (

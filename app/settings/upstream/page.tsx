@@ -235,7 +235,7 @@ export default function UpstreamSettingsPage() {
                               </div>
                               {t && t.state !== 'running' ? (
                                 <div
-                                  className={`mt-1 text-[11px] leading-relaxed ${
+                                  className={`mt-1 text-meta leading-relaxed ${
                                     t.state === 'ok'
                                       ? 'text-[var(--color-success)]'
                                       : 'text-[var(--color-danger)]'
@@ -255,7 +255,7 @@ export default function UpstreamSettingsPage() {
                           加一个模型
                         </button>
                       </div>
-                      <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-text-disabled)]">
+                      <p className="mt-2 text-meta leading-relaxed text-[var(--color-text-disabled)]">
                         测试会真发一句话（1 token），这是唯一能确认这个模型在这个站上能用的办法。
                         改完 URL 或 token 要先点下面的保存，测试读的是已保存的那份。
                       </p>
@@ -310,7 +310,7 @@ export default function UpstreamSettingsPage() {
                   </button>
                 </div>
                 {/* 订阅侧没有可用的 key（凭据在 claude code 手里），所以测不了通断 */}
-                <p className="mt-2 text-[11px] text-[var(--color-text-disabled)]">
+                <p className="mt-2 text-meta text-[var(--color-text-disabled)]">
                   订阅侧没法测通断 —— 凭据在本机 claude 自己手里，这边拿不到
                 </p>
               </div>

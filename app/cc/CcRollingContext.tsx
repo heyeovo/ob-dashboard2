@@ -34,7 +34,7 @@ type BucketCandidate = Candidate & {
   journal: boolean
 }
 
-const SELECT = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[11px] text-[var(--color-text-secondary)]'
+const SELECT = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-meta text-[var(--color-text-secondary)]'
 
 function defaultModes(days: ConversationContextDay[]): Record<string, 'raw' | 'review' | 'omit'> {
   const newest = [...days].sort((a, b) => b.day.localeCompare(a.day))
@@ -119,9 +119,9 @@ function shuffled<T>(items: T[], seed: number): T[] {
 
 function LimitControl({ value, unit, onChange }: { value: number; unit: string; onChange: (value: number) => void }) {
   return (
-    <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
+    <label className="flex items-center gap-1 text-2xs text-[var(--color-text-disabled)]">
       展示候选
-      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)]" />
+      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-meta text-[var(--color-text-secondary)]" />
       {unit}
     </label>
   )
@@ -156,16 +156,16 @@ function SelectionSection({
     <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
       <button type="button" onClick={onToggleOpen} className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
         <span className="min-w-0 flex-1">
-          <span className="block text-[11.5px] font-medium text-[var(--color-text-heading)]">{title}</span>
-          <span className="mt-0.5 block text-[9.5px] text-[var(--color-text-disabled)]">
+          <span className="block text-meta font-medium text-[var(--color-text-heading)]">{title}</span>
+          <span className="mt-0.5 block text-3xs text-[var(--color-text-disabled)]">
             {hint} · 已选 {selectedCount}/{items.length} · {selectedChars.toLocaleString()} 字 · 约 {estimateHandoffTokens(items.filter(item => selected.has(item.id)).map(item => item.content).join('\n\n')).toLocaleString()} token
           </span>
         </span>
-        <span className="text-[10px] text-[var(--color-text-disabled)]">{open ? '收起' : '展开'}</span>
+        <span className="text-2xs text-[var(--color-text-disabled)]">{open ? '收起' : '展开'}</span>
       </button>
       {open ? (
         <div className="border-t border-[var(--color-border-light)] px-3 pb-2.5 pt-2">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-2xs">
             <div>{control}</div>
             {items.length > 0 ? (
               <div className="flex items-center gap-2">
@@ -176,7 +176,7 @@ function SelectionSection({
             ) : null}
           </div>
           {items.length === 0 ? (
-            <div className="py-2 text-center text-[10px] text-[var(--color-text-disabled)]">暂无可选内容</div>
+            <div className="py-2 text-center text-2xs text-[var(--color-text-disabled)]">暂无可选内容</div>
           ) : (
             <div className="max-h-48 space-y-1 overflow-y-auto">
               {items.map(item => (
@@ -184,10 +184,10 @@ function SelectionSection({
                   <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggle(item.id)} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
-                      {item.badge ? <span className="shrink-0 rounded-full bg-[var(--color-primary-muted)] px-1.5 py-0.5 text-[8.5px] text-[var(--color-primary)]">{item.badge}</span> : null}
-                      <span className="block truncate text-[11px] text-[var(--color-text-secondary)]">{item.title}</span>
+                      {item.badge ? <span className="shrink-0 rounded-full bg-[var(--color-primary-muted)] px-1.5 py-0.5 text-3xs text-[var(--color-primary)]">{item.badge}</span> : null}
+                      <span className="block truncate text-meta text-[var(--color-text-secondary)]">{item.title}</span>
                     </span>
-                    <span className="mt-0.5 flex items-center justify-between text-[9px] text-[var(--color-text-disabled)]">
+                    <span className="mt-0.5 flex items-center justify-between text-3xs text-[var(--color-text-disabled)]">
                       <span>{item.note ? `${item.note} · ` : ''}{item.content.length.toLocaleString()} 字</span>
                       {item.created ? <span className="shrink-0 pl-2">{item.created.slice(0, 10)}</span> : null}
                     </span>
@@ -372,8 +372,8 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     return estimatedDateTokens + longTermTokens
   }, [estimatedDateTokens, feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
 
-  if (loading) return <div className="py-8 text-center text-[11px] text-[var(--color-text-disabled)]">读取上下文日期…</div>
-  if (!draft || !session) return <div className="text-[11px] text-[var(--color-danger)]">{note || '没有可用的窗口配置'}</div>
+  if (loading) return <div className="py-8 text-center text-meta text-[var(--color-text-disabled)]">读取上下文日期…</div>
+  if (!draft || !session) return <div className="text-meta text-[var(--color-danger)]">{note || '没有可用的窗口配置'}</div>
 
   const updateStrategy = (strategy: RollingContextConfig['strategy']) => {
     setDraft(current => current ? {
@@ -496,12 +496,12 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     return (
       <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-[11.5px] text-[var(--color-text-secondary)]">
+          <div className="flex items-center gap-1.5 text-meta text-[var(--color-text-secondary)]">
             <span>{day.day}</span>
-            {bodyRestore ? <span className="rounded-full bg-[var(--color-pending-bg)] px-1.5 py-0.5 text-[9px] text-[var(--color-pending)]">正文恢复</span> : null}
+            {bodyRestore ? <span className="rounded-full bg-[var(--color-pending-bg)] px-1.5 py-0.5 text-3xs text-[var(--color-pending)]">正文恢复</span> : null}
           </div>
           {mode === 'raw' ? (
-            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[9.5px] text-[var(--color-text-disabled)]">
+            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-3xs text-[var(--color-text-disabled)]">
               <span>{day.turn_count} 轮</span>
               <span>正文 {estimate.conversation.toLocaleString()}</span>
               <span>工具 {estimate.tools.toLocaleString()}</span>
@@ -514,9 +514,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
               <span className="text-[var(--color-text-secondary)]">合计约 {rawTokens.toLocaleString()} token</span>
             </div>
           ) : mode === 'review' ? (
-            <div className="mt-0.5 text-[9.5px] text-[var(--color-text-disabled)]">日回顾合计约 {reviewTokens.toLocaleString()} token</div>
+            <div className="mt-0.5 text-3xs text-[var(--color-text-disabled)]">日回顾合计约 {reviewTokens.toLocaleString()} token</div>
           ) : (
-            <div className="mt-0.5 text-[9.5px] text-[var(--color-text-disabled)]">当前不带 · 0 token</div>
+            <div className="mt-0.5 text-3xs text-[var(--color-text-disabled)]">当前不带 · 0 token</div>
           )}
         </div>
         <select
@@ -534,7 +534,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
 
   return (
     <div>
-      <div className="mb-2 text-[11px] text-[var(--color-text-disabled)]">上下文方式</div>
+      <div className="mb-2 text-meta text-[var(--color-text-disabled)]">上下文方式</div>
       <div className="mb-3 grid grid-cols-2 gap-1.5">
         <button type="button" onClick={() => updateStrategy('fixed_window')} className={`${SELECT} ${draft.strategy === 'fixed_window' ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : ''}`}>原换窗机制</button>
         <button type="button" onClick={() => updateStrategy('daily_rolling')} className={`${SELECT} ${draft.strategy === 'daily_rolling' ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : ''}`}>按天滚动</button>
@@ -542,26 +542,26 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
 
       {draft.strategy === 'daily_rolling' ? (
         <>
-          <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-2.5 text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">
+          <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-2.5 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
             这里只决定模型下一轮能看到什么，不删除聊天记录。重建时只保留最新一个有对话原文日的召回和 thinking；旧召回剥离后可重新参与召回，但原文期新写入或被 breath 看过的桶仍会隔离。
           </div>
-          <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] p-2.5 text-[10.5px] leading-relaxed text-[var(--color-pending)]">
+          <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] p-2.5 text-2xs leading-relaxed text-[var(--color-pending)]">
             已经退出“原文”的旧日期以后重新设为“原文”时，只会从 Haven 恢复可见的用户与助手正文；当时的工具调用、工具结果和动态召回过程不会恢复。
           </div>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <label className="text-[11px] text-[var(--color-text-tertiary)]">一天从北京时间</label>
+            <label className="text-meta text-[var(--color-text-tertiary)]">一天从北京时间</label>
             <select className={SELECT} value={draft.day_start_hour} onChange={event => setDraft({ ...draft, day_start_hour: Number(event.target.value) })}>
               {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
             </select>
           </div>
-          <div className="mb-2 flex justify-between text-[10.5px] text-[var(--color-text-disabled)]">
+          <div className="mb-2 flex justify-between text-2xs text-[var(--color-text-disabled)]">
             <span>日期内容</span><span>预估约 {estimatedDateTokens.toLocaleString()} token</span>
           </div>
           <div className="space-y-1.5">
             {includedDays.map(renderDay)}
             {omittedDays.length > 0 ? (
               <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)]">
-                <button type="button" onClick={() => toggleSection('omitted-days')} className="flex w-full items-center justify-between px-2.5 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+                <button type="button" onClick={() => toggleSection('omitted-days')} className="flex w-full items-center justify-between px-2.5 py-2 text-2xs text-[var(--color-text-tertiary)]">
                   <span>已不带 {omittedDays.length} 天</span>
                   <span>{openSections.has('omitted-days') ? '收起' : '展开'}</span>
                 </button>
@@ -570,11 +570,11 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
             ) : null}
           </div>
 
-          <div className={`mb-3 mt-4 rounded-[var(--radius-md)] border px-2.5 py-2 text-[10.5px] leading-relaxed ${estimatedTotalTokens >= 100000 ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+          <div className={`mb-3 mt-4 rounded-[var(--radius-md)] border px-2.5 py-2 text-2xs leading-relaxed ${estimatedTotalTokens >= 100000 ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
             当前日期内容与长期层已选项预估约 {estimatedTotalTokens.toLocaleString()} token（不含系统提示词和后续动态召回）。
             {estimatedTotalTokens >= 100000 ? ' 已超过 10 万，建议精简；保存时不会自动截断。' : ''}
           </div>
-          <div className="mb-2 text-[10.5px] text-[var(--color-text-disabled)]">长期层</div>
+          <div className="mb-2 text-2xs text-[var(--color-text-disabled)]">长期层</div>
           <div className="space-y-1.5">
             <SelectionSection
               title="钉选桶"
@@ -636,14 +636,14 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
               control={(
                 <div className="flex items-center gap-2">
                   <LimitControl value={randomHighImportanceLimit} unit="个桶" onChange={setRandomHighImportanceLimit} />
-                  <button type="button" onClick={() => setRandomBatch(current => current + 1)} className="text-[10px] text-[var(--color-primary)] hover:underline">换一批</button>
+                  <button type="button" onClick={() => setRandomBatch(current => current + 1)} className="text-2xs text-[var(--color-primary)] hover:underline">换一批</button>
                 </div>
               )}
             />
           </div>
         </>
       ) : (
-        <div className={`rounded-[var(--radius-md)] px-2.5 py-2 text-[10.5px] leading-relaxed ${
+        <div className={`rounded-[var(--radius-md)] px-2.5 py-2 text-2xs leading-relaxed ${
           session.rolling_context?.strategy === 'daily_rolling'
             ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
             : 'text-[var(--color-text-disabled)]'
@@ -654,26 +654,26 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
         </div>
       )}
 
-      <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-[11.5px] text-[var(--color-on-primary)] disabled:opacity-50">
+      <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-meta text-[var(--color-on-primary)] disabled:opacity-50">
         {saving ? '保存中…' : busy ? '回复结束后可保存' : '保存上下文拼接'}
       </button>
       {draft.strategy === 'daily_rolling' ? (
         <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)]/60 p-2.5">
-          <div className="text-[10.5px] font-medium text-[var(--color-danger)]">损坏窗口恢复</div>
-          <div className="mt-1 text-[9.5px] leading-relaxed text-[var(--color-text-tertiary)]">
+          <div className="text-2xs font-medium text-[var(--color-danger)]">损坏窗口恢复</div>
+          <div className="mt-1 text-3xs leading-relaxed text-[var(--color-text-tertiary)]">
             仅在旧 transcript 无法继续时使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
           </div>
           <button
             type="button"
             disabled={recovering || saving || busy}
             onClick={() => void recoverFromHavenBody()}
-            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 bg-[var(--color-surface)] px-3 py-2 text-[10.5px] text-[var(--color-danger)] disabled:opacity-50"
+            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 bg-[var(--color-surface)] px-3 py-2 text-2xs text-[var(--color-danger)] disabled:opacity-50"
           >
             {recovering ? '正在重建…' : '舍弃损坏的原生记录，用 Haven 正文重建'}
           </button>
         </div>
       ) : null}
-      {note ? <div className="mt-2 text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">{note}</div> : null}
+      {note ? <div className="mt-2 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{note}</div> : null}
     </div>
   )
 }

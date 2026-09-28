@@ -79,19 +79,19 @@ function SelectionSection({ id, title, hint, items, selected, open, loading, onO
     <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
       <button type="button" aria-expanded={open} aria-controls={`handoff-${id}`} onClick={onOpen} className="flex w-full items-center gap-3 px-3.5 py-3 text-left">
         <span className="min-w-0 flex-1">
-          <span className="block text-[12px] font-medium text-[var(--color-text-heading)]">{title}</span>
-          <span className="mt-0.5 block text-[10px] text-[var(--color-text-disabled)]">
+          <span className="block text-xs font-medium text-[var(--color-text-heading)]">{title}</span>
+          <span className="mt-0.5 block text-2xs text-[var(--color-text-disabled)]">
             {hint} · 已选 {selectedCount}/{items.length} · {stats.chars.toLocaleString()} 字 · 约 {stats.tokens.toLocaleString()} token
           </span>
         </span>
-        <span className="text-[11px] text-[var(--color-text-disabled)]">{open ? '收起' : '展开'}</span>
+        <span className="text-meta text-[var(--color-text-disabled)]">{open ? '收起' : '展开'}</span>
       </button>
       {open ? (
         <div id={`handoff-${id}`} className="border-t border-[var(--color-border-light)] px-3.5 pb-3 pt-2.5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>{control}</div>
             {items.length > 0 ? (
-              <div className="flex items-center gap-2 text-[10.5px]">
+              <div className="flex items-center gap-2 text-2xs">
                 <button type="button" onClick={onAll} className="text-[var(--color-primary)] hover:underline">全选</button>
                 <span className="text-[var(--color-border)]">|</span>
                 <button type="button" onClick={onNone} className="text-[var(--color-primary)] hover:underline">全不选</button>
@@ -99,17 +99,17 @@ function SelectionSection({ id, title, hint, items, selected, open, loading, onO
             ) : null}
           </div>
           {loading ? (
-            <div className="py-3 text-center text-[11px] text-[var(--color-text-disabled)]">加载中</div>
+            <div className="py-3 text-center text-meta text-[var(--color-text-disabled)]">加载中</div>
           ) : items.length === 0 ? (
-            <div className="py-3 text-center text-[11px] text-[var(--color-text-disabled)]">暂无可选内容</div>
+            <div className="py-3 text-center text-meta text-[var(--color-text-disabled)]">暂无可选内容</div>
           ) : (
             <div className="max-h-64 space-y-1 overflow-y-auto pr-0.5">
               {items.map(item => (
                 <label key={item.id} className={`flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-md)] border px-3 py-2 transition-colors ${selected.has(item.id) ? 'border-[var(--color-primary)]/50 bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'}`}>
                   <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggle(item.id)} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11.5px] text-[var(--color-text-secondary)]">{item.title}</span>
-                    <span className="mt-0.5 block text-[9.5px] text-[var(--color-text-disabled)]">
+                    <span className="block truncate text-meta text-[var(--color-text-secondary)]">{item.title}</span>
+                    <span className="mt-0.5 block text-3xs text-[var(--color-text-disabled)]">
                       {item.note ? `${item.note} · ` : ''}{item.content.length.toLocaleString()} 字 · 约 {estimateHandoffTokens(item.content).toLocaleString()} token
                     </span>
                   </span>
@@ -125,9 +125,9 @@ function SelectionSection({ id, title, hint, items, selected, open, loading, onO
 
 function LimitControl({ value, unit, max, onChange }: { value: number; unit: string; max?: number; onChange: (value: number) => void }) {
   return (
-    <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-disabled)]">
+    <label className="flex items-center gap-1 text-2xs text-[var(--color-text-disabled)]">
       展示最近
-      <input type="number" min={0} max={max} value={value} onChange={event => onChange(Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(Number(event.target.value) || 0))))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-[11px] text-[var(--color-text-secondary)]" />
+      <input type="number" min={0} max={max} value={value} onChange={event => onChange(Math.min(max ?? Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(Number(event.target.value) || 0))))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-meta text-[var(--color-text-secondary)]" />
       {unit}
     </label>
   )
@@ -289,32 +289,32 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
       <div className="cc-modal relative flex max-h-[90vh] w-full max-w-lg flex-col" role="dialog" aria-label="新对话">
         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-3.5">
           <div>
-            <div className="text-[13px] font-medium text-[var(--color-text-heading)]">{fromSessionId ? '换窗' : '新对话'}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--color-text-disabled)]">选择并冻结这个窗口要带入的背景</div>
+            <div className="text-note font-medium text-[var(--color-text-heading)]">{fromSessionId ? '换窗' : '新对话'}</div>
+            <div className="mt-0.5 text-meta text-[var(--color-text-disabled)]">选择并冻结这个窗口要带入的背景</div>
           </div>
-          <button type="button" onClick={onClose} className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">取消</button>
+          <button type="button" onClick={onClose} className="text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">取消</button>
         </div>
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          <div className="mb-1.5 text-[11px] text-[var(--color-text-disabled)]">模式</div>
+          <div className="mb-1.5 text-meta text-[var(--color-text-disabled)]">模式</div>
           <div className="mb-4 flex gap-2.5">
             {(['chat', 'work'] as const).map(itemMode => (
               <button key={itemMode} type="button" onClick={() => setMode(itemMode)} className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-2.5 text-left transition-colors ${mode === itemMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'}`}>
-                <span className="block text-[12px] font-medium text-[var(--color-text-heading)]">{MODE_LABEL[itemMode]}</span>
-                <span className="mt-0.5 block text-[10.5px] leading-relaxed text-[var(--color-text-tertiary)]">{MODE_HINT[itemMode]}</span>
+                <span className="block text-xs font-medium text-[var(--color-text-heading)]">{MODE_LABEL[itemMode]}</span>
+                <span className="mt-0.5 block text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{MODE_HINT[itemMode]}</span>
               </button>
             ))}
           </div>
-          {error ? <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-[11px] text-[var(--color-danger)]">{error}</div> : null}
+          {error ? <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-meta text-[var(--color-danger)]">{error}</div> : null}
           <div className="space-y-2">{sections.map(section => <SelectionSection key={section.id} {...section} />)}</div>
         </div>
         <div className="border-t border-[var(--color-border-light)] px-5 py-3.5">
           <div className={`mb-2.5 rounded-[var(--radius-md)] border px-3 py-2 ${snapshot.stats.over_budget ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'}`}>
-            <div className="text-[11px] font-medium">本次选择：{snapshot.stats.selected_chars.toLocaleString()} 字 · 约 {snapshot.stats.selected_estimated_tokens.toLocaleString()} token</div>
-            <div className="mt-0.5 text-[10px] opacity-80">
+            <div className="text-meta font-medium">本次选择：{snapshot.stats.selected_chars.toLocaleString()} 字 · 约 {snapshot.stats.selected_estimated_tokens.toLocaleString()} token</div>
+            <div className="mt-0.5 text-2xs opacity-80">
               统一预算 {snapshot.stats.budget_tokens.toLocaleString()} token{snapshot.stats.over_budget ? `；超出部分会按相同规则裁剪，实际约 ${snapshot.stats.effective_estimated_tokens.toLocaleString()} token，省略 ${snapshot.stats.dropped_item_count} 项` : '；CC 与 selfhost 将使用同一份固定快照'}
             </div>
           </div>
-          <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-[12.5px] font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
+          <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-xs font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
         </div>
       </div>
     </div>
