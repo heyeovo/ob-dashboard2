@@ -153,12 +153,55 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
 - 用 `git diff --stat` 说明每个新文件对应原来哪几行；逐一 grep 确认新组件都被引用、`page.tsx` 里没留下没用的 import。
 - 用户在 iPhone 上走一遍：进对话列表 → 进聊天 → 发一条消息看流式 → 打开历史 / 本窗 / 设置 / 「+」菜单 → 返回列表，和拆分前一模一样。桌面浏览器也看一眼左栏。
 
-### 阶段 2 前置 B：字号分层（方向已定，规格待 CC 写，排在拆分之后）
+### 阶段 2 前置 B：字号分层（✅ 已定，可开工）
 
-2026-09-28 用户提出：现在只有一个总字号，想把标题 / 正文 / 小字分开调。CC 已经查过现状，方向如下，**等拆分合进 main 后由 CC 写成可执行规格**（两件事都要改 `app/cc/`，不能同时做）：
-- Tailwind 命名字号（`text-xs` 570 处、`text-sm` 447 处、`text-lg`–`text-4xl` 约 80 处）背后都是 CSS 变量，在 `:root` 里按档乘系数即可，页面代码不用改：`--type-title-scale`（lg 及以上）、`--type-body-scale`（sm / base）、`--type-meta-scale`（xs 及更小）。
-- 写死像素的 `text-[Npx]` 有 436 处（11px 185、10px 135、10.5px 47，其余 8.5–18px 零散），不会跟着变，需要像 1a 一样收编成几档有名字的小字号（如 `text-2xs` / `text-meta`），允许 ±0.5px 的取整。`globals.css` 里 57 处 `font-size` 也接到变量上。
-- 外观设置加三个滑条（标题 / 正文 / 小字），原「整体字号」保留为最外层缩放；三个值存 Haven 的 `font` 字段。
+2026-09-28 定。用户希望标题 / 正文 / 小字能分开调大小，而不是只有一个总字号。**本步只让字号可调、把写死的像素收编成档位，页面观感保持不变（允许 ±0.5px 取整），不改布局、不改颜色。**
+
+**现状**（CC 2026-09-28 统计）
+- Tailwind 命名字号：`text-xs` 570、`text-sm` 447、`text-base` 13、`text-lg` 19、`text-xl` 23、`text-2xl` 24、`text-3xl` 12、`text-4xl` 3。这版 Tailwind（v4）的每一档背后都是 CSS 变量（`--text-xs` 等），可以在 `:root` 统一改。
+- 写死像素的 `text-[Npx]` 436 处：11px 185、10px 135、10.5px 47、9.5px 15、13px 15、11.5px 14、9px 11、12px 4、15px 3、12.5px 3、8.5px 1、18px 1。它们是 px，**连现在的「整体字号」滑条都不跟**（整体字号改的是 `html` 的 font-size，只影响 rem）。
+- `globals.css` 里写死的 `font-size`：11px 16、11.5px 11、12.5px 9、10.5px 6、12px 3、9.5 / 13 / 13.5 / 18 / 20px 各 1；另有若干 `em` 相对值（Markdown 标题等）保留不动。
+
+**1. 档位 Token**（`globals.css` 的 `@theme inline` 里新增，全部用 rem，这样也跟着「整体字号」走）
+
+| 档 | 新 / 现有类 | 基准值 | 收编来源 |
+|---|---|---|---|
+| 小字 | `text-3xs`（新） | 0.5625rem = 9px | 8.5 / 9 / 9.5px |
+| 小字 | `text-2xs`（新） | 0.625rem = 10px | 10 / 10.5px |
+| 小字 | `text-meta`（新） | 0.6875rem = 11px | 11 / 11.5px |
+| 小字 | `text-xs` | 0.75rem = 12px | 12 / 12.5px |
+| 正文 | `text-note`（新） | 0.8125rem = 13px | 13 / 13.5px |
+| 正文 | `text-sm` | 0.875rem = 14px | |
+| 正文 | `text-md`（新） | 0.9375rem = 15px | 15px |
+| 正文 | `text-base` | 1rem = 16px | |
+| 标题 | `text-lg` 及以上 | 不变 | 18px → `text-lg`，20px → `text-xl` |
+
+新档要带 line-height 变量（`--text-meta--line-height` 等，照 Tailwind 现有档的比例）。
+
+**2. 三个系数**：在 `:root` 覆盖 Tailwind 的字号变量，乘上各档系数：
+- `--type-meta-scale` 乘 `3xs / 2xs / meta / xs`
+- `--type-body-scale` 乘 `note / sm / md / base`
+- `--type-title-scale` 乘 `lg / xl / 2xl / 3xl / 4xl`
+- 写法示例：`--text-meta: calc(0.6875rem * var(--type-meta-scale));`。三个系数默认 1，由 `<html style>` 写入（同其他外观滑条）。
+
+**3. 收编**
+- `app/` 下所有 `text-[Npx]` 按上表换成档位类，完成后 `grep -rnoE "text-\[[0-9.]+(px|rem)\]" app --include=*.tsx` 为 0。
+- `globals.css` 里写死 px 的 `font-size` 按同一张表换成 `var(--text-*)`；`em` 相对值、`inherit` 保留。
+- 例外：**输入框和 textarea 的实际字号不能低于 16px**，否则 iPhone 聚焦时会自动放大页面。用到的地方写成 `max(16px, var(--text-…))`，并在 `DESIGN.md` 写明。
+
+**4. 外观设置**
+- Haven `appearance_config.py`：`font` 增加 `titleScale` / `bodyScale` / `metaScale`，范围 0.85–1.4，默认 1；补测试。同步 Haven `docs/reference.md` 的外观字段说明。
+- Dashboard `app/lib/appearance.ts`：类型、默认值、normalize、`appearanceHtmlStyle` 写 `--type-*-scale`；补 `tests/appearance.test.ts`。
+- 外观页「字体」区：保留「整体字号」，下面加「标题大小 / 正文大小 / 小字大小」三个滑条，显示百分比。
+
+**5. 文档**：`DESIGN.md` 新增「字号档位」表（上面第 1 条）和规则：**以后不许再写 `text-[Npx]`，只用档位类**；`AGENTS.md`「设计与组件」加一句同样的规则。
+
+**验收**
+- 上面的 grep 为 0；`npm run build`、全量 Vitest、Haven 外观测试通过。
+- 四个滑条都在 100% 时，页面和改之前几乎看不出区别（最多 0.5px 取整差）。
+- 把「小字大小」拉到 130%，时间戳、token 数、标签、Tab 文字一起变大，标题和正文不动；另外两个滑条同理。
+- iPhone 上点输入框不会放大页面。
+- **推到分支 `feat/type-scale`，不推 main**，等用户验收后由 CC 合并。
 
 ### 阶段 2：聊天页 + 对话列表（布局待讨论）
 
@@ -206,7 +249,7 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
 - [ ] 阶段 1.5：材质统一 + 首批 4 个主题；Dashboard/Haven 已在本地完成主题归一化、材质 Token 推导、`data-background="upload"` 中性玻璃与 tint 蒙层、四主题预览和文档同步。Dashboard build 通过，主题归一化定向测试 2 项通过，Haven 外观测试 3 项通过；Dashboard 全量 353 项通过、1 项跳过，另 2 项因本机 Windows symlink `EPERM` 失败。夜主题按最亮渐变色计算正文 7.66:1、辅助小字 3.29:1。待用户在 iPhone 上验收四主题 × 渐变/上传图，在对话列表、聊天页、记忆库和设置检查材质、选中态与可读性；通过后再勾选本阶段。不改雨滴、气泡形状或页面布局。
   - 9 月 28 日用户反馈渐变几乎看不出来：CC 查到渐变模式下页面根容器仍叠了 56% 底色（`--color-bg`），把渐变冲淡一半；改为全局透明，并把四个主题的晕色往屏幕中部移、浓度提高一档、范围加大，避免被顶栏 / 输入栏 / 底栏盖住。当前渐变值以 `globals.css` 为准，上文表格里的 mesh 是初稿。
 - [x] 阶段 2 前置：聊天页拆分。`refactor/cc-split` 分支已将顶栏、消息流与滚动跳转、共用对话列表、输入区、弹窗外壳和格式函数从 `app/cc/page.tsx` 搬出；父页 213 行，状态仍留父页，界面与行为未刻意变更。本地 build 通过；Vitest 359 通过、1 跳过，另 2 项为已有 Windows symlink `EPERM`；待用户按上方路径做 iPhone 与桌面验收后再合并 `main`。 2026-09-28 CC 复核：基于最新 main，build 通过，全量 Vitest 57 文件 / 362 项通过，拆分前后 className 106 个完全一致、onClick 28 / aria-label 18 等计数一致、中文注释 26 行全部保留；合并提交 `1cf5d9b`，用户 iPhone 正式版走查通过。
-- [ ] 阶段 2 前置 B：字号分层（规格待写）
+- [ ] 阶段 2 前置 B：字号分层
 - [ ] 阶段 2
 - [ ] 阶段 3
 - [ ] 阶段 4
