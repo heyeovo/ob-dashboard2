@@ -23,7 +23,7 @@ export const EFFORT_OPTIONS: { id: CcEffort; label: string }[] = [
 /** Compact model name for the chat header; unknown names stay visible verbatim. */
 export function prettyModelName(model: string): string {
   const name = model.trim()
-  const match = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?(?:-|\[|$)/i.exec(name)
+  const match = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-|\[|$)/i.exec(name)
   if (!match) return name
   const family = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase()
   return `${family} ${match[2]}${match[3] ? `.${match[3]}` : ''}`

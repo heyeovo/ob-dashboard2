@@ -53,7 +53,7 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
           <button type="button" onClick={() => !selfhost && setQuickOpen(true)} disabled={selfhost}
             className="block max-w-full truncate text-left text-2xs text-[var(--color-text-tertiary)] disabled:cursor-default"
             title={selfhost ? '自建引擎' : '快速切换模型和力度'}>
-            {selfhost ? `自建 · ${model || '默认模型'}` : `${channel.slice(0, 8)} · ${model || '默认模型'}${effortLabel ? ` · ${effortLabel}` : ''}`}
+            {selfhost ? `${(shownProvider || '自建').slice(0, 8)} · ${model || '默认模型'}` : `${channel.slice(0, 8)} · ${model || '默认模型'}${effortLabel ? ` · ${effortLabel}` : ''}`}
           </button>
           <div className="hidden truncate whitespace-nowrap text-2xs text-[var(--color-text-disabled)] md:block">
             {chat.stats.turnCount} 轮 · {chat.stats.compacting ? 'Context 压缩中' : ctxTokens > 0 ? `${formatTokens(ctxTokens)}${ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}` : 'Context 待确认'}

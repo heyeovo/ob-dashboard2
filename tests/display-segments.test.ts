@@ -5,7 +5,7 @@ describe('versioned assistant display segments', () => {
   it('splits ordinary paragraphs and preserves the original markdown exactly', () => {
     const source = '第一句。\n第二句。\n\n第三段。'
     const result = buildDisplaySegments(source)
-    expect(result.version).toBe(2)
+    expect(result.version).toBe(3)
     expect(result.segments.map(item => item.markdown).join('')).toBe(source)
     expect(result.segments).toHaveLength(3)
     expect(result.segments.every(item => item.kind === 'text')).toBe(true)
@@ -74,5 +74,15 @@ describe('versioned assistant display segments', () => {
     const list = '- 第一项\n- 第二项\n'
     expect(buildStableDisplaySegments(list, false).segments).toHaveLength(0)
     expect(buildStableDisplaySegments(list, true).segments).toHaveLength(1)
+  })
+
+  it('keeps a bold section label in the same bubble as the list right after it', () => {
+    const source = '好，接着气泡。\n\n**2. 操作行**\n\n- 时间\n- 双勾\n\n你看哪一张。'
+    const segments = buildDisplaySegments(source).segments
+    expect(segments.map(item => item.markdown).join('')).toBe(source)
+    const labelSegment = segments.find(item => item.markdown.includes('**2. 操作行**'))
+    expect(labelSegment?.kind).toBe('atomic')
+    expect(labelSegment?.markdown).toContain('- 双勾')
+    expect(segments.at(-1)?.markdown).toBe('你看哪一张。')
   })
 })

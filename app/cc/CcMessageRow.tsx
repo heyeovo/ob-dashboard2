@@ -23,10 +23,9 @@ import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 const LONG_PRESS_MS = 360
 const SEGMENT_REVEAL_MS = 360
 
-function ActionIcon({ kind }: { kind: 'copy' | 'copied' | 'retry' | 'select' }) {
+function ActionIcon({ kind }: { kind: 'copy' | 'copied' | 'select' }) {
   return <svg viewBox="0 0 24 24" className="size-[13px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {kind === 'copy' ? <><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>
-      : kind === 'retry' ? <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/>
       : kind === 'select' ? <><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.5 2.5 4.5-5"/></>
       : <path d="m5 12 4 4L19 6"/>}
   </svg>
@@ -142,7 +141,6 @@ type Props = {
   selected?: boolean
   onToggleSelect?: (messageId: string) => void
   onStartSelect?: (messageId: string) => void
-  onRetry?: () => void
 }
 
 export function ccMessageVisibleText(message: CcMessage): string {
@@ -206,7 +204,6 @@ export default function CcMessageRow({
   selected = false,
   onToggleSelect,
   onStartSelect,
-  onRetry,
 }: Props) {
   const isUser = message.role === 'user'
   const persona = personaProp || FALLBACK_PERSONA
@@ -798,8 +795,11 @@ export default function CcMessageRow({
                       <span className={`cc-tool-status ${tool.status || (message.streaming ? 'running' : 'completed')}`}>{toolStatusLabel(tool, Boolean(message.streaming))}</span>
                       <span className="cc-tool-chevron" aria-hidden="true">›</span>
                     </button>
-                    {artifactCardByToolId.has(tool.id) ? <CcArtifactCard {...artifactCardByToolId.get(tool.id)!} /> : null}
                   </div>) : null}
+                  {/* 小作品卡片不跟着 Tools 折叠，照旧直接显示 */}
+                  {event.tools.map(tool => artifactCardByToolId.has(tool.id)
+                    ? <CcArtifactCard key={`artifact-${tool.id}`} {...artifactCardByToolId.get(tool.id)!} />
+                    : null)}
                 </div>
               )
             })}
@@ -864,7 +864,6 @@ export default function CcMessageRow({
               aria-label="复制消息" title="复制"
               className="hover:text-[var(--color-text-secondary)]"
               onClick={event => { event.stopPropagation(); copyMessage(message.text) }}><ActionIcon kind={copied ? 'copied' : 'copy'} /></button>
-            {onRetry ? <button type="button" aria-label="重试回复" title="重试" onClick={event => { event.stopPropagation(); onRetry() }}><ActionIcon kind="retry" /></button> : null}
             {canSelect ? <button type="button" aria-label="多选消息" title="多选" onClick={event => { event.stopPropagation(); onStartSelect?.(message.id) }}><ActionIcon kind="select" /></button> : null}
             <span className="cc-time">{shortClock(message.createdAt)}</span>
 

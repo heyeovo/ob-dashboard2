@@ -22,6 +22,7 @@ import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
 import { applyRuntimeSettings, dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import type { TurnConfig } from '@/app/lib/cc/ccOptions'
+import { DISPLAY_SEGMENTS_VERSION } from '@/app/lib/cc/displaySegments'
 import { getSessionMessages, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
 /* ── mock SDK：query 按全局脚本吐消息 ── */
@@ -692,7 +693,7 @@ describe('runTurn：普通回复', () => {
     expect(recInput.laneId).toBe('api:default')
     expect(recInput.raw.cc_turn_uuid).toBe(result.nativeTurnUuid)
     expect(recInput.raw.cc_turn_uuid).toMatch(/^[0-9a-f-]{36}$/)
-    expect(recInput.raw.display_segments).toMatchObject({ version: 2 })
+    expect(recInput.raw.display_segments).toMatchObject({ version: DISPLAY_SEGMENTS_VERSION })
     expect(recInput.agentWakeUpdate).toMatchObject({
       sample_silence: true,
       silence_policy_version: 'conversation-silence-v1',
@@ -703,7 +704,7 @@ describe('runTurn：普通回复', () => {
     const done = handle.events.find(e => e.event === 'done')!
     expect(done.data.usage).toMatchObject({ inputTokens: 10, outputTokens: 20 })
     expect(done.data.interrupted).toBeUndefined()
-    expect(done.data.display_segments).toMatchObject({ version: 2 })
+    expect(done.data.display_segments).toMatchObject({ version: DISPLAY_SEGMENTS_VERSION })
   })
 
   it('does not enter the model when the incoming user message cannot cancel persisted silence state', async () => {

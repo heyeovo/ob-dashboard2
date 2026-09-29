@@ -9,4 +9,9 @@ describe('prettyModelName', () => {
     expect(prettyModelName('claude-haiku-4-5-20261001')).toBe('Haiku 4.5')
     expect(prettyModelName('custom-model')).toBe('custom-model')
   })
+
+  it('does not read a date suffix as a minor version', () => {
+    expect(prettyModelName('claude-sonnet-4-20250514')).toBe('Sonnet 4')
+    expect(prettyModelName('claude-opus-4-1-20250805')).toBe('Opus 4.1')
+  })
 })

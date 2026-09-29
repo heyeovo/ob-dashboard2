@@ -2,7 +2,7 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 
-export const DISPLAY_SEGMENTS_VERSION = 2
+export const DISPLAY_SEGMENTS_VERSION = 3
 
 export type DisplaySegment = {
   kind: 'text' | 'atomic'
@@ -83,6 +83,9 @@ export function buildDisplaySegments(text: string): VersionedDisplaySegments {
       ) {
         lastIndex += 1
       }
+      // 小标题后面直接跟列表 / 引用 / 表格 / 代码时，也和它放进同一个气泡（v3）。
+      const following = nodes[lastIndex + 1]
+      if (lastIndex === index && following && ATOMIC_BLOCKS.has(String(following.type))) lastIndex += 1
     }
 
     const next = nodes[lastIndex + 1]
