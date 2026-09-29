@@ -1852,8 +1852,8 @@ body:has(.home-page) > .rain-layer { display: none; }
 
 /* Stage 3b memory surfaces */
 .memory-card { display:flex; flex-direction:column; width:100%; min-width:0; padding:12px 14px 11px; border:0; border-radius:var(--radius-xl); background:var(--memory-card-fill); box-shadow:var(--memory-card-shadow); text-align:left; color:var(--color-text-primary); cursor:pointer; transition:transform var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard); }
-.memory-card:hover { transform:translateY(-2px); box-shadow:var(--memory-card-shadow), var(--shadow-hover); }
-.memory-card:active { transform:scale(.985); }
+/* 只在有鼠标的设备上浮起：iPhone 点一下会留下粘住的 :hover；按下缩放用全站那条 */
+@media (hover: hover) { .memory-card:hover { transform:translateY(-2px); box-shadow:var(--memory-card-shadow), var(--shadow-hover); } }
 .memory-card-muted { opacity:.55; }
 .memory-card-title { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-family:var(--font-display); font-size:var(--text-md); font-weight:600; line-height:1.4; }
 .memory-pin,.memory-rings { color:var(--color-primary); }
