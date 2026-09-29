@@ -781,10 +781,10 @@ h1, h2 {
 .cc-main-session::before {
   content: '';
   position: absolute;
-  right: -40px;
-  top: -50px;
+  right: 0;
+  top: 0;
   width: 150px;
-  height: 150px;
+  height: 120px;
   border-radius: 50%;
   background: var(--chat-main-glow);
   pointer-events: none;
@@ -957,11 +957,10 @@ h1, h2 {
 }
 .cc-think {
   width: 100%;
-  padding: 0 4px;
 }
 .cc-think-toggle {
   display: inline-flex;
-  min-height: 32px;
+  min-height: 24px;
   align-items: center;
   gap: 6px;
   font-size: var(--text-meta);
@@ -1019,7 +1018,6 @@ h1, h2 {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-top: 7px;
 }
 .cc-toolchip {
   display: flex;

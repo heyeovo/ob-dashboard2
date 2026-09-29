@@ -240,7 +240,7 @@ export default function CcSessionRail({
             <button type="button" onClick={() => setMobileSection('main')} className="rounded-full px-2 py-1 text-sm text-[var(--color-text-secondary)]">←</button>
             <h1 className="text-sm font-medium text-[var(--color-text-heading)]">历史聊天</h1>
           </div>
-          <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto px-3 py-3">
+          <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
             {historicalLoading ? (
               <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">读取历史聊天</div>
             ) : historicalError ? (
@@ -264,7 +264,7 @@ export default function CcSessionRail({
             <button type="button" onClick={() => setMobileSection('main')} className="rounded-full px-2 py-1 text-sm text-[var(--color-text-secondary)]">←</button>
             <h1 className="text-sm font-medium text-[var(--color-text-heading)]">已删除窗口</h1>
           </div>
-          <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto space-y-2 px-3 py-3">
+          <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto overflow-x-hidden space-y-2 px-3 py-3">
             {deletedSessions.length === 0 ? (
               <div className="py-10 text-center text-xs text-[var(--color-text-disabled)]">没有已删除窗口</div>
             ) : deletedSessions.map(session => (
@@ -299,7 +299,7 @@ export default function CcSessionRail({
           </div>
           <button type="button" onClick={onNew} aria-label="新对话" className="flex size-11 items-center justify-center rounded-full bg-[var(--color-primary)] text-xl text-[var(--color-on-primary)] shadow-[var(--glass-shadow)]">+</button>
         </div>
-        <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-3">
+        <div className="cc-mobile-list-scroll no-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-4 pb-5 pt-3">
           {notice ? <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-primary-soft)] px-3 py-2 text-meta text-[var(--color-primary)]">{notice}</div> : null}
           {pinnedSession ? (
             <div className="cc-main-session relative overflow-visible rounded-[var(--radius-2xl)] p-3.5">
