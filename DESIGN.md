@@ -168,6 +168,9 @@
 | `--chat-attachment-width`, `--chat-sheet-height`, `--chat-sheet-radius` | 聊天附件最大宽度和聊天浮层尺寸；输入区的安全区域内边距保留与系统 inset 的计算 |
 | `--home-frame-fill`, `--home-anniversary-fill`, `--home-window-inset` | 阶段 3a 主页窗框实底、纪念日浮卡、窗洞内阴影；上传照片只画在窗洞里 |
 | `--home-cat-eye`, `--home-clawd-glasses`, `--radius-window` | 窗沿占位剪影细节色与窗洞 30px 圆角 |
+| `--memory-card-fill`, `--memory-search-fill`, `--memory-ago-fill`, `--memory-filter-fill` | 阶段 3b 记忆卡片、搜索框、往日记忆条和筛选胶囊的主题材质；列表卡片不做逐卡模糊 |
+| `--memory-card-shadow`, `--memory-switch-shadow` | 记忆卡片顶部高光与轻阴影、两格切换器选中阴影 |
+| `--memory-card-gap`, `--memory-grid-min-height` | 记忆卡片 9px 间距与记忆格固定起始高度（两列等高） |
 | `--effect-rain-intensity` | 透明玻璃水珠的数量与可见度；低强度水珠较少且较淡，高强度叠加更多水珠；默认关闭，页面不可见暂停，减少动态效果时静止 |
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
@@ -268,7 +271,7 @@ BottomTabBar 在底部显示 5 个 Tab：
 
 主页阶段 3a 使用固定窗楣取代原 mini header：菜单、英文日期、默认协作者小头像。主页为实底窗框，窗洞使用当前外观背景；上传照片只在窗洞中绘制。纪念日浮卡压在窗沿上，窗台的日记本、这一周、照顾仅用细线分段。桌面沿用同一结构并居中至 640px，SideRail 不变。
 
-记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格。
+记忆页手机固定顶栏左侧为衬线「记忆库」，右侧 MemoryViewSwitch 薄玻璃药丸切换时间线/记忆格；桌面同样在顶栏显示标题与切换器。时间线使用无竖线的日期分组和圆角实填充卡片；记忆格使用两列等高小方格。
 
 ### 新增按钮
 

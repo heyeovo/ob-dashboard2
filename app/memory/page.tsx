@@ -8,7 +8,7 @@ import MemoryViewSwitch from '../components/MemoryViewSwitch'
 import DetailPanel from '../components/DetailPanel'
 import KnobRow from '../components/KnobRow'
 import type { Bucket, BucketDetail, QuickFilter, DatePreset } from './memoryTypes'
-import { DATE_PRESETS, isFeel, isJourney, matchesQuickFilter, matchesDateFilter, getTopTags, groupByMonth } from './memoryFilters'
+import { isFeel, isJourney, matchesQuickFilter, matchesDateFilter, getTopTags, groupByMonth, getMonthChapters, getOnThisDay } from './memoryFilters'
 import { SkeletonCard } from './MemoryCard'
 import MemoryGrid from './MemoryGrid'
 import MemoryTimeline from './MemoryTimeline'
@@ -59,12 +59,7 @@ function HomeClient() {
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ title: '', content: '', tags: '', importance: 5, valence: 0.5, arousal: 0.3 })
   const [adding, setAdding] = useState(false)
-  const [gridViewMode, setGridViewMode] = useState<'list' | 'card'>('list')
-  const [sortBy, setSortBy] = useState<'score' | 'importance' | 'created'>('score')
-  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({})
-  const [categories, setCategories] = useState<string[]>([])
-  const [activeCategory, setActiveCategory] = useState<string>('')
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [sortBy, setSortBy] = useState<'importance' | 'created'>('created')
 
   const fetchBuckets = useCallback((signal?: AbortSignal) => {
     return fetch(`/api/buckets?full=1&_t=${Date.now()}`, { signal })
@@ -94,17 +89,6 @@ function HomeClient() {
     })
     return () => ac.abort()
   }, [fetchBuckets])
-
-  useEffect(() => {
-    const raw = localStorage.getItem('review_state')
-    if (raw) {
-      try {
-        const data = JSON.parse(raw)
-        setCategoryMap(data.categoryMap ?? {})
-        setCategories(data.categories ?? [])
-      } catch {}
-    }
-  }, [])
 
   useEffect(() => {
     setQuickFilter('all')
@@ -248,18 +232,18 @@ function HomeClient() {
   const displayed = baseList.filter(b =>
     matchesQuickFilter(b, quickFilter) &&
     matchesDateFilter(b, datePreset, customStart, customEnd) &&
-    (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag))) &&
-    (activeCategory === '' || categoryMap[b.id] === activeCategory)
+    (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag)))
   )
 
   const monthlyGroups = useMemo(() => groupByMonth(displayed), [displayed]);
-
-
-  const restoreNoise = (id: string) => {
-    // 乐观更新：立即从本地列表移除 noise 状态
-    setBuckets(prev => prev.map(bucket => bucket.id === id ? { ...bucket, noise: false, resolved: false, importance: bucket.importance } : bucket))
-    void traceOp(id, { resolved: false })
+  const chapters = useMemo(() => getMonthChapters(buckets), [buckets])
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const onThisDay = useMemo(() => getOnThisDay(buckets, today), [buckets, today])
+  const selectGridFilter = (filter: QuickFilter) => {
+    setQuickFilter(filter)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onSearchChange = (val: string) => {
@@ -308,103 +292,41 @@ function HomeClient() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
 
-      {/* Mobile-only header。切换器保留时间线与记忆格。 */}
-      <header className="mobile-page-topbar flex items-center justify-between px-3 md:hidden">
-        <div className="flex items-center gap-1.5">
-          <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]" />
-          <span className="text-sm font-semibold text-[var(--color-text-primary)]">记忆库</span>
-        </div>
+      {/* 手机固定顶栏 */}
+      <header className="mobile-page-topbar flex items-center justify-between px-4 md:hidden">
+        <span className="text-xl font-semibold" style={{ fontFamily: 'var(--font-display)' }}>记忆库</span>
         <MemoryViewSwitch size="sm" />
       </header>
 
-      {/* 桌面端：顶部横条撤了，切换器搬进页面 */}
       <div className="hidden md:block sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)]/50 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <span className="text-xl font-semibold" style={{ fontFamily: 'var(--font-display)' }}>记忆库</span>
           <MemoryViewSwitch />
         </div>
       </div>
 
-      <main className={`max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10 `}>
-        {(
-          <div className="hidden md:block mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)] mb-2 sm:mb-3">
-              {activeTab === 'timeline' ? '时间线' : '记忆格'}
-            </h1>
-            <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm">
-              {activeTab === 'timeline' 
-                ? `沿时间回溯，当前展示 ${displayed.length} 条记录` 
-                : `分类整理与检索 · ${buckets.length} 格`}
-            </p>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8">
+        <MemoryFilters search={search} onSearchChange={onSearchChange} statusCounts={statusCounts} quickFilter={quickFilter} setQuickFilter={setQuickFilter} activeTag={activeTag} setActiveTag={setActiveTag} topTags={topTags} datePreset={datePreset} setDatePreset={setDatePreset} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
+
+        {activeTab === 'timeline' && onThisDay && <button type="button" onClick={() => openBucket(onThisDay.bucket.id)} className="memory-ago w-full flex gap-3 p-3 text-left mb-5">
+          <span className="flex-none w-10 h-10 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)] grid place-items-center italic text-sm" style={{ fontFamily: 'var(--font-display)' }}>{Number(onThisDay.date.slice(5, 7))}.{Number(onThisDay.date.slice(8, 10))}</span>
+          <span className="min-w-0">
+            <span className="block text-meta tracking-wide text-[var(--color-text-tertiary)]">{onThisDay.label}</span>
+            <span className="block font-semibold text-sm mt-0.5" style={{ fontFamily: 'var(--font-display)' }}>{onThisDay.bucket.name}</span>
+            <span className="block text-xs text-[var(--color-text-secondary)] line-clamp-2 mt-0.5">{onThisDay.bucket.content_preview}</span>
+          </span>
+        </button>}
+
+        {activeTab === 'grid' && <div className="flex justify-end mb-2">
+          <div className="memory-switch flex p-0.5 text-xs" aria-label="记忆格排序">
+            <button type="button" aria-pressed={sortBy === 'created'} onClick={() => setSortBy('created')} className={`rounded-full px-3 py-1 ${sortBy === 'created' ? 'bg-[var(--memory-card-fill)] shadow-[var(--memory-switch-shadow)]' : 'text-[var(--color-text-tertiary)]'}`}>最新</button>
+            <button type="button" aria-pressed={sortBy === 'importance'} onClick={() => setSortBy('importance')} className={`rounded-full px-3 py-1 ${sortBy === 'importance' ? 'bg-[var(--memory-card-fill)] shadow-[var(--memory-switch-shadow)]' : 'text-[var(--color-text-tertiary)]'}`}>最重要</button>
           </div>
-        )}
+        </div>}
 
-        <>
-            <MemoryFilters activeTab={activeTab} search={search} onSearchChange={onSearchChange} statusCounts={statusCounts} quickFilter={quickFilter} setQuickFilter={setQuickFilter} activeTag={activeTag} setActiveTag={setActiveTag} topTags={topTags} categories={categories} activeCategory={activeCategory} setActiveCategory={setActiveCategory} />
-
-            {/* 工具条 */}
-            <div className={`flex items-center gap-2 sm:gap-3 mb-6 px-1 ${
-              activeTab === 'timeline' ? 'justify-between' : 'justify-end'
-            }`}>
-              {/* 新增：如果是时间线模式，把首个月份标题顶到工具条左侧的空白处 */}
-              {activeTab === 'timeline' && (
-                monthlyGroups.length > 0 ? (
-                  <div className="flex items-center gap-2 ml-[calc(1rem-7px)] translate-y-[8px] cursor-pointer select-none" onClick={() => toggleMonthCollapse(monthlyGroups[0].month)}>
-                    <h2 className="text-xl font-bold italic font-serif text-[var(--color-primary)] leading-tight whitespace-nowrap">
-                      {monthlyGroups[0].month.replace('-', '·')}
-                    </h2>
-                    <span className="text-xs text-[var(--color-text-disabled)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 rounded-md">
-                      {monthlyGroups[0].days.reduce((sum, d) => sum + d.items.length, 0)} 条
-                    </span>
-                  </div>
-                ) : (
-                  <div className="text-xs text-[var(--color-text-disabled)] ml-1">暂无记录</div>
-                )
-              )}
-
-              {/* 时间选择器 */}
-              <div className="flex items-center gap-2 bg-[var(--color-surface)]/40 rounded-lg px-3 py-1.5 border border-[var(--color-border)] shadow-sm">
-                <span className="text-xs text-[var(--color-text-disabled)] hidden sm:inline">时间</span>
-                <select
-                  className="text-xs bg-transparent outline-none text-[var(--color-text-secondary)] cursor-pointer"
-                  value={datePreset} onChange={e => setDatePreset(e.target.value as DatePreset)}>
-                  {DATE_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-                </select>
-                {datePreset === 'custom' && (
-                  <div className="flex items-center gap-1">
-                    <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                      className="bg-[var(--color-surface)] rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
-                    <span className="text-[var(--color-text-disabled)]">-</span>
-                    <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                      className="bg-[var(--color-surface)] rounded px-1.5 py-0.5 text-xs border border-[var(--color-border)]" />
-                  </div>
-                )}
-              </div>
-
-              {/* 记忆格视图特有控件 */}
-              {activeTab === 'grid' && (
-                <>
-                  <button onClick={() => setGridViewMode(gridViewMode === 'list' ? 'card' : 'list')}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]"
-                  >{gridViewMode === 'list' ? '⧉' : '☰'}</button>
-                  <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/60 text-[var(--color-text-secondary)] outline-none cursor-pointer">
-                    <option value="score">权重</option>
-                    <option value="importance">重要度</option>
-                    <option value="created">时间</option>
-                  </select>
-                  <button onClick={() => setSortOrder(order => order === 'desc' ? 'asc' : 'desc')}
-                    className={`text-xs px-2.5 py-1.5 rounded-md border ${sortOrder === 'desc' ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'bg-[var(--color-surface)]/60 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'}`}
-                  >{sortOrder === 'desc' ? '↓降序' : '↑升序'}</button>
-                </>
-              )}
-            </div>
-
-            {/* 时间线 - 渲染区域 */}
-            {activeTab === 'timeline' ? (
-              <MemoryTimeline monthlyGroups={monthlyGroups} collapsedMonths={collapsedMonths} collapsedDates={collapsedDates} toggleMonthCollapse={toggleMonthCollapse} toggleDateCollapse={toggleDateCollapse} onOpen={openBucket} onRestoreNoise={restoreNoise} />
-            ) : (
-              <MemoryGrid displayed={displayed} quickFilter={quickFilter} sortBy={sortBy} sortOrder={sortOrder} gridViewMode={gridViewMode} onOpen={openBucket} onRestoreNoise={restoreNoise} />
-            )}
+        {activeTab === 'timeline'
+          ? <MemoryTimeline monthlyGroups={monthlyGroups} chapters={chapters} collapsedMonths={collapsedMonths} collapsedDates={collapsedDates} toggleMonthCollapse={toggleMonthCollapse} toggleDateCollapse={toggleDateCollapse} onOpen={openBucket} />
+          : <MemoryGrid displayed={displayed} quickFilter={quickFilter} sortBy={sortBy} onOpen={openBucket} onSelectFilter={selectGridFilter} />}
             {displayed.length === 0 && !loading && (
               <div className="text-center text-[var(--color-text-disabled)] py-20 text-sm bg-[var(--color-surface)] rounded-2xl border border-dashed border-[var(--color-border)]">
                 没有找到对应的记录
@@ -425,7 +347,6 @@ function HomeClient() {
                 已加载全部 {buckets.length} 条记录
               </div>
             )}
-          </>
       </main>
 
       <BucketDetailDrawer
