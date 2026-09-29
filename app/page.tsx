@@ -130,6 +130,6 @@ export default function HomePage() {
         </Link>
       </div>
     </main>
-    <HomeToolDrawer open={toolsOpen} onClose={() => setToolsOpen(false)} />
+    <HomeToolDrawer open={toolsOpen} onClose={() => setToolsOpen(false)} persona={persona} />
   </div>
 }

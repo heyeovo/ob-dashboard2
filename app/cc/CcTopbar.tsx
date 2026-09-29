@@ -6,24 +6,19 @@ import type { CcChatScope } from './CcChatScope'
 
 export default function CcTopbar({ scope }: { scope: CcChatScope }) {
   const { chat, people, selectMode, stopSelecting, selectedMessageIds, setMobileView,
-    setActiveHistorical, setPersonaRailOpen, setWinSetOpen, setHistoryDateOpen,
-    setSettingsFor } = scope
+    setActiveHistorical, setPersonaRailOpen, setWinSetOpen, setHistoryDateOpen } = scope
   const { shownProvider, shownModel, ctxTokens, ctxMax, cacheLabel } = scope.metrics
-  const [menuOpen, setMenuOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const quickRef = useRef<HTMLDivElement>(null)
-  // 两个下拉（··· 菜单、模型快切）点外面都收起
+  // 模型快切下拉点外面收起
   useEffect(() => {
-    if (!menuOpen && !quickOpen) return
+    if (!quickOpen) return
     const close = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (!menuRef.current?.contains(target)) setMenuOpen(false)
-      if (!quickRef.current?.contains(target)) setQuickOpen(false)
+      if (!quickRef.current?.contains(event.target as Node)) setQuickOpen(false)
     }
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
-  }, [menuOpen, quickOpen])
+  }, [quickOpen])
   const selfhost = chat.effectiveEngine === 'selfhost'
   const mode = selfhost ? '自建' : chat.mode === 'work' ? 'WORK' : 'CHAT'
   const channel = chat.pick.kind === 'subscription' ? 'Pro' : shownProvider || 'API'
@@ -99,20 +94,10 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
           <button type="button" aria-label="按日期查看历史消息" title="按日期查看历史消息" onClick={() => setHistoryDateOpen(true)} className="cc-icon-btn flex size-11 items-center justify-center">
             <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14.5" rx="3.5"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/><circle cx="12" cy="15" r="1.1" fill="currentColor" stroke="none"/></svg>
           </button>
-          <div ref={menuRef} className="relative">
-            <button type="button" aria-label="更多聊天选项" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)} className="cc-icon-btn flex size-11 items-center justify-center">
-              <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
-            </button>
-            {menuOpen ? <div className="cc-popmenu absolute right-0 top-full z-50 mt-1 flex w-48 flex-col p-1">
-              <button type="button" className="cc-popmenu-item w-full truncate text-left" onClick={() => {
-                setMenuOpen(false)
-                const title = window.prompt('修改窗口标题', chat.sessionTitle === '新对话' ? '' : chat.sessionTitle)
-                if (title?.trim()) void chat.renameSession(chat.sessionId, title)
-              }}>{chat.sessionTitle || '新对话'} ✎</button>
-              <button type="button" className="cc-popmenu-item w-full text-left" onClick={() => { setMenuOpen(false); setWinSetOpen(true) }}>本窗设置</button>
-              <button type="button" className="cc-popmenu-item w-full text-left" onClick={() => { setMenuOpen(false); setSettingsFor(people.active) }}>提示词</button>
-            </div> : null}
-          </div>
+          {/* 窗口名只读放进本窗设置「会话信息」，提示词在主页抽屉「言」卡片里，··· 直接开本窗设置 */}
+          <button type="button" aria-label="本窗设置" title="本窗设置" onClick={() => setWinSetOpen(true)} className="cc-icon-btn flex size-11 items-center justify-center">
+            <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+          </button>
         </div>
       </div>
     </>

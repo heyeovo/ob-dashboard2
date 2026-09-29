@@ -14,7 +14,7 @@ import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 // 一条消息。
 //
 // 用户侧：实心气泡贴右，纯文本（用户说的话不当 markdown 解析）。长按 360ms / 右键出菜单。
-// 助手侧：名字行（头像 + persona 名 + 时间 + 最右召回按钮）→ thinking / 工具过程 → 正文。
+// 助手侧：召回按钮行（有召回时）→ thinking / 工具过程 → 正文。
 //
 // thinking 的行为（跟 Polaris 不同，用户明确要的）：
 //   流式中自动展开跟着输出，答完**保持展开**，只能手动收起。
@@ -708,13 +708,9 @@ export default function CcMessageRow({
     >
       {selectionCheckbox}
       <div className="cc-assistant-block min-w-0 flex-1">
-        {/* 名字行：头像 + 名字 + 时间，最右是这一轮的召回按钮 */}
-        <div className="cc-namerow">
-          <span className="cc-avatar" style={{ background: persona.tint }} aria-hidden="true">
-            {persona.initial}
-          </span>
-          <span className="cc-name">{persona.name}</span>
-          {message.recall ? (
+        {/* 只有两个人聊，不再每条标头像和名字；这一行只剩召回按钮，没召回就不占位。以后群聊再按条件加回来 */}
+        {message.recall ? (
+          <div className="cc-namerow">
             <button
               type="button"
               className="cc-recall-btn"
@@ -725,8 +721,8 @@ export default function CcMessageRow({
                 ? `记忆 ${message.recall.card_count} · 约 ${message.recall.estimated_tokens ?? 0} token`
                 : '未召回'}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {/* Thinking、助手中间回复与工具按真实顺序展示；末尾文字作为正式回答。 */}
         {processGroups.length > 0 ? (

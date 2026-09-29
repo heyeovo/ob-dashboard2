@@ -334,7 +334,7 @@ export default function CcSessionRail({
                 <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">{session.title || session.session_id}</span>
                 <span className={`cc-mode-cap ${sessionMode(session) === 'CHAT' ? 'chat' : ''}`}>{sessionMode(session)}</span>
               </button>
-              <span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{clockTime(session.last_at)}</span>
+              <span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{session.turn_count.toLocaleString()} 轮 · {clockTime(session.last_at)}</span>
               <button type="button" aria-label={`管理 ${session.title || session.session_id}`} onClick={() => setMenuId(current => current === session.session_id ? '' : session.session_id)} className="flex size-11 shrink-0 items-center justify-center text-[var(--color-text-tertiary)]">···</button>
               {menuId === session.session_id ? <div className="cc-popmenu absolute right-2 top-11 z-30 flex w-40 flex-col p-1">
                 <button type="button" onClick={() => void pin(session)} className="cc-popmenu-item text-left">置顶为主窗</button>
