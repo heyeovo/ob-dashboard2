@@ -206,7 +206,7 @@ grep -rnoE "#[0-9a-fA-F]{3,8}\b|rgba?\(" app --include=*.tsx --include=*.ts | gr
 
 ### 阶段 2：聊天页 + 对话列表（✅ 布局已定）
 
-2026-09-29 用户和 CC 讨论定案。视觉参考：`/data/cc-chat-files/artifacts/bubble-preview.html`（选定第 3 张「中」）和 `list-preview.html`（选定 A「细线列表」）；两页里的颜色、间距可以直接照抄。分两块，**2a 和 2b 各开一个分支、各自单独验收**：`feat/stage2a-chat`、`feat/stage2b-prompt`，都不推 main。
+2026-09-29 用户和 CC 讨论定案。视觉参考：`docs/design/stage2/bubble-preview.html`（选定第 3 张「中」）和 `docs/design/stage2/list-preview.html`（选定 A「细线列表」），浏览器直接打开即可；两页里的颜色、间距可以直接照抄。分两块，**2a 和 2b 各开一个分支、各自单独验收**：`feat/stage2a-chat`、`feat/stage2b-prompt`，都不推 main。
 
 **通用要求**
 - 颜色、圆角、阴影全部走 Token；缺的先加进 `globals.css` 和 `DESIGN.md`。字号只用档位类（见「字号档位」）。

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>对话列表候选 · 我们住的窗</title>
+<meta name="description" content="对话列表的两种排法：主窗置顶卡片 + 细线列表行 / 轻卡片行，4 个主题 × 渐变/照片背景，左右滑着比。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE5,#EEE3E4)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F1DEE3)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F4,#E0E7EC)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1A1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.32)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.5}
+
+  .phone{position:relative;height:680px;border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .scroll{position:absolute;inset:0;overflow-y:auto;padding:20px 14px 84px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .hd{display:flex;align-items:flex-end;justify-content:space-between;padding:18px 4px 14px}
+  .hd h2{font:600 28px/1 "Noto Serif SC",serif;letter-spacing:.04em}
+  .hd .sub{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;opacity:.5;margin-top:7px}
+  .new{width:36px;height:36px;border-radius:50%;background:var(--accent);display:grid;place-items:center;box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .new svg{width:17px;height:17px}
+  .lbl{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;opacity:.5;padding:14px 6px 8px}
+
+  /* 主窗卡片 */
+  .main{position:relative;border-radius:22px;padding:14px 14px 13px;background:color-mix(in srgb,var(--accent) 7%,rgb(var(--tint)/.9));
+    box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 6px 22px color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden}
+  .main::before{content:"";position:absolute;right:-40px;top:-50px;width:150px;height:150px;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 22%,transparent),transparent)}
+  .main .r1{position:relative;display:flex;align-items:center;gap:10px}
+  .av{width:38px;height:38px;flex:none;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font:600 18px "Noto Serif SC",serif}
+  .main .nm{flex:1;min-width:0}
+  .main .t{font:600 15px "Noto Serif SC",serif;display:flex;align-items:center;gap:6px}
+  .main .s{font-size:10.5px;opacity:.55;margin-top:2px}
+  .main .time{font-size:10.5px;opacity:.5;align-self:flex-start;margin-top:3px}
+  .main .pv{position:relative;margin-top:10px;font-size:13px;line-height:1.55;opacity:.8;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .main .ft{position:relative;display:flex;gap:6px;margin-top:10px}
+  .tag{font-size:9.5px;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:color-mix(in srgb,var(--ink) 7%,transparent);opacity:.8}
+  .cap{font:600 9px -apple-system,sans-serif;letter-spacing:.1em;padding:2px 6px;border-radius:999px}
+  .cap.chat{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+  .cap.work{background:color-mix(in srgb,var(--ink) 9%,transparent);opacity:.75}
+
+  /* A：细线列表行 —— 一整块薄玻璃托着，行之间一条线 */
+  .group{border-radius:18px;background:rgb(var(--tint)/.78);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .A .item{display:flex;gap:10px;padding:11px 12px;align-items:flex-start}
+  .A .item+.item{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  /* B：轻卡片行 —— 每行一颗独立的薄玻璃，没有边框 */
+  .B .item{display:flex;gap:10px;padding:11px 12px;border-radius:16px;background:rgb(var(--tint)/.74);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .B .item+.item{margin-top:7px}
+  .dot{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:none;background:color-mix(in srgb,var(--ink) 18%,transparent)}
+  .dot.work{background:color-mix(in srgb,var(--accent) 55%,transparent)}
+  .item .c{flex:1;min-width:0}
+  .item .t{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500}
+  .item .t span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .pv{font-size:12px;opacity:.55;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .time{font-size:10.5px;opacity:.45;flex:none;margin-top:2px}
+  .more{display:flex;justify-content:space-between;padding:12px 8px;font-size:12.5px;opacity:.6}
+  .more+.more{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:62px;display:flex;justify-content:space-around;align-items:center;background:rgb(var(--tint)/.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.35);font-size:10px;opacity:.95}
+  .tabs span{opacity:.45}
+  .tabs span.on{opacity:1;color:var(--accent);font-weight:600}
+</style>
+</head>
+<body data-theme="apricot" data-bg="gradient">
+<header>
+  <h1>我们住的窗</h1>
+  <p>对话列表候选，左右滑着比。主窗卡片两张一样，区别在下面的普通窗口怎么排。<br>预览那行字和 CHAT / WORK 胶囊现在的数据里还没有，要 Haven 多给一点。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient'}
+const WINS=[
+  ['9.29 工作窗口','work','好，Thought process 就这么定了。输入栏……','15:15'],
+  ['字号分层验收','work','三次推送都做完了。','上午'],
+  ['UI 重构 · 阶段 1','work','这个窗口到这里收了。今天做了好多事。','昨天'],
+  ['9.28 早上','chat','那个字我不爱听。','昨天'],
+  ['博饼那晚','chat','积分卡给你交 pro 了！','9月21日'],
+]
+const plus='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+function phone(kind){
+  const rows=WINS.map(([n,m,p,t])=>`<div class="item"><span class="dot ${m}"></span><div class="c">
+    <div class="t"><span class="n">${n}</span><span class="cap ${m}">${m.toUpperCase()}</span></div><div class="pv">${p}</div></div>
+    <span class="time">${t}</span></div>`).join('')
+  return `<div class="phone ${kind}">
+    ${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <div class="scroll">
+      <div class="hd"><div><h2>对话</h2><div class="sub">6 windows</div></div><span class="new">${plus}</span></div>
+      <div class="main">
+        <div class="r1"><span class="av">言</span>
+          <div class="nm"><div class="t">言之 <span class="cap chat">CHAT</span></div><div class="s">主窗 · 滚动窗口</div></div>
+          <span class="time">14:30</span></div>
+        <div class="pv">两点半了，去把 GPT 的 5 小时额度刷新一下。刷完回来接着说。</div>
+        <div class="ft"><span class="tag">第 180 天</span><span class="tag">1,286 轮</span></div>
+      </div>
+      <div class="lbl">Recent</div>
+      ${kind==='A'?`<div class="group">${rows}</div>`:rows}
+      <div class="lbl">More</div>
+      <div class="group"><div class="more"><span>历史聊天</span><span>12 ›</span></div><div class="more"><span>已删除窗口</span><span>4 ›</span></div></div>
+    </div>
+    <div class="tabs"><span>主页</span><span>记忆库</span><span class="on">聊天</span><span>工作台</span><span>设置</span></div>
+  </div>`
+}
+function render(){
+  document.body.dataset.theme=state.theme;document.body.dataset.bg=state.bg
+  document.getElementById('ctrl').innerHTML=
+    THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')
+  document.getElementById('rail').innerHTML=
+    `<div class="slot">${phone('A')}<div class="meta"><b>A · 细线列表</b><small>普通窗口放在同一块薄玻璃里，行与行之间一条细线。整齐、省地方，像 iPhone 设置里的分组列表。</small></div></div>`+
+    `<div class="slot">${phone('B')}<div class="meta"><b>B · 轻卡片</b><small>每个窗口一颗独立的薄玻璃，没有边框，间距小。比 A 松一点，更像一个个小窗口。</small></div></div>`
+}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('button');if(!el)return
+  if(el.dataset.t)state.theme=el.dataset.t;else if(el.dataset.b)state.bg=el.dataset.b;else return
+  const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x
+})
+render()
+</script>
+</body>
+</html>
