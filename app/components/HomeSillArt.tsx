@@ -1,14 +1,10 @@
+import Image from 'next/image'
+
 export default function HomeSillArt({ kind }: { kind: 'cat' | 'clawd' }) {
+  // 奶糖是 GPT 按照片画的，木板已抠掉（public/home/naitang.png，480×325）。
+  // 原木板上沿在图高 72% 处：CSS 让这条线压在窗的下沿，爪子和尾巴垂到窗外
   if (kind === 'cat') return (
-    <svg className="home-sill-cat" viewBox="0 0 74 34" aria-label="奶糖趴在窗沿上" role="img">
-      <g style={{ fill: 'rgb(var(--theme-tint))', stroke: 'color-mix(in srgb, var(--theme-ink) 35%, transparent)' }} strokeWidth="1">
-        <path d="M8 33c-2-9 3-16 13-17l3-8 5 7h10l5-7 3 8c9 1 14 8 13 17z" />
-        <path d="M60 31c6 0 10-3 11-8" fill="none" strokeLinecap="round" />
-      </g>
-      <path d="M23 16l1-7 5 6zM36 19c5-3 12-3 17 1 1 5-2 9-7 10-6 0-10-5-10-11z" style={{ fill: 'color-mix(in srgb, var(--theme-ink) 70%, transparent)' }} />
-      <circle cx="29" cy="21" r="1.5" style={{ fill: 'var(--home-cat-eye)' }} />
-      <circle cx="41" cy="21" r="1.5" style={{ fill: 'var(--home-cat-eye)' }} />
-    </svg>
+    <Image className="home-sill-cat" src="/home/naitang.png" width={480} height={325} alt="奶糖趴在窗沿上" priority />
   )
   return (
     <svg className="home-sill-clawd" viewBox="0 0 40 34" aria-label="Clawd 站在纪念日卡上" role="img">

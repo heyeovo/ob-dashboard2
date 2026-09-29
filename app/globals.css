@@ -147,7 +147,7 @@ html {
   --home-frame-fill:       rgb(var(--theme-tint) / .9);
   --home-anniversary-fill: rgb(var(--theme-tint) / .94);
   --home-window-inset:     inset 0 3px 14px color-mix(in srgb, var(--theme-ink) 16%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--theme-ink) 6%, transparent);
-  --home-cat-eye:          #6FA86A;
+  --home-cat-width:        min(36vw, 140px);
   --home-clawd-glasses:    #2A2320;
   --mobile-topbar-height:   48px;
   --mobile-tabbar-height:   56px;
@@ -657,7 +657,7 @@ body:has(.home-page) > .rain-layer { display: none; }
 .home-ornament i { width: 34px; height: 1px; background: currentColor; }
 .home-ornament b { width: 4px; height: 4px; transform: rotate(45deg); background: currentColor; }
 .home-quote-space { height: 20px; }
-.home-sill-cat { position: absolute; left: 22px; bottom: -2px; z-index: 2; width: 78px; }
+.home-sill-cat { position: absolute; left: 10px; bottom: calc(var(--home-cat-width) * -0.19); z-index: 3; width: var(--home-cat-width); height: auto; pointer-events: none; filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--theme-ink) 14%, transparent)); }
 .home-anniversary { position: absolute; right: 10px; bottom: -60px; width: 60%; min-width: 188px; padding: 13px 15px 12px; border-radius: var(--radius-2xl); background: var(--home-anniversary-fill); box-shadow: var(--chat-bubble-edge), var(--glass-shadow); }
 .home-sill-clawd { position: absolute; right: 20px; bottom: calc(100% - 2px); width: 34px; }
 .home-kicker { font-size: var(--text-3xs); letter-spacing: .2em; text-transform: uppercase; color: var(--color-text-tertiary); }

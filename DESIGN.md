@@ -167,7 +167,7 @@
 | `--chat-session-group-fill`, `--chat-session-group-radius`, `--chat-main-glow`, `--chat-session-dot*` | 对话列表 A：78% tint 的细线分组、18px 圆角、主窗右上角强调色光晕与窗口模式圆点 |
 | `--chat-attachment-width`, `--chat-sheet-height`, `--chat-sheet-radius` | 聊天附件最大宽度和聊天浮层尺寸；输入区的安全区域内边距保留与系统 inset 的计算 |
 | `--home-frame-fill`, `--home-anniversary-fill`, `--home-window-inset` | 阶段 3a 主页窗框实底、纪念日浮卡、窗洞内阴影；上传照片只画在窗洞里 |
-| `--home-cat-eye`, `--home-clawd-glasses`, `--radius-window` | 窗沿占位剪影细节色与窗洞 30px 圆角 |
+| `--home-cat-width`, `--home-clawd-glasses`, `--radius-window` | 窗沿奶糖插画宽度（`min(36vw, 140px)`，图 `public/home/naitang.png` 原木板上沿在 72% 高处，压在窗下沿）、Clawd 占位剪影墨镜色、窗洞 30px 圆角 |
 | `--memory-card-fill`, `--memory-search-fill`, `--memory-ago-fill`, `--memory-filter-fill` | 阶段 3b 记忆卡片、搜索框、往日记忆条和筛选胶囊的主题材质；列表卡片不做逐卡模糊 |
 | `--memory-card-shadow`, `--memory-switch-shadow` | 记忆卡片顶部高光与轻阴影、两格切换器选中阴影 |
 | `--memory-card-gap`, `--memory-grid-min-height` | 记忆卡片 9px 间距与记忆格固定起始高度（两列等高） |
