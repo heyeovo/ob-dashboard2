@@ -21,8 +21,8 @@ export default function HomeToolDrawer({ open, onClose, persona }: { open: boole
   if (!open) return null
   return <div className="fixed inset-0 z-50">
     <button type="button" aria-label="关闭家的其他房间" onClick={onClose} className="absolute inset-0 bg-[var(--color-overlay)]/20" />
-    <aside role="dialog" aria-modal="true" aria-label="家里的其他房间" className="home-nav-drawer float-surface absolute inset-y-0 left-0 w-[74vw] max-w-[360px] overflow-y-auto px-5 pt-8 shadow-2xl">
-      <button type="button" onClick={onClose} aria-label="关闭" className="absolute right-4 top-5 flex h-11 w-11 items-center justify-center text-xl text-[var(--color-text-tertiary)]">×</button>
+    <aside role="dialog" aria-modal="true" aria-label="家里的其他房间" className="home-nav-drawer float-surface absolute inset-y-0 left-0 w-[74vw] max-w-[360px] overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top,0px)+2rem)] shadow-2xl">
+      <button type="button" onClick={onClose} aria-label="关闭" className="absolute right-4 top-[calc(env(safe-area-inset-top,0px)+1.25rem)] flex h-11 w-11 items-center justify-center text-xl text-[var(--color-text-tertiary)]">×</button>
       <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--color-text-heading)]">家里的其他房间</h2>
       <p className="mt-1 mb-5 text-3xs tracking-[0.2em] text-[var(--color-text-tertiary)]">ROOMS</p>
       {/* 言之的房间：提示词页（原来在聊天页 ··· 菜单里） */}

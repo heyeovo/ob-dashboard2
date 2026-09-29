@@ -19,16 +19,20 @@ const weekdays = ['一', '二', '三', '四', '五', '六', '日']
 function dateAt(offset: number, date: string) { const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + offset); return value.toISOString().slice(0, 10) }
 function shortDate(date: string) { return `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}` }
 
+// 客户端内切页回来时先用上次的内容，再在后台刷新；整页刷新会丢，属于允许丢失的运行态
+type HomeCache = { today: string; persona: Persona; journal: Journal | null; reviews: Review[]; buckets: DatedBucket[]; reminders: Reminder[]; todos: Todo[] }
+let homeCache: HomeCache | null = null
+
 export default function HomePage() {
   const [toolsOpen, setToolsOpen] = useState(false)
-  const [today, setToday] = useState('')
+  const [today, setToday] = useState(() => homeCache?.today || '')
   const [selectedDate, setSelectedDate] = useState('')
-  const [persona, setPersona] = useState<Persona>({ id: 'ombre', name: '言之', initial: '言' })
-  const [journal, setJournal] = useState<Journal | null>(null)
-  const [reviews, setReviews] = useState<Review[]>([])
-  const [buckets, setBuckets] = useState<DatedBucket[]>([])
-  const [reminders, setReminders] = useState<Reminder[]>([])
-  const [todos, setTodos] = useState<Todo[]>([])
+  const [persona, setPersona] = useState<Persona>(() => homeCache?.persona || { id: 'ombre', name: '言之', initial: '言' })
+  const [journal, setJournal] = useState<Journal | null>(() => homeCache?.journal ?? null)
+  const [reviews, setReviews] = useState<Review[]>(() => homeCache?.reviews || [])
+  const [buckets, setBuckets] = useState<DatedBucket[]>(() => homeCache?.buckets || [])
+  const [reminders, setReminders] = useState<Reminder[]>(() => homeCache?.reminders || [])
+  const [todos, setTodos] = useState<Todo[]>(() => homeCache?.todos || [])
 
   useEffect(() => {
     const update = () => setToday(dateFormatter.format(new Date()))
@@ -75,6 +79,10 @@ export default function HomePage() {
       if (todoResult.status === 'fulfilled') setTodos(Array.isArray(todoResult.value.todos) ? todoResult.value.todos : [])
     })
   }, [today, week, persona.id])
+
+  useEffect(() => {
+    if (today) homeCache = { today, persona, journal, reviews, buckets, reminders, todos }
+  }, [today, persona, journal, reviews, buckets, reminders, todos])
 
   const anniversaries = today ? upcomingAnniversaries(today) : []
   const next = anniversaries[0]
