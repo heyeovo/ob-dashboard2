@@ -7,6 +7,8 @@
 //
 // 函数都接收 Storage 参数，方便在 node 环境里测。
 
+import type { CcAttachment } from './types'
+
 export const CC_RETURN_SESSION_KEY = 'ob2-cc-return-session'
 export const CC_DRAFTS_KEY = 'ob2-cc-drafts'
 const MAX_DRAFTS = 30
@@ -52,5 +54,36 @@ export function saveCcDrafts(storage: KeyValueStorage, drafts: Map<string, strin
     else storage.setItem(CC_DRAFTS_KEY, JSON.stringify(Object.fromEntries(kept)))
   } catch {
     /* 存满或隐私模式：草稿只留在内存里 */
+  }
+}
+
+// 3. 草稿里的附件（2026-09-29 补）：选图 / 选文件时就已经传到 Haven 了，这里只存附件信息，
+//    切页面回来能接着发。按窗口分开存，发出去或移除就清掉。
+export const CC_DRAFT_ATTACHMENTS_KEY = 'ob2-cc-draft-attachments'
+
+export function loadCcDraftAttachments(storage: KeyValueStorage): Map<string, CcAttachment[]> {
+  try {
+    const parsed: unknown = JSON.parse(storage.getItem(CC_DRAFT_ATTACHMENTS_KEY) || '{}')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new Map()
+    const entries = Object.entries(parsed).flatMap(([sessionId, value]) => {
+      if (!Array.isArray(value)) return []
+      const items = value.filter((item): item is CcAttachment => (
+        Boolean(item) && typeof item === 'object' && typeof (item as CcAttachment).id === 'string'
+      ))
+      return items.length > 0 ? [[sessionId, items] as [string, CcAttachment[]]] : []
+    })
+    return new Map(entries)
+  } catch {
+    return new Map()
+  }
+}
+
+export function saveCcDraftAttachments(storage: KeyValueStorage, drafts: Map<string, CcAttachment[]>) {
+  const kept = [...drafts].filter(([id, items]) => id && items.length > 0).slice(-MAX_DRAFTS)
+  try {
+    if (kept.length === 0) storage.removeItem(CC_DRAFT_ATTACHMENTS_KEY)
+    else storage.setItem(CC_DRAFT_ATTACHMENTS_KEY, JSON.stringify(Object.fromEntries(kept)))
+  } catch {
+    /* 存满或隐私模式：附件只留在这一次页面里 */
   }
 }

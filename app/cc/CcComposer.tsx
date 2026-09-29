@@ -4,6 +4,7 @@ import type { ClipboardEvent, DragEvent, KeyboardEvent } from 'react'
 import { isSupportedDocument, parseDocument } from '@/app/lib/attachments/documentParser'
 import type { CcAttachment } from './types'
 import type { CcPromptModule } from './persona'
+import { loadCcDraftAttachments, saveCcDraftAttachments } from './ccNavMemory'
 
 const MAX_ORIGINAL_BYTES = 25 * 1024 * 1024
 const MAX_STORED_BYTES = 2 * 1024 * 1024
@@ -114,6 +115,19 @@ export default function CcComposer({
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuView, setMenuView] = useState<'main' | 'prompts'>('main')
   const [attachments, setAttachments] = useState<CcAttachment[]>([])
+  // 附件跟着草稿按窗口存：切 Tab 回来还在（见 ccNavMemory）。换窗口时在渲染里直接换成那个窗口的。
+  const [attachmentsFor, setAttachmentsFor] = useState('')
+  if (sessionId && attachmentsFor !== sessionId) {
+    setAttachmentsFor(sessionId)
+    setAttachments(loadCcDraftAttachments(window.localStorage).get(sessionId) || [])
+  }
+  useEffect(() => {
+    if (!attachmentsFor) return
+    const drafts = loadCcDraftAttachments(window.localStorage)
+    drafts.delete(attachmentsFor)
+    if (attachments.length > 0) drafts.set(attachmentsFor, attachments)
+    saveCcDraftAttachments(window.localStorage, drafts)
+  }, [attachments, attachmentsFor])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
 

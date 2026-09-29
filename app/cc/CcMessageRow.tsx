@@ -357,7 +357,7 @@ export default function CcMessageRow({
               aria-expanded={thinkingOpen}
               onClick={() => setThinkingOpen(open => !open)}
             >
-              <span className={`cc-think-caret${thinkingOpen ? ' open' : ''}`} aria-hidden="true" />
+              <span className={`cc-fold-caret${thinkingOpen ? ' open' : ''}`} aria-hidden="true" />
               <span>Thought process{message.thinkingMs ? ` · ${(message.thinkingMs / 1000).toFixed(1)}s` : ''}</span>
             </button>
             {thinkingOpen ? (
@@ -752,7 +752,7 @@ export default function CcMessageRow({
                         <ThinkingLabel startedAt={event.startedAt} active={isActive} durationMs={event.durationMs} />
                       </span>
                       <span
-                        className={`cc-think-caret${thinkingOpen ? ' open' : ''}`}
+                        className={`cc-fold-caret${thinkingOpen ? ' open' : ''}`}
                         aria-hidden="true"
                       />
                     </button>
@@ -783,17 +783,18 @@ export default function CcMessageRow({
                 <div className="cc-toolstrip" key={event.id}>
                   <button
                     type="button"
-                    className="cc-toolchip"
+                    className="cc-think-toggle"
+                    aria-expanded={isOpen}
                     onClick={() => setOpenToolsGroupId(current => current === event.id ? null : event.id)}
                   >
-                    <span className="cc-toolchip-name">Tools · {event.tools.length}</span>
-                    <span className="cc-tool-chevron" aria-hidden="true">{isOpen ? '⌄' : '›'}</span>
+                    <span>Tools · {event.tools.length}</span>
+                    <span className={`cc-fold-caret${isOpen ? ' open' : ''}`} aria-hidden="true" />
                   </button>
                   {isOpen ? event.tools.map(tool => <div key={tool.id}>
                     <button type="button" className="cc-toolchip pl-4" onClick={() => setOpenToolId(tool.id)}>
                       <span className="cc-toolchip-name">{shortToolName(tool.name)}</span>
                       <span className={`cc-tool-status ${tool.status || (message.streaming ? 'running' : 'completed')}`}>{toolStatusLabel(tool, Boolean(message.streaming))}</span>
-                      <span className="cc-tool-chevron" aria-hidden="true">›</span>
+                      <span className="cc-fold-caret" aria-hidden="true" />
                     </button>
                   </div>) : null}
                   {/* 小作品卡片不跟着 Tools 折叠，照旧直接显示 */}

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   CC_DRAFTS_KEY,
+  CC_DRAFT_ATTACHMENTS_KEY,
   ccReturnHref,
+  loadCcDraftAttachments,
   loadCcDrafts,
+  saveCcDraftAttachments,
   rememberCcReturnSession,
   saveCcDrafts,
 } from '../app/cc/ccNavMemory'
@@ -72,5 +75,26 @@ describe('cc drafts', () => {
     expect(loadCcDrafts(storage).size).toBe(0)
     storage.setItem(CC_DRAFTS_KEY, '["a"]')
     expect(loadCcDrafts(storage).size).toBe(0)
+  })
+})
+
+describe('cc draft attachments', () => {
+  const image = {
+    id: 'att-1', sessionId: 's1', filename: 'a.png', kind: 'image' as const,
+    mimeType: 'image/png', byteSize: 10, sha256: 'x', previewUrl: '/api/cc-attachments/att-1?session_id=s1',
+  }
+
+  it('round-trips attachments per session and drops empty lists', () => {
+    const storage = memoryStorage()
+    saveCcDraftAttachments(storage, new Map([['s1', [image]], ['s2', []]]))
+    const loaded = loadCcDraftAttachments(storage)
+    expect(loaded.get('s1')?.[0].previewUrl).toBe(image.previewUrl)
+    expect(loaded.has('s2')).toBe(false)
+  })
+
+  it('ignores malformed entries', () => {
+    const storage = memoryStorage()
+    storage.setItem(CC_DRAFT_ATTACHMENTS_KEY, JSON.stringify({ s1: [{ nope: 1 }], s2: 'x' }))
+    expect(loadCcDraftAttachments(storage).size).toBe(0)
   })
 })

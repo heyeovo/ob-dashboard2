@@ -206,6 +206,8 @@ html {
      现有页面偏"工具风"（小圆角 + 到处是边框），聊天这块先按新尺度做，
      以后整体调整时反过来照它改别的页面。 */
   --chat-bubble-radius:     18px;
+  /* 输入栏：一行高约 44px，22px 看起来就是药丸；多行时是圆角矩形，不会被拉成怪形状 */
+  --chat-composer-radius:   22px;
   --chat-user-fill:         color-mix(in srgb, var(--theme-accent) 24%, rgb(var(--theme-tint) / .9));
   --chat-user-text:         var(--color-text-primary);
   --chat-assistant-fill:    color-mix(in srgb, var(--theme-accent) 6%, rgb(var(--theme-tint) / .9));
@@ -233,7 +235,6 @@ html {
   --chat-code-bg:           rgb(var(--theme-tint) / .88);
   --chat-code-border:       color-mix(in srgb, var(--theme-ink) 8%, transparent);
   --chat-inline-code-bg:    color-mix(in srgb, var(--theme-accent) 8%, transparent);
-  --chat-think-bg:          color-mix(in srgb, var(--theme-ink) 6%, transparent);
   --chat-think-bar:         color-mix(in srgb, var(--theme-ink) 32%, transparent);
   --chat-modal-shadow:      0 24px 64px rgba(58, 56, 54, 0.16);
   --chat-glass:             rgb(var(--theme-tint) / .78);
@@ -719,7 +720,7 @@ h1, h2 {
 
 /* 输入框外壳 */
 .cc-composer {
-  border-radius: 999px;
+  border-radius: var(--chat-composer-radius);
   background: var(--glass-fill);
   border: 1px solid var(--glass-border);
   box-shadow: var(--chat-bubble-edge), var(--glass-shadow);
@@ -956,33 +957,36 @@ h1, h2 {
 }
 .cc-think {
   width: 100%;
-  border-radius: var(--radius-lg);
-  background: var(--chat-think-bg);
-  padding: 8px 11px;
+  padding: 0 4px;
 }
 .cc-think-toggle {
-  display: flex;
-  width: 100%;
+  display: inline-flex;
+  min-height: 32px;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
   font-size: var(--text-meta);
   color: var(--color-text-tertiary);
   transition: color var(--duration-normal) var(--ease-standard);
 }
 .cc-think-toggle:hover { color: var(--color-text-secondary); }
-.cc-think-caret {
-  width: 0;
-  height: 0;
-  border-left: 4px solid currentColor;
-  border-top: 3.5px solid transparent;
-  border-bottom: 3.5px solid transparent;
+/* Thought process / Tools / 模型下拉共用的细线箭头：默认朝右，展开朝下；.down 默认朝下，展开朝上 */
+.cc-fold-caret {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin: 0 2px;
+  border-right: 1.4px solid currentColor;
+  border-bottom: 1.4px solid currentColor;
+  transform: rotate(-45deg);
   transition: transform var(--duration-normal) var(--ease-standard);
 }
-.cc-think-caret.open { transform: rotate(90deg) translateX(1px); }
+.cc-fold-caret.open { transform: rotate(45deg) translate(-1px, -1px); }
+.cc-fold-caret.down { transform: rotate(45deg) translate(-1px, -1px); }
+.cc-fold-caret.down.open { transform: rotate(-135deg); }
 .cc-think-body {
-  margin-top: 7px;
-  padding: 2px 1px 1px;
+  margin: 2px 0 6px;
+  padding: 2px 1px 1px 12px;
   font-size: var(--text-xs);
   line-height: 1.68;
   color: var(--color-text-secondary);
