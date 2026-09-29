@@ -31,6 +31,7 @@ import {
   normalizeWebSettings,
   type CcWebSettings,
 } from './webSettings'
+import { loadCcDrafts, saveCcDrafts } from './ccNavMemory'
 import {
   ACTIVE_SESSION_KEY,
   closeOpenThinking,
@@ -312,11 +313,26 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [])
 
   // 首次进页面：开一个新会话 id + 拉会话列表
+  // 草稿同时从 localStorage 读回来，sessionId 和 draft 必须同一次提交，
+  // 否则下面的持久化 effect 会先拿空草稿把存着的那份覆盖掉。
   useEffect(() => {
     const initialSessionId = requestedCcSessionId(window.location.search) || newSessionId()
-    const timer = window.setTimeout(() => setSessionId(initialSessionId), 0)
+    const timer = window.setTimeout(() => {
+      draftsRef.current = loadCcDrafts(window.localStorage)
+      setSessionId(initialSessionId)
+      setDraft(draftsRef.current.get(initialSessionId) || '')
+    }, 0)
     return () => window.clearTimeout(timer)
   }, [])
+
+  // 草稿写进 localStorage：切 Tab、关掉重开都还在；发出去 draft 变空就删掉
+  useEffect(() => {
+    if (!sessionId) return
+    const drafts = draftsRef.current
+    drafts.delete(sessionId)
+    if (draft) drafts.set(sessionId, draft)
+    saveCcDrafts(window.localStorage, drafts)
+  }, [sessionId, draft])
 
   // 工作台靠这个知道现在在聊哪个会话
   useEffect(() => {

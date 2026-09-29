@@ -9,6 +9,7 @@ import type { CcMessage } from './types'
 import type { CcPersona } from './persona'
 import type { HistoricalConversation } from './historicalChats'
 import { getCcChatMetrics } from './CcChatMetrics'
+import { rememberCcReturnSession } from './ccNavMemory'
 import CcChatView from './CcChatView'
 import type { CcChatScope } from './CcChatScope'
 
@@ -83,6 +84,13 @@ export default function CcChatPage() {
       window.removeEventListener('cc:show-list', showList)
     }
   }, [])
+
+  // 底栏点「聊天」回来时回到哪：在对话里就记这个对话，在列表或历史窗口就记空（回列表）
+  useEffect(() => {
+    if (!chat.sessionId) return
+    const inChat = mobileView === 'chat' && !activeHistorical
+    rememberCcReturnSession(window.sessionStorage, inChat ? chat.sessionId : '')
+  }, [mobileView, activeHistorical, chat.sessionId])
 
   const startSelecting = (messageId?: string) => {
     setSelectMode(true)

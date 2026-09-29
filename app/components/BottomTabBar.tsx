@@ -1,6 +1,7 @@
 'use client'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { ccReturnHref } from '@/app/cc/ccNavMemory'
 
 // 4.6 导航重构后的 5 Tab（用户自己定的顺序）：
 //   Home / 记忆库 / 聊天(cc，中间突起) / 工作台+调参 / 设置
@@ -33,12 +34,35 @@ function TabIcon({ slug, active }: { slug: string; active: boolean }) {
 export default function BottomTabBar() {
   const router = useRouter()
   const pathname = usePathname() || '/'
+  // 点下去立刻高亮目标 Tab，不等服务器回页面；路由真正切过去后以 pathname 为准
+  const [pendingSlug, setPendingSlug] = useState<string | null>(null)
+  const [seenPathname, setSeenPathname] = useState(pathname)
+  if (seenPathname !== pathname) {
+    setSeenPathname(pathname)
+    setPendingSlug(null)
+  }
+
+  // 页面都是动态渲染，Next 默认不预加载；服务器在纽约，每次点 Tab 都要等一个来回。
+  // 底栏在的时候把 5 个页面预先取好（router.prefetch 是完整预取，缓存 5 分钟），
+  // 每次切页顺手续一次，已经新鲜的不会重复请求。
+  useEffect(() => {
+    for (const tab of TABS) {
+      router.prefetch(tab.slug === 'cc' ? ccReturnHref(window.sessionStorage) : tab.href)
+    }
+  }, [router, pathname])
 
   const active = useCallback((slug: string) => {
+    if (pendingSlug) return slug === pendingSlug
     if (slug === 'home') return pathname === '/'
     if (slug === 'memory') return pathname === '/memory' || pathname.startsWith('/bucket')
     return pathname.startsWith(`/${slug}`)
-  }, [pathname])
+  }, [pathname, pendingSlug])
+
+  const go = (slug: string, href: string) => {
+    // 点的就是当前页时 pathname 不会变，不设 pending，免得高亮卡住
+    if (!active(slug)) setPendingSlug(slug)
+    router.push(href)
+  }
 
   return (
     <nav
@@ -55,8 +79,14 @@ export default function BottomTabBar() {
               <button
                 key={tab.slug}
                 onClick={() => {
-                  if (pathname.startsWith('/cc')) window.dispatchEvent(new Event('cc:show-list'))
-                  router.push(tab.href)
+                  // 已经在聊天里：点「聊天」回对话列表（同 iOS 点当前 Tab 回这一栏顶层）。
+                  // 从别的页面过来：回到离开时的那个对话；离开时在列表就回列表。
+                  if (pathname.startsWith('/cc')) {
+                    window.dispatchEvent(new Event('cc:show-list'))
+                    router.push(tab.href)
+                    return
+                  }
+                  go(tab.slug, ccReturnHref(window.sessionStorage))
                 }}
                 className="flex min-w-[64px] flex-col items-center gap-1 transition-all duration-200 active:scale-90"
               >
@@ -83,7 +113,7 @@ export default function BottomTabBar() {
           return (
             <button
               key={tab.slug}
-              onClick={() => router.push(tab.href)}
+              onClick={() => go(tab.slug, tab.href)}
               className="group flex min-w-[64px] flex-col items-center gap-1 transition-all duration-200 active:scale-90"
             >
               <div className="flex h-6 w-6 items-center justify-center text-[var(--color-text-tertiary)] transition-all duration-200">
