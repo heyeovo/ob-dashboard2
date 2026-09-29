@@ -137,6 +137,9 @@
 | `--duration-normal` | `0.18s` |
 | `--duration-slow` | `0.26s` |
 
+- 全站按下反馈：`a` / `button` / `[role="button"]` 按下时 `scale: .97`（base 层、零优先级，用独立 `scale` 属性，不碰 Tailwind 的 `translate`）；不想要的元素自己覆盖 `scale`。
+- 切页淡入：`MobileShell` 按路径重挂内容层并播 `.page-enter`（只动 opacity，不用 transform，免得页面里的 fixed 栏在动画期间错位）。`prefers-reduced-motion` 下两者都关。
+
 ### 阴影
 
 | Token | 值 |

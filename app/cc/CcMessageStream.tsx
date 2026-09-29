@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import CcMessageRow from './CcMessageRow'
 import CcXhsCard, { extractXhsUrl } from './CcXhsCard'
 import { CcPermCard } from './CcPermCard'
@@ -30,6 +30,8 @@ function CcScrollJumps({
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null)
   const scrollTopRef = useRef(0)
+  // 停在底部时跟着内容长高往下走；自己往上翻就不拽回来
+  const stickRef = useRef(true)
   // iOS Safari 不支持 CSS scroll anchoring：进入选择模式时每行多出勾选框、气泡变窄、
   // 上方内容整体变高，画面会被推到很前面。滚动时记下屏幕中间那条消息，布局变化后按它复位。
   const anchorRef = useRef<{ id: string; top: number } | null>(null)
@@ -60,6 +62,7 @@ function CcScrollJumps({
     const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
     const nextCanGoUp = node.scrollTop > 24
     const nextCanGoDown = distanceFromBottom > 24
+    stickRef.current = distanceFromBottom < 80
     setCanGoUp(current => current === nextCanGoUp ? current : nextCanGoUp)
     setCanGoDown(current => current === nextCanGoDown ? current : nextCanGoDown)
     const trackHeight = Math.max(0, node.clientHeight - 16)
@@ -110,6 +113,21 @@ function CcScrollJumps({
       window.removeEventListener('resize', update)
     }
   }, [children, firstMessageId, lastMessageId, lastMessageVersion, pendingCount, sessionId, update])
+
+  // 回复写完后思考收起、操作行出现、代码块渲染都会让内容再长高，但不算「消息变了」，
+  // 所以另外盯着高度：原本就在底部时跟到底
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (!stickRef.current || dragRef.current) return
+      node.scrollTop = node.scrollHeight
+      update()
+    })
+    observer.observe(node)
+    if (node.firstElementChild) observer.observe(node.firstElementChild)
+    return () => observer.disconnect()
+  }, [sessionId, update])
 
   useLayoutEffect(() => {
     if (layoutKeyRef.current === layoutKey) return

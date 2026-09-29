@@ -329,12 +329,16 @@ export default function CcSessionRail({
             <div className="py-8 text-center text-xs text-[var(--color-text-disabled)]">还没有其他对话</div>
           ) : <div className="cc-session-group overflow-visible">
             {regularSessions.map(session => <div key={session.session_id} className="cc-session-line relative flex min-h-14 items-center gap-2.5 px-3">
-              <span className={`cc-session-dot ${sessionMode(session) === 'WORK' ? 'work' : ''}`} aria-hidden="true" />
-              <button type="button" onClick={() => onPick(session.session_id)} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-                <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">{session.title || session.session_id}</span>
-                <span className={`cc-mode-cap ${sessionMode(session) === 'CHAT' ? 'chat' : ''}`}>{sessionMode(session)}</span>
+              <span className={`cc-session-dot mt-4 self-start ${sessionMode(session) === 'WORK' ? 'work' : ''}`} aria-hidden="true" />
+              {/* 两行：标题 + 胶囊 / 轮数；右边只放时间，标题长了也不跟轮数挤 */}
+              <button type="button" onClick={() => onPick(session.session_id)} className="flex min-w-0 flex-1 flex-col py-2.5 text-left">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">{session.title || session.session_id}</span>
+                  <span className={`cc-mode-cap ${sessionMode(session) === 'CHAT' ? 'chat' : ''}`}>{sessionMode(session)}</span>
+                </span>
+                <span className="mt-0.5 text-2xs text-[var(--color-text-tertiary)]">{session.turn_count.toLocaleString()} 轮</span>
               </button>
-              <span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{session.turn_count.toLocaleString()} 轮 · {clockTime(session.last_at)}</span>
+              <span className="shrink-0 self-start pt-3 text-2xs text-[var(--color-text-tertiary)]">{clockTime(session.last_at)}</span>
               <button type="button" aria-label={`管理 ${session.title || session.session_id}`} onClick={() => setMenuId(current => current === session.session_id ? '' : session.session_id)} className="flex size-11 shrink-0 items-center justify-center text-[var(--color-text-tertiary)]">···</button>
               {menuId === session.session_id ? <div className="cc-popmenu absolute right-2 top-11 z-30 flex w-40 flex-col p-1">
                 <button type="button" onClick={() => void pin(session)} className="cc-popmenu-item text-left">置顶为主窗</button>

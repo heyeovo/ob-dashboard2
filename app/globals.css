@@ -1203,6 +1203,25 @@ body:has(.home-page) > .rain-layer { display: none; }
   overflow-wrap: anywhere;
 }
 
+/* ---- 全站简易动效（阶段 5 的先行版） ---- */
+/* 按下反馈：用独立的 scale 属性，不碰 Tailwind 的 translate；放在 base 层、零优先级，
+   元素自己写了 transition 的以它为准（缩放会直接跳，不影响原有过渡） */
+@layer base {
+  :where(a, button, [role="button"]) { transition: scale var(--duration-fast) var(--ease-standard); }
+  :where(a, button, [role="button"]):active:not(:disabled) { scale: .97; }
+}
+/* 切页淡入：MobileShell 按路径重挂内容层时播一次；不留 fill，播完不残留层叠上下文 */
+.page-enter { animation: pageEnter var(--duration-normal) var(--ease-standard); }
+/* 只动 opacity：transform 会让页面里 position: fixed 的顶栏 / 输入栏在动画期间改认这一层做参照 */
+@keyframes pageEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
+  :where(a, button, [role="button"]):active { scale: none; }
+}
+
 /* ---- Home 左侧功能导航 ---- */
 .home-nav-drawer {
   animation: homeDrawerIn 180ms var(--ease-standard) both;

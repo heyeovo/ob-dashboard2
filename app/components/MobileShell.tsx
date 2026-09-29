@@ -1,5 +1,6 @@
 'use client'
 import { Suspense } from 'react'
+import { usePathname } from 'next/navigation'
 import BottomTabBar from './BottomTabBar'
 import SideRail from './SideRail'
 import type { ReactNode } from 'react'
@@ -12,6 +13,7 @@ import type { ReactNode } from 'react'
  * 4.6 之前桌面导航是每个页面各自 <NavBar />，现在统一收在这里。
  */
 export default function MobileShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
   return (
     <>
       <Suspense fallback={null}>
@@ -19,7 +21,8 @@ export default function MobileShell({ children }: { children: ReactNode }) {
       </Suspense>
       {/* 不要给这层加 z-index：会把页面里的弹窗 / 抽屉关进同一层级，压到底部 Tab 下面。
           背景、雨痕、颗粒用负 z-index 沉到内容下方（见 globals.css「层级」）。 */}
-      <div className="relative md:pl-[68px]">{children}</div>
+      {/* key 按路径：换页时重挂这一层，播一次 .page-enter 淡入 */}
+      <div key={pathname} className="page-enter relative md:pl-[68px]">{children}</div>
       <div className="md:hidden">
         <Suspense fallback={null}>
           <BottomTabBar />
