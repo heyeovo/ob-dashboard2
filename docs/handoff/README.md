@@ -18,5 +18,5 @@
 | `HANDOFF-memory-continuity-fixes.md` | 📦 已完成归档 | |
 | `HANDOFF-cc-auto-chat-slices.md` | ⏸ 暂停 | 阶段一、二代码已提交（Haven `c250299` / `ab43aa3`，Dashboard `96a2668`），9.13 与日回顾解耦后停下。重开时以本文件为事实源；OB Todo「自动化原文切片摘要」 |
 | `HANDOFF-ui-design-system.md` | 📦 已被取代 | 第一步清理硬编码已完成；其余草案以 `HANDOFF-ui-redesign.md` 为准 |
-| `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1 手机统一背景、全屏滚动和子页面返回按钮待正式 iPhone 主屏幕 PWA 验收。阶段 1.5 材质与四主题待 iPhone 截图验收。阶段 2 前置聊天页拆分已合并（`1cf5d9b`）并验收；字号分层（前置 B）已合并（Haven `7d5a0aa`、dashboard `3bba576`）并验收。阶段 2 布局已定；2a 在 dashboard `a8a67cb`、Haven `c2c9204` 两个功能分支完成代码与本地验证，待 iPhone 主屏幕 PWA 验收；2b「提示词」页留给独立分支。玻璃水珠已确认；Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
+| `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1 手机统一背景、全屏滚动和子页面返回按钮待正式 iPhone 主屏幕 PWA 验收。阶段 1.5 材质与四主题待 iPhone 截图验收。阶段 2 前置聊天页拆分已合并（`1cf5d9b`）并验收；字号分层（前置 B）已合并（Haven `7d5a0aa`、dashboard `3bba576`）并验收。阶段 2 布局已定；2a 在 dashboard `a8a67cb`、Haven `c2c9204` 两个功能分支完成代码与本地验证，待 iPhone 主屏幕 PWA 验收；2b「提示词」页已在 dashboard `feat/stage2b-prompt` 完成本地实现与验证，待手机、桌面和 Context 验收。玻璃水珠已确认；Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
 | `OB待处理大问题清单.md` | 📦 已完成归档 | P0 两项、journey、聊天原文库已完成；语录、moments、官端开窗已转入 OB Todo |

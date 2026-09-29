@@ -1,27 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { ENGINE_OPTIONS, TINT_PRESETS, type CcEngine, type CcPersona } from './persona'
+import { TINT_PRESETS, type CcPersona } from './persona'
 
-// 当前协作者的设置（对话列表**右上角**点开的那个）。4 个子 tab。
-//
-// 组织方式照 Polaris 的协作者信息页，但只留 cc 引擎下真会生效的项：
-//   身份    头像 / 名字 / 印象 / 你的称呼 / 协作者定位
-//   提示词  可独立维护、排序和默认启停的 systemPrompt 模块
-//   记忆    手写记忆条目 + 两个召回开关
-//   引擎    订阅 / 中转站 / 自建（自建是第 7 步，灰着）
-//
-// Polaris 那页里的温度、top_p、max_tokens、provider 清单、自定义 headers/body
-// **这里没有** —— claude code 自己组装请求，SDK 不给这些参数。等第 7 步自建引擎回来。
-// 模型选择和 MCP 归主页侧边栏；主题字体归 UI 设置工具。都是用户定的分工。
-
-type TabKey = 'identity' | 'prompt' | 'memory' | 'engine'
-
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'identity', label: '身份' },
-  { key: 'prompt', label: '提示词' },
-  { key: 'memory', label: '记忆' },
-  { key: 'engine', label: '引擎' },
-]
+// 当前协作者的提示词设置。隐藏的 description / memoryEntries / semanticOn / engine
+// 仍留在 draft 中，保存时原值透传。
 
 type Props = {
   persona: CcPersona
@@ -41,9 +23,7 @@ export default function CcPersonaDialog({
   onDelete,
   onClose,
 }: Props) {
-  const [tab, setTab] = useState<TabKey>('identity')
   const [draft, setDraft] = useState<CcPersona>(persona)
-  const [entryInput, setEntryInput] = useState('')
   const [dirInput, setDirInput] = useState('')
   const [writeDirInput, setWriteDirInput] = useState('')
   const [editingPromptModuleId, setEditingPromptModuleId] = useState<string | null>(null)
@@ -64,13 +44,6 @@ export default function CcPersonaDialog({
   const patch = <K extends keyof CcPersona>(key: K, value: CcPersona[K]) => {
     setDraft(prev => ({ ...prev, [key]: value }))
     setHint('')
-  }
-
-  const addEntry = () => {
-    const text = entryInput.trim()
-    if (!text) return
-    patch('memoryEntries', [...draft.memoryEntries, text])
-    setEntryInput('')
   }
 
   const addPromptModule = () => {
@@ -126,7 +99,6 @@ export default function CcPersonaDialog({
     const name = draft.name.trim()
     if (!name) {
       setHint('名字不能为空')
-      setTab('identity')
       return
     }
     const cleaned: CcPersona = {
@@ -152,6 +124,7 @@ export default function CcPersonaDialog({
   return (
     <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
+      {/* 弹窗限制在视口内，长内容由中段滚动，底部保存按钮保持可见。 */}
       <div className="cc-modal relative flex max-h-[86vh] w-full max-w-lg flex-col">
         {/* 头 */}
         <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-5 py-3.5">
@@ -159,7 +132,7 @@ export default function CcPersonaDialog({
             {draft.initial}
           </span>
           <div className="min-w-0">
-            <div className="truncate text-note font-medium text-[var(--color-text-heading)]">
+            <div className="truncate text-xl text-[var(--color-text-heading)]" style={{ fontFamily: 'var(--font-display)' }}>
               {draft.name || '未命名'}
             </div>
             <div className="mt-0.5 text-meta text-[var(--color-text-disabled)]">协作者设置</div>
@@ -173,23 +146,9 @@ export default function CcPersonaDialog({
           </button>
         </div>
 
-        {/* 子 tab */}
-        <div className="flex gap-1 border-b border-[var(--color-border-light)] px-4 py-2">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`cc-subtab${tab === t.key ? ' active' : ''}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {tab === 'identity' ? (
-            <div className="flex flex-col gap-4">
+          <section className="flex flex-col gap-4" aria-labelledby="cc-persona-identity">
+              <h2 id="cc-persona-identity" className="text-meta font-semibold tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">身份</h2>
               <label className="cc-field">
                 <span className="cc-field-label">名字</span>
                 <input
@@ -228,17 +187,7 @@ export default function CcPersonaDialog({
               </div>
 
               <label className="cc-field">
-                <span className="cc-field-label">印象</span>
-                <input
-                  className="cc-input"
-                  value={draft.description}
-                  onChange={e => patch('description', e.target.value)}
-                  placeholder="一句话，只在协作者列表里显示"
-                />
-              </label>
-
-              <label className="cc-field">
-                <span className="cc-field-label">你的称呼</span>
+                <span className="text-meta text-[var(--color-text-secondary)]">你的称呼</span>
                 <input
                   className="cc-input"
                   value={draft.userName}
@@ -257,9 +206,151 @@ export default function CcPersonaDialog({
                   onChange={e => patch('purpose', e.target.value)}
                   placeholder="TA 为什么在这里，以怎样的身份存在？"
                 />
+                <span className="cc-field-hint">会写进提示词的「关于我」</span>
               </label>
 
-              <div className="cc-field border-t border-[var(--color-border-light)] pt-3.5">
+              {canDelete ? (
+                <div className="border-t border-[var(--color-border-light)] pt-3.5">
+                  {confirmDelete ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-meta text-[var(--color-text-secondary)]">
+                        删掉「{draft.name}」？历史对话会保留
+                      </span>
+                      <button
+                        type="button"
+                        className="cc-btn-danger"
+                        onClick={() => void onDelete(draft.id).then(r => r.ok && onClose())}
+                      >
+                        确认删除
+                      </button>
+                      <button
+                        type="button"
+                        className="cc-btn-ghost"
+                        onClick={() => setConfirmDelete(false)}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className="cc-btn-ghost" onClick={() => setConfirmDelete(true)}>
+                      删除这个协作者
+                    </button>
+                  )}
+                </div>
+              ) : null}
+          </section>
+
+          <section className="mt-6 flex flex-col gap-3 border-t border-[var(--color-border-light)] pt-5" aria-labelledby="cc-persona-prompt">
+              <h2 id="cc-persona-prompt" className="text-meta font-semibold tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">提示词</h2>
+              <label className="cc-field">
+                <span className="cc-field-label">基础提示词</span>
+                <span className="cc-field-hint">每个协作者独立保存，会放在 system 的最前面；允许留空。</span>
+                <textarea
+                  className="cc-textarea font-mono"
+                  rows={6}
+                  value={draft.basePrompt}
+                  onChange={event => patch('basePrompt', event.target.value)}
+                  placeholder="填写这个协作者始终需要遵守的基础说明"
+                />
+              </label>
+              <div className="border-t border-[var(--color-border-light)]" />
+              {editingPromptModuleId ? (() => {
+                const promptModule = draft.promptModules.find(item => item.id === editingPromptModuleId)
+                if (!promptModule) return null
+                return (
+                  <div className="flex flex-col gap-4">
+                    <button type="button" className="w-fit text-sm text-[var(--color-text-secondary)]" onClick={() => setEditingPromptModuleId(null)}>
+                      ← 返回模块列表
+                    </button>
+                    <label className="cc-field">
+                      <span className="cc-field-label">模块名称</span>
+                      <input className="cc-input" value={promptModule.name} onChange={event => updatePromptModule(promptModule.id, { name: event.target.value })} placeholder="例如：互动规则" />
+                    </label>
+                    <label className="cc-field">
+                      <span className="cc-field-label">提示词内容</span>
+                      <textarea className="cc-textarea font-mono" rows={14} value={promptModule.content} onChange={event => updatePromptModule(promptModule.id, { content: event.target.value })} placeholder="这段内容会作为独立模块加入 system。" />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+                      <input type="checkbox" checked={promptModule.enabledByDefault} onChange={event => updatePromptModule(promptModule.id, { enabledByDefault: event.target.checked })} />
+                      新窗口默认开启
+                    </label>
+                    <button
+                      type="button"
+                      className="cc-btn-ghost w-fit text-[var(--color-danger)]"
+                      onClick={() => {
+                        patch('promptModules', draft.promptModules.filter(item => item.id !== promptModule.id))
+                        setEditingPromptModuleId(null)
+                      }}
+                    >
+                      删除这个模块
+                    </button>
+                  </div>
+                )
+              })() : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="cc-field-label">提示词模块</div>
+                      <div className="mt-1 text-meta text-[var(--color-text-tertiary)]">默认开启的模块会用于每个新窗口</div>
+                    </div>
+                    <button type="button" className="cc-btn-ghost" onClick={addPromptModule}>＋ 新增</button>
+                  </div>
+                  {draft.promptModules.length === 0 ? (
+                    <div className="cc-recall-empty">还没有提示词模块</div>
+                  ) : (
+                    <div className="flex flex-col gap-2.5">
+                      {draft.promptModules.map((module, index) => (
+                        <div key={module.id} className="rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3.5">
+                          <button type="button" className="w-full text-left" onClick={() => setEditingPromptModuleId(module.id)}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-[var(--color-text-heading)]">{module.name || '未命名模块'}</div>
+                                <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-[var(--color-text-secondary)]">{module.content || '还没有内容'}</div>
+                              </div>
+                              <span className="shrink-0 text-[var(--color-text-tertiary)]">›</span>
+                            </div>
+                          </button>
+                          <div className="mt-3 flex items-center border-t border-[var(--color-border-light)] pt-2.5">
+                            <button type="button" disabled={index === 0} className="cc-btn-ghost px-2 disabled:opacity-30" onClick={() => movePromptModule(module.id, -1)} aria-label="上移">↑</button>
+                            <button type="button" disabled={index === draft.promptModules.length - 1} className="cc-btn-ghost px-2 disabled:opacity-30" onClick={() => movePromptModule(module.id, 1)} aria-label="下移">↓</button>
+                            <label className="ml-auto flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                              <input type="checkbox" checked={module.enabledByDefault} onChange={event => updatePromptModule(module.id, { enabledByDefault: event.target.checked })} />
+                              默认开启
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="cc-note">模块会进入 system，不会拼进用户原话。聊天里的「＋」只覆盖当前窗口，其他窗口仍使用这里的默认状态。</p>
+                </>
+              )}
+          </section>
+
+          <section className="mt-6 flex flex-col gap-4 border-t border-[var(--color-border-light)] pt-5" aria-labelledby="cc-persona-memory">
+              <h2 id="cc-persona-memory" className="text-meta font-semibold tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">记忆</h2>
+              <div>
+                <label className="cc-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.recallOn}
+                    onChange={e => patch('recallOn', e.target.checked)}
+                  />
+                  <span>
+                    <span className="cc-field-label">注入 OB 记忆</span>
+                    <span className="cc-field-hint">
+                      关掉之后每轮不再查 Haven，回复下方的召回按钮也不出现
+                    </span>
+                  </span>
+                </label>
+              </div>
+          </section>
+          <section className="mt-6 flex flex-col gap-4 border-t border-[var(--color-border-light)] pt-5" aria-labelledby="cc-persona-directories">
+            <div>
+              <h2 id="cc-persona-directories" className="text-meta font-semibold tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">目录</h2>
+              <p className="cc-field-hint mt-1">以后搬去工作台</p>
+            </div>
+              <div className="cc-field">
                 <span className="cc-field-label">能访问哪些目录</span>
                 <span className="cc-field-hint">
                   一行一个绝对路径。第一个当工作目录，其余是附加目录。
@@ -364,245 +455,7 @@ export default function CcPersonaDialog({
                 </p>
               </div>
 
-              {canDelete ? (
-                <div className="border-t border-[var(--color-border-light)] pt-3.5">
-                  {confirmDelete ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-meta text-[var(--color-text-secondary)]">
-                        删掉「{draft.name}」？历史对话会保留
-                      </span>
-                      <button
-                        type="button"
-                        className="cc-btn-danger"
-                        onClick={() => void onDelete(draft.id).then(r => r.ok && onClose())}
-                      >
-                        确认删除
-                      </button>
-                      <button
-                        type="button"
-                        className="cc-btn-ghost"
-                        onClick={() => setConfirmDelete(false)}
-                      >
-                        取消
-                      </button>
-                    </div>
-                  ) : (
-                    <button type="button" className="cc-btn-ghost" onClick={() => setConfirmDelete(true)}>
-                      删除这个协作者
-                    </button>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {tab === 'prompt' ? (
-            <div className="flex flex-col gap-3">
-              <label className="cc-field">
-                <span className="cc-field-label">基础提示词</span>
-                <span className="cc-field-hint">每个协作者独立保存，会放在 system 的最前面；允许留空。</span>
-                <textarea
-                  className="cc-textarea font-mono"
-                  rows={6}
-                  value={draft.basePrompt}
-                  onChange={event => patch('basePrompt', event.target.value)}
-                  placeholder="填写这个协作者始终需要遵守的基础说明"
-                />
-              </label>
-              <div className="border-t border-[var(--color-border-light)]" />
-              {editingPromptModuleId ? (() => {
-                const module = draft.promptModules.find(item => item.id === editingPromptModuleId)
-                if (!module) return null
-                return (
-                  <div className="flex flex-col gap-4">
-                    <button type="button" className="w-fit text-sm text-[var(--color-text-secondary)]" onClick={() => setEditingPromptModuleId(null)}>
-                      ← 返回模块列表
-                    </button>
-                    <label className="cc-field">
-                      <span className="cc-field-label">模块名称</span>
-                      <input className="cc-input" value={module.name} onChange={event => updatePromptModule(module.id, { name: event.target.value })} placeholder="例如：互动规则" />
-                    </label>
-                    <label className="cc-field">
-                      <span className="cc-field-label">提示词内容</span>
-                      <textarea className="cc-textarea font-mono" rows={14} value={module.content} onChange={event => updatePromptModule(module.id, { content: event.target.value })} placeholder="这段内容会作为独立模块加入 system。" />
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
-                      <input type="checkbox" checked={module.enabledByDefault} onChange={event => updatePromptModule(module.id, { enabledByDefault: event.target.checked })} />
-                      新窗口默认开启
-                    </label>
-                    <button
-                      type="button"
-                      className="cc-btn-ghost w-fit text-[var(--color-danger)]"
-                      onClick={() => {
-                        patch('promptModules', draft.promptModules.filter(item => item.id !== module.id))
-                        setEditingPromptModuleId(null)
-                      }}
-                    >
-                      删除这个模块
-                    </button>
-                  </div>
-                )
-              })() : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="cc-field-label">提示词模块</div>
-                      <div className="mt-1 text-meta text-[var(--color-text-tertiary)]">默认开启的模块会用于每个新窗口</div>
-                    </div>
-                    <button type="button" className="cc-btn-ghost" onClick={addPromptModule}>＋ 新增</button>
-                  </div>
-                  {draft.promptModules.length === 0 ? (
-                    <div className="cc-recall-empty">还没有提示词模块</div>
-                  ) : (
-                    <div className="flex flex-col gap-2.5">
-                      {draft.promptModules.map((module, index) => (
-                        <div key={module.id} className="rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3.5">
-                          <button type="button" className="w-full text-left" onClick={() => setEditingPromptModuleId(module.id)}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-sm font-medium text-[var(--color-text-heading)]">{module.name || '未命名模块'}</div>
-                                <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-[var(--color-text-secondary)]">{module.content || '还没有内容'}</div>
-                              </div>
-                              <span className="shrink-0 text-[var(--color-text-tertiary)]">›</span>
-                            </div>
-                          </button>
-                          <div className="mt-3 flex items-center border-t border-[var(--color-border-light)] pt-2.5">
-                            <button type="button" disabled={index === 0} className="cc-btn-ghost px-2 disabled:opacity-30" onClick={() => movePromptModule(module.id, -1)} aria-label="上移">↑</button>
-                            <button type="button" disabled={index === draft.promptModules.length - 1} className="cc-btn-ghost px-2 disabled:opacity-30" onClick={() => movePromptModule(module.id, 1)} aria-label="下移">↓</button>
-                            <label className="ml-auto flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-                              <input type="checkbox" checked={module.enabledByDefault} onChange={event => updatePromptModule(module.id, { enabledByDefault: event.target.checked })} />
-                              默认开启
-                            </label>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <p className="cc-note">模块会进入 system，不会拼进用户原话。聊天里的「＋」只覆盖当前窗口，其他窗口仍使用这里的默认状态。</p>
-                </>
-              )}
-            </div>
-          ) : null}
-
-          {tab === 'memory' ? (
-            <div className="flex flex-col gap-4">
-              <div className="cc-field">
-                <span className="cc-field-label">记忆条目</span>
-                <span className="cc-field-hint">
-                  手写的固定事实，每轮都跟提示词一起送过去。跟 OB 记忆桶是两件事 ——
-                  这里是你钉死的，那边是自动召回的。
-                </span>
-                <div className="mt-2 flex flex-col gap-1.5">
-                  {draft.memoryEntries.length === 0 ? (
-                    <div className="cc-recall-empty">还没有条目</div>
-                  ) : (
-                    draft.memoryEntries.map((entry, i) => (
-                      <div key={`${i}-${entry.slice(0, 8)}`} className="cc-entry-row">
-                        <span className="min-w-0 flex-1 break-words">{entry}</span>
-                        <button
-                          type="button"
-                          aria-label="删掉这条"
-                          className="cc-entry-del"
-                          onClick={() =>
-                            patch(
-                              'memoryEntries',
-                              draft.memoryEntries.filter((_, idx) => idx !== i),
-                            )
-                          }
-                        >
-                          删
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    className="cc-input flex-1"
-                    value={entryInput}
-                    onChange={e => setEntryInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        addEntry()
-                      }
-                    }}
-                    placeholder="加一条，回车确认"
-                  />
-                  <button type="button" className="cc-btn-ghost" onClick={addEntry}>
-                    添加
-                  </button>
-                </div>
-              </div>
-
-              <div className="border-t border-[var(--color-border-light)] pt-3.5">
-                <label className="cc-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={draft.recallOn}
-                    onChange={e => patch('recallOn', e.target.checked)}
-                  />
-                  <span>
-                    <span className="cc-field-label">注入 OB 记忆</span>
-                    <span className="cc-field-hint">
-                      关掉之后每轮不再查 Haven，回复下方的召回按钮也不出现
-                    </span>
-                  </span>
-                </label>
-                <label className="cc-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={draft.semanticOn}
-                    disabled={!draft.recallOn}
-                    onChange={e => patch('semanticOn', e.target.checked)}
-                  />
-                  <span>
-                    <span className="cc-field-label">语义检索</span>
-                    <span className="cc-field-hint">
-                      开着单次约 4-6 秒、召回更全；关掉只做关键词匹配，快但会漏
-                    </span>
-                  </span>
-                </label>
-              </div>
-            </div>
-          ) : null}
-
-          {tab === 'engine' ? (
-            <div className="flex flex-col gap-2.5">
-              {ENGINE_OPTIONS.map(opt => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  disabled={opt.disabled}
-                  onClick={() => patch('engine', opt.id as CcEngine)}
-                  className={`cc-engine-card${draft.engine === opt.id ? ' active' : ''}${
-                    opt.disabled ? ' disabled' : ''
-                  }`}
-                >
-                  <span className="cc-engine-radio" aria-hidden="true" />
-                  <span className="min-w-0">
-                    <span className="block text-note text-[var(--color-text-primary)]">
-                      {opt.label}
-                      {opt.disabled ? (
-                        <span className="ml-1.5 rounded-full bg-[var(--color-surface-tertiary)] px-1.5 py-px text-2xs text-[var(--color-text-tertiary)]">
-                          第 7 步
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="mt-0.5 block text-meta leading-relaxed text-[var(--color-text-disabled)]">
-                      {opt.hint}
-                    </span>
-                  </span>
-                </button>
-              ))}
-              <p className="cc-note">
-                改引擎<b>新对话</b>一定生效，老对话同上（看后台进程还在不在）。额度是启动参数，
-                中途换要重起进程、丢上下文，所以不做热切。
-                <br />
-                模型选择在主页侧边栏，不在这里。
-              </p>
-            </div>
-          ) : null}
+          </section>
         </div>
 
         {/* 底 */}
