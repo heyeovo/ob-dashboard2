@@ -233,7 +233,7 @@ function CcScrollJumps({
 
 export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
   const { chat, people, xhs, normalizedSearchQuery, shownActiveSearchMessageId,
-    selectMode, selectedMessageIds, toggleSelectedMessage, setRecallDetail, copy,
+    selectMode, selectedMessageIds, toggleSelectedMessage, startSelecting, setRecallDetail, copy,
     openSearchFromFloat } = scope
   const conversationMessages = chat.messages.filter(message => !message.handoff)
   const latestAssistantId = [...conversationMessages]
@@ -326,6 +326,13 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
                   selectMode={selectMode}
                   selected={selectedMessageIds.has(m.id)}
                   onToggleSelect={toggleSelectedMessage}
+                  onStartSelect={startSelecting}
+                  onRetry={m.role === 'assistant' && m.id === latestAssistantId && !m.fromHistory && !chat.sending
+                    ? () => {
+                        const previousUser = [...conversationMessages.slice(0, index)].reverse().find(item => item.role === 'user')
+                        if (previousUser?.text) void chat.send(previousUser.text)
+                      }
+                    : undefined}
                 />
                 {m.role === 'user' && (() => {
                   const url = extractXhsUrl(m.text)

@@ -3,6 +3,7 @@ import {
   listSessions,
   listAllTurns,
   listTurns,
+  listConversationChatDays,
   getConversationSession,
   patchConversationRollingContext,
   patchConversationSessionState,
@@ -50,6 +51,13 @@ export async function GET(request: NextRequest) {
       : undefined
 
   if (sessionId) {
+    if (sp.get('days') === '1') {
+      const result = await listConversationChatDays(sessionId)
+      return Response.json(
+        { ok: result.ok, session_id: sessionId, days: result.days, error: result.error || undefined },
+        { status: result.ok ? 200 : 502 },
+      )
+    }
     const [res, state] = await Promise.all([
       sp.get('all') === '1'
         ? listAllTurns(sessionId, {

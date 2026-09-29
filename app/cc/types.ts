@@ -406,4 +406,6 @@ export type CcSessionListItem = {
   source: string
   pinned_at?: string | null
   deleted_at?: string | null
+  mode?: 'chat' | 'work'
+  local_engine_preference?: 'cc' | 'selfhost'
 }

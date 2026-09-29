@@ -4,13 +4,14 @@ import CcPersonaRail from './CcPersonaRail'
 import CcRecallDialog from './CcRecallDialog'
 import CcWindowSettings from './CcWindowSettings'
 import CcHandoffDialog from './CcHandoffDialog'
+import CcChatCalendar from './CcChatCalendar'
 import { draftPersona } from './persona'
 import type { CcChatScope } from './CcChatScope'
 
 export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
   const { chat, people, personaRailOpen, setPersonaRailOpen, settingsFor, setSettingsFor,
-    winSetOpen, setWinSetOpen, historyDateOpen, setHistoryDateOpen, historyDate,
-    setHistoryDate, handoffOpen, setHandoffOpen, recallDetail, setRecallDetail,
+    winSetOpen, setWinSetOpen, historyDateOpen, setHistoryDateOpen,
+    handoffOpen, setHandoffOpen, recallDetail, setRecallDetail,
     pendingForward, setPendingForward, stopSelecting, confirmForwardTo,
     setMobileView } = scope
   const { displayStats, totalChars, conversationText, systemPromptText, shownProvider,
@@ -98,6 +99,12 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
           onSaveWebDefaults={() => void chat.saveWebDefaults()}
           webSaving={chat.webSaving}
           engine={chat.effectiveEngine}
+          onEngineChange={engine => {
+            const chooseMode = engine === 'cc' && chat.effectiveEngine === 'selfhost' && !chat.modeLocked
+            void chat.changeEngine(engine)
+            if (chooseMode) setWinSetOpen(true)
+          }}
+          engineDisabled={chat.isRemote === true || chat.engineSaving || chat.sending}
           mode={chat.mode}
           onModeChange={chat.setMode}
           modeLocked={chat.modeLocked}
@@ -116,33 +123,13 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
         />
       ) : null}
 
-      {historyDateOpen ? (
-        <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button type="button" aria-label="关闭" className="absolute inset-0" onClick={() => setHistoryDateOpen(false)} />
-          <div className="cc-modal relative w-full max-w-xs p-5" role="dialog" aria-label="查看历史消息">
-            <div className="text-note font-medium text-[var(--color-text-heading)]">跳到某一天</div>
-            <div className="mt-1 text-2xs text-[var(--color-text-disabled)]">仍在当前聊天页内；上下滚动可以继续进入相邻日期。</div>
-            <input type="date" value={historyDate} onChange={event => setHistoryDate(event.target.value)} className="mt-4 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs" />
-            <button
-              type="button"
-              className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-meta text-[var(--color-on-primary)]"
-              onClick={() => {
-                void (async () => {
-                  const found = await chat.loadHistoryDay(historyDate)
-                  if (!found) {
-                    chat.setError('这一天没有聊天记录')
-                    return
-                  }
-                  setHistoryDateOpen(false)
-                  window.setTimeout(() => document.getElementById(`chat-day-${historyDate}`)?.scrollIntoView({ block: 'start' }), 50)
-                })()
-              }}
-            >
-              查看这一天
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <CcChatCalendar open={historyDateOpen} sessionId={chat.sessionId}
+        onClose={() => setHistoryDateOpen(false)}
+        onPick={async day => {
+          const found = await chat.loadHistoryDay(day)
+          if (found) window.setTimeout(() => document.getElementById(`chat-day-${day}`)?.scrollIntoView({ block: 'start' }), 50)
+          return found
+        }} />
 
       {/* 换窗 / 新对话弹窗 */}
       {handoffOpen ? (

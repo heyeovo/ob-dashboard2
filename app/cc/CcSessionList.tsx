@@ -43,6 +43,8 @@ export default function CcSessionList({ scope, variant = 'rail' }: { scope: CcCh
       onLoadMoreDeleted={chat.loadMoreDeletedSessions}
       variant={variant}
       notice={chat.sessionActionNote}
+      personaName={scope.people.active.name}
+      personaInitial={scope.people.active.initial}
     />
   )
 }

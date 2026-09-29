@@ -20,6 +20,15 @@ export const EFFORT_OPTIONS: { id: CcEffort; label: string }[] = [
   { id: 'max', label: '最高' },
 ]
 
+/** Compact model name for the chat header; unknown names stay visible verbatim. */
+export function prettyModelName(model: string): string {
+  const name = model.trim()
+  const match = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?(?:-|\[|$)/i.exec(name)
+  if (!match) return name
+  const family = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase()
+  return `${family} ${match[2]}${match[3] ? `.${match[3]}` : ''}`
+}
+
 /** 一个中转站。models 是这个站上能用的模型名（人工填，中转站一般不给可靠的列表接口）。 */
 export type CcProvider = {
   id: string

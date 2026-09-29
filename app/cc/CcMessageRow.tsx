@@ -23,6 +23,26 @@ import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 const LONG_PRESS_MS = 360
 const SEGMENT_REVEAL_MS = 360
 
+function ActionIcon({ kind }: { kind: 'copy' | 'copied' | 'retry' | 'select' }) {
+  return <svg viewBox="0 0 24 24" className="size-[13px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {kind === 'copy' ? <><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>
+      : kind === 'retry' ? <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/>
+      : kind === 'select' ? <><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.5 2.5 4.5-5"/></>
+      : <path d="m5 12 4 4L19 6"/>}
+  </svg>
+}
+
+function ThinkingLabel({ startedAt, active, durationMs }: { startedAt?: number; active: boolean; durationMs?: number }) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!active) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [active])
+  if (active) return <span className="cc-thinking-active">Thinking · {Math.max(0, Math.floor((now - (startedAt || now)) / 1000))}s</span>
+  return <span>Thought process{durationMs != null ? ` · ${(durationMs / 1000).toFixed(1)}s` : ''}</span>
+}
+
 /** token 明细里的数字：等宽对齐，不加粗到抢眼 */
 const USAGE_NUM = 'font-medium tabular-nums text-[var(--color-text-secondary)]'
 
@@ -64,17 +84,6 @@ function UsageDetails({ usage }: { usage: CcTurnUsage }) {
       </div>
     </div>
   )
-}
-
-function formatTime(ms: number) {
-  const d = new Date(ms)
-  const yyyy = String(d.getFullYear()).padStart(4, '0')
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  const ss = String(d.getSeconds()).padStart(2, '0')
-  return `${yyyy}-${month}-${day} ${hh}:${mm}:${ss}`
 }
 
 function formatBytes(bytes: number) {
@@ -133,6 +142,7 @@ type Props = {
   selected?: boolean
   onToggleSelect?: (messageId: string) => void
   onStartSelect?: (messageId: string) => void
+  onRetry?: () => void
 }
 
 export function ccMessageVisibleText(message: CcMessage): string {
@@ -196,6 +206,7 @@ export default function CcMessageRow({
   selected = false,
   onToggleSelect,
   onStartSelect,
+  onRetry,
 }: Props) {
   const isUser = message.role === 'user'
   const persona = personaProp || FALLBACK_PERSONA
@@ -203,10 +214,20 @@ export default function CcMessageRow({
   const usage = message.usage || null
   const { showRuntimeInfo, showTokenInfo } = useChatDisplayPreferences()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const copyTimer = useRef<number | null>(null)
+  useEffect(() => () => { if (copyTimer.current != null) window.clearTimeout(copyTimer.current) }, [])
+  const copyMessage = (text: string) => {
+    onCopy(text)
+    setCopied(true)
+    if (copyTimer.current != null) window.clearTimeout(copyTimer.current)
+    copyTimer.current = window.setTimeout(() => setCopied(false), 1200)
+  }
   // 新生成的当前轮默认展开；从 Haven 读回的历史轮默认折叠。
   // 状态只属于当前页面：实时轮结束后保持展开，刷新后会按历史规则重新折叠。
   const [thinkingOpen, setThinkingOpen] = useState(isCurrentTurn && !message.fromHistory)
   const [openToolId, setOpenToolId] = useState<string | null>(null)
+  const [openToolsGroupId, setOpenToolsGroupId] = useState<string | null>(null)
   // 这一轮的 token 明细，默认收着
   const [usageOpen, setUsageOpen] = useState(false)
   // 上下文预算是诊断信息，收进图标浮窗，避免元数据行过长。
@@ -340,7 +361,7 @@ export default function CcMessageRow({
               onClick={() => setThinkingOpen(open => !open)}
             >
               <span className={`cc-think-caret${thinkingOpen ? ' open' : ''}`} aria-hidden="true" />
-              <span>Claude 的深度思考{message.thinkingMs ? ` (${(message.thinkingMs / 1000).toFixed(1)}s)` : ''}</span>
+              <span>Thought process{message.thinkingMs ? ` · ${(message.thinkingMs / 1000).toFixed(1)}s` : ''}</span>
             </button>
             {thinkingOpen ? (
               <div className="border-t border-[var(--color-border-light)] px-3 py-2 text-[var(--color-text-secondary)]">
@@ -443,7 +464,7 @@ export default function CcMessageRow({
             onPointerLeave={clearTimer}
           >
             {message.attachments?.length ? (
-              <div className={`grid max-w-[360px] gap-2 ${message.attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <div className={`grid max-w-[var(--chat-attachment-width)] gap-2 ${message.attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {message.attachments.map(attachment => (
                   <div key={attachment.id} className="group/image relative overflow-hidden rounded-xl bg-[var(--color-surface-secondary)]">
                     {attachment.cleared || !attachment.previewUrl ? (
@@ -513,7 +534,7 @@ export default function CcMessageRow({
             {forwardedMessage ? (
               <button
                 type="button"
-                className="w-full max-w-[360px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left"
+                className="w-full max-w-[var(--chat-attachment-width)] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] px-3 py-2 text-left"
                 aria-label={`查看转发消息：${forwardedMessage.title}`}
                 onClick={event => {
                   event.stopPropagation()
@@ -578,13 +599,17 @@ export default function CcMessageRow({
             </div>
           ) : null}
 
-          <div className="cc-row-actions cc-time mt-1 pr-1">{formatTime(message.createdAt)}</div>
+          <div className="cc-row-actions cc-time mt-1 flex flex-row-reverse items-center gap-3 pr-1">
+            <button type="button" aria-label="复制消息" title="复制" onClick={event => { event.stopPropagation(); copyMessage(userText) }}><ActionIcon kind={copied ? 'copied' : 'copy'} /></button>
+            {canSelect ? <button type="button" aria-label="多选消息" title="多选" onClick={event => { event.stopPropagation(); onStartSelect?.(message.id) }}><ActionIcon kind="select" /></button> : null}
+            <span>{shortClock(message.createdAt)}</span>
+          </div>
         </div>
       </div>
       {forwardedMessage && forwardOpen ? (
         <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
           <button type="button" aria-label="关闭转发消息" onClick={() => setForwardOpen(false)} className="absolute inset-0" />
-          <div role="dialog" aria-modal="true" aria-label={`转发消息：${forwardedMessage.title}`} className="cc-modal cc-tool-sheet relative flex max-h-[86vh] w-full max-w-2xl flex-col">
+          <div role="dialog" aria-modal="true" aria-label={`转发消息：${forwardedMessage.title}`} className="cc-modal cc-tool-sheet relative flex max-h-[var(--chat-sheet-height)] w-full max-w-2xl flex-col">
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
             <div className="flex items-start gap-3 border-b border-[var(--color-border-light)] px-5 py-4">
               <div className="min-w-0 flex-1">
@@ -643,6 +668,14 @@ export default function CcMessageRow({
   const lastProcessEvent = process.at(-1)
   const trailingText = lastProcessEvent?.type === 'text' ? lastProcessEvent : null
   const visibleProcess = trailingText ? process.slice(0, -1) : process
+  type ProcessGroup = Exclude<CcProcessEvent, { type: 'tool' }> | { type: 'tools'; id: string; tools: CcToolEvent[] }
+  const processGroups: ProcessGroup[] = []
+  for (const event of visibleProcess) {
+    if (event.type !== 'tool') { processGroups.push(event); continue }
+    const previous = processGroups.at(-1)
+    if (previous?.type === 'tools') previous.tools.push(event.tool)
+    else processGroups.push({ type: 'tools', id: event.id, tools: [event.tool] })
+  }
   const hasProcessText = process.some(event => event.type === 'text')
   const finalText = hasProcessText
     ? trailingText?.text || ''
@@ -703,17 +736,14 @@ export default function CcMessageRow({
         </div>
 
         {/* Thinking、助手中间回复与工具按真实顺序展示；末尾文字作为正式回答。 */}
-        {visibleProcess.length > 0 ? (
+        {processGroups.length > 0 ? (
           <div className="cc-process">
-            {visibleProcess.map((event, index) => {
+            {processGroups.map((event, index) => {
               if (event.type === 'thinking') {
-                const thinkingIndex =
-                  visibleProcess.slice(0, index).filter(item => item.type === 'thinking').length
                 const isActive =
                   Boolean(message.streaming) &&
-                  index === visibleProcess.length - 1 &&
+                  index === processGroups.length - 1 &&
                   event.durationMs == null
-                const title = thinkingIndex === 0 ? '深度思考' : '继续思考'
                 return (
                   <div className="cc-think" key={event.id}>
                     <button
@@ -722,11 +752,7 @@ export default function CcMessageRow({
                       onClick={() => setThinkingOpen(value => !value)}
                     >
                       <span>
-                        {isActive
-                          ? '正在思考'
-                          : event.durationMs != null
-                            ? `${title} · ${(event.durationMs / 1000).toFixed(1)}s`
-                            : `${title} · 时长未记录`}
+                        <ThinkingLabel startedAt={event.startedAt} active={isActive} durationMs={event.durationMs} />
                       </span>
                       <span
                         className={`cc-think-caret${thinkingOpen ? ' open' : ''}`}
@@ -755,27 +781,25 @@ export default function CcMessageRow({
                 return <CompactionDivider key={event.id} compaction={event.compaction} />
               }
 
-              const tool = event.tool
-              const status = tool.status || (message.streaming ? 'running' : 'completed')
+              const isOpen = openToolsGroupId === event.id
               return (
                 <div className="cc-toolstrip" key={event.id}>
                   <button
                     type="button"
                     className="cc-toolchip"
-                    onClick={() => setOpenToolId(tool.id)}
+                    onClick={() => setOpenToolsGroupId(current => current === event.id ? null : event.id)}
                   >
-                    <span className="cc-tool-wrench" aria-hidden="true">⌁</span>
-                    <span className="cc-toolchip-name">
-                      调用工具：{shortToolName(tool.name)}
-                    </span>
-                    <span className={`cc-tool-status ${status}`}>
-                      {toolStatusLabel(tool, Boolean(message.streaming))}
-                    </span>
-                    <span className="cc-tool-chevron" aria-hidden="true">›</span>
+                    <span className="cc-toolchip-name">Tools · {event.tools.length}</span>
+                    <span className="cc-tool-chevron" aria-hidden="true">{isOpen ? '⌄' : '›'}</span>
                   </button>
-                  {artifactCardByToolId.has(tool.id) ? (
-                    <CcArtifactCard {...artifactCardByToolId.get(tool.id)!} />
-                  ) : null}
+                  {isOpen ? event.tools.map(tool => <div key={tool.id}>
+                    <button type="button" className="cc-toolchip pl-4" onClick={() => setOpenToolId(tool.id)}>
+                      <span className="cc-toolchip-name">{shortToolName(tool.name)}</span>
+                      <span className={`cc-tool-status ${tool.status || (message.streaming ? 'running' : 'completed')}`}>{toolStatusLabel(tool, Boolean(message.streaming))}</span>
+                      <span className="cc-tool-chevron" aria-hidden="true">›</span>
+                    </button>
+                    {artifactCardByToolId.has(tool.id) ? <CcArtifactCard {...artifactCardByToolId.get(tool.id)!} /> : null}
+                  </div>) : null}
                 </div>
               )
             })}
@@ -832,37 +856,22 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
-        {/* 行内操作：hover 才出。右边贴这一轮的 token 数，点开看明细 */}
+        {/* 行内操作和时间 */}
         {!message.streaming && message.text ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-meta text-[var(--color-text-tertiary)]">
             <button
               type="button"
+              aria-label="复制消息" title="复制"
               className="hover:text-[var(--color-text-secondary)]"
-              onClick={e => {
-                onCopy(message.text)
-                const btn = e.currentTarget
-                btn.textContent = '已复制'
-                setTimeout(() => { btn.textContent = '复制' }, 1200)
-              }}
-            >
-              复制
-            </button>
+              onClick={event => { event.stopPropagation(); copyMessage(message.text) }}><ActionIcon kind={copied ? 'copied' : 'copy'} /></button>
+            {onRetry ? <button type="button" aria-label="重试回复" title="重试" onClick={event => { event.stopPropagation(); onRetry() }}><ActionIcon kind="retry" /></button> : null}
+            {canSelect ? <button type="button" aria-label="多选消息" title="多选" onClick={event => { event.stopPropagation(); onStartSelect?.(message.id) }}><ActionIcon kind="select" /></button> : null}
+            <span className="cc-time">{shortClock(message.createdAt)}</span>
 
             {/* 保存状态图标 */}
-            {message.deliveryState === 'saved' || message.deliveryState === 'replayed' ? (
-              <span title={message.deliveryNote || '已保存'} className="text-[var(--color-success)]">
-                <svg aria-hidden="true" viewBox="0 0 20 10" className="h-3 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="1 5 4 8 10 2" />
-                  <polyline points="7 5 10 8 16 2" />
-                </svg>
-              </span>
-            ) : message.deliveryState === 'saving' ? (
-              <span title={message.deliveryNote || '保存中…'} className="animate-pulse text-[var(--color-primary)]">
-                <svg aria-hidden="true" viewBox="0 0 20 10" className="h-3 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="2 5 6 9 14 1" />
-                </svg>
-              </span>
-            ) : message.deliveryState && message.deliveryState !== 'generating' && message.deliveryState !== 'stopped' ? (
+            {message.deliveryState === 'saving' ? (
+              <span title={message.deliveryNote || '保存中…'} className="cc-saving-indicator size-2 rounded-full border border-current" />
+            ) : message.deliveryState && !['saved', 'replayed', 'generating', 'stopped'].includes(message.deliveryState) ? (
               <>
                 <button
                   type="button"

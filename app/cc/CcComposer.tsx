@@ -320,7 +320,7 @@ export default function CcComposer({
 
       {menuOpen ? (
         <div className="fixed inset-0 z-50 bg-[var(--color-overlay)]/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[28px] float-surface px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[var(--chat-sheet-radius)] float-surface px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
             <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--color-overlay)]/15" />
             {menuView === 'main' ? (
               <>
@@ -382,7 +382,7 @@ export default function CcComposer({
 
       <div className="flex items-end gap-2">
         <button type="button" aria-label="添加" aria-expanded={menuOpen} disabled={disabled || sending || uploading} onClick={() => { setMenuView('main'); setMenuOpen(true) }} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40">+</button>
-        <textarea ref={ref} rows={1} value={value} onChange={event => onChange(event.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={disabled} placeholder={placeholder || '说点什么'} className="flex-1 border-0 bg-transparent px-1 py-1 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-disabled)] disabled:opacity-60" />
+        <textarea ref={ref} rows={1} value={value} onChange={event => onChange(event.target.value)} onKeyDown={handleKeyDown} onPaste={handlePaste} disabled={disabled} placeholder={placeholder || '写点什么……'} className="flex-1 border-0 bg-transparent px-1 py-1 text-sm text-[var(--color-text-primary)] disabled:opacity-60" />
         <button type="button" onClick={sending ? onStop : submit} disabled={disabled || uploading || (!sending && !hasContent)} aria-label={sending ? '停止生成' : uploading ? '附件上传中' : '发送'} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition-colors ${sending ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]' : hasContent && !uploading ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:bg-[var(--color-primary-hover)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-disabled)]'}`}>{sending ? '■' : '↑'}</button>
       </div>
     </div>

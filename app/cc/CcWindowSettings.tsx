@@ -59,6 +59,8 @@ type Props = {
   onSaveWebDefaults: () => void
   webSaving: boolean
   engine: CcEngine
+  onEngineChange: (engine: CcEngine) => void
+  engineDisabled: boolean
   mode: CcMode
   onModeChange: (next: CcMode) => void
   modeLocked: boolean
@@ -120,6 +122,8 @@ export default function CcWindowSettings({
   onSaveWebDefaults,
   webSaving,
   engine,
+  onEngineChange,
+  engineDisabled,
   mode,
   onModeChange,
   modeLocked,
@@ -325,6 +329,17 @@ export default function CcWindowSettings({
               </div>
             </>
           ) : null}
+
+          <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
+          <div className={LABEL}>引擎</div>
+          <div className="mb-3 flex gap-1.5">
+            {(['cc', 'selfhost'] as const).map(nextEngine => (
+              <button key={nextEngine} type="button" disabled={engineDisabled}
+                onClick={() => onEngineChange(nextEngine)} className={seg(engine === nextEngine)}>
+                {nextEngine === 'cc' ? 'cc' : '自建'}
+              </button>
+            ))}
+          </div>
 
           {engine === 'cc' && mode === 'work' ? (
             <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)]/60 p-2.5">

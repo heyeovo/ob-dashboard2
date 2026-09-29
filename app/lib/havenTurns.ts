@@ -154,6 +154,8 @@ export type HavenSession = {
   source: string
   pinned_at?: string | null
   deleted_at?: string | null
+  mode?: 'chat' | 'work'
+  local_engine_preference?: 'cc' | 'selfhost'
 }
 
 export type RecordTurnInput = {
@@ -824,6 +826,27 @@ export async function listTurns(
     ok: true,
     turns: Array.isArray(res.payload.turns) ? (res.payload.turns as HavenTurn[]) : [],
     error: '',
+  }
+}
+
+/** Calendar summary scoped to one profile/session, without turn bodies. */
+export async function listConversationChatDays(sessionId: string): Promise<{
+  ok: boolean
+  days: { day: string; turn_count: number }[]
+  error: string
+}> {
+  const id = (sessionId || '').trim()
+  if (!id) return { ok: false, days: [], error: 'session_id 为空' }
+  const res = await havenFetch({
+    method: 'GET',
+    path: `/gateway/api/conversation/turns?session_id=${encodeURIComponent(id)}&days=1`,
+    sessionId: id,
+  })
+  return {
+    ok: res.ok,
+    days: res.ok && Array.isArray(res.payload.days)
+      ? res.payload.days as { day: string; turn_count: number }[] : [],
+    error: res.error,
   }
 }
 

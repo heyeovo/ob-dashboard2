@@ -205,10 +205,20 @@ html {
      沿用上面的色板，但另开一套尺度：圆角更大、边框更少、行距更松。
      现有页面偏"工具风"（小圆角 + 到处是边框），聊天这块先按新尺度做，
      以后整体调整时反过来照它改别的页面。 */
-  --chat-bubble-radius:     20px;
-  --chat-user-fill:         color-mix(in srgb, var(--theme-accent) 12%, rgb(var(--theme-tint) / var(--glass-opacity)));
+  --chat-bubble-radius:     18px;
+  --chat-user-fill:         color-mix(in srgb, var(--theme-accent) 24%, rgb(var(--theme-tint) / .9));
   --chat-user-text:         var(--color-text-primary);
-  --chat-assistant-fill:    color-mix(in srgb, var(--theme-ink) 5%, rgb(var(--theme-tint) / var(--glass-opacity)));
+  --chat-assistant-fill:    color-mix(in srgb, var(--theme-accent) 6%, rgb(var(--theme-tint) / .9));
+  --chat-bubble-edge:       inset 0 1px 0 rgb(255 255 255 / .6);
+  --chat-bubble-shadow:     0 2px 12px color-mix(in srgb, var(--theme-ink) 7%, transparent);
+  --chat-session-group-fill: rgb(var(--theme-tint) / .78);
+  --chat-session-group-radius: 18px;
+  --chat-main-glow: radial-gradient(closest-side, color-mix(in srgb, var(--theme-accent) 22%, transparent), transparent);
+  --chat-session-dot: color-mix(in srgb, var(--theme-ink) 18%, transparent);
+  --chat-session-dot-work: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  --chat-attachment-width: 360px;
+  --chat-sheet-height: 86vh;
+  --chat-sheet-radius: 28px;
   --chat-assistant-width:   760px;
   --chat-line-height:       1.72;
   --chat-stream-bar:        linear-gradient(180deg, color-mix(in srgb, var(--theme-accent) 62%, transparent), color-mix(in srgb, var(--theme-accent) 18%, transparent));
@@ -309,6 +319,8 @@ html {
 :root[data-background="upload"] .cc-bubble-user,
 :root[data-background="upload"] .cc-bubble-assistant,
 :root[data-background="upload"] .cc-bubble-assistant-segment,
+:root[data-background="upload"] .cc-main-session,
+:root[data-background="upload"] .cc-session-group,
 :root[data-background="upload"] .cc-modal,
 :root[data-background="upload"] .cc-popmenu,
 :root[data-background="upload"] .float-surface,
@@ -606,7 +618,7 @@ h1, h2 {
 /* Chat（/cc 聊天页）                            */
 /* ============================================ */
 
-/* 用户气泡：实心、大圆角、贴右。不画边框。 */
+/* 用户气泡：半透明、大圆角、贴右；用填充与高光，不逐泡模糊。 */
 .cc-bubble-user {
   align-self: flex-end;
   min-width: 0;
@@ -614,6 +626,7 @@ h1, h2 {
   padding: 11px 16px;
   border-radius: var(--chat-bubble-radius);
   background: var(--chat-user-fill);
+  box-shadow: var(--chat-bubble-edge), var(--chat-bubble-shadow);
   color: var(--chat-user-text);
   line-height: 1.6;
   white-space: pre-wrap;
@@ -621,7 +634,7 @@ h1, h2 {
   user-select: text;
 }
 
-/* 助手侧：不给底色不给边框，内容直接摊在页面上。
+/* 助手侧：普通段落贴字宽，结构块整宽，都有半透明底。
    ⚠️ 这里**不能有** white-space: pre-wrap —— 正文走 markdown 渲染了，
    留着会让段落间距翻倍、代码块缩进变双份。换行由 .cc-md 里的块元素负责。 */
 .cc-bubble-assistant {
@@ -631,10 +644,14 @@ h1, h2 {
   line-height: var(--chat-line-height);
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
+  padding: 9px 13px;
+  border-radius: var(--chat-bubble-radius);
+  background: var(--chat-assistant-fill);
+  box-shadow: var(--chat-bubble-edge), var(--chat-bubble-shadow);
 }
 
 /* 完成后的普通聊天段按 display_segments 显示为连续气泡；
-   代码、列表、表格等原子块仍沿用上面的无底色整宽样式。 */
+   代码、列表、表格等原子块沿用整宽样式。 */
 .cc-assistant-segments {
   display: flex;
   width: 100%;
@@ -646,7 +663,7 @@ h1, h2 {
 .cc-bubble-assistant-segment {
   width: fit-content;
   padding: 9px 13px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--chat-bubble-radius);
   background: var(--chat-assistant-fill);
 }
 .cc-bubble-assistant.entering {
@@ -673,25 +690,39 @@ h1, h2 {
   background: var(--chat-stream-bar);
 }
 
-/* 行内操作按钮：默认隐形，hover 到那一行才浮现。手机端常显（没有 hover）。 */
+/* 行内操作按钮：默认淡化，hover 时稍提亮；手机端保持可见。 */
 .cc-row-actions {
-  opacity: 0;
+  opacity: .45;
   transition: opacity var(--duration-normal) var(--ease-standard);
 }
 .cc-row:hover .cc-row-actions,
 .cc-row:focus-within .cc-row-actions {
-  opacity: 1;
+  opacity: .75;
 }
 @media (hover: none) {
-  .cc-row-actions { opacity: 1; }
+  .cc-row-actions { opacity: .45; }
+}
+.cc-thinking-active {
+  background: linear-gradient(90deg, var(--color-text-tertiary) 20%, var(--color-text-secondary) 50%, var(--color-text-tertiary) 80%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: cc-thinking-sweep 1.8s linear infinite;
+}
+@keyframes cc-thinking-sweep { to { background-position: -200% 0; } }
+.cc-saving-indicator { animation: cc-saving-pulse 1.8s ease-in-out infinite; }
+@keyframes cc-saving-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) {
+  .cc-thinking-active, .cc-saving-indicator { animation: none; }
 }
 
 /* 输入框外壳 */
 .cc-composer {
-  border-radius: var(--chat-bubble-radius);
+  border-radius: 999px;
   background: var(--glass-fill);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--chat-shadow-soft);
+  box-shadow: var(--chat-bubble-edge), var(--glass-shadow);
   backdrop-filter: blur(var(--glass-blur));
   transition: border-color var(--duration-normal) var(--ease-standard);
 }
@@ -706,6 +737,12 @@ h1, h2 {
   background: transparent;
   width: 100%;
 }
+.cc-composer textarea::placeholder {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--color-text-disabled);
+}
+:root[data-theme="dusk"] { --chat-bubble-edge: inset 0 1px 0 rgb(255 255 255 / .12); }
 
 /* 生成中的三点 */
 .cc-dots span {
@@ -736,6 +773,31 @@ h1, h2 {
 }
 .cc-rail-item:hover { background: var(--color-surface-secondary); }
 .cc-rail-item.active { background: var(--color-primary-soft); }
+.cc-main-session {
+  background: var(--chat-assistant-fill);
+  box-shadow: var(--chat-bubble-edge), var(--glass-shadow);
+}
+.cc-main-session::before {
+  content: '';
+  position: absolute;
+  right: -40px;
+  top: -50px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: var(--chat-main-glow);
+  pointer-events: none;
+}
+.cc-session-group {
+  background: var(--chat-session-group-fill);
+  border-radius: var(--chat-session-group-radius);
+  box-shadow: var(--chat-bubble-edge);
+}
+.cc-session-line + .cc-session-line { border-top: 1px solid var(--color-border-subtle); }
+.cc-session-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--chat-session-dot); }
+.cc-session-dot.work { background: var(--chat-session-dot-work); }
+.cc-mode-cap { flex: none; border-radius: 999px; background: var(--color-surface-tertiary); padding: 2px 6px; font-size: var(--text-3xs); font-weight: 600; letter-spacing: .1em; color: var(--color-text-secondary); }
+.cc-mode-cap.chat { background: var(--color-primary-soft); color: var(--color-primary); }
 
 /* ============================================ */
 /* Chat 4.5 — markdown / 质感 / thinking / 弹窗   */
@@ -1182,7 +1244,7 @@ h1, h2 {
   margin: 0 0 0.95em;
   border-radius: var(--radius-lg);
   border: 1px solid var(--chat-code-border);
-  background: var(--chat-code-bg);
+  background: color-mix(in srgb, var(--theme-ink) 7%, transparent);
   overflow: hidden;
 }
 .cc-md-codebar {
