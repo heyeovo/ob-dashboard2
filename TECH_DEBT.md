@@ -14,6 +14,7 @@
 | H-01 | Haven 内置单文件 `dashboard.html`（355KB）要不要继续维护 | 🟨 产品决策 | — |
 | H-02 | Haven 根目录 `INTERNALS.md` / `BEHAVIOR_SPEC.md` 旧文档归档 | 🟨 随 Haven 文档梳理处理 | `9c6c8cedd0ca4860` |
 | L-01 | 旧 session 诊断表补 profile 隔离 | ⬜ | — |
+| MEM-01 | 待处理界面已删除，重启每日记忆人工审核时确认新入口 | 🟦 | `ccd4751631644fd9` |
 | CC-02 | 缓存 usage 与中转站账单口径不一致 / 连续缓存写 | ⬜ | — |
 | CC-04 | Agent SDK MCP `tool_result` 后的续写边界 | ⬜ | — |
 | CC-05 | Polaris 导入旧 MCP 工具结果正文缺失 | ⬜ | — |
@@ -58,6 +59,11 @@
 ---
 
 ## 长期遗留
+
+#### MEM-01｜每日记忆人工审核入口
+
+- 记忆库「待处理」界面及 `ReviewSection`、`PendingSection`、`AutoMemoryQueue.tsx` 已删除。Dashboard `/api/daily-chat-memory` 路由与 Haven 接口保留；每日自动记忆目前由 `legacy_daily_memory_paused` 暂停。
+- 若重新开启 `review` 模式，先确认入口是否放到 OB Todo `ccd4751631644fd9` 的日视图，再实现界面。
 
 #### L-01｜旧 session 诊断表补 profile 隔离
 
