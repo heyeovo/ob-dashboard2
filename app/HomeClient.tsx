@@ -9,7 +9,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 export default function HomeClient() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const activeTab = (searchParams.get('tab') as 'timeline' | 'grid' | 'review') || 'timeline'
+  const activeTab = searchParams.get('tab') === 'grid' ? 'grid' : 'timeline'
 
   // ... 其余所有状态、函数、JSX 保持不变，直接复制过来
 }

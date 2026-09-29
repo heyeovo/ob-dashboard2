@@ -233,7 +233,7 @@
 |------|------|------|
 | **SideRail** | `SideRail.tsx` | 桌面端左侧导航栏（4.6 取代原顶部 NavBar） |
 | **BottomTabBar** | `BottomTabBar.tsx` | 手机端底部 5 栏 Tab Bar |
-| **MemoryViewSwitch** | `MemoryViewSwitch.tsx` | 记忆库页内切换：时间线 / 记忆格 / 待处理（桌面与手机共用） |
+| **MemoryViewSwitch** | `MemoryViewSwitch.tsx` | 记忆库页内切换：时间线 / 记忆格（桌面与手机共用） |
 | **MobileShell** | `MobileShell.tsx` | 手机端布局容器（加底部间距） |
 | **SubpageBackButton** | `SubpageBackButton.tsx` | 手机子页面正文标题上方的圆形返回按钮 |
 
@@ -268,7 +268,7 @@ BottomTabBar 在底部显示 5 个 Tab：
 
 主页阶段 3a 使用固定窗楣取代原 mini header：菜单、英文日期、默认协作者小头像。主页为实底窗框，窗洞使用当前外观背景；上传照片只在窗洞中绘制。纪念日浮卡压在窗沿上，窗台的日记本、这一周、照顾仅用细线分段。桌面沿用同一结构并居中至 640px，SideRail 不变。
 
-记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格/待处理。
+记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格。
 
 ### 新增按钮
 
