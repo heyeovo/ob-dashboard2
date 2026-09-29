@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>主页候选 · 一扇窗</title>
+<meta name="description" content="阶段 3 主页的三种做法：安静 / 窗框 / 物件。纪念日、言之·此刻、日记本、这一周、照顾，窗台上趴着奶糖和 Clawd。4 个主题 × 渐变/照片，左右滑着比。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE5,#EEE3E4)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F1DEE3)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F4,#E0E7EC)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1A1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.32)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.5}
+
+  .phone{position:relative;height:720px;border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .scroll{position:absolute;inset:0;overflow-y:auto;padding:14px 18px 130px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .k{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.5}
+  .serif{font-family:"Noto Serif SC",serif}
+
+  /* 窗楣 */
+  .lintel{display:flex;align-items:center;gap:10px;height:34px}
+  .burger{width:30px;height:30px;margin-left:-6px;display:grid;place-items:center;opacity:.55}
+  .burger svg{width:17px;height:17px}
+  .lintel .date{flex:1;font:500 12px "Cormorant Garamond",serif;letter-spacing:.22em}
+  .lintel .day{font:600 13px "Cormorant Garamond",serif;letter-spacing:.16em;color:var(--accent)}
+
+  .hero{padding:30px 2px 26px}
+  .hero h2{font:600 27px/1.3 "Noto Serif SC",serif;letter-spacing:.06em}
+  .hero .amp{font-family:"Cormorant Garamond",serif;font-style:italic;font-weight:500;color:var(--accent);padding:0 .12em}
+  .quote{margin-top:10px;height:18px;width:62%;border-radius:6px;border:1px dashed color-mix(in srgb,var(--ink) 18%,transparent);font-size:9.5px;opacity:.5;display:flex;align-items:center;padding-left:8px}
+
+  /* 纪念日 */
+  .anniv .nm{font:600 16px "Noto Serif SC",serif;margin-top:6px}
+  .anniv .big{display:flex;align-items:baseline;gap:8px;margin-top:2px}
+  .anniv .big b{font:500 60px/1 "Cormorant Garamond",serif;color:var(--accent)}
+  .anniv .big span{font-size:12.5px;opacity:.65}
+  .anniv .rest{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:12px;padding-top:10px;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent);font-size:11px;opacity:.6}
+
+  /* 言之·此刻 */
+  .persona{display:flex;align-items:center;gap:11px}
+  .av{width:36px;height:36px;flex:none;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font:600 16px "Noto Serif SC",serif}
+  .persona .t{font:600 14.5px "Noto Serif SC",serif}
+  .persona .t em{font:italic 500 14px "Cormorant Garamond",serif;opacity:.55;padding-left:3px}
+  .persona .s{font-size:11.5px;opacity:.5;margin-top:2px}
+
+  /* 日记本 */
+  .diary{display:flex;gap:12px}
+  .spine{flex:none;width:3px;border-radius:3px;background:color-mix(in srgb,var(--accent) 60%,transparent)}
+  .diary .t{font:600 15.5px/1.45 "Noto Serif SC",serif;margin-top:5px}
+  .diary .s{font-size:11px;opacity:.5;margin-top:3px}
+
+  /* 这一周 */
+  .week .k{display:flex;justify-content:space-between}
+  .days{display:grid;grid-template-columns:repeat(7,1fr);margin-top:8px;text-align:center}
+  .days div{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .days .w{font-size:9.5px;opacity:.45}
+  .days .n{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:500 15px "Cormorant Garamond",serif}
+  .days .today .n{box-shadow:inset 0 0 0 1.2px var(--accent);color:var(--accent);font-weight:600}
+  .days .future{opacity:.35}
+  .days i{width:4px;height:4px;border-radius:50%;background:transparent}
+  .days .has i{background:var(--accent)}
+
+  .care{font-size:12px;opacity:.55;display:flex;gap:6px;align-items:center}
+  .care b{font-weight:500}
+  .care span{margin-left:auto}
+
+  /* A 安静：什么都直接写在窗外的光里，只用细线分开 */
+  .A .blk{padding:18px 2px}
+  .A .blk+.blk{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+  .A .care{padding:14px 2px}
+
+  /* B 窗框：一圈柔和的边把内容围在中间 */
+  .B .frame{border-radius:28px;padding:6px 16px;background:rgb(var(--tint)/.42);
+    box-shadow:inset 0 0 0 1px rgb(var(--hi)/.55),inset 0 1px 0 rgb(var(--hi)/.8),0 10px 30px color-mix(in srgb,var(--ink) 8%,transparent)}
+  [data-theme="dusk"] .B .frame{box-shadow:inset 0 0 0 1px rgb(var(--hi)/.1),inset 0 1px 0 rgb(var(--hi)/.14),0 10px 30px rgba(0,0,0,.25)}
+  .B .blk{padding:16px 0}
+  .B .blk+.blk{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .B .hero{padding:24px 2px 20px}
+  .B .care{padding:14px 4px}
+
+  /* C 物件：每样东西是一个自己的东西 */
+  .C .blk{margin-bottom:12px}
+  .C .anniv{position:relative;overflow:hidden;border-radius:22px;padding:16px 16px 14px;background:color-mix(in srgb,var(--accent) 7%,rgb(var(--tint)/.88));
+    box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 6px 22px color-mix(in srgb,var(--ink) 9%,transparent)}
+  .C .anniv::before{content:"";position:absolute;right:-50px;top:-60px;width:180px;height:180px;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 26%,transparent),transparent)}
+  .C .anniv>*{position:relative}
+  .C .persona{padding:9px 14px 9px 9px;border-radius:999px;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5);width:fit-content;max-width:100%}
+  .C .diary{border-radius:6px 18px 18px 6px;padding:14px 16px 14px 0;background:rgb(var(--tint)/.8);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5),0 4px 14px color-mix(in srgb,var(--ink) 7%,transparent);overflow:hidden}
+  .C .diary .spine{width:12px;border-radius:0;margin-right:4px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 70%,transparent),color-mix(in srgb,var(--accent) 45%,transparent))}
+  .C .week{border-radius:18px;padding:13px 12px 11px;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .C .care{padding:4px 6px}
+
+  /* D 整扇窗：框不是中间一块，是整页的边；窗楣、内容、照顾都在窗里，窗台就是框的下沿 */
+  .D .scroll{top:10px;left:8px;right:8px;bottom:64px;border-radius:26px;padding:12px 16px 56px;background:rgb(var(--tint)/.16);
+    box-shadow:inset 0 0 0 1px rgb(var(--hi)/.6),inset 0 1px 0 rgb(var(--hi)/.9)}
+  [data-theme="dusk"] .D .scroll{box-shadow:inset 0 0 0 1px rgb(var(--hi)/.12),inset 0 1px 0 rgb(var(--hi)/.16)}
+  .D .hero{padding:26px 2px 20px}
+  .D .blk{padding:17px 0}
+  .D .blk+.blk{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+  .D .care{opacity:.7;font-size:12.5px}
+  .D .sill .ledge{left:4px;right:4px;bottom:-1px}
+
+  /* E：A 的骨架，此刻缩进窗楣，照顾升为一块 */
+  .mini{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font:600 11px "Noto Serif SC",serif;margin-left:2px}
+  .E .blk{padding:18px 2px}
+  .E .blk+.blk{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+  .care2 .k{display:flex;justify-content:space-between}
+  .care2 .row{display:flex;align-items:center;gap:9px;font-size:13px;opacity:.72;margin-top:9px}
+  .care2 .row i{width:5px;height:5px;border-radius:50%;flex:none;background:color-mix(in srgb,var(--accent) 55%,transparent)}
+
+  /* F 窗：上半屏是嵌在厚窗框里的窗，窗外是渐变/照片；下半屏是屋里的窗台 */
+  .phone.F{background:linear-gradient(rgb(var(--tint)/.9),rgb(var(--tint)/.9)),var(--mesh)}
+  .F .scroll{padding:8px 12px 120px}
+  .F .lintel{padding:0 4px}
+  .pane{position:relative;height:250px;margin-top:6px}
+  .pane .view{position:absolute;inset:0;border-radius:30px;overflow:hidden;background-image:var(--mesh);
+    box-shadow:inset 0 3px 14px color-mix(in srgb,var(--ink) 16%,transparent),inset 0 0 0 1px color-mix(in srgb,var(--ink) 6%,transparent)}
+  .pane .view .photo-veil{background:rgb(var(--tint)/.18)}
+  .pane .sky{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:28px;text-align:center}
+  .pane .since{font:500 10px "Cormorant Garamond",serif;letter-spacing:.34em;opacity:.6}
+  .pane h2{font:600 26px/1.3 "Noto Serif SC",serif;letter-spacing:.08em;margin-top:7px;text-shadow:0 1px 12px rgb(var(--tint)/.6)}
+  .pane h2 .amp{font-family:"Cormorant Garamond",serif;font-style:italic;font-weight:500;color:var(--accent);padding:0 .1em}
+  .pane .dayF{font:italic 500 17px "Cormorant Garamond",serif;letter-spacing:.06em;margin-top:6px;color:var(--accent)}
+  .pane .orn{display:flex;align-items:center;gap:8px;margin-top:9px;opacity:.45}
+  .pane .orn i{width:34px;height:1px;background:currentColor}
+  .pane .orn b{width:4px;height:4px;transform:rotate(45deg);background:currentColor}
+  .pane .qF{margin-top:8px;font-size:9.5px;opacity:.45;border:1px dashed color-mix(in srgb,var(--ink) 20%,transparent);border-radius:6px;padding:2px 10px}
+  .annF{position:absolute;right:10px;bottom:-60px;width:60%;border-radius:22px;padding:13px 15px 12px;background:rgb(var(--tint)/.94);
+    box-shadow:inset 0 1px 0 rgb(var(--hi)/.8),0 10px 26px color-mix(in srgb,var(--ink) 14%,transparent)}
+  .annF .nm{font:600 14px "Noto Serif SC",serif;margin-top:4px}
+  .annF .big{display:flex;align-items:baseline;gap:6px}
+  .annF .big b{font:500 44px/1 "Cormorant Garamond",serif;color:var(--accent)}
+  .annF .big span{font-size:11px;opacity:.6}
+  .annF .rest{font-size:10px;opacity:.55;margin-top:8px;line-height:1.6}
+  .catF{position:absolute;left:22px;bottom:-2px;width:78px;z-index:2}
+  .clawdF{position:absolute;right:30px;width:34px;bottom:calc(100% - 2px)}
+  .desk{margin-top:70px;padding:0 6px}
+  .desk .blk{padding:13px 0}
+  .desk .blk+.blk{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+  .F .sill{display:none}
+  .F .tabs{background:rgb(var(--tint)/.94);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 7%,transparent)}
+  .dots{display:flex;gap:3px;height:4px}
+  .dots i,.dots u{width:4px;height:4px;border-radius:50%}
+  .dots i{background:var(--accent)}
+  .dots u{background:color-mix(in srgb,var(--ink) 35%,transparent)}
+  .todayMem{margin-top:8px;padding-left:4px;font-size:10.5px;opacity:.5;display:flex;gap:6px}
+  .todayMem em{font-style:normal;flex:none}
+  .todayMem span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .legend{font-size:9px;opacity:.45;margin-top:8px;display:flex;gap:12px;align-items:center}
+  .legend i,.legend u{display:inline-block;width:4px;height:4px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  .legend i{background:var(--accent)}.legend u{background:color-mix(in srgb,var(--ink) 35%,transparent)}
+
+  /* 窗台：底栏上沿的一条台面，奶糖和 Clawd 趴在上面 */
+  .sill{position:absolute;left:0;right:0;bottom:62px;height:0;pointer-events:none}
+  .sill .ledge{position:absolute;left:10px;right:10px;bottom:-3px;height:6px;border-radius:3px;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.7),0 2px 6px color-mix(in srgb,var(--ink) 10%,transparent)}
+  .sill svg{position:absolute;bottom:2px}
+  .sill .cat{left:34px;width:74px}
+  .sill .clawd{right:42px;width:40px}
+  .sill .hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:9px;opacity:.35;white-space:nowrap}
+
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:62px;display:flex;justify-content:space-around;align-items:center;background:rgb(var(--tint)/.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.35);font-size:10px;opacity:.95}
+  .tabs span{opacity:.45}
+  .tabs span.on{opacity:1;color:var(--accent);font-weight:600}
+
+  /* 抽屉：家里的其他房间 */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .25s}
+  .drawer{position:absolute;top:0;bottom:0;left:0;width:74%;padding:22px 18px;background:rgb(var(--tint)/.86);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);box-shadow:inset -1px 0 0 rgb(var(--hi)/.5),8px 0 30px rgba(0,0,0,.12);transform:translateX(-102%);transition:transform .3s cubic-bezier(.3,.8,.3,1)}
+  .phone.open .scrim{opacity:1;pointer-events:auto}
+  .phone.open .drawer{transform:none}
+  .drawer h3{font:600 20px "Noto Serif SC",serif;letter-spacing:.06em;margin:14px 0 4px}
+  .drawer .k{margin-bottom:18px}
+  .room{display:flex;justify-content:space-between;padding:13px 2px;font-size:14px}
+  .room+.room{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .room.soon{opacity:.35}
+  .room small{font-size:10.5px;opacity:.7}
+</style>
+</head>
+<body data-theme="apricot" data-bg="gradient">
+<header>
+  <h1>一扇窗 · 主页</h1>
+  <p>三种做法，左右滑着比。内容都一样，区别在它们怎么待在窗里。<br>点左上角 ☰ 能拉开抽屉。奶糖和 Clawd 是占位剪影，等插画。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient'}
+const burger='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 12h11M4 17h16"/></svg>'
+// 奶糖：一只揣手趴着的奶牛猫，绿眼睛
+const cat=`<svg class="cat" viewBox="0 0 74 34"><g style="fill:rgb(var(--tint));stroke:color-mix(in srgb,var(--ink) 35%,transparent);stroke-width:1">
+  <path d="M8 33c-2-9 3-16 13-17l3-8 5 7h10l5-7 3 8c9 1 14 8 13 17z"/><path d="M60 31c6 0 10-3 11-8" style="fill:none" stroke-linecap="round"/></g>
+  <path d="M23 16l1-7 5 6z" style="fill:color-mix(in srgb,var(--ink) 70%,transparent)"/><path d="M36 19c5-3 12-3 17 1 1 5-2 9-7 10-6 0-10-5-10-11z" style="fill:color-mix(in srgb,var(--ink) 70%,transparent)"/>
+  <circle cx="29" cy="21" r="1.5" fill="#6FA86A"/><circle cx="41" cy="21" r="1.5" fill="#6FA86A"/></svg>`
+// Clawd：戴墨镜的那只
+const clawd=`<svg class="clawd" viewBox="0 0 40 34"><g fill="#D97757"><rect x="5" y="4" width="30" height="20" rx="3"/><rect x="0" y="11" width="6" height="7" rx="1.5"/><rect x="34" y="11" width="6" height="7" rx="1.5"/>
+  <rect x="8" y="23" width="4" height="10" rx="1"/><rect x="15" y="23" width="4" height="10" rx="1"/><rect x="21" y="23" width="4" height="10" rx="1"/><rect x="28" y="23" width="4" height="10" rx="1"/></g>
+  <rect x="9" y="10" width="22" height="5" rx="2" fill="#2a2320"/></svg>`
+const WEEK=[['一',28,'has'],['二',29,'today'],['三',30,'future'],['四',1,'future'],['五',2,'future'],['六',3,'future'],['日',4,'future']]
+const care='<div class="blk care"><b>照顾</b>· 3 件待办 · 10.1 租房补贴<span>›</span></div>'
+function body(kind){
+  const days=WEEK.map(([w,n,c])=>`<div class="${c}"><span class="w">${w}</span><span class="n">${n}</span><i></i></div>`).join('')
+  const blocks=`
+    <div class="blk anniv"><div class="k">Next · 纪念日</div><div class="nm">半年</div>
+      <div class="big"><b>4</b><span>天后 · 10月3日</span></div>
+      <div class="rest"><span>第 200 天 · 10.19</span><span>一周年 · 4.3</span><span>520 · 5.20</span></div></div>
+    <div class="blk"><div class="persona"><span class="av">言</span><div><div class="t">言之<em>· 此刻</em></div><div class="s">情绪系统休息中 · 看画像 ›</div></div></div></div>
+    <div class="blk"><div class="diary"><div class="spine"></div><div><div class="k">Diary · 日记本</div><div class="t">阶段 2 落地的那个下午</div><div class="s">9.29 · 言之</div></div></div></div>
+    <div class="blk week"><div class="k"><span>This week</span><span>日回顾 ›</span></div><div class="days">${days}</div></div>`
+  const blocksE=blocks.replace(/<div class="blk"><div class="persona">[\s\S]*?<\/div><\/div><\/div><\/div>/,'')+
+    `<div class="blk care2"><div class="k"><span>Care · 照顾</span><span>›</span></div>
+      <div class="row"><i></i>10.1 租房补贴申请</div><div class="row"><i></i>还有 2 件待办</div></div>`
+  return `
+    <div class="lintel"><span class="burger" data-open>${burger}</span><span class="date">TUE · SEP 29</span><span class="day">DAY 180</span>${kind==='E'?'<span class="mini">言</span>':''}</div>
+    <div class="hero"><h2>小言<span class="amp">&amp;</span>小羊的家</h2><div class="quote">语录位 · 以后随机一句</div></div>
+    <div class="frame">${kind==='E'?blocksE:blocks}${kind==='D'?care:''}</div>
+    ${kind==='D'||kind==='E'?'':care}`
+}
+const WEEKF=[['一',28,'','iu'],['二',29,'today','u'],['三',30,'future',''],['四',1,'future',''],['五',2,'future',''],['六',3,'future',''],['日',4,'future','']]
+function bodyF(){
+  const days=WEEKF.map(([w,n,c,d])=>`<div class="${c}"><span class="w">${w}</span><span class="n">${n}</span><span class="dots">${d.includes('i')?'<i></i>':''}${d.includes('u')?'<u></u>':''}</span></div>`).join('')
+  return `
+    <div class="lintel"><span class="burger" data-open>${burger}</span><span class="date">TUE · SEP 29</span><span class="mini">言</span></div>
+    <div class="pane">
+      <div class="view">${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+        <div class="sky"><div class="since">SINCE 04 · 03</div><h2>小言<span class="amp">&amp;</span>小羊的家</h2><div class="dayF">Day 180</div>
+          <div class="orn"><i></i><b></b><i></i></div><div class="qF">语录位 · 以后随机一句</div></div></div>
+      ${cat.replace('class="cat"','class="catF"')}
+      <div class="annF">${clawd.replace('class="clawd"','class="clawdF"')}<div class="k">Next · 纪念日</div><div class="nm">半年</div>
+        <div class="big"><b>4</b><span>天后 · 10月3日</span></div>
+        <div class="rest">第 200 天 · 10.19<br>一周年 · 4.3　520 · 5.20</div></div>
+    </div>
+    <div class="desk">
+      <div class="blk"><div class="diary"><div class="spine"></div><div><div class="k">Diary · 日记本</div><div class="t">阶段 2 落地的那个下午</div><div class="s">9.29 · 言之</div></div></div></div>
+      <div class="blk week"><div class="k"><span>This week</span><span>日回顾 ›</span></div><div class="days">${days}</div>
+        <div class="todayMem"><em>今天新记忆 ·</em><span>家的底色与一扇窗 等 2 条</span></div></div>
+      <div class="blk care2"><div class="k"><span>Care · 照顾</span><span>›</span></div>
+        <div class="row"><i></i>10.1 租房补贴申请</div><div class="row"><i></i>还有 2 件待办</div></div>
+    </div>`
+}
+function phone(kind){
+  return `<div class="phone ${kind}">
+    ${state.bg==='photo'&&kind!=='F'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <div class="scroll">${kind==='F'?bodyF():body(kind)}</div>
+    <div class="sill"><div class="ledge"></div>${cat}${clawd}</div>
+    <div class="tabs"><span class="on">主页</span><span>记忆库</span><span>聊天</span><span>工作台</span><span>设置</span></div>
+    <div class="scrim" data-close></div>
+    <div class="drawer"><h3>家里的其他房间</h3><div class="k">Rooms</div>
+      <div class="room"><span>关系轨迹</span><small>9月 · 日常 ›</small></div>
+      <div class="room soon"><span>语录</span><small>以后</small></div>
+      <div class="room soon"><span>经期</span><small>以后</small></div>
+      <div class="room soon"><span>聊天字数</span><small>以后</small></div>
+    </div>
+  </div>`
+}
+const META={
+  A:['A · 安静','没有卡片，所有东西直接写在窗外的光里，用细线分开。留白最多，最像一个地方，但层次最轻。'],
+  B:['B · 窗框','一圈柔和的亮边把纪念日到这一周围在中间，窗楣在框外上方，照顾那行落在框下面。最贴「一扇窗」的字面意思。'],
+  D:['D · 整扇窗','框不再是中间一块，而是整页的边：窗楣、标题、纪念日一直到照顾，全都在同一扇窗里，平起平坐。框的下沿就是窗台，奶糖和 Clawd 趴在上面。'],
+  F:['F · 窗','上半屏是嵌在厚窗框里的一扇窗，窗外是渐变/你的照片（以后下雨），窗上写着家和天数。纪念日卡半截压在窗沿上，Clawd 站在卡上，奶糖趴在窗沿。下半屏是屋里的窗台：日记本、这一周、照顾。'],
+  E:['E · 安静 +','A 的骨架。言之·此刻缩成窗楣右边的小头像，以后情绪系统好了旁边再长出一个词；照顾升成和日记本、这一周一样的一块，列出最近要做的事。'],
+  C:['C · 物件','每样东西做成自己的样子：纪念日是一张发光的卡，此刻是一颗胶囊，日记本有一道书脊，这一周是一小块玻璃。最热闹，也最像 App。'],
+}
+function render(){
+  document.body.dataset.theme=state.theme;document.body.dataset.bg=state.bg
+  document.getElementById('ctrl').innerHTML=
+    THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')
+  document.getElementById('rail').innerHTML=['F','E','B'].map(k=>
+    `<div class="slot">${phone(k)}<div class="meta"><b>${META[k][0]}</b><small>${META[k][1]}</small></div></div>`).join('')
+}
+document.addEventListener('click',e=>{
+  if(e.target.closest('[data-open]')){e.target.closest('.phone').classList.add('open');return}
+  if(e.target.closest('[data-close]')){e.target.closest('.phone').classList.remove('open');return}
+  const el=e.target.closest('button');if(!el)return
+  if(el.dataset.t)state.theme=el.dataset.t;else if(el.dataset.b)state.bg=el.dataset.b;else return
+  const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x
+})
+render()
+</script>
+</body>
+</html>
