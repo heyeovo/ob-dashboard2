@@ -126,6 +126,7 @@
 | `--radius-lg` | 14px | Card(padding=md) |
 | `--radius-xl` | 16px | Card(padding=lg) |
 | `--radius-2xl` | 22px | 弹窗/Modal |
+| `--radius-window` | 30px | 主页窗洞圆角 |
 
 ### 动效
 
@@ -162,6 +163,8 @@
 | `--chat-user-fill`, `--chat-assistant-fill`, `--chat-bubble-radius`, `--chat-bubble-edge`, `--chat-bubble-shadow` | 阶段 2a 的两侧半透明气泡：用户 24% 强调色、助手 6% 强调色、90% tint；共用 18px 圆角、顶部高光与轻阴影，不逐泡模糊 |
 | `--chat-session-group-fill`, `--chat-session-group-radius`, `--chat-main-glow`, `--chat-session-dot*` | 对话列表 A：78% tint 的细线分组、18px 圆角、主窗右上角强调色光晕与窗口模式圆点 |
 | `--chat-attachment-width`, `--chat-sheet-height`, `--chat-sheet-radius` | 聊天附件最大宽度和聊天浮层尺寸；输入区的安全区域内边距保留与系统 inset 的计算 |
+| `--home-frame-fill`, `--home-anniversary-fill`, `--home-window-inset` | 阶段 3a 主页窗框实底、纪念日浮卡、窗洞内阴影；上传照片只画在窗洞里 |
+| `--home-cat-eye`, `--home-clawd-glasses`, `--radius-window` | 窗沿占位剪影细节色与窗洞 30px 圆角 |
 | `--effect-rain-intensity` | 透明玻璃水珠的数量与可见度；低强度水珠较少且较淡，高强度叠加更多水珠；默认关闭，页面不可见暂停，减少动态效果时静止 |
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
@@ -191,6 +194,7 @@
 | 小字 | `text-3xs` / `text-2xs` / `text-meta` / `text-xs` | 9 / 10 / 11 / 12px |
 | 正文 | `text-note` / `text-sm` / `text-md` / `text-base` | 13 / 14 / 15 / 16px |
 | 标题 | `text-lg` / `text-xl` / `text-2xl` / `text-3xl` / `text-4xl` | 18 / 20 / 24 / 30 / 36px |
+| 主页大数字 | `--text-hero`（仅 CSS 变量，主页纪念日倒数） | 44px，跟标题系数缩放 |
 
 所有档位以 rem 定义，先受「整体字号」影响，再乘所属层级的系数；新档位也有对应的行高 Token。以后使用命名档位类，不再写 `text-[Npx]`。`globals.css` 的固定字号也引用同一组 Token；Markdown 标题等相对字号保持 `em`。手机端输入框、textarea 和 select 的实际字号至少 16px，避免 iPhone 聚焦时页面自动放大。
 
@@ -258,6 +262,8 @@ BottomTabBar 在底部显示 5 个 Tab：
 底栏内容高 56px，另加 `env(safe-area-inset-bottom)`；主页、记忆库、工作台和设置的手机顶栏固定在状态栏下方，聊天页的消息区域独立滚动。
 
 普通子页面的手机标题随正文自然滚动；返回按钮放在标题上方。小作品全屏查看器和登录页保留专用布局。五个主页面的顶栏内容随各自页面重设计阶段再定：聊天阶段 2，主页/记忆库阶段 3，工作台/设置阶段 4。
+
+主页阶段 3a 使用固定窗楣取代原 mini header：菜单、英文日期、默认协作者小头像。主页为实底窗框，窗洞使用当前外观背景；上传照片只在窗洞中绘制。纪念日浮卡压在窗沿上，窗台的日记本、这一周、照顾仅用细线分段。桌面沿用同一结构并居中至 640px，SideRail 不变。
 
 记忆页顶部有 mini header（`md:hidden`）：左 Ombre Brain logo，右 MemoryViewSwitch 切换时间线/记忆格/待处理。
 

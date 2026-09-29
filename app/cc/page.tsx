@@ -85,6 +85,19 @@ export default function CcChatPage() {
     }
   }, [])
 
+  // 主页抽屉的「言」卡片用 /cc?prompt=1 打开提示词页；协作者加载完再开，开完把参数去掉
+  useEffect(() => {
+    if (people.loading) return
+    if (new URLSearchParams(window.location.search).get('prompt') !== '1') return
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('prompt')
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+      setSettingsFor(people.active)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [people.loading, people.active])
+
   // 底栏点「聊天」回来时回到哪：在对话里就记这个对话，在列表或历史窗口就记空（回列表）
   useEffect(() => {
     if (!chat.sessionId) return

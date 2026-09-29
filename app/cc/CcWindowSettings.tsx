@@ -36,6 +36,8 @@ function fmtCost(usd: number) {
 
 type Props = {
   sessionId: string
+  /** 只读显示；改名在对话列表 */
+  sessionTitle?: string
   personaId: string
   stats: CcSessionStats
   /** 界面上这一窗的总字数（消息正文加起来） */
@@ -103,6 +105,7 @@ function seg(on: boolean) {
 
 export default function CcWindowSettings({
   sessionId,
+  sessionTitle,
   personaId,
   stats,
   totalChars,
@@ -240,6 +243,10 @@ export default function CcWindowSettings({
           <>
           {/* ── 只读信息 ── */}
           <div className="mb-1">
+            <div className={ROW}>
+              <span className={KEY}>窗口名</span>
+              <span className={`${VAL} truncate`}>{sessionTitle || '新对话'}</span>
+            </div>
             <div className={ROW}>
               <span className={KEY}>会话 id</span>
               <code className={`${VAL} font-mono text-2xs`}>{sessionId || '—'}</code>

@@ -80,6 +80,7 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
       {winSetOpen ? (
         <CcWindowSettings
           sessionId={chat.sessionId}
+          sessionTitle={chat.sessionTitle}
           personaId={people.active.id}
           stats={displayStats}
           totalChars={totalChars}

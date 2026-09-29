@@ -4,6 +4,7 @@ import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
+import { bucketDate, bucketName, isLegacyDailyImpression } from '../lib/dailyBucketDate'
 
 type Persona = { id: string; name?: string }
 type DailyReview = {
@@ -59,41 +60,8 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit',
 })
 
-function dateKey(value?: unknown): string | null {
-  if (typeof value !== 'string' || !value.trim()) return null
-  const direct = value.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (direct) return direct[1]
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : DATE_FORMATTER.format(parsed)
-}
-
 function bucketMetadata(bucket: BucketListItem) {
   return bucket.metadata && typeof bucket.metadata === 'object' ? bucket.metadata : {}
-}
-
-function bucketTags(bucket: BucketListItem): string[] {
-  const metadataTags = bucketMetadata(bucket).tags
-  const tags = Array.isArray(bucket.tags) ? bucket.tags : Array.isArray(metadataTags) ? metadataTags : []
-  return tags.map(String)
-}
-
-function isLegacyDailyImpression(bucket: BucketListItem): boolean {
-  const metadata = bucketMetadata(bucket)
-  const marker = metadata.daily_impression
-  return bucketTags(bucket).some(tag => tag.toLowerCase() === 'daily_impression')
-    || marker === true
-    || marker === 1
-    || (typeof marker === 'string' && ['true', '1', 'daily_impression'].includes(marker.toLowerCase()))
-    || String(metadata.type ?? bucket.type ?? '').toLowerCase() === 'daily_impression'
-}
-
-function bucketDate(bucket: BucketListItem) {
-  const metadata = bucketMetadata(bucket)
-  return dateKey(bucket.event_time ?? metadata.event_time ?? bucket.created ?? metadata.created)
-}
-
-function bucketName(bucket: BucketListItem) {
-  return bucket.name || String(bucketMetadata(bucket).name || '') || bucket.id
 }
 
 function bucketContent(bucket: BucketListItem) {
@@ -153,6 +121,15 @@ export default function DailyReviewsPage() {
   const [bucketSaving, setBucketSaving] = useState(false)
   const [operating, setOperating] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const date = new URLSearchParams(window.location.search).get('date')
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date))) {
+      setSelectedDate(date)
+      setYear(Number(date.slice(0, 4)))
+      setMonth(Number(date.slice(5, 7)) - 1)
+    }
+  }, [])
 
   const loadData = useCallback(async (selectedPersona: string, signal?: AbortSignal) => {
     setError('')
