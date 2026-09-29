@@ -122,6 +122,7 @@ function laneIdForPick(pick: CcUpstreamPick): string {
 }
 
 const INITIAL_HISTORY_LIMIT = 50
+const SESSION_PAGE_SIZE = 60
 const SESSION_HISTORY_CACHE_TTL_MS = 60_000
 const MAX_CACHED_SESSIONS = 5
 
@@ -151,6 +152,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [deletedSessionsTotal, setDeletedSessionsTotal] = useState(0)
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [deletedSessionsLoadingMore, setDeletedSessionsLoadingMore] = useState(false)
+  const [sessionsTotal, setSessionsTotal] = useState(0)
+  const [sessionsLoadingMore, setSessionsLoadingMore] = useState(false)
+  // 点过「加载更多」后，定时刷新也按已加载的数量拉，列表不会缩回 60 个
+  const loadedSessionCountRef = useRef(SESSION_PAGE_SIZE)
   const [messages, setMessages] = useState<CcMessage[]>([])
   const [handoffTranscript, setHandoffTranscript] = useState('')
   const [isRolling, setIsRolling] = useState(false)
@@ -360,14 +365,17 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     try {
       const qs = personaId ? `&persona_id=${encodeURIComponent(personaId)}` : ''
       const [activeResponse, deletedResponse] = await Promise.all([
-        fetch(`/api/cc-turns?limit=60${qs}`, { cache: 'no-store' }),
+        fetch(`/api/cc-turns?limit=${Math.max(SESSION_PAGE_SIZE, loadedSessionCountRef.current)}${qs}`, { cache: 'no-store' }),
         fetch(`/api/cc-turns?limit=60&deleted=1${qs}`, { cache: 'no-store' }),
       ])
       const [activeData, deletedData] = await Promise.all([
         activeResponse.json(),
         deletedResponse.json(),
       ])
-      if (activeData.ok && Array.isArray(activeData.sessions)) setSessions(activeData.sessions)
+      if (activeData.ok && Array.isArray(activeData.sessions)) {
+        setSessions(activeData.sessions)
+        setSessionsTotal(Number.isFinite(Number(activeData.total)) ? Number(activeData.total) : activeData.sessions.length)
+      }
       if (deletedData.ok && Array.isArray(deletedData.sessions)) {
         setDeletedSessions(deletedData.sessions)
         setDeletedSessionsTotal(Number.isFinite(Number(deletedData.total)) ? Number(deletedData.total) : deletedData.sessions.length)
@@ -378,6 +386,37 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       setSessionsLoading(false)
     }
   }, [personaId])
+
+  const loadMoreSessions = useCallback(async () => {
+    if (sessionsLoadingMore || sessions.length >= sessionsTotal) return
+    setSessionsLoadingMore(true)
+    try {
+      const qs = personaId ? `&persona_id=${encodeURIComponent(personaId)}` : ''
+      const response = await fetch(
+        `/api/cc-turns?limit=${SESSION_PAGE_SIZE}&offset=${sessions.length}${qs}`,
+        { cache: 'no-store' },
+      )
+      const data = await response.json()
+      if (!response.ok || !data.ok || !Array.isArray(data.sessions)) {
+        throw new Error(String(data.error || '读取更多窗口失败'))
+      }
+      setSessions(previous => {
+        const next = [
+          ...previous,
+          ...data.sessions.filter((item: CcSessionListItem) => !previous.some(existing => existing.session_id === item.session_id)),
+        ]
+        loadedSessionCountRef.current = next.length
+        return next
+      })
+      setSessionsTotal(Number.isFinite(Number(data.total)) ? Number(data.total) : sessionsTotal)
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '读取更多窗口失败'
+      setError(message)
+      setSessionActionNote(message)
+    } finally {
+      setSessionsLoadingMore(false)
+    }
+  }, [personaId, sessions.length, sessionsLoadingMore, sessionsTotal])
 
   const loadMoreDeletedSessions = useCallback(async () => {
     if (deletedSessionsLoadingMore || deletedSessions.length >= deletedSessionsTotal) return
@@ -1951,6 +1990,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     deletedSessions,
     deletedSessionsTotal,
     deletedSessionsLoadingMore,
+    sessionsTotal,
+    sessionsLoadingMore,
     sessionsLoading,
     sessionActionNote,
     sessionTitle,
@@ -1979,6 +2020,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     pinSession,
     deleteSession,
     permanentlyDeleteSession,
+    loadMoreSessions,
     loadMoreDeletedSessions,
     localEnginePreference,
     effectiveEngine,

@@ -8,7 +8,7 @@ import MemoryViewSwitch from '../components/MemoryViewSwitch'
 import DetailPanel from '../components/DetailPanel'
 import KnobRow from '../components/KnobRow'
 import type { Bucket, BucketDetail, QuickFilter, DatePreset } from './memoryTypes'
-import { isFeel, isJourney, matchesQuickFilter, matchesDateFilter, getTopTags, groupByMonth, getMonthChapters, getOnThisDay } from './memoryFilters'
+import { isFeel, isJourney, matchesQuickFilter, matchesDateFilter, groupByMonth, getMonthChapters, getOnThisDay } from './memoryFilters'
 import { SkeletonCard } from './MemoryCard'
 import MemoryGrid from './MemoryGrid'
 import MemoryTimeline from './MemoryTimeline'
@@ -27,7 +27,6 @@ function HomeClient() {
   const [searchResults, setSearchResults] = useState<Bucket[] | null>(null)
   const [searchLoading, setSearchLoading] = useState(false)
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
-  const [activeTag, setActiveTag] = useState<string | null>(null)
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
@@ -92,13 +91,12 @@ function HomeClient() {
 
   useEffect(() => {
     setQuickFilter('all')
-    setActiveTag(null)
   }, [activeTab])
 
   const doSearch = async (q: string) => {
     if (!q.trim()) { setSearchResults(null); return }
     setSearchLoading(true)
-    setQuickFilter('all'); setActiveTag(null); setDatePreset('all')
+    setQuickFilter('all'); setDatePreset('all')
     setCustomStart(''); setCustomEnd('')
 
     // Tokenize: split by whitespace, then each token as exact substring
@@ -227,12 +225,10 @@ function HomeClient() {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const topTags = useMemo(() => getTopTags(buckets), [buckets])
   const baseList = searchResults ?? buckets
   const displayed = baseList.filter(b =>
     matchesQuickFilter(b, quickFilter) &&
-    matchesDateFilter(b, datePreset, customStart, customEnd) &&
-    (!activeTag || (activeTag === 'feel' ? isFeel(b) : (b.tags ?? []).includes(activeTag)))
+    matchesDateFilter(b, datePreset, customStart, customEnd)
   )
 
   const monthlyGroups = useMemo(() => groupByMonth(displayed), [displayed]);
@@ -306,14 +302,14 @@ function HomeClient() {
       </div>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8">
-        <MemoryFilters search={search} onSearchChange={onSearchChange} statusCounts={statusCounts} quickFilter={quickFilter} setQuickFilter={setQuickFilter} activeTag={activeTag} setActiveTag={setActiveTag} topTags={topTags} datePreset={datePreset} setDatePreset={setDatePreset} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
+        <MemoryFilters search={search} onSearchChange={onSearchChange} statusCounts={statusCounts} quickFilter={quickFilter} setQuickFilter={setQuickFilter} datePreset={datePreset} setDatePreset={setDatePreset} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
 
         {activeTab === 'timeline' && onThisDay && <button type="button" onClick={() => openBucket(onThisDay.bucket.id)} className="memory-ago w-full flex gap-3 p-3 text-left mb-5">
           <span className="flex-none w-10 h-10 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)] grid place-items-center italic text-sm" style={{ fontFamily: 'var(--font-display)' }}>{Number(onThisDay.date.slice(5, 7))}.{Number(onThisDay.date.slice(8, 10))}</span>
           <span className="min-w-0">
             <span className="block text-meta tracking-wide text-[var(--color-text-tertiary)]">{onThisDay.label}</span>
             <span className="block font-semibold text-sm mt-0.5" style={{ fontFamily: 'var(--font-display)' }}>{onThisDay.bucket.name}</span>
-            <span className="block text-xs text-[var(--color-text-secondary)] line-clamp-2 mt-0.5">{onThisDay.bucket.content_preview}</span>
+            <span className="text-xs text-[var(--color-text-secondary)] line-clamp-2 mt-0.5">{onThisDay.bucket.content_preview}</span>
           </span>
         </button>}
 

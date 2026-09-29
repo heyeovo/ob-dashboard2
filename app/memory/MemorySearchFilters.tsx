@@ -1,10 +1,9 @@
 import { DATE_PRESETS, QUICK_FILTERS } from './memoryFilters'
 import type { DatePreset, QuickFilter } from './memoryTypes'
 
-export default function MemoryFilters({ search, onSearchChange, statusCounts, quickFilter, setQuickFilter, activeTag, setActiveTag, topTags, datePreset, setDatePreset, customStart, setCustomStart, customEnd, setCustomEnd }: {
+export default function MemoryFilters({ search, onSearchChange, statusCounts, quickFilter, setQuickFilter, datePreset, setDatePreset, customStart, setCustomStart, customEnd, setCustomEnd }: {
   search: string; onSearchChange: (value: string) => void; statusCounts: Record<QuickFilter, number>;
   quickFilter: QuickFilter; setQuickFilter: (value: QuickFilter) => void;
-  activeTag: string | null; setActiveTag: (value: string | null) => void; topTags: string[];
   datePreset: DatePreset; setDatePreset: (value: DatePreset) => void;
   customStart: string; setCustomStart: (value: string) => void; customEnd: string; setCustomEnd: (value: string) => void
 }) {
@@ -23,9 +22,5 @@ export default function MemoryFilters({ search, onSearchChange, statusCounts, qu
       <input aria-label="开始日期" type="date" value={customStart} onChange={event => setCustomStart(event.target.value)} className="memory-search px-2 text-base md:text-sm min-w-0 flex-1" />
       <input aria-label="结束日期" type="date" value={customEnd} onChange={event => setCustomEnd(event.target.value)} className="memory-search px-2 text-base md:text-sm min-w-0 flex-1" />
     </div>}
-    <div className="flex gap-4 overflow-x-auto no-scrollbar text-xs text-[var(--color-text-tertiary)] py-1">
-      <button type="button" onClick={() => setActiveTag(null)} className={`flex-none ${activeTag === null ? 'text-[var(--color-primary)]' : ''}`}>热门标签</button>
-      {['feel', ...topTags.filter(tag => tag !== 'feel')].map(tag => <button key={tag} type="button" onClick={() => setActiveTag(activeTag === tag ? null : tag)} className={`flex-none ${activeTag === tag ? 'text-[var(--color-primary)]' : ''}`}>{tag}</button>)}
-    </div>
   </div>
 }

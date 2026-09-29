@@ -76,17 +76,6 @@ export function formatDateGroup(dateStr: string) {
   return formatReviewDate(dateStr)
 }
 
-export function getTopTags(buckets: Bucket[], n = 10): string[] {
-  if (!Array.isArray(buckets)) return [];
-  const freq = new Map<string, number>();
-  for (const b of buckets)
-    for (const t of b.tags ?? []) freq.set(t, (freq.get(t) ?? 0) + 1);
-  return Array.from(freq.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
-    .map(([t]) => t);
-}
-
 export function groupByDate(buckets: Bucket[]) {
   const map = new Map<string, Bucket[]>()
   for (const b of buckets) {

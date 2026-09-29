@@ -18,6 +18,9 @@ type Props = {
   sessions: CcSessionListItem[]
   deletedSessions: CcSessionListItem[]
   deletedSessionsTotal: number
+  sessionsTotal: number
+  sessionsLoadingMore: boolean
+  onLoadMore: () => Promise<void>
   deletedSessionsLoadingMore: boolean
   activeSessionId: string
   activeHistoricalKey: string
@@ -68,6 +71,9 @@ export default function CcSessionRail({
   sessions,
   deletedSessions,
   deletedSessionsTotal,
+  sessionsTotal,
+  sessionsLoadingMore,
+  onLoadMore,
   deletedSessionsLoadingMore,
   activeSessionId,
   activeHistoricalKey,
@@ -295,7 +301,7 @@ export default function CcSessionRail({
         <div className="cc-mobile-list-topbar flex items-center justify-between px-4 py-3">
           <div>
             <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--color-text-heading)]">对话</h1>
-            <div className="mt-1 text-2xs uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">{loading ? '正在同步窗口…' : `${sessions.length} WINDOWS`}</div>
+            <div className="mt-1 text-2xs uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">{loading ? '正在同步窗口…' : `${Math.max(sessionsTotal, sessions.length)} WINDOWS`}</div>
           </div>
           <button type="button" onClick={onNew} aria-label="新对话" className="flex size-11 items-center justify-center rounded-full bg-[var(--color-primary)] text-xl text-[var(--color-on-primary)] shadow-[var(--glass-shadow)]">+</button>
         </div>
@@ -338,7 +344,7 @@ export default function CcSessionRail({
                 </span>
                 <span className="mt-0.5 text-2xs text-[var(--color-text-tertiary)]">{session.turn_count.toLocaleString()} 轮</span>
               </button>
-              <span className="shrink-0 self-start pt-3 text-2xs text-[var(--color-text-tertiary)]">{clockTime(session.last_at)}</span>
+              <span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{clockTime(session.last_at)}</span>
               <button type="button" aria-label={`管理 ${session.title || session.session_id}`} onClick={() => setMenuId(current => current === session.session_id ? '' : session.session_id)} className="flex size-11 shrink-0 items-center justify-center text-[var(--color-text-tertiary)]">···</button>
               {menuId === session.session_id ? <div className="cc-popmenu absolute right-2 top-11 z-30 flex w-40 flex-col p-1">
                 <button type="button" onClick={() => void pin(session)} className="cc-popmenu-item text-left">置顶为主窗</button>
@@ -347,6 +353,16 @@ export default function CcSessionRail({
               </div> : null}
             </div>)}
           </div>}
+          {sessions.length < sessionsTotal ? (
+            <button
+              type="button"
+              disabled={sessionsLoadingMore}
+              onClick={() => void onLoadMore()}
+              className="mt-2 w-full rounded-[var(--radius-md)] px-3 py-2.5 text-xs text-[var(--color-primary)] disabled:opacity-50"
+            >
+              {sessionsLoadingMore ? '加载中…' : `加载更多（还有 ${sessionsTotal - sessions.length} 个）`}
+            </button>
+          ) : null}
           <div className="mb-2 mt-5 px-1 text-2xs uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">MORE</div>
           <div className="cc-session-group overflow-hidden">
             <button type="button" onClick={() => setMobileSection('historical')} className="cc-session-line flex min-h-12 w-full items-center justify-between px-3 text-left text-note text-[var(--color-text-secondary)]">
@@ -391,6 +407,16 @@ export default function CcSessionRail({
             <div className="cc-session-group">
               {regularSessions.map(session => sessionItem(session))}
             </div>
+            {sessions.length < sessionsTotal ? (
+              <button
+                type="button"
+                disabled={sessionsLoadingMore}
+                onClick={() => void onLoadMore()}
+                className="mt-2 w-full rounded-[var(--radius-md)] px-2.5 py-2 text-meta text-[var(--color-primary)] disabled:opacity-50"
+              >
+                {sessionsLoadingMore ? '加载中…' : `加载更多（还有 ${sessionsTotal - sessions.length} 个）`}
+              </button>
+            ) : null}
           </>
         )}
 
