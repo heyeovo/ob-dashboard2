@@ -450,6 +450,45 @@ CARE · 照顾                              ›
 - 除删掉「待处理」外，界面和行为不变：拆分前后 className、onClick、aria-label 计数对齐（删掉部分除外），中文注释全部保留。
 - 验收：`npm run build`、全量 Vitest 通过；`text-[Npx]` 为 0；时间线 / 记忆格的搜索、快捷筛选、标签、日期、排序、详情抽屉、新建按钮手机走查与拆分前一致。
 
+### 阶段 4 前置：提示词页 + 注入记忆按窗口（✅ 布局已定）
+
+2026-09-29 用户和 CC 讨论定案，对应 OB Todo `156e4589e0bf40ec`。预览 `docs/design/stage4/prompt-page-preview.html`（左：主页面，右：编辑页）。分支 `feat/prompt-page`（dashboard）+ `feat/window-recall`（Haven），都不推 main。
+
+**起因**：提示词弹窗挂在 `/cc` 里，从主页抽屉「言」卡片进去要先加载整个聊天页（几秒）；基础提示词和模块在弹窗里是 14 行的小框，几千字没法改。注入记忆本该按窗口：工作窗口一般不需要召回。
+
+**A. 页面与路由**
+- 新页面 `/collaborators/[id]`（`/prompts` 已被 Haven 内部提示词「权重配置」占用，`/persona` 是 Persona 状态）。新建协作者 `/collaborators/new`。编辑子页：`/collaborators/[id]/base`（基础提示词）、`/collaborators/[id]/modules/[moduleId]`（单个模块）。子页用 `SubpageBackButton`，iOS 右滑返回自然生效。
+- 数据用现有 `/api/cc-personas` 读写（整对象保存，结构不变），可复用 `app/cc/usePersonas.ts`；不要为这页加载聊天页的任何东西。
+- 入口改：主页抽屉「言」卡片 → `/collaborators/<当前协作者 id>`；聊天页协作者列表的「新建」→ `/collaborators/new`。删掉 `CcPersonaDialog.tsx`、`CcChatOverlays` 里的 `settingsFor` 分支和 `/cc?prompt=1` 的处理（`app/cc/page.tsx`），确认无引用。
+
+**B. 主页面（只看）**
+1. 顶部：返回按钮；居中 76px 圆形头像（强调色底 + 白色衬线首字，带阴影）→ 衬线名字（加宽字距）→ 一行淡色定位（最多两行）。
+2. `IDENTITY · 身份`：一块薄玻璃分组（`--glass-fill` 同系实填充 + 顶部高光，不加 blur，行间细线），四行：名字 / 头像（字 + 颜色圆点）/ 称呼你 / 定位。点一行弹 `DetailPanel mode="modal"` 小框改，框内「保存」直接保存整个协作者。
+3. `PROMPT · 基础提示词`：同款玻璃块，露前 5 行；底行左边 `N 字 · 约 X token`，右边 `编辑 ›` → `/base`。
+4. `MODULES · 提示词模块` + 右侧 `＋ 新增`（新建一个「未命名模块」并直接进它的编辑页）：同款分组，一行一个：左 `⋮⋮` 拖动把手 → 模块名（衬线）+ `N 字 · 约 X token` → 右侧开关（= 新窗口默认开启，拨动即保存）。点行进 `/modules/[moduleId]`。
+   - **拖动排序**：按住 `⋮⋮` 拖，松手即保存新顺序；用 pointer events 自己实现，**不引入新依赖**；拖动时这一行轻微抬起（阴影 + 放大 1.02），其它行让位；`prefers-reduced-motion` 下不做动画。删掉现在的上下箭头。
+   - 下方一行淡色说明：「开关 = 新窗口默认带上这个模块。按住左边 ⋮⋮ 拖动排序。」
+5. `DIRECTORIES · 目录`：收成一行「能访问 N 个 · 能修改 N 个 · 以后搬去工作台 ›」，点开展开现有两个目录编辑区（逻辑原样搬），阶段 4 再迁。
+6. 页面最底：协作者多于一个时显示「删除这个协作者」（危险色，二次确认），沿用现有删除逻辑。
+7. **没有「注入 OB 记忆」**（挪到本窗设置，见 D）。「印象」「记忆条目」「语义检索」「引擎」照 2b 继续隐藏，存着的值随保存原样透传。
+
+**C. 编辑页（全屏改）**
+- 顶栏：返回 + 右上角「保存」（没改动时灰色不可点）。标题（模块名 / 「基础提示词」，衬线）→ 小字 `N 字 · 约 X token`，**随输入实时更新**。
+- 正文一个撑满剩余高度的 textarea（等宽字体，玻璃块底），iOS 键盘弹起时不被遮挡。模块页的标题可点击改名。
+- 模块页底部：「新窗口默认开启」开关 + 「删除模块」（确认后删并返回）。
+- 有未保存改动时点返回：`confirm` 问一句「放弃这次修改？」。
+- 字数 = 字符数；token 用现有 `estimateTextTokens`（`app/lib/recallDisplay.ts`），显示为 `约 1.5k token` / `约 520 token`。
+
+**D. 注入记忆按窗口**
+- **Haven**（先合）：`conversation_sessions` 新增列 `recall_mode TEXT NOT NULL DEFAULT ''`（`''` = 按模式默认，`'on'` / `'off'` = 这个窗口手动指定），照 `daily_review_enabled` 的方式做迁移、加进 `patch_conversation_session_state` 的 `allowed`、在 session 返回里带出。**不要**塞进 `cc_overrides`：`gateway_state.py` 追加 turn 时会把 `cc_overrides` 重建成只有 `active_cred / subscription / api` 的对象，别的键会被抹掉。补测试，同步 Haven `docs/reference.md`「cc 持久化（Haven 侧）」。
+- **dashboard 生效顺序**（cc 与自建两个引擎一致）：请求体显式 `recall` → 窗口 `recall_mode`（on / off）→ 按模式默认（**CHAT 开，WORK 关**）。协作者的 `recall_on` 不再参与判断，但值保留不清空。改 `app/api/cc-chat/route.ts` 的 `setRecallPrefs` 与 `app/lib/selfhost/runSelfhostTurn.ts` 的判断；前端现在若有从协作者读 `recall_on` 发给请求体的地方一并去掉。
+- **本窗设置**：「本窗」tab 加一行「注入 OB 记忆」三态：`跟随模式（现在：开 / 关）` / `开` / `关`，写 `recall_mode`；改完下一轮生效。同步 dashboard `docs/reference.md`「cc 数据持久化契约」。
+
+**验收**
+- build、全量 Vitest、Haven 测试通过；`text-[Npx]` 为 0；`CcPersonaDialog` 无引用。
+- 手机：抽屉「言」卡片秒开页面；改名字 / 头像 / 称呼 / 定位、改基础提示词、改模块内容、改名、开关、拖动排序、新增、删除，刷新后都在；新开窗口的系统提示词与改之前一致（Context 分析页对比）。
+- 新开 CHAT 窗口有召回按钮、WORK 窗口没有；本窗设置改成「开 / 关」后下一轮跟着变；刷新后仍在。
+
 ### 阶段 4：其余页面统一 + 工作台（布局待讨论）
 
 - 日记、关系轨迹、日回顾、Persona、照顾备忘、设置各子页，逐页对齐新组件和间距。
@@ -485,5 +524,6 @@ CARE · 照顾                              ›
 - [x] 阶段 2b：「提示词」页瘦身。Codex `0e40df6`：单页四段（身份 / 提示词 / 记忆 / 目录），隐藏印象、记忆条目、语义检索与引擎界面，原值随保存透传；CC 验收无改动，2026-09-29 合并 main。
 - [ ] 阶段 3a：主页「窗」。2026-09-29 布局已定（预览 `docs/design/stage3/home-preview.html` F）。`feat/stage3a-home` 已本地实现窗楣、窗洞、纪念日、日记/周视图/照顾、两项房间抽屉和工作台 MCP 入口；build 通过，Vitest 374 通过、1 跳过、2 项因 Windows symlink `EPERM` 失败。待 iPhone 主屏幕 PWA 按上方「3a 验收」实机核对四主题 × 渐变/照片、首屏照顾标题和交互，。CC 验收（`6b42ec3`）：纪念日同日合并不再重复「周年」、半年/周年用中文数字；窗沿剪影的颜色改走 style（Safari 下 SVG 属性里的 CSS 变量不可靠）；纪念日大数字接 `--text-hero` 跟标题系数缩放。CC 环境 build 通过、Vitest 60 文件 / 377 项全过。同分支顺带做完 OB Todo `87ba2e16bde74652`（用户 9 月 29 日提）：助手消息去掉头像和名字（名字行只在有召回时显示召回按钮）；对话列表普通行补回「N 轮 · 时间」；聊天顶栏 `···` 不再弹菜单、直接打开本窗设置；窗口名只读放进本窗设置「会话信息」首行（改名仍在对话列表）；提示词入口挪到主页抽屉顶部「言」卡片（`/cc?prompt=1` 打开提示词弹窗）。**这改变了 2a 规格第 2 条「··· 菜单三项」**，以此为准。OB Todo `876b8bc1482247f2` 的背景仍需补入决定「v1 只显示与倒数，编辑页及点进去翻当天记忆以后再做」。
 - [ ] 阶段 3b：记忆库。布局已定（时间线预览 D、记忆格两列方格）；前置拆分在 `feat/stage3b-split` 完成，旧 `?tab=review` 回到时间线，保留原有分类筛选与每日记忆 API。build 通过；Vitest 378 通过、1 跳过，另 2 项因本机 Windows symlink `EPERM` 失败；拆分后保留区域的 className、onClick、aria-label 与中文注释计数和拆分前对齐。待 iPhone 按 3b 前置验收做交互走查；卡片样式待 CC 预览定稿。CC 复核：合并 main 后 build 通过、Vitest 61 文件 / 381 项全过、`text-[Npx]` 为 0，合并 main。下一步 GPT 按「3b 布局」在 `feat/stage3b-memory` 实现。
+- [ ] 阶段 4 前置：提示词页 + 注入记忆按窗口。2026-09-29 布局已定（预览 `docs/design/stage4/prompt-page-preview.html`），排在 3b 之后交 GPT；Haven `feat/window-recall` 先合。
 - [ ] 阶段 4
 - [ ] 阶段 5
