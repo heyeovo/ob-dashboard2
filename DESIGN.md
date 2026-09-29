@@ -194,6 +194,7 @@
 | 小字 | `text-3xs` / `text-2xs` / `text-meta` / `text-xs` | 9 / 10 / 11 / 12px |
 | 正文 | `text-note` / `text-sm` / `text-md` / `text-base` | 13 / 14 / 15 / 16px |
 | 标题 | `text-lg` / `text-xl` / `text-2xl` / `text-3xl` / `text-4xl` | 18 / 20 / 24 / 30 / 36px |
+| 主页大数字 | `--text-hero`（仅 CSS 变量，主页纪念日倒数） | 44px，跟标题系数缩放 |
 
 所有档位以 rem 定义，先受「整体字号」影响，再乘所属层级的系数；新档位也有对应的行高 Token。以后使用命名档位类，不再写 `text-[Npx]`。`globals.css` 的固定字号也引用同一组 Token；Markdown 标题等相对字号保持 `em`。手机端输入框、textarea 和 select 的实际字号至少 16px，避免 iPhone 聚焦时页面自动放大。
 
