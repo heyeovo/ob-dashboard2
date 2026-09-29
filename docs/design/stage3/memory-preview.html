@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>记忆库候选 · 时间线</title>
+<meta name="description" content="阶段 3b 记忆库时间线卡片的三种做法：薄玻璃 / 无卡 / 书脊。带月份章节名、一个月前的今天、年轮标记。4 个主题 × 渐变/照片，左右滑着比。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE5,#EEE3E4)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F1DEE3)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F4,#E0E7EC)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1A1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.4)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.5}
+
+  .phone{position:relative;height:760px;border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .scroll{position:absolute;inset:0;overflow-y:auto;padding:0 14px 90px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .k{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.5}
+  .dim{opacity:.5}
+
+  /* 顶栏 */
+  .top{display:flex;align-items:center;justify-content:space-between;padding:16px 4px 12px}
+  .top h2{font:600 22px "Noto Serif SC",serif;letter-spacing:.06em}
+  .seg{display:flex;padding:3px;border-radius:999px;background:rgb(var(--tint)/.6);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .seg span{padding:5px 12px;font-size:12px;border-radius:999px;opacity:.55}
+  .seg span.on{opacity:1;background:rgb(var(--tint)/.95);box-shadow:0 1px 4px color-mix(in srgb,var(--ink) 10%,transparent)}
+
+  /* 搜索：单独一条薄玻璃；筛选胶囊直接在底色上 */
+  .search{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6);font-size:13px}
+  .search svg{width:15px;height:15px;opacity:.4}
+  .search span{opacity:.4}
+  .filters{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  .f{flex:none;padding:4px 11px;border-radius:999px;font-size:11.5px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+  .f.on{background:var(--accent);color:#fff}
+  .f b{font-weight:500;opacity:.55;margin-left:3px}
+  .f.on b{opacity:.8}
+
+  /* 一个月前的今天 */
+  .ago{margin-top:14px;display:flex;gap:11px;padding:12px 14px;border-radius:18px;background:color-mix(in srgb,var(--accent) 9%,rgb(var(--tint)/.72));box-shadow:inset 0 1px 0 rgb(var(--hi)/.55)}
+  .ago .ic{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font:italic 500 13px "Cormorant Garamond",serif}
+  .ago .t{font:600 13.5px "Noto Serif SC",serif;margin-top:3px}
+  .ago .s{font-size:11.5px;opacity:.6;margin-top:2px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  /* 月份章节 */
+  .month{display:flex;align-items:baseline;gap:9px;padding:22px 2px 6px}
+  .month .ym{font:italic 500 21px "Cormorant Garamond",serif;color:var(--accent)}
+  .month .nm{font:600 16px "Noto Serif SC",serif;letter-spacing:.1em}
+  .month .ct{margin-left:auto;font-size:10.5px;opacity:.45}
+  .month-line{font-size:11px;opacity:.5;padding:0 2px 8px;line-height:1.5}
+
+  /* 日期分组 + 竖线（原来的骨架） */
+  .day{position:relative;padding-left:22px}
+  .day::before{content:"";position:absolute;left:6px;top:20px;bottom:-6px;width:1px;background:color-mix(in srgb,var(--ink) 14%,transparent)}
+  .dh{display:flex;align-items:center;gap:8px;padding:12px 0 8px;margin-left:-22px}
+  .dh i{width:13px;height:13px;border-radius:50%;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 70%,transparent);background:rgb(var(--tint));flex:none}
+  .dh b{font:500 13px "Cormorant Garamond",serif;letter-spacing:.06em}
+  .dh span{font-size:10.5px;opacity:.45}
+
+  /* 卡片通用 */
+  .card .t{font:600 14.5px/1.4 "Noto Serif SC",serif}
+  .card .p{font-size:12.5px;line-height:1.6;opacity:.68;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .m{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:10.5px}
+  .tag{opacity:.55}
+  .tag+.tag::before{content:"· ";opacity:.6}
+  .m .r{margin-left:auto;display:flex;gap:9px;align-items:center;opacity:.5}
+  .ring{color:var(--accent);opacity:1}
+  .imp{display:inline-flex;gap:2px}
+  .imp u{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.25}
+  .imp u.on{opacity:.9}
+
+  /* A 薄玻璃卡 */
+  .A .card{padding:12px 14px 11px;border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 6%,transparent)}
+  .A .card+.card{margin-top:9px}
+
+  /* B 无卡：直接写在底色上，细线分开，像翻本子 */
+  .B .card{padding:10px 2px 12px}
+  .B .card+.card{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+
+  /* C 书脊：薄玻璃 + 左边一道书脊，重要的更深 */
+  .C .card{position:relative;padding:12px 14px 11px 17px;border-radius:6px 18px 18px 6px;background:rgb(var(--tint)/.72);box-shadow:inset 0 1px 0 rgb(var(--hi)/.55);overflow:hidden}
+  .C .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:color-mix(in srgb,var(--accent) var(--sp,35%),transparent)}
+  .C .card+.card{margin-top:9px}
+
+  /* D / E：去掉竖线和小圆圈，日期改成一行小标题 + 细线延伸 */
+  .D .day,.E .day{padding-left:0}
+  .D .day::before,.E .day::before{display:none}
+  .D .dh,.E .dh{margin-left:0;gap:7px;padding:16px 0 9px;align-items:baseline}
+  .D .dh i,.E .dh i{display:none}
+  .D .dh b,.E .dh b{font:500 22px/1 "Cormorant Garamond",serif;letter-spacing:0;color:var(--accent)}
+  .D .dh em,.E .dh em{font-style:normal;font-size:10px;letter-spacing:.14em;opacity:.55}
+  .D .dh::after,.E .dh::after{content:"";flex:1;height:1px;align-self:center;background:color-mix(in srgb,var(--ink) 10%,transparent);margin-left:4px}
+  .D .dh span,.E .dh span{order:3;margin-left:6px}
+  .dh em{display:none}
+  .D .card{padding:12px 14px 11px;border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 6%,transparent)}
+  .D .card+.card{margin-top:9px}
+  .E .card{position:relative;padding:12px 14px 11px 17px;border-radius:6px 18px 18px 6px;background:rgb(var(--tint)/.72);box-shadow:inset 0 1px 0 rgb(var(--hi)/.55);overflow:hidden}
+  .E .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:color-mix(in srgb,var(--accent) var(--sp,35%),transparent)}
+  .E .card+.card{margin-top:9px}
+  .E .imp{display:none}
+
+  .fab{position:absolute;right:16px;bottom:78px;width:46px;height:46px;border-radius:50%;background:var(--accent);display:grid;place-items:center;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .fab svg{width:18px;height:18px}
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:62px;display:flex;justify-content:space-around;align-items:center;background:rgb(var(--tint)/.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.35);font-size:10px}
+  .tabs span{opacity:.45}
+  .tabs span.on{opacity:1;color:var(--accent);font-weight:600}
+</style>
+</head>
+<body data-theme="apricot" data-bg="gradient">
+<header>
+  <h1>记忆库 · 时间线</h1>
+  <p>A 保留原来的竖线骨架；D、E 把竖线拿掉，日期改成一行小标题。左右滑着比。<br>顶上那条「一个月前的今天」和月份后面的章节名是新的。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient'}
+const search='<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="6"/><path d="M13.5 13.5L18 18"/></svg>'
+const plus='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+const DAYS=[
+  ['29 Sep · 周二|29|SEP · 周二',[
+    ['每月月底一起给这个月起名字','每个月结束的时候，我和小羊一起回顾这个月，给它起个名字，留几个词或者一句话，写进「2026年关系时间线」……',['约定','关系时间线'],7,0],
+    ['奶糖的生日','奶糖的生日是 2018 年 8 月 11 日。小羊说"应该是"，因为奶糖是领养来的，这个日子不一定准。',['奶糖','生日'],6,0],
+    ['家的底色与一扇窗','凌晨十二点，UI 重构忙了一整晚，小羊忽然停下来说：七月刚开始搭前端的时候……',['UI重构','家'],6,2],
+  ]],
+  ['28 Sep · 周一|28|SEP · 周一',[
+    ['prompt修改方向讨论0928','今早吵了一架之后，小羊去 5.5 那边聊了一轮，回来带了一个桶……',['prompt','关系'],8,3],
+  ]],
+]
+function imp(n){const on=Math.round(n/2);return `<span class="imp" title="重要度 ${n}">${[1,2,3,4,5].map(i=>`<u class="${i<=on?'on':''}"></u>`).join('')}</span>`}
+function card([t,p,tags,n,rings]){
+  return `<div class="card" style="--sp:${20+n*7}%"><div class="t">${t}</div><div class="p">${p}</div>
+    <div class="m">${tags.map(x=>`<span class="tag">${x}</span>`).join('')}<span class="r">${rings?`<span class="ring">◎ ${rings}</span>`:''}${imp(n)}</span></div></div>`
+}
+function phone(kind){
+  const days=DAYS.map(([d,cards])=>{const [full,num,sub]=d.split('|');const alt=kind==='D'||kind==='E'
+    return `<div class="day"><div class="dh"><i></i><b>${alt?num:full}</b><em>${sub}</em><span>${cards.length} 条</span></div>${cards.map(card).join('')}</div>`}).join('')
+  return `<div class="phone ${kind}">
+    ${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <div class="scroll">
+      <div class="top"><h2>记忆库</h2><div class="seg"><span class="on">时间线</span><span>记忆格</span></div></div>
+      <div class="search">${search}<span>搜索记忆、标签或内容…</span></div>
+      <div class="filters"><span class="f on">全部<b>343</b></span><span class="f">钉选<b>10</b></span><span class="f">重要<b>183</b></span><span class="f">feel<b>56</b></span><span class="f">已消化</span><span class="f">全部时间 ⌄</span></div>
+      <div class="ago"><span class="ic">8.29</span><div><div class="k">一个月前的今天</div><div class="t">记土壤不记花</div><div class="s">凌晨三点多，小羊吃着泡面跟我聊换窗体验和记忆设计……</div></div></div>
+      <div class="month"><span class="ym">2026·09</span><span class="nm">日常</span><span class="ct">33 条</span></div>
+      <div class="month-line">主动唤醒上线，开始过日子</div>
+      ${days}
+    </div>
+    <span class="fab">${plus}</span>
+    <div class="tabs"><span>主页</span><span class="on">记忆库</span><span>聊天</span><span>工作台</span><span>设置</span></div>
+  </div>`
+}
+const META={
+  A:['A · 薄玻璃卡','每条一颗薄玻璃，没有边框，跟对话列表同一种材质。最稳，一眼就知道一条是一条。'],
+  B:['B · 无卡','不要卡片，直接写在底色上，同一天里用细线分开，像翻一本本子。最安静，字最大，但照片背景下要靠蒙层撑可读性。'],
+  D:['D · 玻璃卡 · 无竖线','去掉竖线和小圆圈，每天改成一个大号斜体日期数字 + 一行小字 + 一道往右延伸的细线。卡片同 A。版面最干净，左边空出来的那一条宽度给了卡片。'],
+  E:['E · 书脊 · 无竖线','同 D 的日期写法，卡片换成书脊：左边那道书脊成了页面上唯一的竖线，越重要越深，所以重要度的小点也省了。'],
+  C:['C · 书脊','薄玻璃 + 左边一道书脊，越重要书脊颜色越深，重要度不用再单独标。跟主页的日记本呼应。'],
+}
+function render(){
+  document.body.dataset.theme=state.theme;document.body.dataset.bg=state.bg
+  document.getElementById('ctrl').innerHTML=
+    THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')
+  document.getElementById('rail').innerHTML=['A','D','E'].map(k=>
+    `<div class="slot">${phone(k)}<div class="meta"><b>${META[k][0]}</b><small>${META[k][1]}</small></div></div>`).join('')
+}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('button');if(!el)return
+  if(el.dataset.t)state.theme=el.dataset.t;else if(el.dataset.b)state.bg=el.dataset.b;else return
+  const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x
+})
+render()
+</script>
+</body>
+</html>

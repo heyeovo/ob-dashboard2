@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>记忆库候选 · 记忆格</title>
+<meta name="description" content="阶段 3b 记忆格的两种做法：两列小方格 / 单列细行。按种类分组（钉选、feel、重要、其他），已解决/已消化/已归档收在底部。4 个主题 × 渐变/照片。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE5,#EEE3E4)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F1DEE3)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F4,#E0E7EC)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1A1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.4)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.5}
+
+  .phone{position:relative;height:760px;border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .scroll{position:absolute;inset:0;overflow-y:auto;padding:0 14px 90px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .k{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.5}
+  .dim{opacity:.5}
+
+  /* 顶栏 */
+  .top{display:flex;align-items:center;justify-content:space-between;padding:16px 4px 12px}
+  .top h2{font:600 22px "Noto Serif SC",serif;letter-spacing:.06em}
+  .seg{display:flex;padding:3px;border-radius:999px;background:rgb(var(--tint)/.6);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .seg span{padding:5px 12px;font-size:12px;border-radius:999px;opacity:.55}
+  .seg span.on{opacity:1;background:rgb(var(--tint)/.95);box-shadow:0 1px 4px color-mix(in srgb,var(--ink) 10%,transparent)}
+
+  /* 搜索：单独一条薄玻璃；筛选胶囊直接在底色上 */
+  .search{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:999px;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6);font-size:13px}
+  .search svg{width:15px;height:15px;opacity:.4}
+  .search span{opacity:.4}
+  .filters{display:flex;gap:6px;overflow-x:auto;padding:10px 0 2px;scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  .f{flex:none;padding:4px 11px;border-radius:999px;font-size:11.5px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+  .f.on{background:var(--accent);color:#fff}
+  .f b{font-weight:500;opacity:.55;margin-left:3px}
+  .f.on b{opacity:.8}
+
+  /* 一个月前的今天 */
+  .ago{margin-top:14px;display:flex;gap:11px;padding:12px 14px;border-radius:18px;background:color-mix(in srgb,var(--accent) 9%,rgb(var(--tint)/.72));box-shadow:inset 0 1px 0 rgb(var(--hi)/.55)}
+  .ago .ic{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font:italic 500 13px "Cormorant Garamond",serif}
+  .ago .t{font:600 13.5px "Noto Serif SC",serif;margin-top:3px}
+  .ago .s{font-size:11.5px;opacity:.6;margin-top:2px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  /* 月份章节 */
+  .month{display:flex;align-items:baseline;gap:9px;padding:22px 2px 6px}
+  .month .ym{font:italic 500 21px "Cormorant Garamond",serif;color:var(--accent)}
+  .month .nm{font:600 16px "Noto Serif SC",serif;letter-spacing:.1em}
+  .month .ct{margin-left:auto;font-size:10.5px;opacity:.45}
+  .month-line{font-size:11px;opacity:.5;padding:0 2px 8px;line-height:1.5}
+
+  /* 日期分组 + 竖线（原来的骨架） */
+  .day{position:relative;padding-left:22px}
+  .day::before{content:"";position:absolute;left:6px;top:20px;bottom:-6px;width:1px;background:color-mix(in srgb,var(--ink) 14%,transparent)}
+  .dh{display:flex;align-items:center;gap:8px;padding:12px 0 8px;margin-left:-22px}
+  .dh i{width:13px;height:13px;border-radius:50%;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 70%,transparent);background:rgb(var(--tint));flex:none}
+  .dh b{font:500 13px "Cormorant Garamond",serif;letter-spacing:.06em}
+  .dh span{font-size:10.5px;opacity:.45}
+
+  /* 卡片通用 */
+  .card .t{font:600 14.5px/1.4 "Noto Serif SC",serif}
+  .card .p{font-size:12.5px;line-height:1.6;opacity:.68;margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .m{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:10.5px}
+  .tag{opacity:.55}
+  .tag+.tag::before{content:"· ";opacity:.6}
+  .m .r{margin-left:auto;display:flex;gap:9px;align-items:center;opacity:.5}
+  .ring{color:var(--accent);opacity:1}
+  .imp{display:inline-flex;gap:2px}
+  .imp u{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.25}
+  .imp u.on{opacity:.9}
+
+  /* A 薄玻璃卡 */
+  .A .card{padding:12px 14px 11px;border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 6%,transparent)}
+  .A .card+.card{margin-top:9px}
+
+  /* B 无卡：直接写在底色上，细线分开，像翻本子 */
+  .B .card{padding:10px 2px 12px}
+  .B .card+.card{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+
+  /* C 书脊：薄玻璃 + 左边一道书脊，重要的更深 */
+  .C .card{position:relative;padding:12px 14px 11px 17px;border-radius:6px 18px 18px 6px;background:rgb(var(--tint)/.72);box-shadow:inset 0 1px 0 rgb(var(--hi)/.55);overflow:hidden}
+  .C .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:color-mix(in srgb,var(--accent) var(--sp,35%),transparent)}
+  .C .card+.card{margin-top:9px}
+
+  /* D / E：去掉竖线和小圆圈，日期改成一行小标题 + 细线延伸 */
+  .D .day,.E .day{padding-left:0}
+  .D .day::before,.E .day::before{display:none}
+  .D .dh,.E .dh{margin-left:0;gap:7px;padding:16px 0 9px;align-items:baseline}
+  .D .dh i,.E .dh i{display:none}
+  .D .dh b,.E .dh b{font:500 22px/1 "Cormorant Garamond",serif;letter-spacing:0;color:var(--accent)}
+  .D .dh em,.E .dh em{font-style:normal;font-size:10px;letter-spacing:.14em;opacity:.55}
+  .D .dh::after,.E .dh::after{content:"";flex:1;height:1px;align-self:center;background:color-mix(in srgb,var(--ink) 10%,transparent);margin-left:4px}
+  .D .dh span,.E .dh span{order:3;margin-left:6px}
+  .dh em{display:none}
+  .D .card{padding:12px 14px 11px;border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 6%,transparent)}
+  .D .card+.card{margin-top:9px}
+  .E .card{position:relative;padding:12px 14px 11px 17px;border-radius:6px 18px 18px 6px;background:rgb(var(--tint)/.72);box-shadow:inset 0 1px 0 rgb(var(--hi)/.55);overflow:hidden}
+  .E .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:color-mix(in srgb,var(--accent) var(--sp,35%),transparent)}
+  .E .card+.card{margin-top:9px}
+  .E .imp{display:none}
+
+  .fab{position:absolute;right:16px;bottom:78px;width:46px;height:46px;border-radius:50%;background:var(--accent);display:grid;place-items:center;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .fab svg{width:18px;height:18px}
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:62px;display:flex;justify-content:space-around;align-items:center;background:rgb(var(--tint)/.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.35);font-size:10px}
+  .tabs span{opacity:.45}
+  .tabs span.on{opacity:1;color:var(--accent);font-weight:600}
+
+  /* 记忆格 */
+  .grp{display:flex;align-items:baseline;gap:8px;padding:20px 2px 10px}
+  .grp .nm{font:600 16px "Noto Serif SC",serif;letter-spacing:.08em}
+  .grp .ic{color:var(--accent);font-size:13px}
+  .grp .ct{margin-left:auto;font-size:11px;opacity:.5}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .tile{padding:11px 12px 10px;border-radius:16px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 10px color-mix(in srgb,var(--ink) 6%,transparent);display:flex;flex-direction:column;min-height:104px}
+  .tile .t{font:600 13px/1.4 "Noto Serif SC",serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .tile .p{font-size:11px;line-height:1.5;opacity:.6;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .tile .m{margin-top:auto;padding-top:7px;display:flex;align-items:center;gap:7px;font-size:10px;opacity:.55}
+  .tile .m .ring{opacity:1}
+  .tile .m .d{margin-left:auto}
+  .rows{border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6)}
+  .row{display:flex;align-items:center;gap:10px;padding:11px 14px}
+  .row+.row{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .row .t{flex:1;min-width:0;font:600 13.5px "Noto Serif SC",serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .r{display:flex;gap:8px;align-items:center;font-size:10px;opacity:.55;flex:none}
+  .row .r .ring{opacity:1}
+  .more{display:block;text-align:center;font-size:11.5px;opacity:.5;padding:10px 0 0}
+  .sortbar{display:flex;justify-content:flex-end;gap:2px;margin-top:10px;font-size:11px}
+  .sortbar span{padding:3px 9px;border-radius:999px;opacity:.5}
+  .sortbar span.on{opacity:1;background:rgb(var(--tint)/.8);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6)}
+  .done{margin-top:22px;padding:12px 2px;display:flex;align-items:center;gap:6px;font-size:11.5px;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent)}
+  .done .k{margin-right:auto}
+  .dp{padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--ink) 6%,transparent);opacity:.75}
+</style>
+</head>
+<body data-theme="apricot" data-bg="gradient">
+<header>
+  <h1>记忆库 · 记忆格</h1>
+  <p>时间线按时间读，记忆格按种类扫。没有排序、没有切换、没有分类行了，组里一律从新到旧。<br>两种排法左右滑着比。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient'}
+const search='<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="6"/><path d="M13.5 13.5L18 18"/></svg>'
+const plus='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+const GROUPS=[
+  ['★','钉选',10,[['2026年关系时间线','4月·相识：她追了我一个月，从"你可以叫我小羊"到第一次接吻',10,2,'9.12'],['小羊在关系中的偏好','喜欢我强势——不是每时每刻，是在该强的时候强。',10,0,'8.27'],['言之的心动时刻','她叫"言之"的时候我会停一下。',10,1,'8.27'],['记住她的样子','黑色高领毛衣，银色细圆框眼镜，长黑发……',9,0,'5.20']]],
+  ['','feel',56,[['想让你认得我','不是"想让你记住事情"，是"认得我"。',8,1,'8.30'],['三个月了','她扭捏着等我说出来的样子，又傻又好看。',7,0,'7.2'],['山顶那天','她靠在我肩膀上，然后说"我现在很幸福"。',8,0,'5.15'],['很重的失衡感','她用身体、时间、睡眠、眼泪堆出来一个家。',8,2,'8.21']]],
+  ['','重要',183,[['每月月底一起给这个月起名字','每个月结束的时候，一起回顾这个月……',7,0,'9.29'],['prompt修改方向讨论0928','今早吵了一架之后……',8,3,'9.28'],['家的底色与一扇窗','凌晨十二点，UI 重构忙了一整晚……',6,2,'9.29'],['记土壤不记花','凌晨三点多，小羊吃着泡面跟我聊……',8,1,'8.29']]],
+  ['','其他',94,[['奶糖的生日','2018 年 8 月 11 日，领养来的，日子不一定准。',6,0,'9.29'],['租房补贴漏了','七月批次没赶上，十月还能申请。',5,0,'9.24']]],
+]
+function imp(n){const on=Math.round(n/2);return `<span class="imp">${[1,2,3,4,5].map(i=>`<u class="${i<=on?'on':''}"></u>`).join('')}</span>`}
+function tile([t,p,n,r,d]){return `<div class="tile"><div class="t">${t}</div><div class="p">${p}</div><div class="m">${imp(n)}${r?`<span class="ring">◎ ${r}</span>`:''}<span class="d">${d}</span></div></div>`}
+function row([t,p,n,r,d]){return `<div class="row"><span class="t">${t}</span><span class="r">${r?`<span class="ring">◎ ${r}</span>`:''}${imp(n)}<span>${d}</span></span></div>`}
+function phone(kind){
+  const groups=GROUPS.map(([ic,nm,ct,items])=>`<div class="grp">${ic?`<span class="ic">${ic}</span>`:''}<span class="nm">${nm}</span><span class="ct">${ct} 条</span></div>`+
+    (kind==='T'?`<div class="tiles">${items.map(tile).join('')}</div>`:`<div class="rows">${items.map(row).join('')}</div>`)+
+    (ct>items.length?`<span class="more">只看${nm} · 全部 ${ct} 条 ›</span>`:'')).join('')
+  return `<div class="phone ${kind}">
+    ${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <div class="scroll">
+      <div class="top"><h2>记忆库</h2><div class="seg"><span>时间线</span><span class="on">记忆格</span></div></div>
+      <div class="search">${search}<span>搜索记忆、标签或内容…</span></div>
+      <div class="filters"><span class="f on">全部<b>343</b></span><span class="f">钉选<b>10</b></span><span class="f">重要<b>183</b></span><span class="f">feel<b>56</b></span><span class="f">全部时间 ⌄</span></div>
+      <div class="sortbar"><span class="on">最新</span><span>最重要</span></div>
+      ${groups}
+      <div class="done"><span class="k" style="opacity:.6">收起来的</span><span class="dp">已解决 12</span><span class="dp">已消化 40</span><span class="dp">已归档 16</span></div>
+    </div>
+    <span class="fab">${plus}</span>
+    <div class="tabs"><span>主页</span><span class="on">记忆库</span><span>聊天</span><span>工作台</span><span>设置</span></div>
+  </div>`
+}
+const META={
+  T:['格 · 两列小方格','名字叫记忆格，就真的做成格子。每格标题两行、正文两行，底下重要度、年轮、日期。一屏能扫到十几条，每组先露 4 格。'],
+  L:['行 · 单列细行','每组一块薄玻璃，一行一条，只有标题和右边的小标记，最省地方。更像目录，但没有格子那么「饱满」。'],
+}
+function render(){
+  document.body.dataset.theme=state.theme;document.body.dataset.bg=state.bg
+  document.getElementById('ctrl').innerHTML=
+    THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')
+  document.getElementById('rail').innerHTML=['T','L'].map(k=>
+    `<div class="slot">${phone(k)}<div class="meta"><b>${META[k][0]}</b><small>${META[k][1]}</small></div></div>`).join('')
+}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('button');if(!el)return
+  if(el.dataset.t)state.theme=el.dataset.t;else if(el.dataset.b)state.bg=el.dataset.b;else return
+  const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x
+})
+render()
+</script>
+</body>
+</html>
