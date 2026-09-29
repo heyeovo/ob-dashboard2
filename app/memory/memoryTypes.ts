@@ -15,6 +15,8 @@ export interface Bucket {
   score: number
   activation_count?: number
   content_preview: string
+  content?: string
+  comment_count?: number
   wish?: boolean
   todo?: string
   todo_done?: boolean

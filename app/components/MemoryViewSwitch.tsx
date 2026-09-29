@@ -21,14 +21,15 @@ export default function MemoryViewSwitch({ size = 'md' }: { size?: 'sm' | 'md' }
   const activeTab = searchParams?.get('tab') === 'grid' ? 'grid' : 'timeline'
 
   return (
-    <div className={`flex items-center gap-1 rounded-lg bg-[var(--color-surface-tertiary)] p-0.5 ${size === 'sm' ? 'text-xs' : 'text-sm'}`}>
+    <div className={`memory-switch flex items-center gap-1 p-0.5 ${size === 'sm' ? 'text-xs' : 'text-sm'}`}>
       {ITEMS.map(([slug, label]) => (
         <button
           key={slug}
           onClick={() => router.replace(`/memory?tab=${slug}`, { scroll: false })}
-          className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+          aria-current={activeTab === slug ? 'page' : undefined}
+          className={`rounded-full px-3 py-1.5 font-medium transition-colors ${
             activeTab === slug
-              ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm'
+              ? 'text-[var(--color-text-primary)]'
               : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
           }`}
         >

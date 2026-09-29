@@ -1,5 +1,6 @@
 import { formatBeijingDate, getBeijingDayOfWeek } from '@/app/utils/format'
 import type { Bucket, QuickFilter, DatePreset } from './memoryTypes'
+import { bucketDate } from '@/app/lib/dailyBucketDate'
 
 // ==================== 工具函数 ====================
 export const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
@@ -89,8 +90,7 @@ export function getTopTags(buckets: Bucket[], n = 10): string[] {
 export function groupByDate(buckets: Bucket[]) {
   const map = new Map<string, Bucket[]>()
   for (const b of buckets) {
-    const eventTime = b.event_time || b.created || ''
-    const d = eventTime ? eventTime.slice(0, 10) : 'unknown'
+    const d = bucketDate(b) ?? 'unknown'
     if (!map.has(d)) map.set(d, [])
     map.get(d)!.push(b)
   }
@@ -111,7 +111,7 @@ export function groupByDate(buckets: Bucket[]) {
 export function groupByMonth(buckets: Bucket[]) {
   const map = new Map<string, Bucket[]>()
   for (const b of buckets) {
-    const d = ((b.event_time || b.created) ?? '').slice(0, 7) || 'unknown'  // 取 YYYY-MM
+    const d = bucketDate(b)?.slice(0, 7) ?? 'unknown'  // 取 YYYY-MM
     if (!map.has(d)) map.set(d, [])
     map.get(d)!.push(b)
   }
@@ -122,4 +122,49 @@ export function groupByMonth(buckets: Bucket[]) {
       const days = groupByDate(items)   // 返回 { date, items }[]
       return { month, days }
     })
+}
+
+export type MonthChapter = { name: string; description: string }
+
+export function getMonthChapters(buckets: Bucket[]): Record<string, MonthChapter> {
+  const chapters: Record<string, MonthChapter> = {}
+  for (const bucket of buckets) {
+    if (!bucket.pinned) continue
+    const match = bucket.name.match(/^(\d{4})年关系时间线$/)
+    if (!match) continue
+    for (const line of (bucket.content ?? bucket.content_preview ?? '').split(/\r?\n/)) {
+      const entry = line.trim().match(/^(\d{1,2})月·([^：:]+)[：:](.*)$/)
+      if (!entry) continue
+      const monthNumber = Number(entry[1])
+      if (monthNumber < 1 || monthNumber > 12) continue
+      chapters[`${match[1]}-${String(monthNumber).padStart(2, '0')}`] = {
+        name: entry[2].trim(), description: entry[3].trim(),
+      }
+    }
+  }
+  return chapters
+}
+
+function previousSameDay(today: string, months: number): string | null {
+  const [year, month, day] = today.split('-').map(Number)
+  const target = new Date(Date.UTC(year, month - 1 - months, 1))
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+  if (day > lastDay) return null
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+export function getOnThisDay(buckets: Bucket[], today: string): { bucket: Bucket; date: string; label: string } | null {
+  const firstDate = buckets.map(bucketDate).filter((date): date is string => !!date).sort()[0]
+  const aYearAgo = previousSameDay(today, 12)
+  const aMonthAgo = previousSameDay(today, 1)
+  const dates = aYearAgo && firstDate && firstDate <= aYearAgo ? [aYearAgo, aMonthAgo] : [aMonthAgo]
+  for (const date of dates) {
+    if (!date) continue
+    const matches = buckets.filter(bucket => bucketDate(bucket) === date)
+    if (matches.length) {
+      matches.sort((a, b) => Number(b.importance) - Number(a.importance) || b.created.localeCompare(a.created))
+      return { bucket: matches[0], date, label: date === aYearAgo ? '去年的今天' : '一个月前的今天' }
+    }
+  }
+  return null
 }
