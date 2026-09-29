@@ -13,7 +13,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
     <div className="px-4 pb-4 pt-1">
       <div className="mx-auto max-w-[var(--chat-assistant-width)]">
         {selectMode ? (
-          <div className="flex items-center justify-between rounded-2xl border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-4 py-2.5 shadow-sm">
+          <div className="cc-composer flex items-center justify-between px-4 py-2.5">
             <span className="text-xs text-[var(--color-primary)]">
               {selectedMessageIds.size > 0 ? `已选 ${selectedMessageIds.size} 条消息` : '请选择消息'}
             </span>

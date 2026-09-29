@@ -398,12 +398,8 @@ export default function CcMessageRow({
     clearTimer()
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null
-      if (onStartSelect) {
-        suppressClickRef.current = true
-        setMenuOpen(false)
-        onStartSelect(message.id)
-        return
-      }
+      // 长按只开「你的消息」的编辑菜单（2a 之前的行为）；多选改由操作行的多选图标进入，
+      // 否则会跟系统长按选字抢手势。
       openMenu()
     }, LONG_PRESS_MS)
   }

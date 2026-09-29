@@ -14,6 +14,7 @@ function CcScrollJumps({
   lastMessageId,
   lastMessageVersion,
   pendingCount,
+  layoutKey,
   onOpenSearch,
 }: {
   children: ReactNode
@@ -22,11 +23,17 @@ function CcScrollJumps({
   lastMessageId: string
   lastMessageVersion: string
   pendingCount: number
+  /** 选择模式等会整体改变气泡宽度的状态；变化时把正在看的那条消息钉在原位 */
+  layoutKey: string
   onOpenSearch?: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null)
   const scrollTopRef = useRef(0)
+  // iOS Safari 不支持 CSS scroll anchoring：进入选择模式时每行多出勾选框、气泡变窄、
+  // 上方内容整体变高，画面会被推到很前面。滚动时记下屏幕中间那条消息，布局变化后按它复位。
+  const anchorRef = useRef<{ id: string; top: number } | null>(null)
+  const layoutKeyRef = useRef(layoutKey)
   const previousContentRef = useRef<{
     sessionId: string
     firstMessageId: string
@@ -44,6 +51,12 @@ function CcScrollJumps({
     const node = scrollRef.current
     if (!node) return
     scrollTopRef.current = node.scrollTop
+    const rect = node.getBoundingClientRect()
+    const probe = document.elementFromPoint(rect.left + rect.width * 0.3, rect.top + node.clientHeight / 2)
+    const row = probe?.closest<HTMLElement>('[data-message-id]')
+    anchorRef.current = row && node.contains(row)
+      ? { id: row.dataset.messageId || '', top: row.getBoundingClientRect().top }
+      : null
     const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
     const nextCanGoUp = node.scrollTop > 24
     const nextCanGoDown = distanceFromBottom > 24
@@ -97,6 +110,18 @@ function CcScrollJumps({
       window.removeEventListener('resize', update)
     }
   }, [children, firstMessageId, lastMessageId, lastMessageVersion, pendingCount, sessionId, update])
+
+  useLayoutEffect(() => {
+    if (layoutKeyRef.current === layoutKey) return
+    layoutKeyRef.current = layoutKey
+    const node = scrollRef.current
+    const anchor = anchorRef.current
+    if (!node || !anchor?.id) return
+    const row = Array.from(node.querySelectorAll<HTMLElement>('[data-message-id]'))
+      .find(item => item.dataset.messageId === anchor.id)
+    if (row) node.scrollTop += row.getBoundingClientRect().top - anchor.top
+    update()
+  }, [layoutKey, update])
 
   const jump = (top: number) => {
     scrollRef.current?.scrollTo({ top, behavior: 'smooth' })
@@ -263,6 +288,7 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
       lastMessageId={lastMessageId}
       lastMessageVersion={lastMessageVersion}
       pendingCount={chat.pending.length}
+      layoutKey={selectMode ? 'select' : 'normal'}
       onOpenSearch={openSearchFromFloat}
     >
       <div className="mx-auto flex min-w-0 max-w-[var(--chat-assistant-width)] flex-col gap-7">
