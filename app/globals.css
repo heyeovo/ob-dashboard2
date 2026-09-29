@@ -535,6 +535,22 @@ body::after {
   }
 }
 
+/* 小作品全屏页。iOS 26 主屏幕模式下 fixed + bottom:0 会停在 Home 条上方，
+   底下露出一截页面背景（同上面聊天页的问题），所以这时改用 100vh 算高度。
+   作品页自己会滚动，内容可以延伸到 Home 条下面，不再给 iframe 留底部内边距。 */
+.artifact-viewer {
+  position: fixed;
+  inset-inline: 0;
+  top: env(safe-area-inset-top, 0px);
+  bottom: 0;
+}
+@media (display-mode: standalone) and (max-width: 767px) {
+  .artifact-viewer {
+    bottom: auto;
+    height: calc(100vh - env(safe-area-inset-top, 0px));
+  }
+}
+
 h1, h2 {
   font-family: var(--font-display);
 }

@@ -23,10 +23,7 @@ export default function ArtifactViewPage({ params }: { params: Promise<{ name: s
   }
 
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-[var(--color-bg)]"
-      style={{ top: 'env(safe-area-inset-top, 0px)' }}
-    >
+    <div className="artifact-viewer z-50 flex flex-col bg-[var(--color-bg)]">
       <header
         className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2"
       >
@@ -64,7 +61,6 @@ export default function ArtifactViewPage({ params }: { params: Promise<{ name: s
           title={artifactBaseName(name)}
           sandbox={SANDBOX}
           className="min-h-0 w-full flex-1 border-0 bg-[var(--color-surface)]"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         />
       ) : (
         <div className="m-auto text-sm text-[var(--color-text-tertiary)]">这个名字不对，找不到作品。</div>
