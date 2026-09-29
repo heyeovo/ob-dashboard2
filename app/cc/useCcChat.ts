@@ -198,6 +198,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const selfhostPickRef = useRef<CcUpstreamPick>(initialPick)
   const [settingsNote, setSettingsNote] = useState('')
   const [webDefaults, setWebDefaults] = useState<CcWebSettings>(DEFAULT_WEB_SETTINGS)
+  const [webDefaultsLoaded, setWebDefaultsLoaded] = useState(false)
   const [webSettings, setWebSettings] = useState<CcWebSettings>(DEFAULT_WEB_SETTINGS)
   const [webSaving, setWebSaving] = useState(false)
   /**
@@ -305,6 +306,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setWebSettings(settings)
       } catch {
         /* Haven 暂时不可用时沿用安全默认值，不阻断聊天 */
+      } finally {
+        if (!cancelled) setWebDefaultsLoaded(true)
       }
     })()
     return () => {
@@ -313,14 +316,21 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [])
 
   // 首次进页面：开一个新会话 id + 拉会话列表
+  // URL 带 session_id（Bark 通知、底栏回到上次的对话）时，不能直接把它设成 sessionId ——
+  // 那样历史和本窗配置都不会加载，看起来像个空的新窗口。先占一个新 id，
+  // 等上游配置和联网默认值拉回来，再走跟点列表一样的 switchSession（见下方 deepLink effect）。
   // 草稿同时从 localStorage 读回来，sessionId 和 draft 必须同一次提交，
   // 否则下面的持久化 effect 会先拿空草稿把存着的那份覆盖掉。
+  const deepLinkSessionRef = useRef('')
   useEffect(() => {
-    const initialSessionId = requestedCcSessionId(window.location.search) || newSessionId()
+    const requested = requestedCcSessionId(window.location.search)
+    const initialSessionId = newSessionId()
     const timer = window.setTimeout(() => {
       draftsRef.current = loadCcDrafts(window.localStorage)
+      deepLinkSessionRef.current = requested
+      if (requested) setHistoryLoading(true)
       setSessionId(initialSessionId)
-      setDraft(draftsRef.current.get(initialSessionId) || '')
+      setDraft('')
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -923,6 +933,14 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       isRemote,
     ],
   )
+
+  // URL 指定的对话：配置到齐后按点列表的方式打开，历史、本窗模型和设置才会一起恢复
+  useEffect(() => {
+    const target = deepLinkSessionRef.current
+    if (!target || !sessionId || !upstreamLoaded || !webDefaultsLoaded) return
+    deepLinkSessionRef.current = ''
+    void switchSession(target)
+  }, [sessionId, upstreamLoaded, webDefaultsLoaded, switchSession])
 
   const loadEarlierHistory = useCallback(async () => {
     if (!sessionId || !hasEarlierHistory || historyBeforeId == null || earlierHistoryLoading) return
