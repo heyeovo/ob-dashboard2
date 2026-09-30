@@ -2,40 +2,48 @@
 
 import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
-import { ComponentProps, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ComponentProps, FormEvent, ReactNode, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import DetailPanel from '../components/DetailPanel'
+import BodyPortal from '../components/BodyPortal'
 
-// 仅待办编辑 / 新增弹窗跟随可视视口，键盘弹起时保留底部保存区。
-function TodoFormPanel({ open, onClose, onSubmit, children }: { open: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode }) {
-  const formRef = useRef<HTMLFormElement>(null)
+const subscribeTodoLayout = (notify: () => void) => {
+  const query = window.matchMedia('(min-width: 640px)')
+  query.addEventListener('change', notify)
+  return () => query.removeEventListener('change', notify)
+}
+
+function TodoFormPanel({ open, onClose, onSubmit, title, children }: { open: boolean; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; title: string; children: ReactNode }) {
+  const desktop = useSyncExternalStore(subscribeTodoLayout, () => window.matchMedia('(min-width: 640px)').matches, () => false)
   useEffect(() => {
     if (!open) return
-    const panel = formRef.current?.parentElement?.parentElement
-    if (!panel) return
-    const viewport = window.visualViewport
-    const update = () => {
-      const height = viewport?.height || window.innerHeight
-      const top = viewport?.offsetTop || 0
-      panel.style.top = `${top + height / 2}px`
-      panel.style.bottom = 'auto'
-      panel.style.margin = '0 auto'
-      panel.style.transform = 'translateY(-50%)'
-      panel.style.maxHeight = `${height - 24}px`
-      panel.style.setProperty('--todo-visible-height', `${height - 24}px`)
-    }
-    update()
-    viewport?.addEventListener('resize', update)
-    viewport?.addEventListener('scroll', update)
-    window.addEventListener('resize', update)
-    return () => {
-      viewport?.removeEventListener('resize', update)
-      viewport?.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-    }
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = overflow }
   }, [open])
-  return <DetailPanel open={open} onClose={onClose} mode="modal" width="max-w-2xl" className="!p-4 sm:!p-6">
-    <form ref={formRef} onSubmit={onSubmit} className="flex max-h-[calc(var(--todo-visible-height,85dvh)-3rem)] min-h-0 flex-col gap-4">{children}</form>
+  if (!open) return null
+  if (!desktop) return <BodyPortal>
+    <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-base)] text-[var(--color-text-primary)] sm:hidden">
+      <form onSubmit={onSubmit} className="flex h-full min-h-0 flex-col">
+        <header className="shrink-0 border-b border-[var(--color-border-light)] bg-[var(--bg-base)] px-4 pt-[env(safe-area-inset-top,0px)]">
+          <div className="grid min-h-14 grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <button type="button" onClick={onClose} className="min-h-11 justify-self-start text-sm text-[var(--color-text-secondary)]">取消</button>
+            <h2 className="text-base font-medium">{title}</h2>
+            <button type="submit" className="min-h-11 justify-self-end text-sm font-medium text-[var(--color-primary)]">保存</button>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">{children}</div>
+      </form>
+    </div>
+  </BodyPortal>
+  return <DetailPanel open={open} onClose={onClose} mode="modal" width="max-w-2xl" className="!p-6">
+    <form onSubmit={onSubmit} className="flex max-h-[calc(85vh-3rem)] min-h-0 flex-col gap-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-2">
+        <div className="flex items-center justify-between"><h2 className="text-base font-medium">{title}</h2><button type="button" onClick={onClose} className="text-sm text-[var(--color-text-tertiary)]">取消</button></div>
+        {children}
+      </div>
+      <div className="shrink-0 border-t border-[var(--color-border-light)] pt-3"><button className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`} type="submit">保存</button></div>
+    </form>
   </DetailPanel>
 }
 
@@ -453,17 +461,13 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
     </div>
     <div className="flex gap-2">{domains.map(key => <button key={key} type="button" onClick={() => setDomain(key)} className={`rounded-full px-4 py-2 text-xs ${domain === key ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'}`}>{{ tech: '技术', emotional: '情感', unclassified: '未分类' }[key]} {groups[key].length}</button>)}</div>
 
-    <TodoFormPanel open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submit}>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-2">
-      <div className="flex items-center justify-between"><h2 className="font-medium">{editing ? '编辑 Todo' : '新增独立 Todo'}</h2><button type="button" onClick={() => setFormOpen(false)} className="text-sm text-[var(--color-text-tertiary)]">取消</button></div>
+    <TodoFormPanel open={formOpen} onClose={() => setFormOpen(false)} onSubmit={submit} title={editing ? '编辑 Todo' : '新增 Todo'}>
       <Field label="Todo 正文" wide><textarea required rows={3} className={input} value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} /></Field>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="类型"><select className={input} value={form.domain} onChange={e => setForm({ ...form, domain: e.target.value as TodoForm['domain'] })}><option value="tech">技术</option><option value="emotional">情感</option></select></Field>
         {editing?.source !== 'bucket' && <Field label="关联桶 ID（可选）"><input className={input} value={form.source_bucket} onChange={e => setForm({ ...form, source_bucket: e.target.value })} /></Field>}
         {editing?.source !== 'bucket' && <Field label="背景说明（无关联桶时必填）" wide><textarea required={!form.source_bucket.trim()} rows={6} ref={node => { if (node) { node.style.height = 'auto'; node.style.height = `${node.scrollHeight}px` } }} className={`${input} resize-none overflow-hidden`} value={form.context} onChange={e => setForm({ ...form, context: e.target.value })} /></Field>}
       </div>
-      </div>
-      <div className="shrink-0 border-t border-[var(--color-border-light)] pt-3"><button className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`} type="submit">保存</button></div>
     </TodoFormPanel>
 
     {loading ? <Empty text="加载中…" /> : <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]">{visible.length ? visible.map(item => <article key={item.id} className="flex gap-3 border-b border-[var(--color-border-light)] p-4 last:border-b-0">

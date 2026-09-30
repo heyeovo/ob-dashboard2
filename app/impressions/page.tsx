@@ -1,6 +1,8 @@
 'use client'
 
 import SubpageBackButton from '@/app/components/SubpageBackButton'
+import WeekCalendar from '@/app/components/WeekCalendar'
+import { MONTHS_ZH } from '../journal/journalData'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import { bucketDate, bucketName, isLegacyDailyImpression } from '../lib/dailyBucketDate'
@@ -97,7 +99,6 @@ function nextDate(date: string) {
 
 export default function DailyReviewsPage() {
   const today = DATE_FORMATTER.format(new Date())
-  const yesterday = previousDate(today)
   const [year, setYear] = useState(Number(today.slice(0, 4)))
   const [month, setMonth] = useState(Number(today.slice(5, 7)) - 1)
   const [selectedDate, setSelectedDate] = useState(today)
@@ -226,15 +227,6 @@ export default function DailyReviewsPage() {
     }
   }
 
-  const generateYesterday = () => {
-    selectDate(yesterday)
-    if (reviewMap.has(yesterday)) {
-      setNotice('昨天已经有日回顾，已为你打开。')
-      return
-    }
-    void generateReview(yesterday)
-  }
-
   const regenerate = () => {
     if (!selectedReview) return
     const override = selectedReview.edited_by_user === true
@@ -323,16 +315,16 @@ export default function DailyReviewsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="mx-auto max-w-2xl px-4 pt-5"><div className="flex items-center justify-between"><SubpageBackButton href="/" label="返回主页" /><div className="relative"><button type="button" onClick={() => setMenuOpen(!menuOpen)} aria-label="更多操作" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--glass-shadow)]">···</button>{menuOpen && <div className="cc-popmenu absolute right-0 top-11 z-20 min-w-40 rounded-[var(--radius-xl)] p-2 text-xs">{personas.length > 1 && <select aria-label="协作者" value={personaId} onChange={event => { setPersonaId(event.target.value); setMenuOpen(false) }} className="w-full rounded-[var(--radius-md)] p-2">{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select>}<button type="button" onClick={() => { generateYesterday(); setMenuOpen(false) }} className="w-full p-2 text-left">{reviewMap.has(yesterday) ? '查看昨天' : '生成昨天'}</button><button type="button" onClick={() => { setLoading(true); void loadData(personaId).finally(() => setLoading(false)); setMenuOpen(false) }} className="w-full p-2 text-left">刷新</button></div>}</div></div><p className="mt-5 text-xs uppercase tracking-[var(--label-tracking)] text-[var(--color-primary)]">DAYS · 日回顾</p><h1 className="mt-1 font-[var(--font-display)] text-3xl text-[var(--color-text-heading)]">日回顾</h1><p className="mt-2 text-sm text-[var(--color-text-tertiary)]">每天结束后，写给第二天的自己{personas.length > 1 ? ` · ${personas.find(persona => persona.id === personaId)?.name || personaId}` : ''}</p></header>
+      <header className="mx-auto max-w-2xl px-4 pt-5"><div className="flex items-center justify-between"><SubpageBackButton href="/" label="返回主页" /><div className="relative"><button type="button" onClick={() => setMenuOpen(!menuOpen)} aria-label="更多操作" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--glass-shadow)]">···</button>{menuOpen && <div className="cc-popmenu absolute right-0 top-11 z-20 min-w-40 rounded-[var(--radius-xl)] p-2 text-xs">{personas.length > 1 && <select aria-label="协作者" value={personaId} onChange={event => { setPersonaId(event.target.value); setMenuOpen(false) }} className="w-full rounded-[var(--radius-md)] p-2">{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select>}{!loading && selectedDate < today && !selectedReview && <button type="button" disabled={Boolean(generatingDate)} onClick={() => { void generateReview(selectedDate); setMenuOpen(false) }} className="w-full p-2 text-left">补写 {Number(selectedDate.slice(5, 7))}月{Number(selectedDate.slice(8, 10))}日</button>}<button type="button" onClick={() => { setLoading(true); void loadData(personaId).finally(() => setLoading(false)); setMenuOpen(false) }} className="w-full p-2 text-left">刷新</button></div>}</div></div><p className="mt-5 text-xs uppercase tracking-[var(--label-tracking)] text-[var(--color-primary)]">DAYS · 日回顾</p><h1 className="mt-1 font-[var(--font-display)] text-3xl font-normal text-[var(--color-text-heading)]">日回顾</h1><p className="mt-2 text-sm text-[var(--color-text-tertiary)]">每天结束后，写给第二天的自己{personas.length > 1 ? ` · ${personas.find(persona => persona.id === personaId)?.name || personaId}` : ''}</p></header>
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-5">
         <section className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]">
-          <div className="flex items-center justify-between px-4 py-4 sm:px-5"><h2 className="font-[var(--font-display)] text-lg">{['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'][month]}{chapters[`${year}-${String(month + 1).padStart(2, '0')}`]?.name ? ` · ${chapters[`${year}-${String(month + 1).padStart(2, '0')}`].name}` : ''}</h2><button type="button" onClick={() => setCalendarOpen(!calendarOpen)} className="text-xs text-[var(--color-primary)]">{calendarOpen ? '收起月历 ⌄' : '展开月历 ›'}</button></div>
-          <div className="grid grid-cols-7 gap-1 px-2 pb-3">{weekCells.map((cell, index) => <button key={cell.key} type="button" onClick={() => selectDate(cell.key)} disabled={cell.key > today} className={`flex min-h-16 flex-col items-center justify-center rounded-[var(--radius-md)] ${cell.key === selectedDate ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)]'} disabled:opacity-35`}><span className="text-2xs">{WEEKDAYS[index]}</span><span className="font-[var(--font-display)] text-lg">{cell.day}</span><span className="flex h-2 items-center">{reviewDates.has(cell.key) && <span className="h-1 w-1 rounded-full bg-[var(--color-primary)]" />}</span></button>)}</div>
+          <div className="home-section-heading px-4 pt-4 sm:px-5"><p className="home-kicker">{new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(year, month, 1)).toUpperCase()} · {MONTHS_ZH[month]}{chapters[`${year}-${String(month + 1).padStart(2, '0')}`]?.name ? ` · ${chapters[`${year}-${String(month + 1).padStart(2, '0')}`].name}` : ''}</p><button type="button" onClick={() => setCalendarOpen(!calendarOpen)} className="home-section-link">{calendarOpen ? '收起月历 ⌄' : '展开月历 ›'}</button></div>
+          <div className="px-4 pb-3 sm:px-5"><WeekCalendar days={weekCells.map((cell, index) => ({ date: cell.key, label: WEEKDAYS[index], hasReview: reviewDates.has(cell.key), hasMemory: eventDates.has(cell.key) }))} today={today} selectedDate={selectedDate} onSelect={selectDate} highlightSelection disableFuture /></div>
           {calendarOpen && <>
           <div className="flex items-center justify-between border-t border-[var(--color-border-light)] px-4 py-2">
             <button type="button" aria-label="上个月" onClick={() => changeMonth(-1)} className="flex h-9 w-9 items-center justify-center rounded-lg text-lg hover:bg-[var(--color-surface-secondary)]">‹</button>
-            <h2 className="font-semibold">{year} 年 {month + 1} 月</h2>
+            <p className="home-kicker">{year} 年 {month + 1} 月</p>
             <button type="button" aria-label="下个月" onClick={() => changeMonth(1)} className="flex h-9 w-9 items-center justify-center rounded-lg text-lg hover:bg-[var(--color-surface-secondary)]">›</button>
           </div>
           <div className="grid grid-cols-7 px-2 pt-3 sm:px-4">{WEEKDAYS.map(day => <div key={day} className="py-2 text-center text-xs text-[var(--color-text-disabled)]">{day}</div>)}</div>
@@ -351,22 +343,21 @@ export default function DailyReviewsPage() {
         </section>
 
         <section className="space-y-5">
-          <div className="flex items-center justify-between px-1"><div><p className="text-xs text-[var(--color-text-disabled)]">{selectedReview ? '1 篇日回顾' : '暂无日回顾'} · {selectedEvents.length} 件记忆事件</p></div></div>
           {error && <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">{error}</div>}
           {notice && <div className="rounded-xl border border-[var(--color-success-border)] bg-[var(--color-success-bg)] px-4 py-3 text-sm text-[var(--color-success)]">{notice}</div>}
           {loading ? <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-12 text-center text-sm text-[var(--color-text-disabled)]">正在读取…</div> : (
             <>
               <div>
-                <div className="mb-2 flex items-center justify-between px-1"><h3 className="font-[var(--font-display)] text-base">{selectedLabel}</h3>{selectedReview && !editing && <div className="relative"><button type="button" onClick={() => setReviewMenuOpen(!reviewMenuOpen)} className="text-sm">···</button>{reviewMenuOpen && <div className="cc-popmenu absolute right-0 top-6 z-20 min-w-28 rounded-[var(--radius-lg)] p-2"><button type="button" disabled={Boolean(generatingDate)} onClick={() => { regenerate(); setReviewMenuOpen(false) }} className="block px-2 py-1 text-xs">重新生成</button><button type="button" onClick={() => { setEditing(true); setDraft(selectedReview.content); setReviewMenuOpen(false) }} className="block px-2 py-1 text-xs">编辑</button></div>}</div>}</div>
+                <div className="mb-2 flex items-center justify-between px-1"><div><p className="home-kicker">DAY · 日回顾</p><h2 className="home-diary-title">{selectedLabel}</h2></div>{selectedReview && !editing && <div className="relative"><button type="button" onClick={() => setReviewMenuOpen(!reviewMenuOpen)} className="text-sm">···</button>{reviewMenuOpen && <div className="cc-popmenu absolute right-0 top-6 z-20 min-w-28 rounded-[var(--radius-lg)] p-2"><button type="button" disabled={Boolean(generatingDate)} onClick={() => { regenerate(); setReviewMenuOpen(false) }} className="block px-2 py-1 text-xs">重新生成</button><button type="button" onClick={() => { setEditing(true); setDraft(selectedReview.content); setReviewMenuOpen(false) }} className="block px-2 py-1 text-xs">编辑</button></div>}</div>}</div>
                 {selectedReview ? <article className="rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
                   <p className="mb-3 text-2xs text-[var(--color-text-disabled)]">{selectedReview.edited_by_user ? '已手动微调' : '自动生成'}{selectedReview.source_turn_count ? ` · ${selectedReview.source_turn_count} 轮素材` : ''}</p>
                   {editing ? <div><textarea value={draft} onChange={event => setDraft(event.target.value)} rows={8} className="w-full resize-y rounded-[var(--radius-lg)] border border-[var(--color-border)] px-3 py-2.5 text-base leading-7 outline-none focus:border-[var(--color-primary)]" /><div className="mt-2 flex justify-end gap-2"><button type="button" disabled={saving} onClick={() => setEditing(false)} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-1.5 text-xs">取消</button><button type="button" disabled={saving || !draft.trim()} onClick={() => void saveReview()} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-1.5 text-xs text-[var(--color-on-primary)] disabled:opacity-40">{saving ? '保存中…' : '保存微调'}</button></div></div> : <p className="whitespace-pre-wrap text-md leading-[1.9] text-[var(--color-text-secondary)]">{selectedReview.content}</p>}
                 </article> : <div className="rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border)] px-4 py-8 text-center text-sm text-[var(--color-text-disabled)]">这一天还没有日回顾{selectedDate < today && <button type="button" onClick={() => void generateReview(selectedDate)} className="ml-2 text-[var(--color-primary)]">补写这一天</button>}</div>}
               </div>
-              <div><h3 className="mb-2 px-1 font-[var(--font-display)] text-lg">那天存下的 · {selectedEvents.length}</h3><div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)]">{selectedEvents.length > 0 ? selectedEvents.map(bucket => <button key={bucket.id} type="button" onClick={() => void openBucket(bucket.id)} className="flex w-full items-center gap-3 border-b border-[var(--color-border-light)] p-4 text-left last:border-b-0"><span className={`h-2 w-2 shrink-0 rounded-full ${bucket.type === 'feel' || bucket.metadata?.type === 'feel' ? 'bg-[var(--color-feel)]' : 'bg-[var(--color-memory-event)]'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm">{bucketName(bucket)}</span><span className="text-2xs text-[var(--color-text-tertiary)]">{bucket.type === 'feel' ? '感受' : '记忆事件'}</span></span><span className="text-[var(--color-text-tertiary)]">›</span></button>) : <p className="p-6 text-center text-sm text-[var(--color-text-tertiary)]">这一天没有带日期的记忆事件</p>}</div></div>
+              <div><h3 className="home-kicker mb-2 px-1">SAVED · 那天存下的 · {selectedEvents.length}</h3><div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)]">{selectedEvents.length > 0 ? selectedEvents.map(bucket => <button key={bucket.id} type="button" onClick={() => void openBucket(bucket.id)} className="flex w-full items-center gap-3 border-b border-[var(--color-border-light)] p-4 text-left last:border-b-0"><span className={`h-2 w-2 shrink-0 rounded-full ${bucket.type === 'feel' || bucket.metadata?.type === 'feel' ? 'bg-[var(--color-feel)]' : 'bg-[var(--color-memory-event)]'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm">{bucketName(bucket)}</span><span className="text-2xs text-[var(--color-text-tertiary)]">{bucket.type === 'feel' ? '感受' : '记忆事件'}</span></span><span className="text-[var(--color-text-tertiary)]">›</span></button>) : <p className="p-6 text-center text-sm text-[var(--color-text-tertiary)]">这一天没有带日期的记忆事件</p>}</div></div>
             </>
           )}
-          <nav className="grid grid-cols-2 gap-3"><button type="button" onClick={() => selectDate(previousDate(selectedDate))} className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left text-sm">‹ 前一天</button>{selectedDate < today ? <button type="button" onClick={() => selectDate(nextDate(selectedDate))} className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-right text-sm">后一天 ›</button> : <span />}</nav>
+          <nav className="home-section-heading px-1"><button type="button" onClick={() => selectDate(previousDate(selectedDate))} className="home-section-link py-2">‹ 前一天</button>{selectedDate < today ? <button type="button" onClick={() => selectDate(nextDate(selectedDate))} className="home-section-link py-2">后一天 ›</button> : <span />}</nav>
         </section>
       </main>
 
