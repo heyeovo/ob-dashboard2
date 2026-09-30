@@ -21,9 +21,6 @@ export default function CollaboratorPage({ id }: { id: string }) {
   const [field, setField] = useState<Field | null>(null)
   const [fieldValue, setFieldValue] = useState('')
   const [tint, setTint] = useState('')
-  const [directoriesOpen, setDirectoriesOpen] = useState(false)
-  const [dirInput, setDirInput] = useState('')
-  const [writeDirInput, setWriteDirInput] = useState('')
   const [hint, setHint] = useState('')
   const [orderOverride, setOrderOverride] = useState<string[] | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -68,18 +65,6 @@ export default function CollaboratorPage({ id }: { id: string }) {
     const moduleId = `prompt-${crypto.randomUUID()}`
     const next = { ...person, promptModules: [...modules, { id: moduleId, name: '未命名模块', content: '', enabledByDefault: false }] }
     if (await persist(next)) router.push(`/collaborators/${encodeURIComponent(id)}/modules/${encodeURIComponent(moduleId)}`)
-  }
-  const saveDirs = async (key: 'dirs' | 'writeDirs', text: string) => {
-    if (!person || !text.trim()) return
-    const next = [...new Set([...person[key], text.trim()])]
-    if (isNew) setNewDraft({ ...person, [key]: next })
-    else await persist({ ...person, [key]: next })
-  }
-  const removeDir = async (key: 'dirs' | 'writeDirs', value: string) => {
-    if (!person) return
-    const next = { ...person, [key]: person[key].filter(item => item !== value) }
-    if (isNew) setNewDraft(next)
-    else await persist(next)
   }
   const finishDrag = async () => {
     const drag = dragRef.current
@@ -142,13 +127,6 @@ export default function CollaboratorPage({ id }: { id: string }) {
         </div>)}
       </div>
       <p className="px-1 pt-2 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">开关 = 新窗口默认带上这个模块。按住左边 ⋮⋮ 拖动排序。</p>
-      <Section title="Directories · 目录" />
-      <div className="prompt-group">
-        <button type="button" onClick={() => setDirectoriesOpen(!directoriesOpen)} aria-expanded={directoriesOpen} className="flex w-full items-center justify-between px-4 py-3 text-left text-note text-[var(--color-text-secondary)]"><span>能访问 {person.dirs.length} 个 · 能修改 {person.writeDirs.length} 个</span><span>以后搬去工作台 ›</span></button>
-        {directoriesOpen && <div className="space-y-5 border-t border-[var(--color-border-subtle)] px-4 py-4">
-          {([{ key: 'dirs', title: '能访问的目录', hint: '一行一个绝对路径。第一个当工作目录；留空只能读看板仓库。', value: dirInput, set: setDirInput }, { key: 'writeDirs', title: '能修改的目录', hint: '留空 = 一个文件都不能改。只填现在正在做的项目。', value: writeDirInput, set: setWriteDirInput }] as const).map(group => <div key={group.key}><h3 className="mb-1 text-xs text-[var(--color-text-tertiary)]">{group.title}</h3><p className="mb-2 text-meta text-[var(--color-text-tertiary)]">{group.hint}</p>{person[group.key].map(path => <div key={path} className="flex items-center justify-between gap-2 py-1 text-note"><span className="min-w-0 break-all font-mono">{path}</span><button type="button" onClick={() => void removeDir(group.key, path)} className="text-[var(--color-danger)]">移除</button></div>)}<div className="mt-2 flex gap-2"><input value={group.value} onChange={event => group.set(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void saveDirs(group.key, group.value); group.set('') } }} className="cc-input min-w-0 flex-1 font-mono" placeholder="输入绝对路径" /><button type="button" onClick={() => { void saveDirs(group.key, group.value); group.set('') }} className="text-xs text-[var(--color-primary)]">添加</button></div></div>)}
-        </div>}
-      </div>
       {people.personas.length > 1 && <button type="button" onClick={async () => { if (!window.confirm('确定删除这个协作者？')) return; const result = await people.deletePersona(person.id); if (result.ok) router.replace('/cc') }} className="mt-8 w-full py-3 text-center text-note text-[var(--color-danger)]">删除这个协作者</button>}
     </>}
     {hint && <p role="alert" className="mt-3 text-center text-xs text-[var(--color-danger)]">{hint}</p>}

@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   // Agent SDK 会 spawn claude code 子进程并读取自带的平台二进制，
   // 不能被打包进 server bundle，否则子进程找不到可执行文件。
   serverExternalPackages: ['@anthropic-ai/claude-agent-sdk'],
+  // proxy.ts 会把请求体缓冲一份，默认只缓冲 10MB，超出的部分被截掉。
+  // 工作台「放进来」单个文件上限 10MB，加上 multipart 外壳会超，所以放到 12MB。
+  experimental: {
+    proxyClientMaxBodySize: '12mb',
+  },
   // 手机从内网 IP 访问 dev 服务器（`npm run dev:lan`）时必须放行。
   //
   // Next 默认只让 localhost 请求 dev 资源，别的来源算跨源，那些 `/_next/*` 的 JS

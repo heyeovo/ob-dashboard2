@@ -1,85 +1,60 @@
 'use client'
-import { useState } from 'react'
-import EntryGrid, { type Entry } from '../components/EntryGrid'
-import CcWorkbenchPanel from './CcWorkbenchPanel'
-import ContextAuditPanel from './ContextAuditPanel'
 
-/**
- * 工作台 + 调参（4.6 建，第 5 步填内容）。
- *
- * 工作台 = 当前会话的「现在是什么状态」，跟对话流（过程）互补：
- *   ① 待批准的操作队列   ② 这次会话改过哪些文件   ③ 回退点   ④ 命令输出
- * 内容全在 CcWorkbenchPanel 里，数据来自 /api/cc-workbench。
- *
- * 调参 = 引擎在干什么。现有的 breath-sim 那五个 tab 不搬代码，这里给入口。
- */
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { usePersonas } from '@/app/cc/usePersonas'
+import { WorkbenchIcon, type WorkbenchIconName } from './WorkbenchIcon'
 
-const BENCH_ENTRIES: Entry[] = [
-  { key: 'artifacts', label: '小作品', desc: '言之做过的页面、小游戏和图，点开就能玩', href: '/artifacts' },
+type Artifact = { name: string; title: string; updated_at: string }
+type RootInfo = { key: string; available: boolean; count?: number }
+type Entry = { label: string; description: string; href: string; icon: WorkbenchIconName; primary?: boolean; root?: string }
+
+const FILES: Entry[] = [
+  { label: '言之的文件', description: '作品、你放进来的东西', href: '/workbench/files/yanzhi', icon: 'folder', primary: true, root: 'yanzhi' },
+  { label: 'dashboard', description: '前端仓库 · 只读', href: '/workbench/files/dashboard', icon: 'folder', root: 'dashboard' },
+  { label: 'haven', description: '记忆后端仓库 · 只读', href: '/workbench/files/haven', icon: 'folder', root: 'haven' },
+  { label: '言之的笔记', description: 'Claude Code 里的工作笔记 · 只读', href: '/workbench/files/notes', icon: 'note', root: 'notes' },
+]
+const ENGINE: Entry[] = [
+  { label: '工具 · MCP', description: '工具清单与 MCP 服务', href: '/tools/mcp', icon: 'plug' },
+  { label: '模拟 Breath', description: 'Pipeline、即时模拟、评分旋钮', href: '/breath-sim', icon: 'wave' },
+  { label: '召回透镜', description: '逐轮看召回、拒绝与降级', href: '/recall-lens', icon: 'lens' },
+  { label: '聊天切片', description: '按日期检查离线切片', href: '/conversation-slices', icon: 'slice' },
+  { label: '上下文审计', description: '这一轮到底带了什么进去', href: '/workbench/context', icon: 'layers' },
+  { label: '当前工作窗口', description: '待批准、改过的文件、回退点、命令输出', href: '/workbench/session', icon: 'now' },
 ]
 
-const TUNE_ENTRIES: Entry[] = [
-  { key: 'mcp', label: '工具 · MCP', desc: '工具清单与 MCP 服务', href: '/tools/mcp' },
-  { key: 'breath', label: '模拟 Breath', desc: 'Pipeline / 即时模拟 / 评分旋钮 / 命中统计 / 检索追溯', href: '/breath-sim' },
-  { key: 'inject', label: '召回透镜', desc: '逐轮查看召回、拒绝、规则解释与系统降级', href: '/recall-lens' },
-  { key: 'chat-slices', label: '聊天切片检查', desc: '按日期检查离线切片、回查原文与管理补生成任务', href: '/conversation-slices' },
-]
-
-export default function WorkbenchPage() {
-  const [tab, setTab] = useState<'bench' | 'tune'>('bench')
-
-  return (
-    <div className="mobile-page-with-topbar min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="mobile-page-topbar flex items-center justify-between px-3 md:hidden">
-        <span className="text-sm font-semibold">{tab === 'bench' ? '工作台' : '调参'}</span>
-        <Switch tab={tab} onPick={setTab} />
-      </header>
-
-      <main className="mx-auto max-w-5xl px-3 pt-5 sm:px-6 sm:pt-10">
-        <div className="mb-6 hidden items-end justify-between md:flex">
-          <div>
-            <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
-              {tab === 'bench' ? '工作台' : '调参'}
-            </h1>
-            <p className="text-sm text-[var(--color-text-tertiary)]">
-              {tab === 'bench'
-                ? '当前会话的状态：待批准、改过的文件、回退点、命令输出'
-                : '看引擎在干什么'}
-            </p>
-          </div>
-          <Switch tab={tab} onPick={setTab} />
-        </div>
-
-        {tab === 'bench' ? (
-          <div className="space-y-4">
-            <EntryGrid entries={BENCH_ENTRIES} />
-            <CcWorkbenchPanel />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <EntryGrid entries={TUNE_ENTRIES} />
-            <ContextAuditPanel />
-          </div>
-        )}
-      </main>
-    </div>
-  )
+function Section({ title, action }: { title: string; action?: React.ReactNode }) {
+  return <div className="flex items-center justify-between px-1 pb-2 pt-5"><h2 className="text-3xs font-semibold uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">{title}</h2>{action}</div>
 }
 
-function Switch({ tab, onPick }: { tab: 'bench' | 'tune'; onPick: (t: 'bench' | 'tune') => void }) {
-  return (
-    <div className="flex items-center gap-1 rounded-lg bg-[var(--color-surface-tertiary)] p-0.5 text-xs">
-      {([['bench', '工作台'], ['tune', '调参']] as const).map(([k, label]) => (
-        <button
-          key={k}
-          onClick={() => onPick(k)}
-          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-            tab === k ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-tertiary)]'
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
+function Row({ entry, status }: { entry: Entry; status?: string }) {
+  const unavailable = status === '这台机器上没有'
+  const content = <><WorkbenchIcon name={entry.icon} primary={entry.primary} /><span className="min-w-0 flex-1"><span className="block truncate text-note">{entry.label}</span><span className="block truncate text-2xs text-[var(--color-text-tertiary)]">{entry.description}</span></span>{status && <span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{status}</span>}<span aria-hidden="true" className="text-[var(--color-text-disabled)]">›</span></>
+  return unavailable
+    ? <div className="prompt-row flex min-h-13 items-center gap-3 px-4 py-2 opacity-60">{content}</div>
+    : <Link href={entry.href} className="prompt-row flex min-h-13 items-center gap-3 px-4 py-2">{content}</Link>
+}
+
+export default function WorkbenchPage() {
+  const people = usePersonas()
+  const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [roots, setRoots] = useState<RootInfo[]>([])
+  useEffect(() => {
+    void fetch('/api/artifacts').then(r => r.json()).then(data => { if (data.ok) setArtifacts(data.items.slice(0, 8)) }).catch(() => {})
+    void fetch('/api/files?root=all').then(r => r.json()).then(data => { if (data.ok) setRoots(data.roots) }).catch(() => {})
+  }, [])
+  const rootStatus = (key: string) => {
+    const root = roots.find(item => item.key === key)
+    return root ? root.available ? key === 'yanzhi' ? `${root.count ?? 0} 项` : undefined : '这台机器上没有' : undefined
+  }
+  return <div className="mobile-page-with-topbar min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
+    <header className="mobile-page-topbar flex items-center px-3 md:hidden"><span className="text-xl font-semibold" style={{ fontFamily: 'var(--font-display)' }}>工作台</span></header>
+    <main className="mx-auto max-w-2xl px-3 pt-5 sm:px-6 sm:pt-10">
+      <h1 className="mb-6 hidden text-3xl font-bold tracking-tight text-[var(--color-text-heading)] md:block">工作台</h1>
+      {artifacts.length > 0 && <section><Section title="Works · 作品" action={<Link href="/workbench/files/yanzhi/artifacts" className="text-xs text-[var(--color-primary)]">全部 ›</Link>} /><div className="-mx-3 flex gap-2.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">{artifacts.map((item, index) => <Link key={item.name} href={`/artifacts/${encodeURIComponent(item.name)}`} className="w-[132px] shrink-0 overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]"><div className="relative h-[74px] bg-[image:var(--theme-mesh)] bg-[length:160%_160%]" style={{ backgroundPosition: `${index * 19 % 100}% ${index * 27 % 100}%` }}><span className="absolute bottom-1.5 right-2 max-w-[110px] truncate font-[family-name:var(--font-display)] text-xs italic text-[var(--color-text-heading)]">{item.name.replace(/\.(html|svg)$/i, '')}</span></div><div className="truncate px-2.5 pt-2 font-[family-name:var(--font-display)] text-xs font-semibold">{item.title}</div><div className="px-2.5 pb-2 pt-0.5 text-3xs text-[var(--color-text-tertiary)]">{new Date(item.updated_at).toLocaleDateString('zh-CN')}</div></Link>)}</div></section>}
+      <section><Section title="Files · 文件" /><div className="prompt-group">{FILES.map(entry => <Row key={entry.href} entry={entry} status={rootStatus(entry.root!)} />)}</div><div className="prompt-group mt-2.5"><Row entry={{ label: '目录权限', description: `能访问 ${people.active.dirs.length} 个 · 能修改 ${people.active.writeDirs.length} 个`, href: '/workbench/dirs', icon: 'lock' }} /></div></section>
+      <section><Section title="Engine · 引擎" /><div className="prompt-group">{ENGINE.map(entry => <Row key={entry.href} entry={entry} />)}</div></section>
+    </main>
+  </div>
 }
