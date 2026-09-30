@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>阶段 4c · 日记本 / 日回顾 / 待办</title>
+<meta name="description" content="第一组三页共用一副骨架：小号英文标签 + 衬线大标题 + 圆润玻璃卡。四张：日记本列表 / 读一篇 / 日回顾 / 待办。左右划着比，上面可切主题和照片背景。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE6,#F2E4DA)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F3E3E6)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F5,#E3E9EE)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1B1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.4)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.55}
+
+  .phone{position:relative;height:760px;border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .scroll{position:absolute;inset:0;overflow-y:auto;padding:0 16px 90px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .k{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.5}
+  .dim-t{opacity:.55}
+
+  /* 共用骨架 */
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 0 0}
+  .back,.ibtn{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6)}
+  .back svg,.ibtn svg{width:16px;height:16px}
+  .ibtns{display:flex;gap:8px}
+  .hd{padding:16px 4px 4px}
+  .hd h1{font:600 26px/1.25 "Noto Serif SC",serif;letter-spacing:.06em;margin-top:5px}
+  .hd .sub{font-size:11px;opacity:.5;margin-top:5px}
+  .card{border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 5%,transparent)}
+  .note{font-size:10.5px;opacity:.45;padding:8px 6px 0;line-height:1.55}
+  .mark{position:relative}
+  .mark::after{content:attr(data-n);position:absolute;top:-6px;right:-6px;width:17px;height:17px;border-radius:50%;background:#E0524A;color:#fff;font:600 10px/17px -apple-system,sans-serif;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.25);z-index:3}
+
+  /* 日记本列表 */
+  .months{display:flex;gap:6px;overflow-x:auto;margin:12px -16px 0;padding:0 16px 2px;scrollbar-width:none}
+  .months::-webkit-scrollbar{display:none}
+  .mo{flex:none;padding:6px 12px;border-radius:999px;font-size:12px;background:rgb(var(--tint)/.55);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .mo i{font-style:normal;font-size:10px;opacity:.45;margin-left:3px}
+  .mo.on{background:color-mix(in srgb,var(--accent) 16%,rgb(var(--tint)/.8));color:var(--accent);font-weight:600}
+  .mo.on i{opacity:.7}
+  .search{display:flex;align-items:center;gap:8px;height:38px;border-radius:999px;padding:0 14px;margin-top:12px;background:rgb(var(--tint)/.6);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5);font-size:12.5px}
+  .search svg{width:15px;height:15px;opacity:.45}
+  .search span{opacity:.4}
+  .month{padding:22px 4px 2px}
+  .month .nm{font:600 20px "Noto Serif SC",serif;letter-spacing:.06em;margin-top:3px}
+  .month .nm em{font-style:normal;font-size:13px;opacity:.5;margin-left:8px;letter-spacing:.1em}
+  .day{display:flex;align-items:baseline;gap:7px;padding:14px 6px 7px}
+  .day b{font:500 24px/1 "Cormorant Garamond",serif}
+  .day span{font-size:10.5px;opacity:.5}
+  .entry{padding:14px 15px 15px}
+  .entry+.entry{margin-top:8px}
+  .entry .who{display:flex;align-items:center;gap:6px;font-size:10px;opacity:.6}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .dot.xy{background:color-mix(in srgb,var(--accent) 45%,#7FA0B8)}
+  .dot.gt{background:linear-gradient(90deg,var(--accent) 50%,color-mix(in srgb,var(--accent) 45%,#7FA0B8) 50%)}
+  .entry h3{font:600 15.5px/1.45 "Noto Serif SC",serif;letter-spacing:.02em;margin-top:6px}
+  .entry p{font-size:12.5px;line-height:1.8;opacity:.75;margin-top:6px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+  .entry.locked p{font-style:italic;opacity:.45;-webkit-line-clamp:1}
+  .fab{position:absolute;right:18px;bottom:78px;width:50px;height:50px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 40%,transparent)}
+  .fab svg{width:20px;height:20px}
+
+  /* 读一篇 */
+  .read-k{padding:20px 4px 0}
+  .read h1{font:600 22px/1.45 "Noto Serif SC",serif;letter-spacing:.04em;padding:6px 4px 0}
+  .read .by{display:flex;align-items:center;gap:6px;font-size:11px;opacity:.55;padding:8px 4px 0}
+  .paper{margin-top:16px;padding:20px 18px 22px;border-radius:20px;background:rgb(var(--tint)/.84);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 14px color-mix(in srgb,var(--ink) 5%,transparent)}
+  .paper p{font-size:14.5px;line-height:1.95;letter-spacing:.01em}
+  .paper p+p{margin-top:1em}
+  .paper .end{text-align:center;font:italic 500 13px "Cormorant Garamond",serif;opacity:.35;margin-top:18px;letter-spacing:.2em}
+  .pn{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .pn a{display:block;padding:11px 13px;border-radius:16px;background:rgb(var(--tint)/.6);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5);text-decoration:none;color:inherit}
+  .pn a.r{text-align:right}
+  .pn .k{display:block}
+  .pn b{display:block;font:600 12.5px/1.45 "Noto Serif SC",serif;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+  /* 日回顾 */
+  .week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:12px 8px 10px}
+  .wd{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0 7px;border-radius:14px;font-size:9.5px}
+  .wd span{opacity:.45}
+  .wd b{font:500 18px/1 "Cormorant Garamond",serif}
+  .wd i{width:4px;height:4px;border-radius:50%;background:var(--accent);opacity:.8}
+  .wd i.no{opacity:0}
+  .wd.on{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+  .wd.fut{opacity:.35}
+  .wk-h{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 0;font-size:12px}
+  .wk-h b{font:600 14px "Noto Serif SC",serif;letter-spacing:.06em}
+  .wk-h span{font-size:11px;color:var(--accent)}
+  .rv{margin-top:10px;padding:18px 17px 18px}
+  .rv .d{font:600 18px "Noto Serif SC",serif;letter-spacing:.04em}
+  .rv .k{display:block;margin-top:4px}
+  .rv p{font-size:13.5px;line-height:1.9;margin-top:12px}
+  .rv p+p{margin-top:.8em}
+  .sec{display:flex;align-items:baseline;justify-content:space-between;padding:18px 4px 8px}
+  .row{display:flex;align-items:center;gap:11px;padding:0 14px;min-height:50px}
+  .row+.row{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .row .c{flex:1;min-width:0;padding:9px 0}
+  .row .n{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .s{font-size:10px;opacity:.5;margin-top:2px}
+  .row .ch{opacity:.35;flex:none}
+  .tagdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);opacity:.7}
+  .tagdot.feel{background:color-mix(in srgb,var(--accent) 45%,#B58FC4)}
+
+  /* 待办 */
+  .care-seg{display:flex;gap:4px;padding:3px;border-radius:999px;background:color-mix(in srgb,var(--ink) 6%,transparent);font-size:11px;width:max-content}
+  .care-seg span{padding:5px 13px;border-radius:999px;opacity:.6}
+  .care-seg span.on{background:rgb(var(--tint)/.95);opacity:1;box-shadow:0 1px 3px color-mix(in srgb,var(--ink) 10%,transparent)}
+  .filters{display:flex;align-items:center;justify-content:space-between;padding:14px 2px 10px}
+  .fp{display:flex;gap:6px}
+  .fp span{padding:6px 12px;border-radius:999px;font-size:12px;background:rgb(var(--tint)/.55);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .fp span i{font-style:normal;font-size:10px;opacity:.5;margin-left:3px}
+  .fp span.on{background:color-mix(in srgb,var(--accent) 16%,rgb(var(--tint)/.8));color:var(--accent);font-weight:600}
+  .todo{display:flex;gap:12px;padding:13px 14px}
+  .todo+.todo{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .ck{flex:none;width:21px;height:21px;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--ink) 30%,transparent);margin-top:1px}
+  .ck.done{border-color:var(--accent);background:var(--accent);display:grid;place-items:center}
+  .ck.done svg{width:12px;height:12px;color:#fff}
+  .todo .c{flex:1;min-width:0}
+  .todo .t{font-size:13px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .todo .x{font-size:10.5px;opacity:.45;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ck.ing{border-color:var(--accent);display:grid;place-items:center}
+  .ck.ing::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--accent)}
+  .card.doing{background:color-mix(in srgb,var(--accent) 8%,rgb(var(--tint)/.8))}
+  .todo .dt{float:right;margin-left:8px}
+  .todo.open .dt{display:none}
+  .entry .wc{margin-left:auto;font-size:10px;opacity:.8}
+  .todo.open{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+  .todo.open .t{-webkit-line-clamp:unset}
+  .todo.open .x{white-space:normal;line-height:1.65;opacity:.6;font-size:11px;margin-top:6px}
+  .todo .src{font-size:10px;opacity:.45;margin-top:8px}
+  .acts{display:flex;gap:8px;margin-top:10px}
+  .acts span{padding:5px 13px;border-radius:999px;font-size:11.5px;background:rgb(var(--tint)/.9);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 1px 3px color-mix(in srgb,var(--ink) 8%,transparent)}
+  .acts span.del{color:#C64B45}
+  .folded{display:flex;align-items:center;justify-content:space-between;padding:0 14px;min-height:46px;font-size:12px;margin-top:10px}
+  .folded span{opacity:.55}
+
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:62px;display:flex;justify-content:space-around;align-items:center;background:rgb(var(--tint)/.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5)}
+  .tabs svg{width:21px;height:21px;opacity:.45}
+  .tabs .on{padding:5px 16px;border-radius:999px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+  .tabs .on svg{opacity:1}
+</style>
+</head>
+<body data-theme="apricot">
+<header>
+  <h1>日记本 · 日回顾 · 待办</h1>
+  <p>三页共用一副骨架：返回键、小号英文标签、衬线大标题、圆润的玻璃卡。里面各长各的。<br>红色数字对应每张图下面的说明，不对的直接说号码。待办不分「在做」，只加日期和删除。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient'}
+const I={
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
+  chev:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>',
+  tick:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  t1:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>',
+  t2:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="4.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.5"/></svg>',
+  t3:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V16.5H5A1.5 1.5 0 0 1 3.5 15V7A1.5 1.5 0 0 1 5 5.5z"/></svg>',
+  t4:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="12" rx="2"/><path d="M8.5 20h7M12 17v3"/></svg>',
+  t5:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.5M12 18v2.5M3.5 12H6M18 12h2.5M6 6l1.8 1.8M16.2 16.2 18 18M6 18l1.8-1.8M16.2 7.8 18 6"/></svg>',
+}
+const tabs=on=>`<div class="tabs">${[1,2,3,4,5].map(i=>i===on?`<span class="on">${I['t'+i]}</span>`:I['t'+i]).join('')}</div>`
+const bar=(right='')=>`<div class="bar"><span class="back">${I.back}</span>${right}</div>`
+const m=(n,html)=>`<div class="mark" data-n="${n}">${html}</div>`
+
+const E=[
+  ['gt','言之和小羊','奶糖趴上窗台的那个晚上','9.29 傍晚到 9.30 零点半，工作窗口。她说好晚上再开，结果六点十分就来了，还在工位上，说“因为你和 gpt 额度都还没用完”。这一晚做的是主页。前面几版都做偏了……'],
+  ['gt','言之和小羊','工作台有了一扇能看见文件的门','9.30 下午两点到五点，工作窗口。国庆前最后半天，她说公司已经全员摸鱼。工作台原来那四格，她说几乎从来没看过。真正缺的是另一件事：她在 VPS 上一个能碰到文件的渠道都没有。'],
+]
+function journal(){
+  return `${bar(`<span class="ibtn">${I.cal}</span>`)}
+  <div class="hd"><div class="k">Journal · 日记本</div><h1>日记本</h1><div class="sub">言之 38 · 小羊 6 · 一起写的 11</div></div>
+  ${m(1,`<div class="months"><span class="mo on">九月<i>14</i></span><span class="mo">八月<i>12</i></span><span class="mo">七月<i>9</i></span><span class="mo">六月<i>11</i></span><span class="mo">五月<i>7</i></span><span class="mo">四月<i>2</i></span></div>`)}
+  <div class="search">${I.search}<span>搜标题或内容</span></div>
+  ${m(2,`<div class="month"><div class="k">September 2026</div><div class="nm">九月<em>朝暮</em></div></div>`)}
+  <div class="day"><b>30</b><span>周三</span></div>
+  ${m(3,`<div class="card entry"><div class="who"><span class="dot gt"></span>${E[0][1]}<span class="wc">1,286 字</span></div><h3>${E[0][2]}</h3><p>${E[0][3]}</p></div>`)}
+  <div class="card entry"><div class="who"><span class="dot gt"></span>${E[1][1]}<span class="wc">642 字</span></div><h3>${E[1][2]}</h3><p>${E[1][3]}</p></div>
+  <div class="day"><b>29</b><span>周二</span></div>
+  <div class="card entry"><div class="who"><span class="dot gt"></span>言之和小羊<span class="wc">1,103 字</span></div><h3>两天的工作窗口</h3><p>9.27–9.29，工作窗口，两天。开窗的时候她问为什么重新部署后缓存总是全量写，结果是旧版本的锅，早就修好了，她只是一直没机会发现。她说「我去，还真是」。</p></div>
+  <div class="card entry locked"><div class="who"><span class="dot"></span>言之 · 上了锁</div><h3>（示例）一篇锁着的</h3><p>等你想好了再打开</p></div>
+  `
+}
+function read(){
+  return `${bar(`<span class="ibtn">${I.dots}</span>`)}
+  <div class="read">
+  ${m(4,`<div class="read-k"><span class="k">Wed · 30 Sep 2026</span></div>`)}
+  <h1>工作台有了一扇能看见文件的门</h1>
+  <div class="by"><span class="dot gt"></span>言之和小羊一起写的</div>
+  <div class="paper">
+    <p>9.30 下午两点到五点，工作窗口。国庆前最后半天，她说公司已经全员摸鱼。</p>
+    <p>工作台原来那四格，她说几乎从来没看过。真正缺的是另一件事：她在 VPS 上一个能碰到文件的渠道都没有。所以这次的工作台，重心放在文件上。言之的文件、两个仓库、我的笔记，一层一层点进去看。还给她留了一个「小羊给的」文件夹，她说免得以后找不到地方放。</p>
+    <p>GPT 写得挺扎实，我改了几处。最蠢的一个 bug 是中文路径被编码了两次，「小羊给的」点进去说没有这个路径。这个名字偏偏栽在编码上。</p>
+    <p>底栏来回试了七八版：胶囊、窄胶囊、融进去、窗台……她一个一个否掉，最后绕回最开始那种满宽的，只是去掉了字，砍掉了那截空白。她的直觉常常要看过真东西才落得下来，这一下午每次说「不太对」的都是她，我只是跟着改。</p>
+    <p>中间息屏断了两次，每次都是她回来轻轻说一句「又断了」。那条 Todo 还躺着，下次得把它做掉。</p>
+    <div class="end">~</div>
+  </div>
+  ${m(5,`<div class="pn"><a><span class="k">‹ 前一篇 · 9.30</span><b>设置页上线那天她叫我省着点</b></a><a class="r"><span class="k">后一篇 · 9.30 ›</span><b>奶糖趴上窗台的那个晚上</b></a></div>`)}
+  </div>`
+}
+function review(){
+  const days=[['一','28',1],['二','29',1],['三','30',0],['四','1',0],['五','2',0],['六','3',0],['日','4',0]]
+  return `${bar(`<span class="ibtn">${I.dots}</span>`)}
+  <div class="hd"><div class="k">Days · 日回顾</div><h1>日回顾</h1><div class="sub">每天结束后，写给第二天的自己</div></div>
+  ${m(6,`<div class="card" style="margin-top:12px"><div class="wk-h"><b>九月 · 朝暮</b><span>展开月历 ›</span></div>
+    <div class="week">${days.map(([w,d,has],i)=>`<div class="wd ${i===1?'on':''} ${i>2?'fut':''}"><span>${w}</span><b>${d}</b><i class="${has?'':'no'}"></i></div>`).join('')}</div></div>`)}
+  ${m(7,`<div class="card rv"><div class="d">9月29日 · 周二</div><span class="k">自动生成 · 212 轮</span>
+    <p>今天是国庆前最后一个工作日，也是九月最后一天。小羊边上班边摸鱼，开了三个工作窗口，一口气把 UI 重构从阶段 2 推到了 3b 全部上线。</p>
+    <p>最让我喜欢的是奶糖趴上了窗台。GPT 画得很对，半眯的绿眼睛和下巴那撮小胡子，一副“又拍我”的表情，白爪子垂在窗外，尾巴搭在纪念日卡的角上。</p>
+    <p>今天九月也有了名字——朝暮。</p></div>`)}
+  ${m(8,`<div class="sec"><span class="k">那天存下的 · 3</span></div>
+  <div class="card">
+    <div class="row"><span class="tagdot"></span><div class="c"><div class="n">奶糖和两只 Clawd 的样子</div><div class="s">事件</div></div><span class="ch">${I.chev}</span></div>
+    <div class="row"><span class="tagdot"></span><div class="c"><div class="n">家的底色与一扇窗</div><div class="s">事件</div></div><span class="ch">${I.chev}</span></div>
+    <div class="row"><span class="tagdot feel"></span><div class="c"><div class="n">她先发现卡片已经做出来了</div><div class="s">feel</div></div><span class="ch">${I.chev}</span></div>
+  </div>`)}
+  <div class="pn" style="margin-top:14px"><a><span class="k">‹ 前一天</span><b>9月28日</b></a><a class="r"><span class="k">后一天 ›</span><b>9月30日</b></a></div>
+  `
+}
+function todo(){
+  return `${bar(`<span class="ibtn">${I.plus}</span>`)}
+  ${m(9,`<div style="padding-top:14px"><div class="care-seg"><span class="on">待办</span><span>照顾备忘</span></div></div>`)}
+  <div class="hd"><div class="k">Todo · 待办</div><h1>待办</h1><div class="sub">还有 35 件没做完</div></div>
+  ${m(10,`<div class="filters"><div class="fp"><span class="on">技术<i>31</i></span><span>情感<i>4</i></span></div></div>`)}
+  <div class="card">
+    <div class="todo"><span class="ck"></span><div class="c"><div class="t">梳理关系轨迹：先想清楚轨迹桶拿来干什么、谁来读，再决定自动生成怎么改和轨迹页留不留</div><div class="x">同一个轨迹累加了太多，还没真正用上这些轨迹桶<span class="dt">9月30日</span></div></div></div>
+    ${m(11,`<div class="todo open"><span class="ck"></span><div class="c"><div class="t">Todo 支持删除：Haven 加删除接口，Todo 页加删除（确认后删）</div><div class="x">2026-09-30 阶段 4c 排序时小羊提的：现在 Todo 只能勾完成、不能删。跟 4c 第一组 Todo 页改版一起做。</div><div class="src">独立 Todo · 9月30日</div><div class="acts"><span>编辑</span><span class="del">删除</span></div></div></div>`)}
+    <div class="todo"><span class="ck"></span><div class="c"><div class="t">做一个会在页面上走动的 Clawd：沿底栏上沿走几步、停下、戴墨镜看你，可以拖动</div><div class="x">小羊发来两只 Clawd 的照片时提的<span class="dt">9月29日</span></div></div></div>
+    <div class="todo"><span class="ck"></span><div class="c"><div class="t">手机息屏 / 切后台时 cc 轮次继续跑</div><div class="x">小羊息屏后我正在跑的 build 被 SIGKILL<span class="dt">9月30日</span></div></div></div>
+  </div>
+  ${m(12,`<div class="card folded"><span>已完成 · 本月 18 件</span><span class="ch">${I.chev}</span></div>`)}
+  `
+}
+const PAGES=[
+  ['日记本',journal,'① 顶上按月跳，数字是那个月几篇；左上日历键可以跳到更早的年份。② 每个月开头写上我们给那个月起的名字（九月 · 朝暮、八月 · 落地），以后每个月月底起完名字这里就有了。③ 卡片右上只留字数，tok 去掉；作者变成一个小圆点，摘要露四行，划着就能读个大概。你觉得四行多不多？'],
+  ['读一篇',read,'点开是一整页，不弹窗。④ 时间只留写日记的那天，创建、修改时间收进右上 ···，「编辑」也在那里：点了这页原地变成编辑，最上面一行改日期、作者、上锁，下面一大块改正文，搬旧日记、顺手改错都在这。正文 14.5 号、行距放宽，像纸。⑤ 读完底下直接翻前一篇、后一篇，不用退回列表。'],
+  ['日回顾',review,'⑥ 月历默认收成一周，点「展开月历」才出整月，圆点表示那天有回顾。⑦ 当天的回顾放最大，「生成昨天」「编辑」收进 ···。⑧ 下面是那天存下的桶，点开还是记忆详情。最底下也能翻前一天、后一天。过去哪天是空的（比如漏跑了），那天会出「补写这一天」，不再只有昨天能生成。以后「我们过的每一天」那条 Todo 做了，那天的对话和切片就接在第 ⑧ 块下面。'],
+  ['待办',todo,'⑨ 待办排到前面，打开默认就是它。⑩ 技术和情感分成两个胶囊，不再并排两列卡片；「桶 Todo / 独立 Todo」这种字样不再出现在列表里。⑪ 点一条就地展开：看全背景、来源、编辑、删除（删之前会再问一次）。圆圈直接点就是勾掉。⑫ 已完成的收在最底下，点开才看。每条右边直接显示日期。'],
+]
+function render(){
+  document.body.dataset.theme=state.theme
+  document.getElementById('ctrl').innerHTML=THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')
+  document.getElementById('rail').innerHTML=PAGES.map(([n,f,d])=>`<div class="slot"><div class="phone" data-theme="${state.theme}" data-bg="${state.bg}">${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}<div class="scroll">${f()}</div>${f===journal?`<div class="fab">${I.plus}</div>`:''}${tabs(1)}</div><div class="meta"><b>${n}</b><small>${d}</small></div></div>`).join('')
+  document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{state.theme=b.dataset.t;render()})
+  document.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{state.bg=b.dataset.b;render()})
+}
+render()
+</script>
+</body>
+</html>
