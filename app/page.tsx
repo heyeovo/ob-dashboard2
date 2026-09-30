@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import HomeToolDrawer from './components/HomeToolDrawer'
 import HomeSillArt from './components/HomeSillArt'
+import WeekCalendar from './components/WeekCalendar'
 import { daysTogether, upcomingAnniversaries } from './lib/anniversaries'
 import { bucketDate, bucketName, isLegacyDailyImpression, type DatedBucket } from './lib/dailyBucketDate'
 
@@ -122,14 +123,8 @@ export default function HomePage() {
       <div className="home-desk">
         <Link href="/journal" className="home-desk-block home-diary"><span className="home-diary-spine" aria-hidden="true" /><span><span className="home-kicker">DIARY · 日记本</span><strong>{journal ? journal.locked ? '上锁的一篇' : journal.name : '还没有日记'}</strong><small>{journal ? `${shortDate((journal.event_time || journal.created).slice(0, 10))} · ${journal.author}` : '去日记本 ›'}</small></span></Link>
         <section className="home-desk-block home-week" aria-label="这一周">
-          <div className="home-section-heading"><span className="home-kicker">THIS WEEK</span><Link href="/impressions">日回顾 ›</Link></div>
-          <div className="home-week-days">{week.map(({ label, date }) => {
-            const dayBuckets = buckets.some(bucket => bucketDate(bucket) === date)
-            const hasReview = reviews.some(review => review.review_date === date)
-            return <button key={date} type="button" className={`home-week-day ${date === today ? 'is-today' : ''} ${date > today ? 'is-future' : ''} ${date === activeDate ? 'is-selected' : ''}`} onClick={() => date === activeDate ? window.location.assign(`/impressions?date=${date}`) : setSelectedDate(date)} aria-label={`${date}${hasReview ? '，有日回顾' : ''}${dayBuckets ? '，有新记忆' : ''}`}>
-              <span className="home-week-label">{label}</span><span className="home-week-number">{Number(date.slice(8, 10))}</span><span className="home-week-dots">{hasReview && <i />}{dayBuckets && <b />}</span>
-            </button>
-          })}</div>
+          <div className="home-section-heading"><span className="home-kicker">THIS WEEK</span><Link href="/impressions" className="home-section-link">日回顾 ›</Link></div>
+          <WeekCalendar days={week.map(({ label, date }) => ({ label, date, hasMemory: buckets.some(bucket => bucketDate(bucket) === date), hasReview: reviews.some(review => review.review_date === date) }))} today={today} selectedDate={activeDate} onSelect={date => date === activeDate ? window.location.assign(`/impressions?date=${date}`) : setSelectedDate(date)} />
           {activeBuckets.length > 0 && <div className="home-week-memory"><span>{activeDate === today ? '今天' : shortDate(activeDate)}新记忆 · </span><span>{bucketName(activeBuckets[0])}{activeBuckets.length > 1 ? ` 等 ${activeBuckets.length} 条` : ''}</span></div>}
           {activeBuckets.length === 0 && activeReview && <div className="home-week-memory">{activeDate === today ? '今天' : shortDate(activeDate)}有一篇日回顾</div>}
         </section>
