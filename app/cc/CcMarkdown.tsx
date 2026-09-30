@@ -2,6 +2,7 @@
 import { Children, cloneElement, isValidElement, memo, useMemo, useState, type ReactElement, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly'
 import remarkBreaks from 'remark-breaks'
 import type { Components } from 'react-markdown'
 
@@ -142,7 +143,7 @@ function CcMarkdownInner({
   )
   return (
     <div className="cc-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkBreaks]} components={components}>
         {text}
       </ReactMarkdown>
     </div>
