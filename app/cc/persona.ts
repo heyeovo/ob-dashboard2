@@ -72,7 +72,7 @@ export const FALLBACK_PERSONA: CcPersona = {
   id: 'ombre',
   name: 'Ombre',
   initial: 'O',
-  tint: 'var(--chat-avatar-tint)',
+  tint: 'var(--persona-avatar-tint)',
   userName: '',
   purpose: '',
   description: '',
@@ -117,7 +117,9 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
     id: String(row.id || ''),
     name: String(row.name || '') || '未命名',
     initial: String(row.initial || '') || String(row.name || 'A').slice(0, 1).toUpperCase(),
-    tint: String(row.tint || '') || FALLBACK_PERSONA.tint,
+    tint: String(row.tint || '') === 'var(--chat-avatar-tint)'
+      ? FALLBACK_PERSONA.tint
+      : String(row.tint || '') || FALLBACK_PERSONA.tint,
     userName: String(row.user_name || ''),
     purpose: String(row.purpose || ''),
     description: String(row.description || ''),
@@ -165,8 +167,9 @@ export function personaToPayload(persona: CcPersona): Record<string, unknown> {
   }
 }
 
-/** 头像底色预设。跟 :root 里的 --chat-avatar-tint 同一个调子，别写死单色。 */
+/** 头像底色预设。默认跟随当前主题，其余预设保留用户选择的固定颜色。 */
 export const TINT_PRESETS: { id: string; label: string; value: string }[] = [
+  { id: 'theme', label: '跟随主题', value: 'var(--persona-avatar-tint)' },
   { id: 'ombre', label: '橙', value: 'var(--chat-avatar-tint)' },
   { id: 'slate', label: '灰蓝', value: 'linear-gradient(150deg, #9AA7B8, #6E7C90)' },
   { id: 'moss', label: '苔绿', value: 'linear-gradient(150deg, #A3B892, #7A9166)' },
@@ -207,6 +210,6 @@ export function draftPersona(): CcPersona {
     id: `p-${Date.now().toString(36)}-${rand}`,
     name: '新协作者',
     initial: 'A',
-    tint: TINT_PRESETS[1].value,
+    tint: TINT_PRESETS[0].value,
   }
 }

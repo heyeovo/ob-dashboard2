@@ -247,6 +247,9 @@ html {
   --chat-page-tint:         radial-gradient(120% 78% at 12% -8%, rgba(217, 119, 87, 0.045) 0%, rgba(217, 119, 87, 0) 58%),
                             radial-gradient(96% 62% at 96% 4%, rgba(140, 152, 168, 0.05) 0%, rgba(140, 152, 168, 0) 62%);
   --chat-avatar-tint:       linear-gradient(150deg, #E6A886, #D97757);
+  --persona-avatar-tint:    linear-gradient(150deg,
+                            color-mix(in srgb, var(--theme-accent) 68%, var(--theme-base)),
+                            color-mix(in srgb, var(--theme-accent) 88%, var(--theme-base)));
   --chat-code-bg:           rgb(var(--theme-tint) / .88);
   --chat-code-border:       color-mix(in srgb, var(--theme-ink) 8%, transparent);
   --chat-inline-code-bg:    color-mix(in srgb, var(--theme-accent) 8%, transparent);

@@ -25,7 +25,7 @@ const SEED_PERSONA: PersonaPatch = {
   id: 'ombre',
   name: 'Ombre',
   initial: 'O',
-  tint: 'var(--chat-avatar-tint)',
+  tint: 'var(--persona-avatar-tint)',
   user_name: '',
   purpose: '',
   description: '',
