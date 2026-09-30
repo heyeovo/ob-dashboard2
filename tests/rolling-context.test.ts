@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { getSessionMessages, type SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
@@ -12,29 +12,18 @@ vi.mock('@/app/lib/api', () => ({
 
 import { buildRollingWindowAppend, buildRollingWindowHistory, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import {
-  assertFixedMigrationSeed,
-  assertRollingResumeRecovered,
-  assertRollingSeedAvailable,
-  assertRequiredRollingRevisionSeed,
-  buildRollingTranscriptEntries,
-  createFixedTranscriptMigrationSeed,
-  createManualRollingBodyRecoverySeed,
-  createRollingHistoryRevisionSeed,
-  createRollingHistorySeed,
-  createRollingTranscriptRecoverySeed,
-  inspectRollingHistoryAlignment,
-  inspectRollingHistoryTranscript,
-  materializeRollingHistorySeed,
-  materializeRollingNativeSession,
-  openRollingHistoryResume,
-  rollingRevisionRequiresSource,
-  syncRollingNativeSession,
-  stripStaleSystemReminders,
+  cloneRollingTranscriptForSession,
+  inspectRollingHistoryTranscript, materializeRollingHistorySeed, materializeRollingNativeSession,
+  openRollingHistoryResume, stripStaleSystemReminders,
 } from '@/app/lib/cc/rollingHistory'
+import {
+  appendRollingArchive, archiveChatDay, archiveEnvelopes, createArchiveRevisionSeed,
+  createManualRollingArchiveRecoverySeed, ensureRollingArchive, inspectRollingArchive,
+  readRollingArchive, sliceRollingArchive, syncRollingNativeSession,
+} from '@/app/lib/cc/rollingArchive'
 import { ccResumeHintForContext, ccResumeKey } from '@/app/lib/ccSession'
 import { turnsToMessages } from '@/app/cc/ccHistory'
 import type { ConversationContextDay, HavenConversationSession, HavenTurn } from '@/app/lib/havenTurns'
-import { recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 
 const session = {
   context_revision: 7,
@@ -96,7 +85,7 @@ describe('model surface transcript rebase', () => {
     ] as SessionStoreEntry[]
 
     const cleaned = stripStaleSystemReminders(source)
-    expect(cleaned.removedBlockCount).toBe(2)
+    expect(cleaned.removedBlockCount).toBe(3)
     expect(cleaned.entries).toHaveLength(4)
     expect(JSON.stringify(cleaned.entries)).not.toContain('system-reminder')
     expect(JSON.stringify(cleaned.entries)).not.toContain('旧 MCP server instructions')
@@ -176,1499 +165,255 @@ describe('daily rolling context', () => {
     expect(result.content).not.toContain('不应生效')
   })
 
-  it('restores raw days as a native user/assistant transcript seed', async () => {
-    const history = buildRollingWindowHistory(session, turns, days)
-    const seed = createRollingHistorySeed(history, { cwd: 'C:/workspace', fallbackModel: 'claude' })
-    expect(history.map(turn => turn.id)).toEqual([3])
-    expect(seed?.entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
-    expect(seed?.entries.every(entry => entry.ob2HavenTurnId === 3)).toBe(true)
-    expect((seed?.entries[0].message as { content: string }).content).toBe(
-      '今天的原话\n\n[北京时间 2026-09-11 20:00 周五]',
-    )
-    expect((seed?.entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('今天的回应')
-    expect(seed?.entries[0]).toMatchObject({
-      type: 'user',
-      version: '2.1.222',
-      gitBranch: 'HEAD',
-      permissionMode: 'default',
-      promptSource: 'sdk',
-      entrypoint: 'sdk-ts',
-      userType: 'external',
-    })
-    expect(seed?.entries[0].promptId).toMatch(/^[0-9a-f-]{36}$/)
-    expect(seed?.entries[1]).toMatchObject({
-      type: 'assistant',
-      version: '2.1.222',
-      gitBranch: 'HEAD',
-      userType: 'external',
-      message: {
-        usage: {
-          input_tokens: 0,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          output_tokens: 0,
-          service_tier: 'standard',
-        },
-      },
-    })
-    expect(seed?.entries[1].requestId).toMatch(/^req_01[0-9a-f]{32}$/)
-    expect(await seed?.sessionStore.load({ projectKey: 'any', sessionId: seed.resumeFrom })).toEqual(seed?.entries)
-    const parsed = await getSessionMessages(seed!.resumeFrom, {
-      dir: 'C:/workspace',
-      sessionStore: seed!.sessionStore,
-    })
-    expect(parsed.map(message => message.message.role)).toEqual(['user', 'assistant'])
+})
+
+const context = { timezone: 'Asia/Shanghai', day_start_hour: 4, day_modes: {} }
+const key = { havenSessionId: 'synthetic-window', laneId: 'subscription' }
+const seedOptions = { cwd: '/synthetic', fallbackModel: 'synthetic-model' }
+
+function entry(uuid: string, role: string, timestamp: string, content: unknown): SessionStoreEntry {
+  return { type: role, uuid, parentUuid: null, timestamp, sessionId: 'synthetic-native',
+    message: { role, content } } as SessionStoreEntry
+}
+function nativeRound(id: string, timestamp: string): SessionStoreEntry[] {
+  return [
+    entry(`${id}-u`, 'user', timestamp, [
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'c3ludGhldGlj' } },
+      { type: 'text', text: `<记忆召回>recall-${id}</记忆召回>\nquestion-${id}` },
+    ]),
+    entry(`${id}-a`, 'assistant', timestamp, [
+      { type: 'thinking', thinking: `thinking-${id}`, signature: 'synthetic-signature' },
+      { type: 'redacted_thinking', data: 'synthetic' },
+      { type: 'tool_use', id: `tool-${id}`, name: 'synthetic_tool', input: { query: id } },
+    ]),
+    entry(`${id}-r`, 'user', timestamp, [{ type: 'tool_result', tool_use_id: `tool-${id}`, content: `result-${id}` }]),
+    entry(`${id}-end`, 'assistant', timestamp, [{ type: 'text', text: `answer-${id}` }]),
+    { type: 'attachment', uuid: `${id}-env`, timestamp, attachment: { type: 'environment', content: 'old environment' } },
+    { type: 'attachment', uuid: `${id}-file`, timestamp, attachment: { type: 'file', content: 'keep file' } },
+  ] as SessionStoreEntry[]
+}
+async function withStore(test: (storeRoot: string, claudeConfigDir: string) => Promise<void>) {
+  const root = await mkdtemp(path.join(tmpdir(), 'ob2-archive-synthetic-'))
+  try { await test(path.join(root, 'store'), path.join(root, 'claude')) }
+  finally { await rm(root, { recursive: true, force: true }) }
+}
+
+describe('native archive day slicing', () => {
+  it('uses local wall time and the 03:59 / 04:00 boundary, including timezone defaults', () => {
+    expect(archiveChatDay('2026-09-11T19:59:00Z', context)).toBe('2026-09-11')
+    expect(archiveChatDay('2026-09-11T20:00:00Z', context)).toBe('2026-09-12')
+    expect(archiveChatDay('2026-09-11T23:59:00Z', { ...context, timezone: 'UTC', day_start_hour: 0 })).toBe('2026-09-11')
+    expect(archiveChatDay('2026-09-11T20:00:00Z', { ...context, timezone: '' })).toBe('2026-09-12')
   })
 
-  it('marks every entry in an explicit Haven-body recovery seed', () => {
-    const seed = createManualRollingBodyRecoverySeed(turns, {
-      cwd: 'C:/workspace', fallbackModel: 'claude',
-    })
+  it('groups images, SDK continuations, interrupted halves, wake and midnight replies without Haven', () => {
+    const source = [
+      { type: 'system', uuid: 'prefix' },
+      ...nativeRound('image', '2026-09-11T15:59:00Z'),
+      entry('interrupt', 'user', '2026-09-11T16:00:00Z', '[Request interrupted by user]'),
+      entry('continue', 'user', '2026-09-11T16:01:00Z', 'Continue from where you left off.'),
+      entry('late-answer', 'assistant', '2026-09-11T20:00:00Z', [{ type: 'text', text: 'reply beyond day boundary' }]),
+      entry('cutoff', 'user', '2026-09-11T20:01:00Z', 'Your response above was cut off. Please continue.'),
+      entry('cutoff-answer', 'assistant', '2026-09-11T20:02:00Z', [{ type: 'text', text: 'continued answer' }]),
+      entry('wake', 'user', '2026-09-12T10:00:00Z', '<agent_wake/>'),
+      entry('wake-answer', 'assistant', '2026-09-12T10:01:00Z', [{ type: 'text', text: 'wake answer' }]),
+      entry('sdk-continue', 'user', '2026-09-12T10:02:00Z', '[Your previous response had no visible output. Please continue and produce a user-visible response.]'),
+      entry('half', 'user', '2026-09-13T10:00:00Z', 'unfinished question'),
+    ] as SessionStoreEntry[]
+    const groups = archiveEnvelopes(source, context)
+    expect(groups.map(group => group.day)).toEqual(['2026-09-11', '2026-09-12', '2026-09-13'])
+    expect(groups[0].entries.map(item => item.uuid)).toContain('late-answer')
+    expect(groups[0].entries.map(item => item.uuid)).toContain('cutoff-answer')
+    const sliced = sliceRollingArchive(source, { ...context, day_modes: { '2026-09-12': 'review', '2026-09-13': 'omit' } }, [], seedOptions)
+    expect(sliced.entries.map(item => item.uuid)).not.toContain('prefix')
+    expect(sliced.entries.map(item => item.uuid)).not.toContain('half')
+    expect(sliced.entries.map(item => item.uuid)).not.toContain('wake')
+    expect(JSON.stringify(sliced.entries)).toContain('image/png')
+    expect(JSON.stringify(sliced.entries)).toContain('continued answer')
+  })
+
+  it('keeps latest-day thinking/recall; prunes older completed thinking, recall and SDK attachments only', () => {
+    const source = [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('latest', '2026-09-12T10:00:00Z')]
+    const before = JSON.stringify(source)
+    const sliced = sliceRollingArchive(source, context, [], seedOptions)
+    const text = JSON.stringify(sliced.entries)
+    expect(text).not.toContain('thinking-old')
+    expect(text).not.toContain('recall-old')
+    expect(text).not.toContain('old-env')
+    expect(text).toContain('old-file')
+    expect(text).toContain('thinking-latest')
+    expect(text).toContain('recall-latest')
+    expect(text).toContain('latest-env')
+    for (const id of ['old', 'latest']) {
+      expect(text).toContain(`question-${id}`)
+      expect(text).toContain(`answer-${id}`)
+      expect(text).toContain(`tool-${id}`)
+      expect(text).toContain(`result-${id}`)
+    }
+    expect(sliced.days[0]).toMatchObject({ thinkingPrunedBlockCount: 2, memoryRecallPrunedBlockCount: 1, attachmentPrunedBlockCount: 1 })
+    expect(JSON.stringify(source)).toBe(before)
+  })
+
+  it('protects thinking when an older tool_use has no result', () => {
+    const incomplete = nativeRound('open', '2026-09-11T10:00:00Z').filter(item => item.uuid !== 'open-r')
+    const sliced = sliceRollingArchive([...incomplete, ...nativeRound('latest', '2026-09-12T10:00:00Z')], context, [], seedOptions)
+    expect(JSON.stringify(sliced.entries)).toContain('thinking-open')
+    expect(sliced.days[0].thinkingPrunedBlockCount).toBe(0)
+  })
+
+  it('uses the archive latest day, even when that day is omitted', () => {
+    const source = [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('latest', '2026-09-12T10:00:00Z')]
+    const sliced = sliceRollingArchive(source, { ...context, day_modes: { '2026-09-12': 'omit' } }, [], seedOptions)
+    expect(JSON.stringify(sliced.entries)).not.toContain('thinking-')
+    expect(sliced.days.map(day => day.treatment)).toEqual(['pruned', 'removed'])
+  })
+
+  it('restores omit → raw from an immutable archive; only an entirely absent date uses Haven body', async () => withStore(async storeRoot => {
+    const source = [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('latest', '2026-09-12T10:00:00Z')]
+    await appendRollingArchive(key, source, { storeRoot })
+    const archive = (await readRollingArchive(key, { storeRoot }))!
+    const omitted = createArchiveRevisionSeed(archive, { ...context, day_modes: { '2026-09-11': 'omit' } }, [], { ...seedOptions, storeRoot })!
+    expect(JSON.stringify(omitted.entries)).not.toContain('tool-old')
+    const restored = createArchiveRevisionSeed(archive, context, [
+      { ...turns[0], chat_day: '2026-09-11', user_text: 'Haven must not fill a partial day' },
+      { ...turns[0], id: 4, chat_day: '2026-09-10', created_at: '2026-09-10T10:00:00Z', user_text: 'missing date body' },
+    ], { ...seedOptions, storeRoot })!
+    const text = JSON.stringify(restored.entries)
+    expect(text).toContain('tool-old')
+    expect(text).toContain('result-old')
+    expect(text).toContain('image/png')
+    expect(text).not.toContain('Haven must not fill')
+    expect(text).toContain('missing date body')
+    expect(restored.entries.filter(item => item.ob2RollingFidelity === 'body_restored')).toHaveLength(2)
+    expect(restored.diagnostic?.days?.find(day => day.day === '2026-09-10')?.treatment).toBe('body_restored')
+    expect(await readRollingArchive(key, { storeRoot })).toEqual(archive)
+  }))
+
+  it('preserves archive identities when UUIDs and parent chains are cloned', () => {
+    const source = nativeRound('old', '2026-09-11T10:00:00Z').map(item => ({ ...item, ob2ArchiveUuid: item.uuid }))
+    const cloned = cloneRollingTranscriptForSession(source, 'new-native')
+    expect(cloned.map(item => item.ob2ArchiveUuid)).toEqual(source.map(item => item.uuid))
+    expect(cloned.map(item => item.uuid)).not.toEqual(source.map(item => item.uuid))
+    expect(cloned[0].parentUuid).toBe(null)
+    expect(cloned[1].parentUuid).toBe(cloned[0].uuid)
+  })
+})
+
+describe('archive IO and migration', () => {
+  it('excludes UUID-less metadata from archives/revisions and repeated sync does not duplicate visible entries', async () => withStore(async (storeRoot, claudeConfigDir) => {
+    const visible = nativeRound('visible', '2026-09-12T10:00:00Z')
+    const metadata = ['queue-operation', 'file-history-snapshot', 'ai-title', 'last-prompt', 'mode', 'atis-latch', 'cost-state']
+      .map(type => ({ type, value: 'synthetic metadata' })) as SessionStoreEntry[]
+    const incoming = [...metadata.slice(0, 2), ...visible, ...metadata.slice(2)]
+    const options = { ...key, storeRoot, claudeConfigDir,
+      importLocalSession: async (_id: string, store: import('@anthropic-ai/claude-agent-sdk').SessionStore) => {
+        await store.append({ projectKey: '', sessionId: 'metadata-native' }, incoming)
+      } }
+    await syncRollingNativeSession('metadata-native', seedOptions.cwd, options)
+    await syncRollingNativeSession('metadata-native', seedOptions.cwd, options)
+    const archive = (await readRollingArchive(key, { storeRoot }))!
+    expect(archive.map(item => item.uuid)).toEqual(visible.map(item => item.uuid))
+    const revision = createArchiveRevisionSeed([...metadata, ...archive], context, [], { ...seedOptions, storeRoot })!
+    expect(revision.entries).toHaveLength(visible.length)
+    expect(revision.entries.every(item => item.uuid && item.ob2ArchiveUuid)).toBe(true)
+    const current = await openRollingHistoryResume('metadata-native', { storeRoot })!.sessionStore.load({ projectKey: '', sessionId: 'metadata-native' })
+    expect(current!.filter(item => !item.uuid)).toEqual(metadata)
+  }))
+
+  it.each(['user', 'assistant', 'attachment'])('stops for a model-visible %s entry without UUID rather than adding an ID', async type => withStore(async storeRoot => {
+    const invalid = [{ type, timestamp: '2026-09-12T10:00:00Z', message: { role: type, content: 'synthetic' } }] as SessionStoreEntry[]
+    await expect(appendRollingArchive(key, invalid, { storeRoot })).rejects.toThrow('缺少 uuid')
+    expect(() => createArchiveRevisionSeed(invalid, context, [], { ...seedOptions, storeRoot })).toThrow('缺少 uuid')
+    expect(await readRollingArchive(key, { storeRoot })).toBeNull()
+    expect(invalid[0].uuid).toBeUndefined()
+  }))
+
+  it('initializes fixed history by official import and legacy rolling history by durable seed', async () => withStore(async (storeRoot, claudeConfigDir) => {
+    const source = nativeRound('native', '2026-09-12T10:00:00Z')
+    const importLocalSession = vi.fn(async (_id, store) => { await store.append({ projectKey: '', sessionId: 'fixed' }, source) })
+    const archive = await ensureRollingArchive(key, { storeRoot, claudeConfigDir, cwd: seedOptions.cwd,
+      sourceResumeFrom: 'fixed', fixedMigration: true, importLocalSession })
+    expect(importLocalSession).toHaveBeenCalledWith('fixed', expect.anything(), { dir: seedOptions.cwd, includeSubagents: false })
+    expect(archive.every(item => item.ob2ArchiveUuid === item.uuid)).toBe(true)
+    const seed = createArchiveRevisionSeed(archive, context, [], { ...seedOptions, storeRoot })!
+    await materializeRollingHistorySeed(seed)
+    const legacyKey = { ...key, laneId: 'api:legacy' }
+    const legacy = await ensureRollingArchive(legacyKey, { storeRoot, claudeConfigDir, cwd: seedOptions.cwd,
+      sourceResumeFrom: seed.resumeFrom, importLocalSession })
+    expect(importLocalSession).toHaveBeenCalledOnce()
+    expect(legacy).toEqual(seed.entries)
+    expect(await readRollingArchive(legacyKey, { storeRoot })).toEqual(seed.entries)
+  }))
+
+  it('synchronizes idempotently including retry after archive append but before transcript marking', async () => withStore(async (storeRoot, claudeConfigDir) => {
+    const source = nativeRound('native', '2026-09-12T10:00:00Z')
+    const importLocalSession = vi.fn(async (_id, store) => { await store.append({ projectKey: '', sessionId: 'native' }, source) })
+    const options = { ...key, storeRoot, claudeConfigDir, importLocalSession }
+    await appendRollingArchive(key, source, options)
+    await syncRollingNativeSession('native', seedOptions.cwd, options)
+    await syncRollingNativeSession('native', seedOptions.cwd, options)
+    expect(await readRollingArchive(key, options)).toHaveLength(source.length)
+    const durable = await openRollingHistoryResume('native', { storeRoot })!.sessionStore.load({ projectKey: '', sessionId: 'native' })
+    expect(durable!.every(item => Boolean(item.ob2ArchiveUuid))).toBe(true)
+    const clone = cloneRollingTranscriptForSession(durable!, 'next')
+    await appendRollingArchive(key, clone, options)
+    expect(await readRollingArchive(key, options)).toHaveLength(source.length)
+  }))
+
+  it('all dates review/omit → empty seed → new-session round appended → raw restores old and new rounds', async () => withStore(async (storeRoot, claudeConfigDir) => {
+    await appendRollingArchive(key, [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('review', '2026-09-12T10:00:00Z')], { storeRoot })
+    const archive = (await readRollingArchive(key, { storeRoot }))!
+    const emptyContext = { ...context, day_modes: { '2026-09-11': 'omit', '2026-09-12': 'review' } } as typeof context
+    expect(createArchiveRevisionSeed(archive, emptyContext, [], { ...seedOptions, storeRoot })).toBeNull()
+    expect(await readRollingArchive(key, { storeRoot })).toEqual(archive)
+    const freshRound = nativeRound('fresh', '2026-09-13T10:00:00Z')
+    await syncRollingNativeSession('fresh-session', seedOptions.cwd, { ...key, storeRoot, claudeConfigDir,
+      importLocalSession: async (_id, store) => { await store.append({ projectKey: '', sessionId: 'fresh-session' }, freshRound) } })
+    const updated = (await readRollingArchive(key, { storeRoot }))!
+    expect(updated).toHaveLength(archive.length + freshRound.length)
+    const seed = createArchiveRevisionSeed(updated, { ...emptyContext, day_modes: { ...emptyContext.day_modes, '2026-09-11': 'raw' } }, [], { ...seedOptions, storeRoot })!
+    expect(JSON.stringify(seed.entries)).toContain('question-old')
+    expect(JSON.stringify(seed.entries)).toContain('tool-old')
+    expect(JSON.stringify(seed.entries)).toContain('question-fresh')
+    expect(JSON.stringify(seed.entries)).toContain('thinking-fresh')
+    expect(JSON.stringify(seed.entries)).not.toContain('question-review')
+  }))
+
+  it('fails explicitly when native sources are missing; never substitutes Haven body silently', async () => withStore(async storeRoot => {
+    await expect(ensureRollingArchive(key, { storeRoot, cwd: seedOptions.cwd, sourceResumeFrom: 'lost', hasHistory: true,
+      importLocalSession: async () => { throw new Error('session not found') } })).rejects.toThrow('上下文检查页确认正文重建')
+    expect(await readRollingArchive(key, { storeRoot })).toBeNull()
+  }))
+
+  it('manual body recovery initializes the full archive, so omitted dates can later be restored', async () => withStore(async storeRoot => {
+    const bodyTurns = [turns[0], { ...turns[0], id: 4, chat_day: '2026-09-12', created_at: '2026-09-12T10:00:00Z' }]
+    const seed = await createManualRollingArchiveRecoverySeed(key, bodyTurns, { ...context, day_modes: { '2026-09-11': 'omit' } }, { ...seedOptions, storeRoot })
     expect(seed?.source).toBe('manual_body_recovery')
     expect(seed?.entries).toHaveLength(2)
-    expect(seed?.entries.every(entry => entry.ob2RollingFidelity === 'body_restored')).toBe(true)
-    expect(seed?.entries.every(entry => entry.ob2HavenTurnId === 3)).toBe(true)
-    expect(seed?.diagnostic?.bodyRestoredTurnCount).toBe(1)
-  })
+    const archive = (await readRollingArchive(key, { storeRoot }))!
+    expect(archive).toHaveLength(4)
+    expect(archive.every(item => item.ob2ArchiveUuid && item.ob2RollingFidelity === 'body_restored')).toBe(true)
+    expect(createArchiveRevisionSeed(archive, context, bodyTurns, { ...seedOptions, storeRoot })!.entries).toHaveLength(4)
+    await expect(createManualRollingArchiveRecoverySeed(key, bodyTurns, context, { ...seedOptions, storeRoot })).rejects.toThrow('存档仍存在')
+  }))
 
-  it('restores an agent wake as a hidden wake trigger followed by its assistant message', () => {
-    const entries = buildRollingTranscriptEntries([{
-      ...turns[0],
-      user_text: '', assistant_text: '忽然想告诉你一件事', turn_kind: 'agent_wake',
-      raw_json: JSON.stringify({
-        agent_wake: { cause: 'agent_schedule', reason: '想起这件事', at: '2026-09-11T03:04:00Z' },
-      }),
-    }], {
-      sessionId: '11111111-1111-4111-8111-111111111111',
-      cwd: 'C:/workspace', fallbackModel: 'claude',
+  it('materializes the seed before resume and audits archive dates without writes', async () => withStore(async (storeRoot, claudeConfigDir) => {
+    await appendRollingArchive(key, nativeRound('latest', '2026-09-12T10:00:00Z'), { storeRoot })
+    const archive = (await readRollingArchive(key, { storeRoot }))!
+    const seed = createArchiveRevisionSeed(archive, context, [], { ...seedOptions, storeRoot })!
+    expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).toBeNull()
+    await materializeRollingNativeSession(seed, seedOptions.cwd, { claudeConfigDir })
+    expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).not.toBeNull()
+    expect(await inspectRollingHistoryTranscript(seed.resumeFrom, { storeRoot })).toMatchObject({ entryCount: 6 })
+    expect(await inspectRollingArchive(key, context, [], { storeRoot })).toMatchObject({
+      available: true, entryCount: 6, firstDay: '2026-09-12', lastDay: '2026-09-12', days: [{ day: '2026-09-12', envelopeCount: 1 }],
     })
-    expect(entries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
-    expect((entries[0].message as { content: string }).content).toBe(
-      '<agent_wake cause="agent_schedule" reason="想起这件事"/>\n\n[北京时间 2026-09-11 11:04 周五]',
-    )
-    expect((entries[1].message as { content: Array<{ text: string }> }).content[0].text).toBe('忽然想告诉你一件事')
+    expect(await readRollingArchive(key, { storeRoot })).toEqual(archive)
+  }))
 
-    const fallbackEntries = buildRollingTranscriptEntries([{
-      ...turns[0],
-      user_text: '', assistant_text: '旧主动消息', turn_kind: 'agent_wake',
-      raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule', at: 'invalid' } }),
-    }], {
-      sessionId: '22222222-2222-4222-8222-222222222222',
-      cwd: 'C:/workspace', fallbackModel: 'claude',
-    })
-    expect((fallbackEntries[0].message as { content: string }).content).toContain(
-      '[北京时间 2026-09-11 20:00 周五]',
-    )
-  })
-
-  it('keeps a rolling transcript available after the in-memory store is replaced', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-store-'))
-    try {
-      const seed = createRollingHistorySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      const appended = buildRollingTranscriptEntries([{ ...turns[0], user_text: '部署前最后一句' }], {
-        sessionId: seed.resumeFrom, cwd: 'C:/workspace', fallbackModel: 'claude',
-      })
-      await seed.sessionStore.append(
-        { projectKey: 'any', sessionId: seed.resumeFrom },
-        appended,
-      )
-
-      const reopened = openRollingHistoryResume(seed.resumeFrom, { storeRoot })
-      expect(reopened?.source).toBe('persisted')
-      expect(await reopened?.sessionStore.load({
-        projectKey: 'another-process', sessionId: seed.resumeFrom,
-      })).toEqual([...seed.entries, ...appended])
-      const audit = await inspectRollingHistoryTranscript(seed.resumeFrom, { storeRoot })
-      expect(audit?.entryCount).toBe(4)
-      expect(audit?.messages.map(message => [message.role, message.content])).toEqual([
-        ['user', '今天的原话\n\n[北京时间 2026-09-11 20:00 周五]'],
-        ['assistant', '今天的回应'],
-        ['user', '部署前最后一句\n\n[北京时间 2026-09-11 20:00 周五]'],
-        ['assistant', '今天的回应'],
-      ])
-      expect(audit?.messages.every(message => !message.containsRollingWindowContext)).toBe(true)
-      expect(openRollingHistoryResume('11111111-1111-4111-8111-111111111111', { storeRoot })).toBeNull()
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('drops only exited-day envelopes and preserves native tool use/result order for remaining raw days', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-revision-'))
-    const sourceTurns = Array.from({ length: 5 }, (_, index) => ({
-      ...turns[0], id: index + 1, round_id: index + 1,
-      chat_day: `2026-09-${String(index + 7).padStart(2, '0')}`,
-      user_text: index === 4 ? '第五天查一下' : `第${index + 1}天`,
-      assistant_text: index === 4 ? '第五天回复' : `第${index + 1}天回复`,
-    })) as HavenTurn[]
-    try {
-      const source = createRollingHistorySeed(sourceTurns.slice(0, 4), {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      for (const [index, entry] of source.entries.entries()) {
-        const message = entry.message as { role: string; content: Array<Record<string, unknown>> }
-        if (message.role !== 'assistant' || !Array.isArray(message.content)) continue
-        message.content.unshift({
-          type: 'thinking', thinking: `较早日期 thinking ${Math.floor(index / 2) + 1}`, signature: `sig-${index}`,
-        })
-      }
-      const olderRecallUser = source.entries[2].message as { role: string; content: string }
-      olderRecallUser.content = '<记忆召回>\n<memory_card>较早日期召回</memory_card>\n</记忆召回>\n\n第2天'
-      const toolUseId = 'toolu_keep_me'
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        {
-          type: 'user', uuid: 'native-user-2', parentUuid: source.entries.at(-1)?.uuid || null,
-          sessionId: source.resumeFrom, message: { role: 'user', content: '<记忆召回>\n<memory_card>完整召回卡</memory_card>\n</记忆召回>\n\n第五天查一下' },
-        },
-        {
-          type: 'assistant', uuid: 'native-assistant-tool', parentUuid: 'native-user-2', sessionId: source.resumeFrom,
-          message: { role: 'assistant', content: [
-            { type: 'thinking', thinking: '最新日期 thinking', signature: 'sig-latest' },
-            { type: 'tool_use', id: toolUseId, name: 'search_chat', input: { query: '旧事' } },
-          ] },
-        },
-        {
-          type: 'user', uuid: 'native-tool-result', parentUuid: 'native-assistant-tool', sessionId: source.resumeFrom,
-          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: '完整工具结果' }] },
-        },
-        {
-          type: 'assistant', uuid: 'native-assistant-final', parentUuid: 'native-tool-result', sessionId: source.resumeFrom,
-          message: { role: 'assistant', content: [
-            { type: 'redacted_thinking', data: '最新日期加密 thinking' },
-            { type: 'text', text: '第五天回复' },
-          ] },
-        },
-      ])
-
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, sourceTurns, sourceTurns.slice(1),
-        {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: sourceTurns.slice(1).map(turn => turn.chat_day),
-        },
-      )
-      expect(revised?.source).toBe('revision_seed')
-      expect(revised?.entries).toHaveLength(10)
-      expect(JSON.stringify(revised?.entries)).not.toContain('第1天')
-      expect(revised?.entries.map(entry => (entry.message as { role: string }).role))
-        .toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant', 'user', 'assistant'])
-      expect(JSON.stringify(revised?.entries[7])).toContain(toolUseId)
-      expect(JSON.stringify(revised?.entries[8])).toContain('完整工具结果')
-      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 2')
-      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 3')
-      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期 thinking 4')
-      expect(JSON.stringify(revised?.entries)).not.toContain('较早日期召回')
-      expect(JSON.stringify(revised?.entries)).toContain('第2天')
-      expect(JSON.stringify(revised?.entries)).toContain('最新日期 thinking')
-      expect(JSON.stringify(revised?.entries)).toContain('最新日期加密 thinking')
-      expect(revised?.diagnostic).toMatchObject({
-        sourceSessionId: source.resumeFrom,
-        sourceEntryCount: 12,
-        retainedEnvelopeCount: 4,
-        bodyRestoredTurnCount: 0,
-        thinkingPrunedBlockCount: 3,
-        memoryRecallPrunedBlockCount: 1,
-        toolUseCount: 1,
-        toolResultCount: 1,
-        memoryRecallCount: 1,
-      })
-      await materializeRollingHistorySeed(revised)
-      expect(openRollingHistoryResume(revised!.resumeFrom, { storeRoot })).not.toBeNull()
-      const audit = await inspectRollingHistoryTranscript(revised!.resumeFrom, { storeRoot })
-      expect(audit?.messages.find(message => message.blockTypes.includes('tool_use'))?.toolNames).toEqual(['search_chat'])
-      expect(audit?.messages.find(message => message.blockTypes.includes('tool_result'))?.content).toContain('完整工具结果')
-      expect(audit?.messages.some(message => message.containsMemoryRecall)).toBe(true)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps thinking when an older envelope has an unmatched tool call', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unfinished-tool-'))
-    const olderTurn = {
-      ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-10',
-      user_text: '较早问题', assistant_text: '较早回答',
-    } as HavenTurn
-    const latestTurn = {
-      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-11',
-      user_text: '最新问题', assistant_text: '最新回答',
-    } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([olderTurn, latestTurn], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      const olderAssistant = source.entries[1].message as {
-        role: string
-        content: Array<Record<string, unknown>>
-      }
-      olderAssistant.content = [
-        { type: 'thinking', thinking: '不能清理的 thinking', signature: 'sig-unfinished' },
-        { type: 'tool_use', id: 'toolu_unfinished', name: 'search_chat', input: { query: '未完成' } },
-        ...olderAssistant.content,
-      ]
-      await materializeRollingHistorySeed(source)
-
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [olderTurn, latestTurn], [olderTurn, latestTurn],
-        {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [olderTurn.chat_day, latestTurn.chat_day],
-        },
-      )
-      expect(JSON.stringify(revised?.entries)).toContain('不能清理的 thinking')
-      expect(revised?.diagnostic?.thinkingPrunedBlockCount).toBe(0)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('prunes older recall but preserves latest recall, tools and images across revisions', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-lifecycle-'))
-    const firstTurn = {
-      ...turns[0], id: 11, round_id: 11, chat_day: '2026-09-12',
-      user_text: '第一次查询', assistant_text: '第一次完成',
-    } as HavenTurn
-    const secondTurn = {
-      ...turns[0], id: 12, round_id: 12, chat_day: '2026-09-13',
-      user_text: '看这张图', assistant_text: '第二次完成',
-    } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([firstTurn], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      const firstUser = source.entries[0].message as { role: string; content: unknown }
-      firstUser.content = '<记忆召回>\n<memory_card>第一次召回</memory_card>\n</记忆召回>\n\n第一次查询'
-      const firstAssistant = source.entries[1].message as { role: string; content: unknown }
-      firstAssistant.content = [
-        { type: 'tool_use', id: 'toolu_first', name: 'search_chat', input: { query: '第一次' } },
-        { type: 'text', text: '第一次完成' },
-      ]
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [{
-          type: 'user', uuid: 'first-result', parentUuid: source.entries[1].uuid,
-          sessionId: source.resumeFrom,
-          message: { role: 'user', content: [{
-            type: 'tool_result', tool_use_id: 'toolu_first', content: '第一次工具结果',
-          }] },
-        }],
-      )
-
-      const revisionOne = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [firstTurn], [firstTurn], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [firstTurn.chat_day],
-        },
-      )
-      await materializeRollingHistorySeed(revisionOne)
-
-      await revisionOne!.sessionStore.append(
-        { projectKey: '', sessionId: revisionOne!.resumeFrom },
-        [
-          {
-            type: 'user', uuid: 'second-user', parentUuid: revisionOne!.entries.at(-1)?.uuid || null,
-            sessionId: revisionOne!.resumeFrom,
-            message: { role: 'user', content: [
-              { type: 'text', text: '<记忆召回>\n<memory_card>第二次召回</memory_card>\n</记忆召回>\n\n看这张图' },
-              { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aW1hZ2U=' } },
-            ] },
-          },
-          {
-            type: 'assistant', uuid: 'second-tool', parentUuid: 'second-user',
-            sessionId: revisionOne!.resumeFrom,
-            message: { role: 'assistant', content: [
-              { type: 'tool_use', id: 'toolu_second', name: 'breath', input: { query: '图片' } },
-            ] },
-          },
-          {
-            type: 'user', uuid: 'second-result', parentUuid: 'second-tool',
-            sessionId: revisionOne!.resumeFrom,
-            message: { role: 'user', content: [{
-              type: 'tool_result', tool_use_id: 'toolu_second', content: '第二次工具结果',
-            }] },
-          },
-          {
-            type: 'assistant', uuid: 'second-final', parentUuid: 'second-result',
-            sessionId: revisionOne!.resumeFrom,
-            message: { role: 'assistant', content: [{ type: 'text', text: '第二次完成' }] },
-          },
-        ],
-      )
-
-      const revisionTwo = await createRollingHistoryRevisionSeed(
-        revisionOne!.resumeFrom, [firstTurn, secondTurn], [firstTurn, secondTurn], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [firstTurn.chat_day, secondTurn.chat_day],
-        },
-      )
-      await materializeRollingHistorySeed(revisionTwo)
-
-      const reopened = openRollingHistoryResume(revisionTwo!.resumeFrom, { storeRoot })
-      expect(reopened).not.toBeNull()
-      const audit = await inspectRollingHistoryTranscript(reopened!.resumeFrom, { storeRoot })
-      expect(audit?.messages.filter(message => message.containsMemoryRecall)).toHaveLength(1)
-      expect(audit?.messages.some(message => message.content.includes('第一次召回'))).toBe(false)
-      expect(audit?.messages.some(message => message.content.includes('第二次召回'))).toBe(true)
-      expect(audit?.messages.flatMap(message => message.toolNames)).toEqual(['search_chat', 'breath'])
-      expect(audit?.messages.filter(message => message.blockTypes.includes('tool_result'))).toHaveLength(2)
-      expect(audit?.messages.some(message => message.blockTypes.includes('image'))).toBe(true)
-      expect(audit?.messages.some(message => message.content.includes('第二次工具结果'))).toBe(true)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('restores a newly re-added raw day from Haven body text only and marks the downgrade', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-restore-'))
-    const sourceTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-11' } as HavenTurn
-    const restoredTurn = {
-      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-10',
-      user_text: '重新加入的旧问题', assistant_text: '重新加入的旧回答',
-    } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([sourceTurn], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [])
-      // 空 append 不会物化；追加一个无 UUID 的非消息标记，同时落下初始 transcript。
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [{ type: 'custom-title', title: 'source' }],
-      )
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [sourceTurn, restoredTurn], [sourceTurn, restoredTurn],
-        {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [sourceTurn.chat_day],
-        },
-      )
-      const restoredEntries = revised?.entries.filter(entry => entry.ob2HavenTurnId === 2) || []
-      expect(restoredEntries.map(entry => (entry.message as { role: string }).role)).toEqual(['user', 'assistant'])
-      expect(restoredEntries.every(entry => entry.ob2RollingFidelity === 'body_restored')).toBe(true)
-      expect((restoredEntries[0].message as { content: string }).content).toBe(
-        '重新加入的旧问题\n\n[北京时间 2026-09-11 20:00 周五]',
-      )
-      expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_use"')
-      expect(JSON.stringify(restoredEntries)).not.toContain('"type":"tool_result"')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('uses legacy transcript timestamps to distinguish repeated body text', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-legacy-repeat-'))
-    const repeatedTurns = [
-      {
-        ...turns[0], id: 21, round_id: 21,
-        user_text: '重复问题', assistant_text: '重复回答',
-        created_at: '2026-09-11T12:00:00Z',
-      },
-      {
-        ...turns[0], id: 22, round_id: 22,
-        user_text: '重复问题', assistant_text: '重复回答',
-        created_at: '2026-09-11T12:05:00Z',
-      },
-    ] as HavenTurn[]
-    try {
-      const source = createRollingHistorySeed(repeatedTurns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      for (const entry of source.entries) {
-        delete entry.ob2HavenTurnId
-        delete entry.ob2ChatDay
-      }
-      // 原生 transcript 记用户进入时间，Haven created_at 是回答完成后的落库时间。
-      source.entries[2].timestamp = '2026-09-11T12:04:30Z'
-      const repeatedUser = source.entries[2].message as { role: string; content: unknown }
-      const repeatedUserText = repeatedUser.content as string
-      repeatedUser.content = [
-        { type: 'text', text: `<记忆召回>\n<memory_card>旧记录召回</memory_card>\n</记忆召回>\n\n${repeatedUserText}` },
-        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'bGVnYWN5' } },
-      ]
-      const repeatedAssistant = source.entries[3].message as { role: string; content: unknown }
-      repeatedAssistant.content = [
-        { type: 'tool_use', id: 'toolu_legacy', name: 'search_chat', input: { query: '旧记录' } },
-        { type: 'text', text: '重复回答' },
-      ]
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [
-          { type: 'custom-title', title: 'legacy source' },
-          {
-            type: 'user', uuid: 'legacy-result', parentUuid: source.entries[3].uuid,
-            sessionId: source.resumeFrom,
-            message: { role: 'user', content: [{
-              type: 'tool_result', tool_use_id: 'toolu_legacy', content: '旧记录工具结果',
-            }] },
-          },
-        ],
-      )
-
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, repeatedTurns, repeatedTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: ['2026-09-11'],
-        },
-      )
-      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(2)
-      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
-      expect(revised?.diagnostic?.memoryRecallCount).toBe(1)
-      expect(revised?.diagnostic?.toolUseCount).toBe(1)
-      expect(revised?.diagnostic?.toolResultCount).toBe(1)
-      expect(JSON.stringify(revised?.entries)).toContain('"type":"image"')
-      expect(JSON.stringify(revised?.entries)).toContain('旧记录工具结果')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('uses stamped Haven turn ids when repeated turns also share a timestamp', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-id-repeat-'))
-    const repeatedTurns = [
-      { ...turns[0], id: 31, round_id: 31, user_text: '相同问题', assistant_text: '相同回答' },
-      { ...turns[0], id: 32, round_id: 32, user_text: '相同问题', assistant_text: '相同回答' },
-    ] as HavenTurn[]
-    try {
-      const source = createRollingHistorySeed(repeatedTurns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [{ type: 'custom-title', title: 'stamped source' }],
-      )
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, repeatedTurns, repeatedTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: ['2026-09-11'],
-        },
-      )
-      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(2)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('still refuses a legacy transcript that remains ambiguous after timestamp matching', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-ambiguous-repeat-'))
-    const repeatedTurns = [
-      { ...turns[0], id: 41, round_id: 41, user_text: '无法区分', assistant_text: '完全相同' },
-      { ...turns[0], id: 42, round_id: 42, user_text: '无法区分', assistant_text: '完全相同' },
-    ] as HavenTurn[]
-    try {
-      const source = createRollingHistorySeed([repeatedTurns[0]], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      for (const entry of source.entries) delete entry.ob2HavenTurnId
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [{ type: 'custom-title', title: 'ambiguous source' }],
-      )
-      await expect(createRollingHistoryRevisionSeed(
-        source.resumeFrom, repeatedTurns, repeatedTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: ['2026-09-11'],
-        },
-      )).rejects.toThrow('完整轮次无法唯一对应')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('uses the persisted native turn UUID after manual recovery instead of ambiguous text matching', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-native-uuid-'))
-    const repeatedTurns = [
-      {
-        ...turns[0], id: 61, round_id: 61,
-        user_text: '重复问题', assistant_text: '重复回答',
-        raw_json: JSON.stringify({ cc_turn_uuid: 'native-turn-61' }),
-      },
-      {
-        ...turns[0], id: 62, round_id: 62,
-        user_text: '重复问题', assistant_text: '重复回答',
-        raw_json: JSON.stringify({ cc_turn_uuid: 'native-turn-62' }),
-      },
-    ] as HavenTurn[]
-    try {
-      const source = createRollingHistorySeed([repeatedTurns[0]], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      for (const entry of source.entries) {
-        delete entry.ob2HavenTurnId
-        delete entry.ob2ChatDay
-      }
-      source.entries[0].uuid = 'native-turn-62'
-      source.entries[0].timestamp = ''
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [{ type: 'custom-title', title: 'native uuid source' }],
-      )
-
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, repeatedTurns, [repeatedTurns[1]], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [repeatedTurns[1].chat_day],
-        },
-      )
-
-      const messages = revised?.entries.filter(entry => entry.message) || []
-      expect(messages).toHaveLength(2)
-      expect(messages.every(entry => entry.ob2HavenTurnId === 62)).toBe(true)
-      expect(messages.every(entry => entry.ob2ChatDay === repeatedTurns[1].chat_day)).toBe(true)
-      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps a uniquely stamped turn even when its displayed assistant text differs from Haven', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-stamped-body-'))
-    try {
-      const source = createRollingHistorySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      const assistant = source.entries[1].message as { content: Array<{ type: string; text: string }> }
-      assistant.content[0].text = '原生记录中的完整回答，与 Haven 展示正文不完全一样'
-      await materializeRollingHistorySeed(source)
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, turns, turns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [turns[0].chat_day],
-        },
-      )
-      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(1)
-      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
-      expect(JSON.stringify(revised?.entries)).toContain('原生记录中的完整回答')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('isolates an unpersisted user-only failed send after manual recovery', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-failed-send-'))
-    const laterTurns = [
-      {
-        ...turns[0], id: 4, round_id: 4,
-        raw_json: JSON.stringify({ cc_turn_uuid: 'successful-native-4' }),
-      },
-      {
-        ...turns[0], id: 5, round_id: 5,
-        raw_json: JSON.stringify({ cc_turn_uuid: 'successful-native-5' }),
-      },
-    ] as HavenTurn[]
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const nativeEntries = buildRollingTranscriptEntries(laterTurns, {
-        sessionId: source.resumeFrom, cwd: 'C:/workspace', fallbackModel: 'claude',
-      })
-      for (let index = 0; index < laterTurns.length; index += 1) {
-        const user = nativeEntries[index * 2]
-        const assistant = nativeEntries[index * 2 + 1]
-        user.uuid = `successful-native-${laterTurns[index].id}`
-        assistant.parentUuid = user.uuid
-        delete user.ob2HavenTurnId
-        delete assistant.ob2HavenTurnId
-      }
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [
-          ...nativeEntries,
-          {
-            type: 'user', uuid: 'failed-send-uuid', parentUuid: nativeEntries.at(-1)?.uuid || null,
-            sessionId: source.resumeFrom,
-            message: { role: 'user', content: turns[0].user_text },
-          },
-        ],
-      )
-      const beforeInspection = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, ...laterTurns], { storeRoot })
-      expect(inspection).toMatchObject({
-        available: true, aligned: true, envelopeCount: 4,
-        matchedTurnCount: 3, isolatedIncompleteCount: 1,
-      })
-      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(beforeInspection)
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [...turns, ...laterTurns], [...turns, ...laterTurns], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [turns[0].chat_day],
-        },
-      )
-      expect(revised?.diagnostic?.retainedEnvelopeCount).toBe(3)
-      expect(revised?.diagnostic?.bodyRestoredTurnCount).toBe(0)
-      expect(JSON.stringify(revised?.entries)).not.toContain('failed-send-uuid')
-      expect(revised?.entries.filter(entry => entry.ob2HavenTurnId === 4)).toHaveLength(2)
-      expect(revised?.entries.filter(entry => entry.ob2HavenTurnId === 5)).toHaveLength(2)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('does not discard an unmatched envelope with assistant output', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unmatched-assistant-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [
-          {
-            type: 'user', uuid: 'unmatched-user', parentUuid: source.entries.at(-1)?.uuid || null,
-            sessionId: source.resumeFrom,
-            message: { role: 'user', content: '没有保存到 Haven 的输入' },
-          },
-          {
-            type: 'assistant', uuid: 'unmatched-assistant', parentUuid: 'unmatched-user',
-            sessionId: source.resumeFrom,
-            message: { role: 'assistant', content: [{ type: 'text', text: '已有助手内容' }] },
-          },
-        ],
-      )
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
-      expect(inspection.aligned).toBe(false)
-      expect(inspection.issues).toMatchObject([{
-        userUuid: 'unmatched-user', agentWake: false,
-        reason: 'missing_haven_user', havenUserCandidateCount: 0,
-      }])
-      await expect(createRollingHistoryRevisionSeed(
-        source.resumeFrom, turns, turns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [turns[0].chat_day],
-        },
-      )).rejects.toThrow('无正文候选 1 条')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('recovers a legacy foreground turn that lost Haven CAS to a simultaneous wake', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-race-'))
-    try {
-      const retained = { ...turns[0], id: 3, round_id: 3 } as HavenTurn
-      const source = createManualRollingBodyRecoverySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const racedEntries = [
-        {
-          type: 'user', uuid: 'wake-user', timestamp: '2026-09-18T11:35:00.000Z',
-          message: { role: 'user', content: '<agent_wake cause="conversation_silence"/>' },
-        },
-        {
-          type: 'assistant', uuid: 'wake-assistant', timestamp: '2026-09-18T11:35:20.000Z',
-          message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop] 她在回家路上，不打扰。' }] },
-        },
-        {
-          type: 'user', uuid: 'race-user', timestamp: '2026-09-18T11:35:22.929Z',
-          message: { role: 'user', content: '噗噗噗\n\n[北京时间 2026-09-18 19:35 周五]' },
-        },
-        {
-          type: 'assistant', uuid: 'race-assistant', timestamp: '2026-09-18T11:35:24.000Z',
-          message: { role: 'assistant', content: [{ type: 'text', text: '什么。' }] },
-        },
-      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, racedEntries)
-
-      const oldDuplicate = {
-        ...retained, id: 4, round_id: 4, chat_day: '2026-09-17',
-        user_text: '噗噗噗', assistant_text: '很早以前的不同回答',
-        created_at: '2026-09-17T11:35:30.000Z', raw_json: '',
-      } as HavenTurn
-      const wakeTurn = {
-        ...retained, id: 5, round_id: 5, chat_day: '2026-09-18',
-        turn_kind: 'agent_wake', user_text: '', assistant_text: '',
-        created_at: '2026-09-18T11:35:21.000Z', raw_json: '',
-      } as HavenTurn
-      const nearbyPersisted = {
-        ...retained, id: 6, round_id: 6, chat_day: '2026-09-18',
-        user_text: '噗噗噗', assistant_text: '并发后 Haven 中的不同回答',
-        created_at: '2026-09-18T11:35:25.000Z', raw_json: '',
-      } as HavenTurn
-      const allTurns = [retained, oldDuplicate, wakeTurn, nearbyPersisted]
-      const rawTurns = [retained, wakeTurn, nearbyPersisted]
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, allTurns, {
-        storeRoot, rawTurns, requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
-      })
-      expect(inspection).toMatchObject({
-        aligned: true,
-        matchedTurnCount: 3,
-        recoveredAssistantMismatchCount: 1,
-        issues: [],
-      })
-
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, allTurns, rawTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
-        },
-      )
-      const recoveredEntries = revised?.entries.filter(entry => entry.ob2HavenTurnId === 6) || []
-      expect(recoveredEntries).toHaveLength(2)
-      expect(JSON.stringify(recoveredEntries.map(entry => entry.message))).toContain('什么。')
-      expect(JSON.stringify(recoveredEntries.map(entry => entry.message))).not.toContain('并发后 Haven 中的不同回答')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('isolates a plain-text wake race turn that never reached Haven', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-race-orphan-'))
-    try {
-      const retained = { ...turns[0], id: 3, round_id: 3 } as HavenTurn
-      const wakeTurn = {
-        ...retained, id: 5, round_id: 5, chat_day: '2026-09-18',
-        turn_kind: 'agent_wake', user_text: '', assistant_text: '',
-        created_at: '2026-09-18T11:35:21.000Z', raw_json: '',
-      } as HavenTurn
-      const oldDuplicate = {
-        ...retained, id: 4, round_id: 4, chat_day: '2026-09-14',
-        user_text: '噗噗噗', assistant_text: '旧回答',
-        created_at: '2026-09-14T11:35:30.000Z', raw_json: '',
-      } as HavenTurn
-      const source = createManualRollingBodyRecoverySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const raceEntries = [
-        {
-          type: 'user', uuid: 'wake-user', timestamp: '2026-09-18T11:35:00.000Z',
-          message: { role: 'user', content: '<agent_wake cause="conversation_silence"/>' },
-        },
-        {
-          type: 'assistant', uuid: 'wake-assistant', timestamp: '2026-09-18T11:35:20.000Z',
-          message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop] 不打扰。' }] },
-        },
-        {
-          type: 'user', uuid: 'orphan-user', timestamp: '2026-09-18T11:35:22.929Z',
-          message: { role: 'user', content: '噗噗噗\n\n[北京时间 2026-09-18 19:35 周五]' },
-        },
-        {
-          type: 'assistant', uuid: 'orphan-assistant', timestamp: '2026-09-18T11:35:24.000Z',
-          message: { role: 'assistant', content: [{ type: 'text', text: '什么。' }] },
-        },
-      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, raceEntries)
-      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-      const allTurns = [retained, oldDuplicate, wakeTurn]
-      const rawTurns = [retained, wakeTurn]
-
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, allTurns, {
-        storeRoot, rawTurns, requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
-      })
-      expect(inspection).toMatchObject({
-        aligned: true,
-        matchedTurnCount: 2,
-        isolatedIncompleteCount: 0,
-        isolatedWakeRaceCount: 1,
-        issues: [],
-      })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, allTurns, rawTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: rawTurns.map(turn => turn.chat_day),
-        },
-      )
-      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('噗噗噗')
-      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('什么。')
-      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).toContain('agent_wake')
-      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('does not isolate an unmatched post-wake turn containing a tool call', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-race-tool-'))
-    try {
-      const retained = { ...turns[0], id: 3, round_id: 3 } as HavenTurn
-      const wakeTurn = {
-        ...retained, id: 4, round_id: 4, chat_day: '2026-09-18',
-        turn_kind: 'agent_wake', user_text: '', assistant_text: '', raw_json: '',
-      } as HavenTurn
-      const source = createManualRollingBodyRecoverySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        { type: 'user', uuid: 'wake-user', timestamp: '2026-09-18T11:35:00.000Z', sessionId: source.resumeFrom, message: { role: 'user', content: '<agent_wake cause="conversation_silence"/>' } },
-        { type: 'assistant', uuid: 'wake-answer', timestamp: '2026-09-18T11:35:10.000Z', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop] 不打扰。' }] } },
-        { type: 'user', uuid: 'tool-user', timestamp: '2026-09-18T11:35:12.000Z', sessionId: source.resumeFrom, message: { role: 'user', content: '执行操作' } },
-        { type: 'assistant', uuid: 'tool-answer', timestamp: '2026-09-18T11:35:13.000Z', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'important_tool', input: {} }] } },
-      ])
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [retained, wakeTurn], { storeRoot })
-      expect(inspection.aligned).toBe(false)
-      expect(inspection.isolatedWakeRaceCount).toBe(0)
-      expect(inspection.issues).toMatchObject([{ userUuid: 'tool-user' }])
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('identifies a wake transcript with a mismatched Haven assistant body without exposing either body', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-audit-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [
-          {
-            type: 'user', uuid: 'wake-user', parentUuid: source.entries.at(-1)?.uuid || null,
-            sessionId: source.resumeFrom,
-            message: { role: 'user', content: '<agent_wake cause="agent_schedule"/>' },
-          },
-          {
-            type: 'assistant', uuid: 'wake-assistant', parentUuid: 'wake-user',
-            sessionId: source.resumeFrom,
-            message: { role: 'assistant', content: [{ type: 'text', text: 'transcript 里的回答' }] },
-          },
-        ],
-      )
-      const wakeTurn = {
-        ...turns[0], id: 4, round_id: 4, turn_kind: 'agent_wake',
-        user_text: '', assistant_text: 'Haven 里的不同回答', raw_json: '',
-      } as HavenTurn
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, wakeTurn], { storeRoot })
-      expect(inspection.aligned).toBe(false)
-      expect(inspection.issues).toMatchObject([{
-        userUuid: 'wake-user', agentWake: true,
-        reason: 'assistant_mismatch', havenUserCandidateCount: 1,
-        havenUserCandidateIds: [4],
-      }])
-      expect(JSON.stringify(inspection.issues)).not.toContain('transcript 里的回答')
-      expect(JSON.stringify(inspection.issues)).not.toContain('Haven 里的不同回答')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps SDK no-visible-output continuation inside its wake turn without rewriting transcript entries', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-continuation-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const wakeEntries = [
-        { type: 'user', uuid: 'wake-trigger', message: { role: 'user', content: '<agent_wake cause="agent_schedule"/>' } },
-        { type: 'assistant', uuid: 'wake-tool', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'wake-tool-id', name: 'set_agent_wake', input: {} }] } },
-        { type: 'user', uuid: 'wake-tool-result', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'wake-tool-id', content: '已安排' }] } },
-        { type: 'user', uuid: 'sdk-no-visible', message: { role: 'user', content: '[Your previous response had no visible output. Please continue and produce a user-visible response.]' } },
-        { type: 'assistant', uuid: 'wake-noop', message: { role: 'assistant', content: [{ type: 'text', text: '[agent_wake_noop]设置完毕' }] } },
-      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, wakeEntries)
-      const wakeTurn = {
-        ...turns[0], id: 4, round_id: 4, turn_kind: 'agent_wake',
-        user_text: '', assistant_text: '', raw_json: '',
-      } as HavenTurn
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, wakeTurn], { storeRoot })
-      expect(inspection).toMatchObject({ aligned: true, matchedTurnCount: 2, issues: [] })
-      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [...turns, wakeTurn], [...turns, wakeTurn], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [turns[0].chat_day],
-        },
-      )
-      expect(revised?.entries.map(entry => entry.message)).toEqual([...source.entries, ...wakeEntries].map(entry => entry.message))
-      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps interruption and auto-continue messages inside the original user turn', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-interrupted-continuation-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const continuedEntries = [
-        { type: 'user', uuid: 'real-user', message: { role: 'user', content: '我的真实消息' } },
-        { type: 'assistant', uuid: 'real-answer', message: { role: 'assistant', content: [{ type: 'text', text: '原本答复' }] } },
-        { type: 'user', uuid: 'interrupted-marker', message: { role: 'user', content: '[Request interrupted by user]' } },
-        { type: 'user', uuid: 'auto-continue', message: { role: 'user', content: 'Continue from where you left off.' } },
-        { type: 'assistant', uuid: 'no-response', message: { role: 'assistant', content: [{ type: 'text', text: 'No response requested.' }] } },
-      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, continuedEntries)
-      const actualTurn = {
-        ...turns[0], id: 4, round_id: 4,
-        user_text: '我的真实消息', assistant_text: '原本答复', raw_json: '',
-      } as HavenTurn
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, actualTurn], { storeRoot })
-      expect(inspection).toMatchObject({ aligned: true, matchedTurnCount: 2, issues: [] })
-      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [...turns, actualTurn], [...turns, actualTurn], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [turns[0].chat_day],
-        },
-      )
-      expect(revised?.entries.map(entry => entry.message)).toEqual([...source.entries, ...continuedEntries].map(entry => entry.message))
-      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('isolates only a status-only failed request while retaining its successful resend', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-failed-status-retry-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const laterEntries = [
-        { type: 'user', uuid: 'failed-real-user', message: { role: 'user', content: '这条后来重新发送' } },
-        { type: 'user', uuid: 'failed-interrupted', message: { role: 'user', content: '[Request interrupted by user]' } },
-        { type: 'user', uuid: 'failed-continue', message: { role: 'user', content: 'Continue from where you left off.' } },
-        { type: 'assistant', uuid: 'failed-status', message: { role: 'assistant', content: [{ type: 'text', text: 'No response requested.' }] } },
-        { type: 'user', uuid: 'successful-retry', message: { role: 'user', content: '这条后来重新发送' } },
-        { type: 'assistant', uuid: 'successful-answer', message: { role: 'assistant', content: [{ type: 'text', text: '重新发送后成功回答' }] } },
-      ].map(entry => ({ ...entry, sessionId: source.resumeFrom }))
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, laterEntries)
-      const successfulTurn = {
-        ...turns[0], id: 4, round_id: 4,
-        user_text: '这条后来重新发送', assistant_text: '重新发送后成功回答',
-        raw_json: JSON.stringify({ cc_turn_uuid: 'successful-retry' }),
-      } as HavenTurn
-      const originalEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [...turns, successfulTurn], { storeRoot })
-      expect(inspection).toMatchObject({
-        aligned: true, envelopeCount: 3, matchedTurnCount: 2,
-        isolatedIncompleteCount: 1, issues: [],
-      })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [...turns, successfulTurn], [...turns, successfulTurn], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [turns[0].chat_day],
-        },
-      )
-      expect(revised?.entries.map(entry => entry.message)).toEqual([
-        ...source.entries, ...laterEntries.slice(4),
-      ].map(entry => entry.message))
-      expect(await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })).toEqual(originalEntries)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('does not isolate an interrupted request containing a real assistant reply or tool call', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-interrupted-with-output-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        { type: 'user', uuid: 'real-user-with-output', sessionId: source.resumeFrom, message: { role: 'user', content: '失败前做了工具调用' } },
-        { type: 'assistant', uuid: 'tool-before-failure', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tool-before-failure', name: 'search', input: {} }] } },
-        { type: 'user', uuid: 'interrupted-after-tool', sessionId: source.resumeFrom, message: { role: 'user', content: '[Request interrupted by user]' } },
-        { type: 'user', uuid: 'continue-after-tool', sessionId: source.resumeFrom, message: { role: 'user', content: 'Continue from where you left off.' } },
-        { type: 'assistant', uuid: 'status-after-tool', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: 'No response requested.' }] } },
-      ])
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
-      expect(inspection.aligned).toBe(false)
-      expect(inspection.issues).toMatchObject([{ userUuid: 'real-user-with-output' }])
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('does not isolate an interrupted request containing an image or thinking block', async () => {
-    for (const variant of ['image', 'thinking'] as const) {
-      const storeRoot = await mkdtemp(path.join(tmpdir(), `ob2-rolling-interrupted-${variant}-`))
-      try {
-        const source = createManualRollingBodyRecoverySeed(turns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-        })!
-        await materializeRollingHistorySeed(source)
-        await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-          {
-            type: 'user', uuid: `real-user-${variant}`, sessionId: source.resumeFrom,
-            message: { role: 'user', content: variant === 'image'
-              ? [{ type: 'text', text: '含图片的失败输入' }, { type: 'image', source: { type: 'base64', data: 'image-data' } }]
-              : '含 thinking 的失败输入' },
-          },
-          { type: 'user', uuid: `interrupted-${variant}`, sessionId: source.resumeFrom, message: { role: 'user', content: '[Request interrupted by user]' } },
-          { type: 'user', uuid: `continue-${variant}`, sessionId: source.resumeFrom, message: { role: 'user', content: 'Continue from where you left off.' } },
-          {
-            type: 'assistant', uuid: `status-${variant}`, sessionId: source.resumeFrom,
-            message: { role: 'assistant', content: variant === 'thinking'
-              ? [{ type: 'thinking', thinking: 'private reasoning' }, { type: 'text', text: 'No response requested.' }]
-              : [{ type: 'text', text: 'No response requested.' }] },
-          },
-        ])
-        const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
-        expect(inspection.aligned).toBe(false)
-        expect(inspection.issues).toMatchObject([{ userUuid: `real-user-${variant}` }])
-      } finally {
-        await rm(storeRoot, { recursive: true, force: true })
-      }
-    }
-  })
-
-  it('does not silently absorb a standalone auto-continue message', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-unanchored-continuation-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        { type: 'user', uuid: 'unanchored-continue', sessionId: source.resumeFrom, message: { role: 'user', content: 'Continue from where you left off.' } },
-        { type: 'assistant', uuid: 'unanchored-answer', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: '没有锚点' }] } },
-      ])
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
-      expect(inspection.aligned).toBe(false)
-      expect(inspection.issues).toMatchObject([{ userUuid: 'unanchored-continue' }])
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('refuses to body-restore a turn from a day that stayed raw', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-required-'))
-    const retained = { ...turns[0], id: 1, chat_day: '2026-09-11' } as HavenTurn
-    const missing = {
-      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-12',
-      user_text: '持久副本里缺失的问题', assistant_text: '持久副本里缺失的回答',
-    } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await source.sessionStore.append(
-        { projectKey: '', sessionId: source.resumeFrom },
-        [{ type: 'custom-title', title: 'source' }],
-      )
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [retained, missing], {
-        storeRoot, rawTurns: [retained, missing], requiredFullRawDays: [retained.chat_day, missing.chat_day],
-      })
-      expect(inspection).toMatchObject({ aligned: true, matchedTurnCount: 1 })
-      expect(inspection.missingRawTurns).toEqual([{
-        id: 2, day: '2026-09-12', createdAt: missing.created_at,
-        turnKind: 'user', userChars: missing.user_text.length,
-        assistantChars: missing.assistant_text.length, fullSourceRequired: true,
-      }])
-      await expect(createRollingHistoryRevisionSeed(
-        source.resumeFrom, [retained, missing], [retained, missing],
-        {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [retained.chat_day, missing.chat_day],
-        },
-      )).rejects.toThrow('仍为 raw 的完整轮次：2026-09-12')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps an unrepresented empty wake in Haven without blocking a raw-day revision', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-empty-wake-'))
-    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-13' } as HavenTurn
-    const emptyWake = {
-      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-13',
-      turn_kind: 'agent_wake', user_text: '', assistant_text: '',
-      raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule' }, process: [{ type: 'thinking', text: 'stored in Haven' }] }),
-    } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const rawTurns = [retained, emptyWake]
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, rawTurns, {
-        storeRoot, rawTurns, requiredFullRawDays: ['2026-09-13'],
-      })
-      expect(inspection).toMatchObject({
-        aligned: true, missingRawTurns: [], unrepresentedEmptyWakeCount: 1,
-      })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, rawTurns, rawTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: ['2026-09-13'],
-        },
-      )
-      expect(revised?.entries.map(entry => entry.message)).toEqual(source.entries.map(entry => entry.message))
-      expect(revised?.diagnostic.bodyRestoredTurnCount).toBe(0)
-      expect(emptyWake.raw_json).toContain('stored in Haven')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps a wake session-limit record in Haven without putting it in the rebuilt transcript', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-wake-limit-'))
-    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-20' } as HavenTurn
-    const limitWake = {
-      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-20',
-      turn_kind: 'agent_wake', user_text: '',
-      assistant_text: "You've hit your session limit · resets 9:50pm (UTC)",
-      created_at: '2026-09-19T20:32:59.000Z', raw_json: '',
-    } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const rawTurns = [retained, limitWake]
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, rawTurns, {
-        storeRoot, rawTurns, requiredFullRawDays: ['2026-09-20'],
-      })
-      expect(inspection).toMatchObject({
-        aligned: true,
-        missingRawTurns: [],
-        excludedAgentWakeLimitCount: 1,
-      })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, rawTurns, rawTurns, {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: ['2026-09-20'],
-        },
-      )
-      expect(JSON.stringify(revised?.entries.map(entry => entry.message))).not.toContain('session limit')
-      expect(limitWake.assistant_text).toContain('session limit')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('isolates legacy OAuth failures as transport status without matching repeated Haven text', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-legacy-auth-'))
-    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-21' } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      const failure = 'Failed to authenticate: OAuth session expired and could not be refreshed'
-      const entries = Array.from({ length: 7 }, (_, index) => {
-        const wake = index % 2 === 1
-        return [
-          {
-            type: 'user', uuid: `auth-user-${index}`, sessionId: source.resumeFrom,
-            timestamp: `2026-09-21T00:${49 + index}:00.000Z`,
-            message: { role: 'user', content: wake
-              ? '<agent_wake cause="cache_keepalive"/>'
-              : '。结果两个你都叫我起床失败' },
-          },
-          {
-            type: 'assistant', uuid: `auth-status-${index}`, sessionId: source.resumeFrom,
-            message: { role: 'assistant', content: [{ type: 'text', text: failure }] },
-          },
-        ]
-      }).flat() as SessionStoreEntry[]
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, entries)
-
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, [retained], { storeRoot })
-      expect(inspection).toMatchObject({
-        aligned: true,
-        matchedTurnCount: 1,
-        isolatedExplicitFailureCount: 7,
-        indeterminateOutcomeCount: 0,
-        issues: [],
-      })
-      const revised = await createRollingHistoryRevisionSeed(
-        source.resumeFrom, [retained], [retained], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [retained.chat_day],
-        },
-      )
-      const rebuilt = JSON.stringify(revised?.entries)
-      expect(rebuilt).not.toContain('Failed to authenticate')
-      expect(rebuilt).not.toContain('结果两个你都叫我起床失败')
-      expect(rebuilt).toContain(retained.assistant_text)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('uses a durable terminal outcome for new failure wording and blocks indeterminate output', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-outcome-ledger-'))
-    const retained = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-21' } as HavenTurn
-    try {
-      const source = createRollingHistorySeed([retained], {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        { type: 'user', uuid: 'future-failure', sessionId: source.resumeFrom, message: { role: 'user', content: '未送达的问题' } },
-        { type: 'assistant', uuid: 'future-status', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: 'A brand new SDK terminal status' }] } },
-      ])
-      await recordTurnOutcome({
-        turnUuid: 'future-failure', requestId: 'request-failed',
-        outcome: 'explicit_failure', reason: 'sdk_terminal_failure', storeRoot,
-      })
-      expect(await inspectRollingHistoryAlignment(source.resumeFrom, [retained], { storeRoot })).toMatchObject({
-        aligned: true, isolatedExplicitFailureCount: 1, indeterminateOutcomeCount: 0,
-      })
-
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        { type: 'user', uuid: 'unknown-outcome', sessionId: source.resumeFrom, message: { role: 'user', content: '可能已经送达的问题' } },
-        { type: 'assistant', uuid: 'unknown-answer', sessionId: source.resumeFrom, message: { role: 'assistant', content: [{ type: 'text', text: '可能是真实回答' }] } },
-      ])
-      await recordTurnOutcome({
-        turnUuid: 'unknown-outcome', requestId: 'request-unknown',
-        outcome: 'indeterminate', reason: 'haven_commit_unknown', storeRoot,
-      })
-      const blocked = await inspectRollingHistoryAlignment(source.resumeFrom, [retained], { storeRoot })
-      expect(blocked).toMatchObject({ aligned: false, indeterminateOutcomeCount: 1 })
-      expect(blocked.error).toContain('状态不明 1 条')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('never treats an authentication string beside thinking or tools as a disposable status turn', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-auth-with-thinking-'))
-    try {
-      const source = createManualRollingBodyRecoverySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      await materializeRollingHistorySeed(source)
-      await source.sessionStore.append({ projectKey: '', sessionId: source.resumeFrom }, [
-        { type: 'user', uuid: 'auth-with-thinking', sessionId: source.resumeFrom, message: { role: 'user', content: '有真实输出的请求' } },
-        {
-          type: 'assistant', uuid: 'auth-thinking', sessionId: source.resumeFrom,
-          message: { role: 'assistant', content: [
-            { type: 'thinking', thinking: 'private reasoning' },
-            { type: 'text', text: 'Failed to authenticate: OAuth session expired and could not be refreshed' },
-          ] },
-        },
-      ])
-      const inspection = await inspectRollingHistoryAlignment(source.resumeFrom, turns, { storeRoot })
-      expect(inspection.aligned).toBe(false)
-      expect(inspection.isolatedExplicitFailureCount).toBe(0)
-      expect(inspection.issues).toMatchObject([{ userUuid: 'auth-with-thinking' }])
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('migrates a fixed-window SDK transcript with recall and tools intact', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-fixed-migration-'))
-    const oldTurn = { ...turns[0], id: 1, round_id: 1, chat_day: '2026-09-09' } as HavenTurn
-    const keptTurn = {
-      ...turns[0], id: 2, round_id: 2, chat_day: '2026-09-13',
-      user_text: '今天查一下', assistant_text: '查完了',
-    } as HavenTurn
-    const sourceSessionId = '11111111-1111-4111-8111-111111111111'
-    const oldEntries = buildRollingTranscriptEntries([oldTurn], {
-      sessionId: sourceSessionId, cwd: 'C:/workspace', fallbackModel: 'claude',
-    })
-    const sourceEntries = [...oldEntries,
-      {
-        type: 'user', uuid: 'fixed-user', parentUuid: oldEntries.at(-1)?.uuid || null,
-        sessionId: sourceSessionId,
-        message: { role: 'user', content: '<记忆召回>\n<memory_card>固定窗召回</memory_card>\n</记忆召回>\n\n今天查一下' },
-      },
-      {
-        type: 'assistant', uuid: 'fixed-tool', parentUuid: 'fixed-user', sessionId: sourceSessionId,
-        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_fixed', name: 'breath', input: { query: '今天' } }] },
-      },
-      {
-        type: 'user', uuid: 'fixed-result', parentUuid: 'fixed-tool', sessionId: sourceSessionId,
-        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_fixed', content: '固定窗完整结果' }] },
-      },
-      {
-        type: 'assistant', uuid: 'fixed-final', parentUuid: 'fixed-result', sessionId: sourceSessionId,
-        message: { role: 'assistant', content: [{ type: 'text', text: '查完了' }] },
-      },
-    ]
-    try {
-      const migrated = await createFixedTranscriptMigrationSeed(
-        sourceSessionId, [oldTurn, keptTurn], [keptTurn], {
-          cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-          requiredFullRawDays: [keptTurn.chat_day],
-          importLocalSession: async (_sessionId, store) => {
-            await store.append({ projectKey: 'fixed', sessionId: sourceSessionId }, sourceEntries)
-          },
-        },
-      )
-      expect(migrated?.source).toBe('fixed_transcript_migration')
-      expect(JSON.stringify(migrated?.entries)).not.toContain(oldTurn.user_text)
-      expect(JSON.stringify(migrated?.entries)).toContain('固定窗完整结果')
-      expect(migrated?.diagnostic).toMatchObject({
-        sourceSessionId, sourceEntryCount: 6, retainedEnvelopeCount: 1,
-        bodyRestoredTurnCount: 0, toolUseCount: 1, toolResultCount: 1, memoryRecallCount: 1,
-      })
-      await materializeRollingHistorySeed(migrated)
-      expect(openRollingHistoryResume(migrated!.resumeFrom, { storeRoot })).not.toBeNull()
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('materializes a new body seed before the SDK can publish its session id', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-new-seed-materialized-'))
-    try {
-      const seed = createRollingHistorySeed(turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', storeRoot,
-      })!
-      expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).toBeNull()
-      await materializeRollingHistorySeed(seed)
-      expect(openRollingHistoryResume(seed.resumeFrom, { storeRoot })).not.toBeNull()
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('materializes rolling history into Claude native storage and syncs it back', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-native-store-'))
-    const claudeConfigDir = await mkdtemp(path.join(tmpdir(), 'ob2-native-claude-'))
-    const cwd = await mkdtemp(path.join(tmpdir(), 'ob2-native-cwd-'))
-    try {
-      const seed = createRollingHistorySeed(turns, {
-        sessionId: 'window-native', cwd, fallbackModel: 'claude', storeRoot,
-      })!
-      const materialized = await materializeRollingNativeSession(seed, cwd, { claudeConfigDir })
-      expect(materialized).toMatchObject({ created: true, entryCount: seed.entries.length })
-      const projectKey = path.resolve(cwd).replace(/[^a-zA-Z0-9]/g, '-')
-      const nativeFile = path.join(claudeConfigDir, 'projects', projectKey, `${seed.resumeFrom}.jsonl`)
-      expect((await readFile(nativeFile, 'utf8')).trim().split(/\r?\n/)).toHaveLength(seed.entries.length)
-
-      const updated = [...seed.entries, { ...seed.entries[0], uuid: 'synced-entry' }]
-      const syncedCount = await syncRollingNativeSession(seed.resumeFrom, cwd, {
-        storeRoot,
-        importLocalSession: async (sessionId, store) => {
-          await store.append({ projectKey: '', sessionId }, updated)
-        },
-      })
-      expect(syncedCount).toBe(updated.length)
-      const reopened = openRollingHistoryResume(seed.resumeFrom, { storeRoot })
-      expect(await reopened!.sessionStore.load({ projectKey: '', sessionId: seed.resumeFrom }))
-        .toHaveLength(updated.length)
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-      await rm(claudeConfigDir, { recursive: true, force: true })
-      await rm(cwd, { recursive: true, force: true })
-    }
-  })
-
-  it('recovers a missing rolling store from the SDK transcript without dropping hidden entries', async () => {
-    const storeRoot = await mkdtemp(path.join(tmpdir(), 'ob2-rolling-recovery-'))
-    const sessionId = '22222222-2222-4222-8222-222222222222'
-    const sourceEntries = [
-      {
-        type: 'user', uuid: 'recovery-user', parentUuid: null, sessionId,
-        message: { role: 'user', content: '<记忆召回>\n<memory_card>旧召回</memory_card>\n</记忆召回>\n\n查一下' },
-      },
-      {
-        type: 'assistant', uuid: 'recovery-tool', parentUuid: 'recovery-user', sessionId,
-        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_recovery', name: 'breath', input: { query: '旧召回' } }] },
-      },
-      {
-        type: 'user', uuid: 'recovery-result', parentUuid: 'recovery-tool', sessionId,
-        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_recovery', content: '完整旧结果' }] },
-      },
-      {
-        type: 'assistant', uuid: 'recovery-final', parentUuid: 'recovery-result', sessionId,
-        message: { role: 'assistant', content: [{ type: 'text', text: '查完了' }] },
-      },
-    ]
-    try {
-      const recovered = await createRollingTranscriptRecoverySeed(sessionId, {
-        cwd: 'C:/workspace', storeRoot,
-        importLocalSession: async (_sessionId, store) => {
-          await store.append({ projectKey: 'default', sessionId }, sourceEntries)
-        },
-      })
-      expect(recovered?.source).toBe('legacy_transcript_recovery')
-      expect(recovered?.resumeFrom).toBe(sessionId)
-      expect(recovered?.diagnostic).toMatchObject({
-        sourceSessionId: sessionId, sourceEntryCount: 4, bodyRestoredTurnCount: 0,
-        toolUseCount: 1, toolResultCount: 1, memoryRecallCount: 1,
-      })
-      await materializeRollingHistorySeed(recovered)
-      const audit = await inspectRollingHistoryTranscript(sessionId, { storeRoot })
-      expect(audit?.messages.some(message => message.containsMemoryRecall)).toBe(true)
-      expect(audit?.messages.find(message => message.blockTypes.includes('tool_result'))?.content)
-        .toContain('完整旧结果')
-    } finally {
-      await rm(storeRoot, { recursive: true, force: true })
-    }
-  })
-
-  it('keeps native Claude resume points isolated by revision', () => {
-    expect(ccResumeKey('session-a', 'subscription', 7)).toBe('session-a::subscription::context-7')
-    expect(ccResumeKey('session-a', 'subscription', 8)).not.toBe(ccResumeKey('session-a', 'subscription', 7))
-  })
-
-  it('fails closed for daily rolling revisions when the prior strategy or source is uncertain', () => {
-    expect(rollingRevisionRequiresSource(true, 0, 1, 'daily_rolling')).toBe(true)
-    expect(rollingRevisionRequiresSource(true, 0, 1, '')).toBe(true)
-    expect(rollingRevisionRequiresSource(true, 0, 1, 'fixed_window')).toBe(false)
-    expect(rollingRevisionRequiresSource(true, 1, 1, 'daily_rolling')).toBe(false)
-    expect(() => assertRequiredRollingRevisionSeed(true, 4, '', null))
-      .toThrow('无法确定旧滚动 transcript')
-    expect(() => assertRequiredRollingRevisionSeed(true, 4, 'old-session', null))
-      .toThrow('旧滚动 transcript 持久副本不存在或无法完整对齐')
-  })
-
-  it('requires explicit body-only consent when a fixed transcript cannot be imported', () => {
-    expect(() => assertFixedMigrationSeed(true, 3, false, null))
-      .toThrow('找不到固定窗口的原生 transcript')
-    expect(() => assertFixedMigrationSeed(true, 3, true, null)).not.toThrow()
-  })
-
-  it('fails closed when neither rolling store nor SDK transcript can resume the same revision', () => {
-    expect(() => assertRollingResumeRecovered(true, null, null))
-      .toThrow('避免静默退化')
-    expect(() => assertRollingResumeRecovered(true, null, createRollingHistorySeed(turns, {
-      cwd: 'C:/workspace', fallbackModel: 'claude',
-    }))).not.toThrow()
-  })
-
-  it('never creates a body-only rolling seed unless the transition explicitly allows it', () => {
-    expect(() => assertRollingSeedAvailable(true, turns.length, null))
-      .toThrow('禁止静默改用 Haven 正文')
-    expect(() => assertRollingSeedAvailable(true, turns.length, createRollingHistorySeed(turns, {
-      cwd: 'C:/workspace', fallbackModel: 'claude',
-    }))).not.toThrow()
-    expect(() => assertRollingSeedAvailable(true, 0, null)).not.toThrow()
-  })
-
-  it('returns control to the confirmed body fallback when a fixed transcript cannot align', async () => {
-    const result = await createFixedTranscriptMigrationSeed(
-      '11111111-1111-4111-8111-111111111111', turns, turns, {
-        cwd: 'C:/workspace', fallbackModel: 'claude', requiredFullRawDays: [],
-        importLocalSession: async (sessionId, store) => {
-          await store.append({ projectKey: 'fixed', sessionId }, [{
-            type: 'user', uuid: 'manual-command', parentUuid: null, sessionId,
-            message: { role: 'user', content: '/compact' },
-          }])
-        },
-      },
-    )
-    expect(result).toBeNull()
-  })
-
-  it('resumes a rolling Claude session only while its context revision still matches', () => {
-    expect(ccResumeHintForContext({
-      persistedHint: ' native-session ', legacyHint: '',
-      laneContextRevision: 7, contextRevision: 7, isRolling: true,
-    })).toBe('native-session')
-    expect(ccResumeHintForContext({
-      persistedHint: 'native-session', legacyHint: '',
-      laneContextRevision: 7, contextRevision: 8, isRolling: true,
-    })).toBe('')
-    expect(ccResumeHintForContext({
-      persistedHint: '', legacyHint: 'legacy-session',
-      laneContextRevision: 0, contextRevision: 0, isRolling: false,
-    })).toBe('legacy-session')
-  })
-
-  it('uses permanent per-message ids when restoring history', () => {
-    const restored = turnsToMessages([{ ...turns[0], source: 'cc' }])
-    expect(restored.map(message => message.id)).toEqual(['msg_user_3', 'msg_assistant_3'])
-    expect(restored.every(message => message.chatDay === '2026-09-11')).toBe(true)
+  it('keeps resume keys isolated by lane/revision and permanent Haven IDs in visible history', () => {
+    expect(ccResumeKey('window', 'subscription', 1)).not.toBe(ccResumeKey('window', 'subscription', 2))
+    expect(ccResumeHintForContext({ persistedHint: 'native', legacyHint: '', laneContextRevision: 1, contextRevision: 2, isRolling: true })).toBe('')
+    expect(turnsToMessages(turns).map(message => message.id)).toEqual(['msg_user_3', 'msg_assistant_3'])
   })
 })

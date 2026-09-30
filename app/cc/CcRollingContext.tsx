@@ -65,17 +65,14 @@ function includeSelected(visible: Candidate[], all: Candidate[], selected: Set<s
   return [...visible, ...all.filter(item => selected.has(item.id) && !visibleIds.has(item.id))]
 }
 
-function latestRawConversationDay(
-  days: ConversationContextDay[],
-  config: RollingContextConfig,
-): string {
+function latestConversationDay(days: ConversationContextDay[]): string {
   return days
-    .filter(day => day.turn_count > 0 && (config.day_modes?.[day.day] || 'raw') === 'raw')
+    .filter(day => day.turn_count > 0)
     .map(day => day.day)
     .sort((a, b) => b.localeCompare(a))[0] || ''
 }
 
-function effectiveRawTokenEstimate(day: ConversationContextDay, latestRawDay: string) {
+function effectiveRawTokenEstimate(day: ConversationContextDay, latestDay: string) {
   const estimate = day.token_estimate
   if (!estimate) {
     const conversation = Math.ceil(day.raw_chars * 1.3)
@@ -87,11 +84,11 @@ function effectiveRawTokenEstimate(day: ConversationContextDay, latestRawDay: st
   const conversation = Number(estimate.conversation || 0)
   const tools = Number(estimate.tools || 0)
   const attachments = Number(estimate.attachments || 0)
-  const recall = day.day === latestRawDay ? Number(estimate.recall || 0) : 0
+  const recall = day.day === latestDay ? Number(estimate.recall || 0) : 0
   const timestamps = Number(estimate.timestamps || 0)
   const messageOverhead = Number(estimate.message_overhead || 0)
   const agentWake = Number(estimate.agent_wake || 0)
-  const thinking = day.day === latestRawDay ? Number(estimate.thinking || 0) : 0
+  const thinking = day.day === latestDay ? Number(estimate.thinking || 0) : 0
   const total = conversation
     + tools
     + attachments
@@ -326,10 +323,10 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   }, [sessionId])
 
   const estimatedDateTokens = useMemo(() => {
-    const latestRawDay = draft ? latestRawConversationDay(days, draft) : ''
+    const latestDay = draft ? latestConversationDay(days) : ''
     return days.reduce((total, day) => {
     const mode = draft?.day_modes?.[day.day] || (draft?.strategy === 'daily_rolling' ? 'raw' : 'omit')
-    if (mode === 'raw') return total + effectiveRawTokenEstimate(day, latestRawDay).total
+    if (mode === 'raw') return total + effectiveRawTokenEstimate(day, latestDay).total
     if (mode === 'review') return total + (day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || ''))
     return total
     }, 0)
@@ -388,32 +385,19 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
 
   const save = async () => {
     if (busy) return
-    const switchingToRolling = session.rolling_context?.strategy === 'fixed_window'
-      && draft.strategy === 'daily_rolling'
     const switchingToFixed = session.rolling_context?.strategy === 'daily_rolling'
       && draft.strategy === 'fixed_window'
-    if (switchingToRolling && !window.confirm(
-      '首次开启会优先把固定窗口的原生 transcript 完整迁入，保留工具、召回和 thinking。\n\n如果旧 transcript 已不存在，是否允许改为只恢复 Haven 中可见的用户与助手正文？取消则不保存。',
-    )) return
     if (switchingToFixed && !window.confirm(
       '切回原换窗机制后，这个窗口只会使用创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。\n\n如果要保留最新衔接，请取消并先使用“换窗继续”。仍要直接切回吗？',
-    )) return
-    const restoredDays = days.filter(day => {
-      const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
-      const nextMode = draft.day_modes?.[day.day] || 'raw'
-      return savedMode !== 'raw' && nextMode === 'raw'
-    })
-    if (restoredDays.length > 0 && !window.confirm(
-      `将 ${restoredDays.length} 个旧日期重新设为“原文”时，只会恢复 Haven 中可见的用户与助手正文，不会恢复当时的工具调用、工具结果和动态召回过程。仍要保存吗？`,
     )) return
     setSaving(true)
     setNote('')
     try {
       const rollingContext = {
-        ...draft,
-        allow_fixed_body_restore: switchingToRolling
-          ? true
-          : draft.allow_fixed_body_restore,
+        strategy: draft.strategy,
+        timezone: draft.timezone,
+        day_start_hour: draft.day_start_hour,
+        day_modes: draft.day_modes,
         selected_pinned_ids: [...selectedPinned],
         selected_journal_ids: [...selectedJournals],
         selected_recent_ids: [...selectedRecent],
@@ -480,25 +464,22 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   })
 
   const modeForDay = (day: ConversationContextDay) => draft.day_modes?.[day.day] || 'raw'
-  const latestRawDay = latestRawConversationDay(days, draft)
+  const latestDay = latestConversationDay(days)
   const sortedDays = [...days].sort((a, b) => b.day.localeCompare(a.day))
   const includedDays = sortedDays.filter(day => modeForDay(day) !== 'omit')
   const omittedDays = sortedDays.filter(day => modeForDay(day) === 'omit')
   const renderDay = (day: ConversationContextDay) => {
     const mode = modeForDay(day)
-    const savedMode = session.rolling_context?.day_modes?.[day.day] || 'raw'
-    const bodyRestore = savedMode !== 'raw' && mode === 'raw'
-    const estimate = effectiveRawTokenEstimate(day, latestRawDay)
+    const estimate = effectiveRawTokenEstimate(day, latestDay)
     const reviewTokens = day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || '')
     const rawTokens = estimate.total
-    const thinkingPruned = day.day !== latestRawDay && Number(day.token_estimate?.thinking || 0) > 0
-    const recallPruned = day.day !== latestRawDay && Number(day.token_estimate?.recall || 0) > 0
+    const thinkingPruned = day.day !== latestDay && Number(day.token_estimate?.thinking || 0) > 0
+    const recallPruned = day.day !== latestDay && Number(day.token_estimate?.recall || 0) > 0
     return (
       <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-meta text-[var(--color-text-secondary)]">
             <span>{day.day}</span>
-            {bodyRestore ? <span className="rounded-full bg-[var(--color-pending-bg)] px-1.5 py-0.5 text-3xs text-[var(--color-pending)]">正文恢复</span> : null}
           </div>
           {mode === 'raw' ? (
             <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-3xs text-[var(--color-text-disabled)]">
@@ -506,8 +487,8 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
               <span>正文 {estimate.conversation.toLocaleString()}</span>
               <span>工具 {estimate.tools.toLocaleString()}</span>
               <span>附件 {estimate.attachments.toLocaleString()}{day.attachment_unknown_count ? `（${day.attachment_unknown_count} 未知）` : ''}</span>
-              <span>召回 {estimate.recall.toLocaleString()}{recallPruned ? `（已剥离 ${Number(day.token_estimate?.recall || 0).toLocaleString()}）` : ''}</span>
-              <span>thinking {estimate.thinking.toLocaleString()}{thinkingPruned ? '（已剥离）' : ''}</span>
+              <span>召回 {estimate.recall.toLocaleString()}{recallPruned ? `（重建时清理 ${Number(day.token_estimate?.recall || 0).toLocaleString()}）` : ''}</span>
+              <span>thinking {estimate.thinking.toLocaleString()}{thinkingPruned ? '（重建时清理）' : ''}</span>
               <span>时间戳≈{estimate.timestamps.toLocaleString()}</span>
               <span>框架≈{estimate.message_overhead.toLocaleString()}</span>
               <span>wake≈{estimate.agent_wake.toLocaleString()}</span>
@@ -543,10 +524,10 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
       {draft.strategy === 'daily_rolling' ? (
         <>
           <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-2.5 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
-            这里只决定模型下一轮能看到什么，不删除聊天记录。重建时只保留最新一个有对话原文日的召回和 thinking；旧召回剥离后可重新参与召回，但原文期新写入或被 breath 看过的桶仍会隔离。
+            这里只决定模型下一轮能看到什么，不删除聊天记录。重建时只保留存档最新一天的召回和 thinking；旧召回剥离后可重新参与召回，但原文期新写入或被 breath 看过的桶仍会隔离。
           </div>
           <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] p-2.5 text-2xs leading-relaxed text-[var(--color-pending)]">
-            已经退出“原文”的旧日期以后重新设为“原文”时，只会从 Haven 恢复可见的用户与助手正文；当时的工具调用、工具结果和动态召回过程不会恢复。
+            日期改回“原文”时从原生存档恢复工具、图片与正文；较早日期仍按规则清理 thinking、召回和过期提醒。只有存档中整天缺失时，才从 Haven 恢复该天正文。
           </div>
           <div className="mb-3 flex items-center justify-between gap-3">
             <label className="text-meta text-[var(--color-text-tertiary)]">一天从北京时间</label>

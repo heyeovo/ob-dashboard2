@@ -16,7 +16,6 @@ import type { CredMode } from '@/app/lib/ccEnv'
 import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import { ccResumeHintForContext } from '@/app/lib/ccSession'
-import { rollingRevisionRequiresSource } from '@/app/lib/cc/rollingHistory'
 
 /** Restore the single last-active native CC lane without any browser state. */
 export async function loadBackgroundTurnInputs(sessionId: string) {
@@ -66,9 +65,6 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   const rollingRevisionChanged = isRolling && laneContextRevision !== contextRevision
   const rollingSourceResumeFrom = rollingRevisionChanged ? laneResumeHint : ''
   const rollingPreviousStrategy = String(session.rolling_context?.previous_strategy || '').trim()
-  const requireRollingSource = rollingRevisionRequiresSource(
-    isRolling, laneContextRevision, contextRevision, rollingPreviousStrategy,
-  )
   const resumeHint = ccResumeHintForContext({
     persistedHint: laneResumeHint,
     legacyHint: '',
@@ -95,17 +91,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     sessionId,
     session,
     sessionResult.contextDays,
-    { includeAllTurns: Boolean(rollingSourceResumeFrom) },
   )
-  const previousDayModes = session.rolling_context?.previous_day_modes || {}
-  const allowFixedBodyRestore = session.rolling_context?.allow_fixed_body_restore === true
-  const rollingRequiredFullRawDays = [...new Set(rolling.history
-    .map(turn => turn.chat_day || '')
-    .filter(day => {
-      if (!day || !rollingRevisionChanged) return false
-      if (rollingPreviousStrategy === 'fixed_window') return !allowFixedBodyRestore
-      return (previousDayModes[day] || 'raw') === 'raw'
-    }))]
   sessionResult = {
     ...sessionResult,
     bucketExclusionIds: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])],
@@ -120,16 +106,11 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     sessionId,
     mode: session.mode,
     contextRevision,
-    rollingHistory: rolling.history,
+    rollingHistory: isRolling ? rolling.history : undefined,
     rollingSourceResumeFrom: rollingSourceResumeFrom || undefined,
-    rollingAllHistory: rollingSourceResumeFrom ? rolling.allTurns : undefined,
-    requireRollingSource,
     rollingPreviousStrategy,
-    rollingRequiredFullRawDays,
-    allowFixedBodyRestore,
-    allowRollingBodySeed: rollingRevisionChanged
-      && rollingPreviousStrategy === 'fixed_window'
-      && allowFixedBodyRestore,
+    rollingContext: session.rolling_context,
+    rollingHasHistory: sessionResult.contextDays.some(day => day.turn_count > 0),
     personaAppend,
     systemPromptKey: '',
     modelSurfaceKey: '',

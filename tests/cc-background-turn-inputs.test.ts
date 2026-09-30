@@ -69,7 +69,7 @@ function session(laneRevision: number, contextRevision: number) {
     cc_lanes: { subscription: { cc_session_id: 'native-session', context_revision: laneRevision } },
     rolling_context: {
       strategy: 'daily_rolling', previous_strategy: 'daily_rolling',
-      previous_day_modes: { '2026-09-13': 'raw' }, day_modes: { '2026-09-13': 'raw' },
+      timezone: 'Asia/Shanghai', day_start_hour: 4, day_modes: { '2026-09-13': 'raw' },
     },
     context_revision: contextRevision, context_gc: {}, prompt_module_overrides: {}, mode: 'chat',
     frozen_persona_append_initialized: true, frozen_persona_append: '', handoff_snapshot: {},
@@ -81,7 +81,7 @@ beforeEach(() => {
   deps.getSession.mockReset()
   deps.loadRolling.mockReset()
   deps.loadRolling.mockResolvedValue({
-    history: [rawTurn], allTurns: [rawTurn], content: '', pinnedBucketIds: [],
+    history: [rawTurn], content: '', pinnedBucketIds: [],
   })
 })
 
@@ -95,13 +95,13 @@ describe('background rolling turn inputs', () => {
 
     expect(loaded.resumeHint).toBe('native-session')
     expect(loaded.config.rollingSourceResumeFrom).toBeUndefined()
-    expect(loaded.config.allowRollingBodySeed).toBe(false)
+    expect(loaded.config.rollingContext).toEqual(session(2, 2).rolling_context)
     expect(deps.loadRolling).toHaveBeenCalledWith(
-      'window-1', expect.any(Object), [], { includeAllTurns: false },
+      'window-1', expect.any(Object), [],
     )
   })
 
-  it('requires the old complete transcript when a background wake crosses a rolling revision', async () => {
+  it('passes the archive context and migration source when a wake crosses a revision', async () => {
     deps.getSession.mockResolvedValue({
       ok: true, session: session(1, 2), contextDays: [], bucketExclusionIds: [],
     })
@@ -110,11 +110,10 @@ describe('background rolling turn inputs', () => {
 
     expect(loaded.resumeHint).toBe('')
     expect(loaded.config.rollingSourceResumeFrom).toBe('native-session')
-    expect(loaded.config.requireRollingSource).toBe(true)
-    expect(loaded.config.rollingAllHistory).toEqual([rawTurn])
-    expect(loaded.config.rollingRequiredFullRawDays).toEqual(['2026-09-13'])
+    expect(loaded.config.rollingHistory).toEqual([rawTurn])
+    expect(loaded.config.rollingContext).toEqual(session(1, 2).rolling_context)
     expect(deps.loadRolling).toHaveBeenCalledWith(
-      'window-1', expect.any(Object), [], { includeAllTurns: true },
+      'window-1', expect.any(Object), [],
     )
   })
 })

@@ -20,7 +20,8 @@
 - 位置：与现有 RollingSeedStore 同根（`$CLAUDE_CONFIG_DIR/ob2-rolling-session-store-v1/`），按 **Haven session ID + lane ID** 分文件，例如 `archive/<base64url(havenSessionId)>/<base64url(laneId)>.jsonl`。该目录已在持久卷上（RollingSeedStore 跨部署可恢复即依赖它）。
 - 内容：模型真实见过的原生 transcript entry，原样保存（thinking、tool_use / tool_result、图片、召回、SDK attachment 全保留）。每条带 `ob2ArchiveUuid`（首次入档时的原生 uuid）。
 - 只追加：不删、不改。旧日期的删减只发生在「生成 revision」时，不回写存档。
-- 追加时机：每个成功轮次结束、现有 `syncRollingNativeSession`（`runTurn.ts` 约 1300 行）同步 RollingSeedStore 的同一位置、同一把锁下。追加规则：当前原生 transcript 中**没有 `ob2ArchiveUuid` 的 entry** 即为新 entry，按顺序追加并补上 `ob2ArchiveUuid`；同时把标记写回当前 transcript / RollingSeedStore，避免下轮重复入档。
+- 追加时机：每个成功轮次结束、现有 `syncRollingNativeSession`（`runTurn.ts` 约 1300 行）同步 RollingSeedStore 的同一位置、同一把锁下。追加规则：当前原生 transcript 中**有原生 `uuid` 且没有 `ob2ArchiveUuid` 的 entry** 即为新 entry，按顺序追加并补上 `ob2ArchiveUuid`；同时把标记写回当前 transcript / RollingSeedStore，避免下轮重复入档。
+- 不生成 ID。无 `uuid` 的 SDK 元数据 entry（`queue-operation` / `file-history-snapshot` / `ai-title` / `last-prompt` / `mode` / `atis-latch` / `cost-state` 等）不入档，也不带入 revision；它们不是模型可见内容，SDK resume 时按当前 options 重建所需状态。实测主窗 transcript 的 `user` / `assistant` / `attachment` 三类 100% 带 `uuid`；这三类若缺 `uuid`，报错停下，不补 ID。单测覆盖混入无 UUID 元数据后的入档过滤及重复同步幂等。
 - 前台 turn 与后台 wake 都走这条路径。
 
 ### 2. 生成 revision = 从存档按天筛
@@ -34,6 +35,7 @@
 4. 存档 prefix（第一轮之前的 entry）不带入 revision。
 5. `cloneRollingTranscriptForSession` 重新编 uuid / 串 `parentUuid`，照旧落 RollingSeedStore + 物化原生 transcript + resume。**clone 时必须保留 `ob2ArchiveUuid`**。
 6. 存档里完全没有某个 raw 日期时（例如存档建立前就已被丢弃的日期）：仅对**整天**用现有 `buildRollingTranscriptEntries` 从 Haven 正文重建，打 `ob2RollingFidelity: 'body_restored'`，上下文检查页可见。不做逐轮拼补。
+7. 筛选结果为空（没有任何 raw 日期的轮次）时：不生成 seed、不 resume，开新的 Claude 会话，只注入现有背景 Context；原生存档不动。该空会话后续产生的新轮次照常按「无 `ob2ArchiveUuid` 即新 entry」追加进存档。之后任意日期改回 raw 时从存档恢复。单测覆盖：全部日期为日回顾／不带 → 开空会话 → 聊一轮 → 该轮入档 → 某天改回 raw → 该天与新轮次都在 revision 里。
 
 ### 3. 迁移入口统一为「建存档」
 
@@ -88,10 +90,10 @@
 
 ## 六、验收
 
-- [ ] 单测：图片轮次、SDK 续写提示、中断半截轮次、wake 轮次、跨零点回复、`day_start_hour` 边界（03:59 / 04:00）各至少一例，按天筛结果正确。
-- [ ] 单测：最后一天 thinking / 召回保留；更早的 raw 日期删除；工具块与正文不动；tool_use 未配对时不删 thinking（沿用现有保护）。
-- [ ] 单测：「不带」→ 改回 raw 时从存档恢复原样（存档不因筛选而缺失）。
-- [ ] 单测：存档追加幂等，同一轮重复同步不重复入档。
+- [x] 单测：图片轮次、SDK 续写提示、中断半截轮次、wake 轮次、跨零点回复、`day_start_hour` 边界（03:59 / 04:00）各至少一例，按天筛结果正确。
+- [x] 单测：最后一天 thinking / 召回保留；更早的 raw 日期删除；工具块与正文不动；tool_use 未配对时不删 thinking（沿用现有保护）。
+- [x] 单测：「不带」→ 改回 raw 时从存档恢复原样（存档不因筛选而缺失）。
+- [x] 单测：存档追加幂等，同一轮重复同步不重复入档。
 - [ ] `npm run build` 通过，`npx vitest run` 全绿。
 - [ ] CC 离线用主窗真实数据跑按天筛（不提交）：thinking 仅最后一天有、工具块数与存档一致、无「body_restored」。
 - [ ] 测试窗口实测：固定→滚动切换一次、跨日重建一次、改某天为「不带」再改回一次，上下文检查页数据正确，对话正常续接。
@@ -99,6 +101,55 @@
 
 ## 七、状态
 
-- [ ] 执行中（GPT）
-- [ ] CC 验收
-- [ ] 上线 + 主窗修复
+- [x] GPT：§五 1–6 实现完成，并同步正式文档；分支 `feat/rolling-archive`，供 CC 拉取验收。
+- [ ] CC 验收：Linux build／全量测试、真实数据离线筛选、测试窗口完整流程。
+- [ ] 上线 + 主窗修复：本次不做第 7 步、不生成修复脚本、不动主窗；不动 main、不合并、不部署。
+
+### 本次验收交接
+
+已确认的补充规则：空筛选不生成 seed、不 resume，但后续新会话轮次照常入档（§二.2 第 7 点）；无 UUID 元数据不入档、不进入 revision，模型可见类型缺 UUID 报错，不补 ID（§二.1）。两项都有合成测试，空会话还经过 runTurn 集成测试确认没有 resume 且成功轮次进入存档。
+
+验证：`npm run build` 通过；全量 `npx vitest run` 为 366 通过、1 条原有跳过、2 条失败。以下两条原样保留，未改、未跳过，用户确认由 CC 在 Linux 验证：
+
+| 测试 | 原因／状态 |
+|---|---|
+| `tests/artifacts.test.ts` → `artifacts` → `lists newest first and ignores symlinks and other files` | 创建文件 symlink 时 `EPERM: operation not permitted`；Windows 符号链接权限，待 CC 在 Linux 验证 |
+| `tests/cc-dirs.test.ts` → `cc workspace 路径边界` → `工作模式内置 yanzhi files 目录；闲聊、未挂载和 symlink 挂载点都不加` | 创建目录 symlink 时 `EPERM: operation not permitted`；Windows 符号链接权限，待 CC 在 Linux 验证 |
+
+额外观察：一次全量运行中，未改动的 `tests/dashboard-auth.test.ts` 的 `compares login input and verifies only authentic, unexpired sessions` 随机 token 末位篡改断言失败；单独重跑 6 条及最后全量运行均通过。其签名比较把 base64url 解码后比较字节，替换末位可能仅改变未使用的编码位。认证代码与测试都没有改动，CC 验收时留意这条既有测试的波动，不把它归为滚动改造逻辑。
+
+CC 下一步：只验收本分支的 §五 1–6 和正式文档，运行 Linux 全量测试；再用真实数据离线验证（不提交聊天内容）和测试窗口验证固定→滚动、跨日、omit→raw、空会话入档。主窗修复仍是后续独立操作；本次不含脚本或线上参数修改。Haven 旧 `allow_fixed_body_restore`／`previous_day_modes` 字段留存未动，后续清理需登记 OB Todo。
+
+### 改动文件
+
+- `app/api/cc-chat/route.ts`
+- `app/api/cc-context-audit/route.ts`
+- `app/api/cc-diagnostics/rolling-ab/route.ts`（删除）
+- `app/api/cc-rolling-recovery/route.ts`
+- `app/cc/CcRollingContext.tsx`
+- `app/lib/cc/ccOptions.ts`
+- `app/lib/cc/rollingArchive.ts`（新增）
+- `app/lib/cc/rollingHistory.ts`
+- `app/lib/cc/runTurn.ts`
+- `app/lib/cc/turnInputs.ts`
+- `app/lib/cc/windowPrompt.ts`
+- `app/lib/havenTurns.ts`
+- `app/workbench/ContextAuditPanel.tsx`
+- `docs/architecture.md`
+- `docs/handoff/HANDOFF-rolling-archive-slicing.md`
+- `docs/handoff/README.md`
+- `docs/reference.md`
+- `proxy.ts`
+- `tests/cc-background-turn-inputs.test.ts`
+- `tests/cc-rolling-recovery-route.test.ts`
+- `tests/cc-runTurn.test.ts`
+- `tests/dashboard-proxy.test.ts`
+- `tests/rolling-context.test.ts`
+
+### 删除的运行时函数与类型
+
+- `app/api/cc-context-audit/route.ts`：`matchTranscriptMessages`。
+- `app/api/cc-diagnostics/rolling-ab/route.ts`：`bearer`、`secureMatch`、`credentialFingerprint`、`promptOnce`、`safeError`、`runProbe`、`POST`。
+- `app/lib/cc/rollingHistory.ts`：`rollingRevisionRequiresSource`、`assertRequiredRollingRevisionSeed`、`assertFixedMigrationSeed`、`assertRollingResumeRecovered`、`assertRollingSeedAvailable`、`normalized`、`envelopeUserMatchesTurn`、`envelopeMatchesTurn`、`isPlainTextPairEnvelope`、`isInterruptedStatusOnlyEnvelope`、`isLegacyExplicitFailureEnvelope`、`havenNativeTurnUuid`、`closestCompletedTurnIndex`、`alignEnvelopesToTurns`、`isUnrepresentedEmptyWake`、`inspectRollingHistoryAlignment`、`createRollingTranscriptRecoverySeed`、`createRollingHistoryRevisionSeed`、`createRevisionSeedFromEntries`、`createFixedTranscriptMigrationSeed`。
+- 删除类型：`RollingAlignmentIssue`、`RollingMissingRawTurn`；删除诊断专用类 `MemorySessionStore` 和类型 `ProbeResult`。
+- `syncRollingNativeSession` 移入 `rollingArchive.ts`，不是删除；`toEnvelope` 只保留 entries／timestamp；`latestRawConversationDay` 改为 `latestConversationDay`，预算按最新对话日估算，实际清理以存档审计为准。

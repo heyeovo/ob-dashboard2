@@ -192,6 +192,18 @@ cc SSE 流式入口，内部拆 `runTurn` / `ccOptions` / `ccHistory` + `process
 
 CC Pro (`subscription`) 与每个 CC API provider (`api:<provider_id>`) 分别从 Haven `cc_lanes` 恢复自己的 Claude 原生 session 和 `seen_round_id`，切换线路时回收空闲 query。订阅模型 ID 原样交给 Claude Code，不改写成动态别名；只有 API provider 的 Opus 4.6 模型继续使用内部映射。目标线路游标之后的全部成功文字轮次作为 `<上次聊到这里>` 补入下一条 SDK user message；thinking、图片与文件不补入。浏览器断连后子进程会被回收。
 
+### 原生存档按天切
+
+滚动窗口把 archive 与当前 revision 分开。`rollingArchive.ts` 按 Haven session ID + lane ID 保存一份只追加 JSONL；首次入档以原生 UUID 标记 `ob2ArchiveUuid`，后续 revision 的 UUID 重编仍保留这个标记。同步重试也以原生 UUID 防止已追加但尚未写回标记的 entry 重复入档。无 UUID 的 SDK 元数据不入档；user／assistant／attachment 缺 UUID 则报错，不生成替代 ID。当前原生 transcript 的元数据保留给 SDK 自身使用。
+
+生成 revision 时以 primary user entry 开始一轮，工具结果与 SDK 续写留在同一轮；按用户消息 timestamp 转窗口时区，再减 `day_start_hour` 得到 chat_day（缺省 Asia/Shanghai、4 点）。跨零点或跨日界线的助手回复不拆。存档 prefix 不带入 revision；日回顾／不带的整轮移除；较早 raw 日期剥离完成工具链的 thinking、召回与过期 SDK attachment／system reminder，未配对工具链的 thinking 仍保留。存档最新一天若为 raw，原样保留。Haven 完成时间与原生用户时间的日界线差异可以落在相邻天，不做逐轮补偿。
+
+只有存档整天不存在而该天选择 raw 时，才用 Haven 恢复该天全部正文并标记 `body_restored`；已有存档日期不按 Haven 补轮次。筛选不写回 archive，因此“原文 → 不带 → 原文”仍从存档恢复工具、图片和正文，再应用当次筛选规则。筛选为空时不生成 seed、不 resume，清除当前 revision 的 resume 指针并启动新 Claude 会话，只注入既有背景 Context；新会话产生的轮次照常入档，以后改回 raw 时可和旧日期一起恢复。
+
+冷启动先初始化／读取 archive，再选择同 revision 的持久 seed 直接 resume，或从 archive 生成新 revision。固定 → 滚动首次切换通过 SDK 官方导入原生 transcript 作为 archive 初值；存量滚动窗口无 archive 时用当前 RollingSeedStore 初始化，持久副本缺失才导入现有原生 transcript。模型表面格式变化也从 archive 生成滚动 seed，禁止回退到 Haven 正文；固定窗口原有 rebase 行为不变。全新无历史窗口可初始化空 archive。
+
+所有原生来源丢失时明确报错，用户在上下文检查页二次确认后，`cc-rolling-recovery` 在窗口协调锁内把全量 Haven 正文作为新 archive 初值，再生成当前 raw 日期 seed；旧日期以后仍可改回 raw。先持久化 seed，再以旧 CC session ID 与 state version CAS 切换 Haven lane 与本地 resume；CAS 失败不激活新 resume。只读检查页同时展示本 revision 已保存的重建处理与按当前配置的预览，不导入来源、不生成 seed、不写配置。
+
 ### cc-chat-selfhost/route.ts
 
 无状态聊天链路：浏览器只提交 `session_id`、`request_id`、`expected_last_round_id`、`persona_id` 和当前正文；服务端从 Haven 读取一切配置。`lib/selfhost/` 负责 Persona → recall、保守上下文预算、Anthropic-compatible `/v1/messages` 请求与 SSE 解析，以及远程 MCP 工具循环：只连接已启用的 HTTP/SSE server，一轮最多 8 次工具调用。预检阶段 GET 连接异常短暂重试一次；HTTP 错误、写入和主动取消不重试。
