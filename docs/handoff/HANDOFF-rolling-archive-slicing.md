@@ -33,6 +33,7 @@
    - **raw 且不是最后一天**：保留，但删 thinking（现有 `pruneCompletedThinking`）和召回（现有 `prunePersistedRecall`）；同时删掉该轮里的 SDK 过期 attachment（environment / model / total_tokens_reminder / date 等，复用 `stripStaleSystemReminders` 的判定）。
    - **最后一天**（存档中最新的 chat_day）：原样保留，thinking 和召回都在。
 4. 存档 prefix（第一轮之前的 entry）不带入 revision。
+   压缩产物也只保留在存档：`type: 'system'` 且 `subtype: 'compact_boundary'` 的 entry，以及 `isCompactSummary: true` 的 user entry 不带入 revision，避免 SDK resume 忽略分界线之前的原文。
 5. `cloneRollingTranscriptForSession` 重新编 uuid / 串 `parentUuid`，照旧落 RollingSeedStore + 物化原生 transcript + resume。**clone 时必须保留 `ob2ArchiveUuid`**。
 6. 存档里完全没有某个 raw 日期时（例如存档建立前就已被丢弃的日期）：仅对**整天**用现有 `buildRollingTranscriptEntries` 从 Haven 正文重建，打 `ob2RollingFidelity: 'body_restored'`，上下文检查页可见。不做逐轮拼补。
 7. 筛选结果为空（没有任何 raw 日期的轮次）时：不生成 seed、不 resume，开新的 Claude 会话，只注入现有背景 Context；原生存档不动。该空会话后续产生的新轮次照常按「无 `ob2ArchiveUuid` 即新 entry」追加进存档。之后任意日期改回 raw 时从存档恢复。单测覆盖：全部日期为日回顾／不带 → 开空会话 → 聊一轮 → 该轮入档 → 某天改回 raw → 该天与新轮次都在 revision 里。
@@ -45,6 +46,8 @@
 | 已在滚动、尚无存档（上线时的存量窗口） | 当前 revision 的 RollingSeedStore 整份作为存档初值（已丢弃的旧日期按 §2.6 处理）。 |
 | 模型表面变化 rebase（`createModelSurfaceRebaseSeed`） | 同样从存档生成，不再退回正文重建。 |
 | 存档与原生 transcript 都丢失 | 明确报错，由用户在上下文检查页确认后走整份正文重建（保留现有 `cc-rolling-recovery` 的二次确认交互，内部改为：正文重建结果作为新存档初值）。 |
+
+`ensureRollingArchive` 只读取迁移来源，不对固定原始 transcript 或旧 RollingSeedStore 写回标记；原生 UUID 足以去重。成功轮次的当前 transcript 同步仍按 §二.1 写回标记。
 
 ### 4. 删除（执行时逐项 grep 确认无引用）
 
@@ -102,14 +105,17 @@
 ## 七、状态
 
 - [x] GPT：§五 1–6 实现完成，并同步正式文档；分支 `feat/rolling-archive`，供 CC 拉取验收。
-- [ ] CC 验收：Linux build／全量测试、真实数据离线筛选、测试窗口完整流程。
+- [x] CC 首轮：Linux build／全量测试、主窗真实数据离线切片通过（用户反馈）。
+- [ ] CC 复验本轮两处修复及测试窗口完整流程。
 - [ ] 上线 + 主窗修复：本次不做第 7 步、不生成修复脚本、不动主窗；不动 main、不合并、不部署。
 
 ### 本次验收交接
 
+2026-10-01 CC 首轮验收（用户反馈）：Linux 全量测试和 build 通过，主窗真实数据离线切片正确。此次只补两处：切片排除压缩分界线／摘要，迁移来源改为只读；新增单测覆盖前后原文保留、存档不删压缩产物、两种来源文件迁移前后字节不变及原生 UUID 去重。对应代码仅 `rollingArchive.ts`，测试仅 `rolling-context.test.ts`，其余改动是命中的文档同步。本轮相关测试 64 条通过，build 通过；交付采用同分支 commit + push，由 CC 复验这两处。主窗修复仍不做。
+
 已确认的补充规则：空筛选不生成 seed、不 resume，但后续新会话轮次照常入档（§二.2 第 7 点）；无 UUID 元数据不入档、不进入 revision，模型可见类型缺 UUID 报错，不补 ID（§二.1）。两项都有合成测试，空会话还经过 runTurn 集成测试确认没有 resume 且成功轮次进入存档。
 
-验证：`npm run build` 通过；全量 `npx vitest run` 为 366 通过、1 条原有跳过、2 条失败。以下两条原样保留，未改、未跳过，用户确认由 CC 在 Linux 验证：
+首轮 Windows 验证记录：`npm run build` 通过；全量 `npx vitest run` 为 366 通过、1 条原有跳过、2 条失败。以下两条原样保留，未改、未跳过，当时用户确认由 CC 在 Linux 验证；CC 首轮 Linux 验证现已通过：
 
 | 测试 | 原因／状态 |
 |---|---|

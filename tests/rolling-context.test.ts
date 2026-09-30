@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { getSessionMessages, type SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
@@ -14,7 +14,7 @@ import { buildRollingWindowAppend, buildRollingWindowHistory, loadRollingWindowA
 import {
   cloneRollingTranscriptForSession,
   inspectRollingHistoryTranscript, materializeRollingHistorySeed, materializeRollingNativeSession,
-  openRollingHistoryResume, stripStaleSystemReminders,
+  nativeClaudeSessionFile, openRollingHistoryResume, RollingSeedStore, stripStaleSystemReminders,
 } from '@/app/lib/cc/rollingHistory'
 import {
   appendRollingArchive, archiveChatDay, archiveEnvelopes, createArchiveRevisionSeed,
@@ -199,6 +199,30 @@ async function withStore(test: (storeRoot: string, claudeConfigDir: string) => P
 }
 
 describe('native archive day slicing', () => {
+  it('keeps compaction artifacts in the archive but removes boundaries and summaries from revisions, preserving both sides', async () => withStore(async storeRoot => {
+    const source = [
+      ...nativeRound('before', '2026-09-12T08:00:00Z'),
+      { type: 'system', subtype: 'compact_boundary', uuid: 'compact-boundary', timestamp: '2026-09-12T09:00:00Z' },
+      { ...entry('compact-summary', 'user', '2026-09-12T09:00:01Z', 'synthetic compact summary'), isCompactSummary: true },
+      ...nativeRound('after', '2026-09-12T10:00:00Z'),
+    ] as SessionStoreEntry[]
+    await appendRollingArchive(key, source, { storeRoot })
+    const archive = (await readRollingArchive(key, { storeRoot }))!
+    expect(archive.map(item => item.uuid)).toEqual(source.map(item => item.uuid))
+    const seed = createArchiveRevisionSeed(archive, context, [], { ...seedOptions, storeRoot })!
+    expect(seed.entries.some(item => item.type === 'system' && item.subtype === 'compact_boundary')).toBe(false)
+    expect(seed.entries.some(item => item.type === 'user' && item.isCompactSummary === true)).toBe(false)
+    const text = JSON.stringify(seed.entries)
+    for (const side of ['before', 'after']) {
+      expect(text).toContain(`question-${side}`)
+      expect(text).toContain(`answer-${side}`)
+      expect(text).toContain(`tool-${side}`)
+      expect(text).toContain(`result-${side}`)
+    }
+    expect(archiveEnvelopes(archive, context)).toHaveLength(2)
+    expect(await readRollingArchive(key, { storeRoot })).toEqual(archive)
+  }))
+
   it('uses local wall time and the 03:59 / 04:00 boundary, including timezone defaults', () => {
     expect(archiveChatDay('2026-09-11T19:59:00Z', context)).toBe('2026-09-11')
     expect(archiveChatDay('2026-09-11T20:00:00Z', context)).toBe('2026-09-12')
@@ -300,6 +324,38 @@ describe('native archive day slicing', () => {
 })
 
 describe('archive IO and migration', () => {
+  it('leaves fixed native transcript and legacy RollingSeedStore source files byte-identical after migration', async () => withStore(async (storeRoot, claudeConfigDir) => {
+    const source = nativeRound('source', '2026-09-12T10:00:00Z')
+    const fixedFile = await nativeClaudeSessionFile('fixed-source', seedOptions.cwd, claudeConfigDir)
+    await mkdir(path.dirname(fixedFile), { recursive: true })
+    // Extra whitespace proves migration preserves the actual source bytes, not just its messages.
+    await writeFile(fixedFile, source.map(item => ` ${JSON.stringify(item)} `).join('\r\n') + '\r\n', 'utf8')
+    const fixedBefore = await readFile(fixedFile)
+    const fixedArchive = await ensureRollingArchive(key, { storeRoot, claudeConfigDir, cwd: seedOptions.cwd,
+      sourceResumeFrom: 'fixed-source', fixedMigration: true,
+      importLocalSession: async (_id, store) => {
+        const entries = (await readFile(fixedFile, 'utf8')).split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
+        await store.append({ projectKey: '', sessionId: 'fixed-source' }, entries)
+      } })
+    expect(await readFile(fixedFile)).toEqual(fixedBefore)
+    expect(openRollingHistoryResume('fixed-source', { storeRoot })).toBeNull()
+    expect(fixedArchive.every(item => item.ob2ArchiveUuid === item.uuid)).toBe(true)
+
+    const legacyStore = new RollingSeedStore('legacy-source', source, storeRoot)
+    await legacyStore.materialize('legacy-source')
+    const legacyFile = path.join(storeRoot, Buffer.from('legacy-source').toString('base64url'), 'main.jsonl')
+    const legacyBefore = await readFile(legacyFile)
+    const legacyKey = { ...key, laneId: 'api:read-only-source' }
+    const legacyArchive = await ensureRollingArchive(legacyKey, { storeRoot, claudeConfigDir,
+      cwd: seedOptions.cwd, sourceResumeFrom: 'legacy-source' })
+    expect(await readFile(legacyFile)).toEqual(legacyBefore)
+    expect(legacyArchive.every(item => item.ob2ArchiveUuid === item.uuid)).toBe(true)
+    expect(await legacyStore.load({ projectKey: '', sessionId: 'legacy-source' })).toEqual(source)
+    // Reusing the unmarked source still deduplicates by its native UUID.
+    await appendRollingArchive(legacyKey, source, { storeRoot })
+    expect(await readRollingArchive(legacyKey, { storeRoot })).toHaveLength(source.length)
+  }))
+
   it('excludes UUID-less metadata from archives/revisions and repeated sync does not duplicate visible entries', async () => withStore(async (storeRoot, claudeConfigDir) => {
     const visible = nativeRound('visible', '2026-09-12T10:00:00Z')
     const metadata = ['queue-operation', 'file-history-snapshot', 'ai-title', 'last-prompt', 'mode', 'atis-latch', 'cost-state']

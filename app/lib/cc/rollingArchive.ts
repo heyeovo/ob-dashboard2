@@ -121,7 +121,6 @@ export async function ensureRollingArchive(
     throw new Error('原生存档与 transcript 都不存在，已停止本轮；请在上下文检查页确认正文重建')
   }
   const marked = await appendRollingArchive(key, source || [], options)
-  if (sourceId) await persistMarkedTranscript(sourceId, options.cwd, marked.entries, options)
   return archiveEligibleEntries(marked.entries)
 }
 
@@ -140,7 +139,10 @@ export function archiveChatDay(timestamp: string, context: ArchiveContext): stri
 }
 
 export function archiveEnvelopes(entries: SessionStoreEntry[], context: ArchiveContext) {
-  return transcriptEnvelopes(archiveEligibleEntries(entries)).envelopes.map(envelope => ({
+  const revisionEntries = archiveEligibleEntries(entries).filter(entry =>
+    !(entry.type === 'system' && entry.subtype === 'compact_boundary')
+    && !(entry.type === 'user' && entry.isCompactSummary === true))
+  return transcriptEnvelopes(revisionEntries).envelopes.map(envelope => ({
     ...envelope, day: archiveChatDay(envelope.timestamp, context),
   }))
 }
