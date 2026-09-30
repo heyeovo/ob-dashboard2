@@ -1,10 +1,11 @@
 'use client'
 
 import SubpageBackButton from '@/app/components/SubpageBackButton'
-import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
 import { bucketDate, bucketName, isLegacyDailyImpression } from '../lib/dailyBucketDate'
+import { getMonthChapters } from '../memory/memoryFilters'
+import type { Bucket } from '../memory/memoryTypes'
 
 type Persona = { id: string; name?: string }
 type DailyReview = {
@@ -60,15 +61,6 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit',
 })
 
-function bucketMetadata(bucket: BucketListItem) {
-  return bucket.metadata && typeof bucket.metadata === 'object' ? bucket.metadata : {}
-}
-
-function bucketContent(bucket: BucketListItem) {
-  const metadata = bucketMetadata(bucket)
-  return bucket.content_preview || String(metadata.content_preview || metadata.content || '')
-}
-
 function makeCalendar(year: number, month: number): CalendarCell[] {
   const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
@@ -97,12 +89,21 @@ function previousDate(date: string) {
   return DATE_FORMATTER.format(value)
 }
 
+function nextDate(date: string) {
+  const value = new Date(`${date}T12:00:00+08:00`)
+  value.setUTCDate(value.getUTCDate() + 1)
+  return DATE_FORMATTER.format(value)
+}
+
 export default function DailyReviewsPage() {
   const today = DATE_FORMATTER.format(new Date())
   const yesterday = previousDate(today)
   const [year, setYear] = useState(Number(today.slice(0, 4)))
   const [month, setMonth] = useState(Number(today.slice(5, 7)) - 1)
   const [selectedDate, setSelectedDate] = useState(today)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [reviewMenuOpen, setReviewMenuOpen] = useState(false)
   const [personas, setPersonas] = useState<Persona[]>([])
   const [personaId, setPersonaId] = useState('ombre')
   const [reviews, setReviews] = useState<DailyReview[]>([])
@@ -173,6 +174,11 @@ export default function DailyReviewsPage() {
   const eventDates = useMemo(() => new Set(eventBuckets.map(bucketDate).filter((value): value is string => Boolean(value))), [eventBuckets])
   const selectedReview = reviewMap.get(selectedDate)
   const selectedEvents = useMemo(() => eventBuckets.filter(bucket => bucketDate(bucket) === selectedDate), [eventBuckets, selectedDate])
+  const chapters = useMemo(() => getMonthChapters(buckets as unknown as Bucket[]), [buckets])
+  const selectedCellIndex = Math.max(0, cells.findIndex(cell => cell.key === selectedDate))
+  const weekCells = cells.slice(Math.floor(selectedCellIndex / 7) * 7, Math.floor(selectedCellIndex / 7) * 7 + 7)
+  const selectedDay = new Date(`${selectedDate}T12:00:00+08:00`)
+  const selectedLabel = `${Number(selectedDate.slice(5))}月${Number(selectedDate.slice(8))}日 · 周${WEEKDAYS[(selectedDay.getUTCDay() + 6) % 7]}`
 
   const selectDate = (date: string) => {
     setSelectedDate(date)
@@ -317,23 +323,14 @@ export default function DailyReviewsPage() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] pb-24 text-[var(--color-text-primary)]">
-      <header className="md:sticky md:top-0 md:z-20 md:border-b md:border-[var(--color-border)] md:bg-[var(--color-bg)]/90 md:backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-3 px-4 pb-4 pt-5 md:min-h-14 md:flex-row md:items-center md:justify-between md:py-2 sm:px-6">
-          <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:gap-3">
-            <SubpageBackButton href="/" label="返回主页" className="md:hidden" />
-            <Link href="/" className="hidden rounded-lg px-2 py-1 text-sm text-[var(--color-text-tertiary)] hover:bg-[var(--color-overlay)]/5 md:inline-flex">← Home</Link>
-            <div><h1 className="text-2xl font-semibold md:text-base">日回顾</h1><p className="text-xs text-[var(--color-text-disabled)]">从月历回看连续性笔记与当天发生的事</p></div>
-          </div>
-          <div className="flex items-center gap-2">
-            {personas.length > 1 && <select value={personaId} onChange={event => setPersonaId(event.target.value)} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-xs">{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select>}
-            <button type="button" disabled={Boolean(generatingDate)} onClick={generateYesterday} className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-[var(--color-on-primary)] disabled:opacity-50">{generatingDate === yesterday ? '生成中…' : reviewMap.has(yesterday) ? '查看昨天' : '生成昨天'}</button>
-          </div>
-        </div>
-      </header>
+      <header className="mx-auto max-w-2xl px-4 pt-5"><div className="flex items-center justify-between"><SubpageBackButton href="/" label="返回主页" /><div className="relative"><button type="button" onClick={() => setMenuOpen(!menuOpen)} aria-label="更多操作" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--glass-shadow)]">···</button>{menuOpen && <div className="cc-popmenu absolute right-0 top-11 z-20 min-w-40 rounded-[var(--radius-xl)] p-2 text-xs">{personas.length > 1 && <select aria-label="协作者" value={personaId} onChange={event => { setPersonaId(event.target.value); setMenuOpen(false) }} className="w-full rounded-[var(--radius-md)] p-2">{personas.map(persona => <option key={persona.id} value={persona.id}>{persona.name || persona.id}</option>)}</select>}<button type="button" onClick={() => { generateYesterday(); setMenuOpen(false) }} className="w-full p-2 text-left">{reviewMap.has(yesterday) ? '查看昨天' : '生成昨天'}</button><button type="button" onClick={() => { setLoading(true); void loadData(personaId).finally(() => setLoading(false)); setMenuOpen(false) }} className="w-full p-2 text-left">刷新</button></div>}</div></div><p className="mt-5 text-xs uppercase tracking-[var(--label-tracking)] text-[var(--color-primary)]">DAYS · 日回顾</p><h1 className="mt-1 font-[var(--font-display)] text-3xl text-[var(--color-text-heading)]">日回顾</h1><p className="mt-2 text-sm text-[var(--color-text-tertiary)]">每天结束后，写给第二天的自己{personas.length > 1 ? ` · ${personas.find(persona => persona.id === personaId)?.name || personaId}` : ''}</p></header>
 
-      <main className="mx-auto grid max-w-6xl gap-5 px-3 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)] lg:py-8">
-        <section className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
-          <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-4 py-4 sm:px-5">
+      <main className="mx-auto max-w-2xl space-y-5 px-4 py-5">
+        <section className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]">
+          <div className="flex items-center justify-between px-4 py-4 sm:px-5"><h2 className="font-[var(--font-display)] text-lg">{year}年{month + 1}月{chapters[`${year}-${String(month + 1).padStart(2, '0')}`]?.name ? ` · ${chapters[`${year}-${String(month + 1).padStart(2, '0')}`].name}` : ''}</h2><button type="button" onClick={() => setCalendarOpen(!calendarOpen)} className="text-xs text-[var(--color-primary)]">{calendarOpen ? '收起月历 ⌄' : '展开月历 ›'}</button></div>
+          <div className="grid grid-cols-7 gap-1 px-2 pb-3">{weekCells.map((cell, index) => <button key={cell.key} type="button" onClick={() => selectDate(cell.key)} disabled={cell.key > today} className={`flex min-h-16 flex-col items-center justify-center rounded-[var(--radius-md)] ${cell.key === selectedDate ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)]'} disabled:opacity-35`}><span className="text-2xs">{WEEKDAYS[index]}</span><span className="font-[var(--font-display)] text-lg">{cell.day}</span>{reviewDates.has(cell.key) && <span className="h-1 w-1 rounded-full bg-[var(--color-primary)]" />}</button>)}</div>
+          {calendarOpen && <>
+          <div className="flex items-center justify-between border-t border-[var(--color-border-light)] px-4 py-2">
             <button type="button" aria-label="上个月" onClick={() => changeMonth(-1)} className="flex h-9 w-9 items-center justify-center rounded-lg text-lg hover:bg-[var(--color-surface-secondary)]">‹</button>
             <h2 className="font-semibold">{year} 年 {month + 1} 月</h2>
             <button type="button" aria-label="下个月" onClick={() => changeMonth(1)} className="flex h-9 w-9 items-center justify-center rounded-lg text-lg hover:bg-[var(--color-surface-secondary)]">›</button>
@@ -345,30 +342,31 @@ export default function DailyReviewsPage() {
               const hasEvent = eventDates.has(cell.key)
               const isSelected = cell.key === selectedDate
               const isToday = cell.key === today
-              return <button key={cell.key} type="button" onClick={() => selectDate(cell.key)} className={`relative flex aspect-square min-h-11 flex-col items-center justify-center rounded-xl text-sm transition sm:min-h-16 ${isSelected ? 'bg-[var(--color-primary)] font-semibold text-[var(--color-on-primary)] shadow-sm' : cell.inMonth ? 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]' : 'text-[var(--color-text-disabled)] hover:bg-[var(--color-surface-secondary)]'} ${isToday && !isSelected ? 'ring-1 ring-inset ring-[var(--color-primary)]' : ''}`}>
+              return <button key={cell.key} type="button" onClick={() => selectDate(cell.key)} disabled={cell.key > today} className={`relative flex aspect-square min-h-11 flex-col items-center justify-center rounded-[var(--radius-lg)] text-sm transition disabled:opacity-35 sm:min-h-16 ${isSelected ? 'bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]' : cell.inMonth ? 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]' : 'text-[var(--color-text-disabled)] hover:bg-[var(--color-surface-secondary)]'} ${isToday && !isSelected ? 'ring-1 ring-inset ring-[var(--color-primary)]' : ''}`}>
                 <span>{cell.day}</span><span className="mt-1 flex h-1.5 items-center gap-1">{hasReview && <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-[var(--color-surface)]' : 'bg-[var(--color-primary)]'}`} />}{hasEvent && <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-[var(--color-surface)]/60' : 'bg-[var(--color-memory-event)]'}`} />}</span>
               </button>
             })}
           </div>
-          <div className="flex items-center justify-center gap-5 border-t border-[var(--color-border-light)] px-4 py-3 text-xs text-[var(--color-text-tertiary)]"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />日回顾</span><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[var(--color-memory-event)]" />记忆事件</span></div>
+          </>}
         </section>
 
         <section className="space-y-5">
-          <div className="flex items-center justify-between px-1"><div><h2 className="text-lg font-semibold">{selectedDate}</h2><p className="text-xs text-[var(--color-text-disabled)]">{selectedReview ? '1 篇日回顾' : '暂无日回顾'} · {selectedEvents.length} 件记忆事件</p></div><button type="button" onClick={() => { setLoading(true); loadData(personaId).catch(reason => setError(reason instanceof Error ? reason.message : '刷新失败')).finally(() => setLoading(false)) }} className="text-xs text-[var(--color-primary)]">刷新</button></div>
+          <div className="flex items-center justify-between px-1"><div><h2 className="font-[var(--font-display)] text-xl">{selectedLabel}</h2><p className="text-xs text-[var(--color-text-disabled)]">{selectedReview ? '1 篇日回顾' : '暂无日回顾'} · {selectedEvents.length} 件记忆事件</p></div></div>
           {error && <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]">{error}</div>}
           {notice && <div className="rounded-xl border border-[var(--color-success-border)] bg-[var(--color-success-bg)] px-4 py-3 text-sm text-[var(--color-success)]">{notice}</div>}
           {loading ? <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-12 text-center text-sm text-[var(--color-text-disabled)]">正在读取…</div> : (
             <>
               <div>
-                <div className="mb-2 flex items-center justify-between px-1"><h3 className="text-sm font-semibold">当日日回顾</h3>{selectedReview && !editing && <div className="flex gap-3"><button type="button" disabled={Boolean(generatingDate)} onClick={regenerate} className="text-xs text-[var(--color-text-tertiary)]">{generatingDate === selectedDate ? '生成中…' : '重新生成'}</button><button type="button" onClick={() => { setEditing(true); setDraft(selectedReview.content) }} className="text-xs text-[var(--color-primary)]">微调</button></div>}</div>
-                {selectedReview ? <article className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+                <div className="mb-2 flex items-center justify-between px-1"><h3 className="font-[var(--font-display)] text-lg">{selectedLabel}</h3>{selectedReview && !editing && <div className="relative"><button type="button" onClick={() => setReviewMenuOpen(!reviewMenuOpen)} className="text-sm">···</button>{reviewMenuOpen && <div className="cc-popmenu absolute right-0 top-6 z-20 min-w-28 rounded-[var(--radius-lg)] p-2"><button type="button" disabled={Boolean(generatingDate)} onClick={() => { regenerate(); setReviewMenuOpen(false) }} className="block px-2 py-1 text-xs">重新生成</button><button type="button" onClick={() => { setEditing(true); setDraft(selectedReview.content); setReviewMenuOpen(false) }} className="block px-2 py-1 text-xs">编辑</button></div>}</div>}</div>
+                {selectedReview ? <article className="rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
                   <p className="mb-3 text-2xs text-[var(--color-text-disabled)]">{selectedReview.edited_by_user ? '已手动微调' : '自动生成'}{selectedReview.source_turn_count ? ` · ${selectedReview.source_turn_count} 轮素材` : ''}</p>
-                  {editing ? <div><textarea value={draft} onChange={event => setDraft(event.target.value)} rows={8} className="w-full resize-y rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm leading-7 outline-none focus:border-[var(--color-primary)]" /><div className="mt-2 flex justify-end gap-2"><button type="button" disabled={saving} onClick={() => setEditing(false)} className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs">取消</button><button type="button" disabled={saving || !draft.trim()} onClick={() => void saveReview()} className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-[var(--color-on-primary)] disabled:opacity-40">{saving ? '保存中…' : '保存微调'}</button></div></div> : <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-secondary)]">{selectedReview.content}</p>}
-                </article> : <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-8 text-center text-sm text-[var(--color-text-disabled)]">这一天还没有日回顾{selectedDate === yesterday && <button type="button" onClick={() => void generateReview(selectedDate)} className="ml-2 text-[var(--color-primary)]">立即生成</button>}</div>}
+                  {editing ? <div><textarea value={draft} onChange={event => setDraft(event.target.value)} rows={8} className="w-full resize-y rounded-[var(--radius-lg)] border border-[var(--color-border)] px-3 py-2.5 text-base leading-7 outline-none focus:border-[var(--color-primary)]" /><div className="mt-2 flex justify-end gap-2"><button type="button" disabled={saving} onClick={() => setEditing(false)} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-1.5 text-xs">取消</button><button type="button" disabled={saving || !draft.trim()} onClick={() => void saveReview()} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-1.5 text-xs text-[var(--color-on-primary)] disabled:opacity-40">{saving ? '保存中…' : '保存微调'}</button></div></div> : <p className="whitespace-pre-wrap text-md leading-[1.9] text-[var(--color-text-secondary)]">{selectedReview.content}</p>}
+                </article> : <div className="rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border)] px-4 py-8 text-center text-sm text-[var(--color-text-disabled)]">这一天还没有日回顾{selectedDate < today && <button type="button" onClick={() => void generateReview(selectedDate)} className="ml-2 text-[var(--color-primary)]">补写这一天</button>}</div>}
               </div>
-              <div><h3 className="mb-2 px-1 text-sm font-semibold">当天发生了什么</h3><div className="space-y-2">{selectedEvents.length > 0 ? selectedEvents.map(bucket => <button key={bucket.id} type="button" onClick={() => void openBucket(bucket.id)} className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left transition hover:border-[var(--color-primary)] hover:shadow-sm"><div className="mb-2 flex items-center justify-between gap-3"><span className="font-medium text-[var(--color-text-primary)]">{bucketName(bucket)}</span><span className="shrink-0 rounded-full bg-[var(--color-surface-secondary)] px-2 py-0.5 text-2xs text-[var(--color-text-tertiary)]">记忆事件</span></div><p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-secondary)]">{bucketContent(bucket) || '点击查看记忆详情'}</p></button>) : <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-8 text-center text-sm text-[var(--color-text-disabled)]">这一天没有带日期的记忆事件</div>}</div></div>
+              <div><h3 className="mb-2 px-1 font-[var(--font-display)] text-lg">那天存下的 · {selectedEvents.length}</h3><div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)]">{selectedEvents.length > 0 ? selectedEvents.map(bucket => <button key={bucket.id} type="button" onClick={() => void openBucket(bucket.id)} className="flex w-full items-center gap-3 border-b border-[var(--color-border-light)] p-4 text-left last:border-b-0"><span className={`h-2 w-2 shrink-0 rounded-full ${bucket.type === 'feel' || bucket.metadata?.type === 'feel' ? 'bg-[var(--color-feel)]' : 'bg-[var(--color-memory-event)]'}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm">{bucketName(bucket)}</span><span className="text-2xs text-[var(--color-text-tertiary)]">{bucket.type === 'feel' ? '感受' : '记忆事件'}</span></span><span className="text-[var(--color-text-tertiary)]">›</span></button>) : <p className="p-6 text-center text-sm text-[var(--color-text-tertiary)]">这一天没有带日期的记忆事件</p>}</div></div>
             </>
           )}
+          <nav className="grid grid-cols-2 gap-3"><button type="button" onClick={() => selectDate(previousDate(selectedDate))} className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left text-sm">‹ 前一天</button>{selectedDate < today ? <button type="button" onClick={() => selectDate(nextDate(selectedDate))} className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-right text-sm">后一天 ›</button> : <span />}</nav>
         </section>
       </main>
 

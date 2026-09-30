@@ -1,598 +1,91 @@
 'use client'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import SubpageBackButton from '@/app/components/SubpageBackButton'
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import DetailPanel from '../components/DetailPanel'
-import SearchBar from '../components/SearchBar'
-import TagPill from '../components/TagPill'
-import { formatBeijingDate, formatBeijingDateTime, getBeijingDayOfWeek } from '@/app/utils/format'
-import TimelineDayGroup from '../components/TimelineDayGroup'
+import DetailPanel from '@/app/components/DetailPanel'
+import SearchBar from '@/app/components/SearchBar'
+import { getBeijingDayOfWeek } from '@/app/utils/format'
+import { getMonthChapters } from '@/app/memory/memoryFilters'
+import type { Bucket } from '@/app/memory/memoryTypes'
+import { Author, JournalEntry, journalDate, MONTHS_ZH, sortJournals, toBeijingIso } from './journalData'
 
-interface JournalEntry {
-  id: string
-  name: string
-  author: string
-  created: string
-  updated_at?: string
-  event_time: string
-  locked: boolean
-  content: string | null
-  unlock_hint?: string
-}
-
-type Author = '言之' | '小羊' | '共同'
-
-function currentBeijingDateTimeLocal(): string {
-  const parts = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(new Date())
-  return parts.replace(' ', 'T')
-}
-
-function toDateTimeLocal(value: string): string {
-  const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
-  return match ? `${match[1]}T${match[2]}` : ''
-}
-
-function toBeijingIso(value: string): string {
-  return value ? `${value}:00+08:00` : ''
-}
-
-function formatJournalDate(dateStr: string): string {
-  const datePart = formatBeijingDate(dateStr)
-  if (datePart === '—') return '—'
-  const dayOfWeek = getBeijingDayOfWeek(dateStr)
-  const parts = datePart.split('/')
-  const day = parseInt(parts[2], 10)
-  const monthNum = parseInt(parts[1], 10) - 1
-  const year = parts[0]
-  const monthShort = new Date(Date.UTC(2000, monthNum)).toLocaleDateString('en', { month: 'short' })
-  return `${day} ${monthShort} ${year} · ${dayOfWeek}`
-}
-
-function stats(text: string) {
-  return { chars: text.length, tokens: Math.ceil(text.length * 1.3) }
+function nowLocal() {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()).replace(' ', 'T')
 }
 
 export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
+  const [chapters, setChapters] = useState<ReturnType<typeof getMonthChapters>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-
-  // ---- 筛选 ----
   const [search, setSearch] = useState('')
-  const [dateStart, setDateStart] = useState('')
-  const [dateEnd, setDateEnd] = useState('')
-
-  // ---- 详情弹窗 ----
-  const [detail, setDetail] = useState<{
-    entry: JournalEntry
-    fullContent: string
-  } | null>(null)
-  const [detailFetching, setDetailFetching] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [editContent, setEditContent] = useState('')
-  const [editName, setEditName] = useState('')
-  const [editAuthor, setEditAuthor] = useState<Author>('共同')
-  const [editEventTime, setEditEventTime] = useState('')
-  const [editLocked, setEditLocked] = useState(false)
-  const [editUnlockHint, setEditUnlockHint] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [copied, setCopied] = useState(false)
-
-  // ---- 写新日记弹窗 ----
+  const [activeMonth, setActiveMonth] = useState('')
+  const [yearMenu, setYearMenu] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newContent, setNewContent] = useState('')
-  const [newAuthor, setNewAuthor] = useState<Author>('共同')
-  const [newEventTime, setNewEventTime] = useState(currentBeijingDateTimeLocal)
-  const [newLocked, setNewLocked] = useState(false)
-  const [newUnlockHint, setNewUnlockHint] = useState('')
+  const [form, setForm] = useState({ name: '', content: '', author: '共同' as Author, eventTime: nowLocal(), locked: false, unlockHint: '' })
   const [submitting, setSubmitting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    setError('')
     try {
-      const res = await fetch('/api/journal')
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? '读取失败')
-      setEntries(data)
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  // ---- 筛选逻辑 ----
-  const filtered = useMemo(() => {
-    let arr = entries
-    // 文本搜索
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      arr = arr.filter(e => e.name?.toLowerCase().includes(q) || e.content?.toLowerCase().includes(q))
-    }
-    // 日期筛选
-    if (dateStart || dateEnd) {
-      const s = dateStart ? new Date(dateStart).getTime() : 0
-      const e = dateEnd ? new Date(dateEnd).getTime() + 86400000 : Infinity
-      arr = arr.filter(item => {
-        const t = new Date(item.event_time || item.created).getTime()
-        return t >= s && t <= e
-      })
-    }
-    return arr
-  }, [entries, search, dateStart, dateEnd])
-
-  // 按日记日期分组
-  const dateGroups = useMemo(() => {
-    const groups = new Map<string, JournalEntry[]>()
-    for (const e of filtered) {
-      const date = formatBeijingDate(e.event_time || e.created)
-      if (!groups.has(date)) groups.set(date, [])
-      groups.get(date)!.push(e)
-    }
-    for (const [, list] of groups) {
-      list.sort((a, b) => new Date(b.event_time || b.created).getTime() - new Date(a.event_time || a.created).getTime())
-    }
-    return Array.from(groups.entries()).sort(([a], [b]) => b.localeCompare(a))
-  }, [filtered])
-
-  // ---- 统计 ----
-  const statsSummary = useMemo(() => {
-    const yz = entries.filter(e => e.author === '言之').length
-    const xy = entries.filter(e => e.author === '小羊').length
-    const gt = entries.filter(e => e.author === '共同').length
-    return { 言之: yz, 小羊: xy, 共同: gt, total: entries.length }
-  }, [entries])
-
-  // ---- 详情弹窗操作 ----
-  const openDetail = async (entry: JournalEntry) => {
-    setEditing(false)
-    setDetail({ entry, fullContent: entry.content ?? '' })
-    setDetailFetching(true)
-    try {
-      const res = await fetch(`/api/journal/${entry.id}`)
-      if (res.ok) {
-        const data: JournalEntry = await res.json()
-        setDetail({
-          entry: data,
-          fullContent: data.content ?? entry.content ?? '',
-        })
+      const [journals, buckets] = await Promise.all([fetch('/api/journal'), fetch('/api/buckets?full=1')])
+      if (!journals.ok) throw new Error('读取日记失败')
+      setEntries(await journals.json())
+      if (buckets.ok) {
+        const data = await buckets.json()
+        setChapters(getMonthChapters((Array.isArray(data) ? data : data.buckets || []) as Bucket[]))
       }
-    } catch (e) { setError(`读取日记失败：${String(e)}`) }
-    setDetailFetching(false)
-  }
+    } catch (reason) { setError(String(reason)) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+  useEffect(() => { const y = sessionStorage.getItem('journal-scroll'); if (y && !loading) requestAnimationFrame(() => window.scrollTo(0, Number(y))) }, [loading])
 
-  const closeDetail = () => {
-    setDetail(null)
-    setEditing(false)
-    setCopied(false)
-  }
-
-  const saveEdit = async () => {
-    if (!detail) return
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/journal/${detail.entry.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editName.trim(), content: editContent, author: editAuthor,
-          event_time: toBeijingIso(editEventTime), locked: editLocked,
-          unlock_hint: editLocked ? editUnlockHint : '',
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? '保存失败')
-      setEditing(false)
-      setDetail({ entry: data, fullContent: data.content })
-      await load()
-    } catch (e) {
-      setError(`保存日记失败：${e instanceof Error ? e.message : String(e)}`)
+  const ordered = useMemo(() => sortJournals(entries), [entries])
+  const filtered = useMemo(() => ordered.filter(entry => !search.trim() || `${entry.name} ${entry.content || ''}`.toLowerCase().includes(search.trim().toLowerCase())), [ordered, search])
+  const months = useMemo(() => {
+    const groups = new Map<string, JournalEntry[]>()
+    for (const entry of filtered) { const month = journalDate(entry).slice(0, 7); if (!groups.has(month)) groups.set(month, []); groups.get(month)!.push(entry) }
+    return Array.from(groups.entries())
+  }, [filtered])
+  const years = [...new Set(months.map(([month]) => month.slice(0, 4)))]
+  useEffect(() => {
+    const update = () => {
+      const visible = months.filter(([month]) => (document.getElementById(`journal-${month}`)?.getBoundingClientRect().top ?? Infinity) <= 160)
+      setActiveMonth(visible.at(-1)?.[0] || months[0]?.[0] || '')
     }
-    setSaving(false)
-  }
+    window.addEventListener('scroll', update, { passive: true })
+    update()
+    return () => window.removeEventListener('scroll', update)
+  }, [months, loading])
+  const counts = { yz: entries.filter(e => e.author === '言之').length, xy: entries.filter(e => e.author === '小羊').length, together: entries.filter(e => e.author === '共同').length }
+  const field = 'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-base'
 
-  const deleteJournal = async () => {
-    if (!detail || !confirm('确定抹除此日记？不可恢复。')) return
-    try {
-      const res = await fetch(`/api/journal/${detail.entry.id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? '删除失败')
-      closeDetail()
-      await load()
-    } catch (e) {
-      setError(`删除日记失败：${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
-  const copyId = () => {
-    if (!detail) return
-    navigator.clipboard.writeText(detail.entry.id)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
-  // ---- 新建日记操作 ----
-  const submitNew = async () => {
-    if (!newContent.trim()) return
+  function jump(month: string) { document.getElementById(`journal-${month}`)?.scrollIntoView({ behavior: 'smooth' }); setActiveMonth(month); setYearMenu(false) }
+  async function submit() {
+    if (!form.content.trim()) return
     setSubmitting(true)
     try {
-      const res = await fetch('/api/journal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: newContent,
-          name: newName.trim() || undefined,
-          author: newAuthor,
-          event_time: toBeijingIso(newEventTime),
-          locked: newLocked,
-          unlock_hint: newLocked ? newUnlockHint : '',
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? '创建失败')
-      setShowAdd(false)
-      setNewName('')
-      setNewContent('')
-      setNewAuthor('共同')
-      setNewLocked(false)
-      setNewUnlockHint('')
-      await load()
-    } catch (e) {
-      setError(String(e))
-    }
-    setSubmitting(false)
+      const response = await fetch('/api/journal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name.trim() || undefined, content: form.content, author: form.author, event_time: toBeijingIso(form.eventTime), locked: form.locked, unlock_hint: form.locked ? form.unlockHint : '' }) })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || '创建失败')
+      setShowAdd(false); await load()
+    } catch (reason) { setError(String(reason)) } finally { setSubmitting(false) }
   }
 
-  const resetNewForm = () => {
-    setNewName('')
-    setNewContent('')
-    setNewAuthor('共同')
-    setNewEventTime(currentBeijingDateTimeLocal())
-    setNewLocked(false)
-    setNewUnlockHint('')
-  }
-
-  const authorColor = (a: string) =>
-    a === '言之' ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]'
-    : a === '小羊' ? 'bg-[var(--color-resolved-bg)] text-[var(--color-resolved)]'
-    : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]'
-
-  // ============ 渲染 ============
-
-  return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-      <style>{`
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: var(--color-border-hover); border-radius: 4px; }
-      `}</style>
-
-      {/* ===== 顶部导航 ===== */}
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24">
-
-        {/* ===== 头部 ===== */}
-        <div className="pb-4 border-b border-[var(--color-border-light)] mb-5">
-          <SubpageBackButton href="/" label="返回主页" className="mb-5 md:hidden" />
-          <h1 className="text-3xl font-bold text-[var(--color-text-heading)] tracking-tight">Journal</h1>
-          <p className="text-sm text-[var(--color-text-tertiary)] mt-1">寻回时间的线索，点滴卡片皆当下。</p>
-
-          {/* 数据看板 */}
-          <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] mt-3">
-            <div>言之 <span className="font-semibold">{statsSummary.言之}</span> 条</div>
-            <div className="h-3 w-[1px] bg-[var(--color-surface-tertiary)]" />
-            <div>小羊 <span className="font-semibold">{statsSummary.小羊}</span> 条</div>
-            <div className="h-3 w-[1px] bg-[var(--color-surface-tertiary)]" />
-            <div>共同 <span className="font-semibold">{statsSummary.共同}</span> 条</div>
-            <div className="h-3 w-[1px] bg-[var(--color-surface-tertiary)]" />
-            <div>总计 <span className="font-semibold">{statsSummary.total}</span> 篇</div>
-          </div>
-        </div>
-
-        {/* 搜索 */}
-        <div className="mb-5">
-          <SearchBar value={search} onChange={setSearch} placeholder="搜索日记标题或内容..." />
-        </div>
-
-        {/* ===== 日期筛选（右下角） ===== */}
-        <div className="flex items-center justify-end gap-1.5 mb-5">
-          <div className="flex items-center gap-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5">
-            <svg className="w-3 h-3 text-[var(--color-text-tertiary)] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
-              className="text-xs outline-none bg-transparent text-[var(--color-text-secondary)] w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
-          </div>
-          <span className="text-xs text-[var(--color-text-tertiary)]">至</span>
-          <div className="flex items-center gap-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5">
-            <svg className="w-3 h-3 text-[var(--color-text-tertiary)] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)}
-              className="text-xs outline-none bg-transparent text-[var(--color-text-secondary)] w-[95px] [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-40" />
-          </div>
-        </div>
-
-        {/* ===== 错误提示 ===== */}
-        {error && (
-          <div className="mb-5 text-sm text-[var(--color-danger)] bg-[var(--color-danger-bg)] border border-[var(--color-danger-border)] rounded-lg px-4 py-2.5 flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError('')} className="text-[var(--color-danger)] opacity-60 hover:opacity-100 ml-3">✕</button>
-          </div>
-        )}
-
-        {/* ===== 加载状态 ===== */}
-        {loading ? (
-          <div className="space-y-6">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="flex gap-4 animate-pulse">
-                <div className="flex-shrink-0 w-[42px] flex flex-col items-center pt-1">
-                  <div className="w-[18px] h-[18px] rounded-full bg-[var(--color-border)]" />
-                </div>
-                <div className="flex-1">
-                  <div className="h-4 w-24 bg-[var(--color-border)] rounded mb-3" />
-                  <div className="h-28 bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-border-light)]/50 rounded-2xl border border-[var(--color-border)]" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="text-4xl mb-4 opacity-40">📖</div>
-            <p className="text-sm text-[var(--color-text-disabled)]">
-              {search || dateStart || dateEnd ? '没有匹配的日记' : '还没有日记'}
-            </p>
-          </div>
-        ) : (
-          /* ===== 时间轴 ===== */
-          <div>
-            {dateGroups.map(([date, items]) => (
-              <div key={date}>
-                <TimelineDayGroup
-                  date={formatJournalDate(items[0].event_time || items[0].created)}
-                  count={items.length}
-                  unit="篇"
-                >
-                      {items.map(e => {
-                        const s = stats(e.content ?? '')
-                        return (
-                          <div key={e.id}
-                            className="bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-border-light)]/50 rounded-2xl p-4 sm:p-6 hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-0.5 cursor-pointer border transition-all duration-300 group w-full relative active:scale-[0.985] touch-pan-y border-[var(--color-border)] hover:border-[var(--color-primary)]/30"
-                            onClick={() => openDetail(e)}>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className={`text-meta px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${authorColor(e.author)}`}>
-                              {e.author}
-                            </span>
-                            <span className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{e.name}</span>
-                            {e.locked && <span className="text-xs flex-shrink-0 opacity-60">🔒</span>}
-                          </div>
-                          <span className="text-meta text-[var(--color-text-tertiary)] font-mono flex-shrink-0 whitespace-nowrap">{s.chars}字·~{s.tokens}tok</span>
-                        </div>
-                        {e.locked ? (
-                          <p className="text-sm text-[var(--color-text-disabled)] italic leading-relaxed">
-                            已上锁{e.unlock_hint ? ` · ${e.unlock_hint}` : ''}
-                          </p>
-                        ) : (
-                          <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-wrap line-clamp-3">
-                            {e.content}
-                          </p>
-                        )}
-                      </div>
-                    )
-                  })}
-                </TimelineDayGroup>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ===== 详情弹窗 ===== */}
-      {detail && (
-        <DetailPanel open={true} onClose={closeDetail} mode="modal" width="max-w-6xl" className="!p-0 overflow-hidden">
-
-            {detailFetching ? (
-              <div className="flex items-center justify-center py-20 text-sm text-[var(--color-text-disabled)]">读取中...</div>
-            ) : (
-              <div className="flex h-[82vh] max-h-[82vh] flex-col">
-                {/* 头部 */}
-                <div className="flex-shrink-0 border-b border-[var(--color-border-light)] px-5 py-4 sm:px-7">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">{detail.entry.name}</h2>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[var(--color-text-tertiary)]">
-                        <span className={`text-meta px-2 py-0.5 rounded-full font-medium ${authorColor(detail.entry.author)}`}>
-                          {detail.entry.author}
-                        </span>
-                        <span>日记: {formatBeijingDateTime(detail.entry.event_time || detail.entry.created)}</span>
-                        <span>创建: {formatBeijingDateTime(detail.entry.created)}</span>
-                        {detail.entry.updated_at && detail.entry.updated_at !== detail.entry.created && (
-                          <span>修改: {formatBeijingDateTime(detail.entry.updated_at)}</span>
-                        )}
-                      </div>
-                    </div>
-                    <button onClick={closeDetail}
-                      className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full flex-shrink-0 transition-colors text-sm leading-none">✕</button>
-                  </div>
-                </div>
-
-                {/* 阅读态只有一个主滚动区；编辑态把大部分空间留给正文 */}
-                {!editing ? (
-                  <div className="custom-scroll min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
-                    <div className="text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap">{detail.fullContent}</div>
-                  </div>
-                ) : (
-                  <div className="custom-scroll grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_280px] lg:overflow-hidden">
-                    <div className="flex min-h-[430px] flex-col bg-[var(--color-surface-secondary)]/45 p-4 sm:p-6 lg:min-h-0">
-                      <label className="mb-2 text-xs font-medium text-[var(--color-text-tertiary)]">正文</label>
-                      <textarea value={editContent} onChange={e => setEditContent(e.target.value)} autoFocus
-                        className="min-h-[380px] w-full flex-1 resize-none rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-sm leading-7 text-[var(--color-text-primary)] outline-none transition-shadow focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 lg:min-h-0" />
-                    </div>
-
-                    <aside className="space-y-5 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] p-5 sm:p-6 lg:border-l lg:border-t-0">
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-tertiary)]">标题</label>
-                        <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="标题"
-                          className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-tertiary)]">日记时间</label>
-                        <input type="datetime-local" value={editEventTime} onChange={e => setEditEventTime(e.target.value)}
-                          className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-xs font-medium text-[var(--color-text-tertiary)]">作者</label>
-                        <div className="flex flex-wrap gap-2">
-                          {(['言之', '小羊', '共同'] as Author[]).map(a => (
-                            <button key={a} onClick={() => setEditAuthor(a)}
-                              className={`rounded-full px-3 py-1.5 text-xs font-medium ${editAuthor === a ? authorColor(a) : 'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-tertiary)]'}`}>
-                              {a}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60 p-3">
-                        <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-[var(--color-text-secondary)]">
-                          <span>上锁这篇日记</span>
-                          <input type="checkbox" checked={editLocked} onChange={e => setEditLocked(e.target.checked)} className="accent-[var(--color-primary)]" />
-                        </label>
-                      </div>
-
-                      {editLocked && (
-                        <input value={editUnlockHint} onChange={e => setEditUnlockHint(e.target.value)} placeholder="解锁提示"
-                          className="w-full rounded-xl border border-[var(--color-border)] px-3 py-2.5 text-sm outline-none focus:border-[var(--color-primary)]" />
-                      )}
-                    </aside>
-                  </div>
-                )}
-
-                {/* 底部操作区 */}
-                <div className="flex-shrink-0 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] px-5 py-3 sm:px-7">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="text-meta text-[var(--color-text-tertiary)] font-mono">
-                      {stats(editing ? editContent : detail.fullContent).chars} 字 · ~{stats(editing ? editContent : detail.fullContent).tokens} tokens
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {!editing ? (
-                        <button onClick={() => {
-                          setEditing(true)
-                          setEditContent(detail.fullContent)
-                          setEditName(detail.entry.name)
-                          setEditAuthor(detail.entry.author as Author)
-                          setEditEventTime(toDateTimeLocal(detail.entry.event_time || detail.entry.created))
-                          setEditLocked(detail.entry.locked)
-                          setEditUnlockHint(detail.entry.unlock_hint || '')
-                        }}
-                          className="text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors">
-                          编辑
-                        </button>
-                      ) : (
-                        <>
-                          <button onClick={() => setEditing(false)}
-                            className="text-xs px-3 py-1.5 rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
-                            取消
-                          </button>
-                          <button onClick={saveEdit} disabled={saving}
-                            className="text-xs text-[var(--color-on-primary)] px-4 py-1.5 rounded-full disabled:opacity-50 transition-all"
-                            style={{ background: 'linear-gradient(135deg, var(--color-primary-gradient), var(--color-primary))' }}>
-                            {saving ? '保存中…' : '保存更改'}
-                          </button>
-                        </>
-                      )}
-                      <button onClick={deleteJournal}
-                        className="text-xs font-medium text-[var(--color-danger)] hover:text-[var(--color-danger)] transition-colors">
-                        抹除
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-meta text-[var(--color-text-disabled)] font-mono">bucket_id: {detail.entry.id}</span>
-                    <button onClick={copyId}
-                      className="text-meta text-[var(--color-primary)] hover:underline flex-shrink-0">
-                      {copied ? '已复制' : '复制'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-        </DetailPanel>
-      )}
-
-      {/* ===== 写新日记弹窗 ===== */}
-      <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-2xl">
-        <div className="flex flex-col" style={{ height: '65vh', maxHeight: '75vh' }}>
-        <h3 className="text-[var(--color-text-primary)] font-semibold mb-4 flex-shrink-0">写新日记</h3>
-
-            <input value={newName} onChange={e => setNewName(e.target.value)}
-              placeholder="标题（可选，留空取正文开头）"
-              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
-
-            <label className="text-xs text-[var(--color-text-tertiary)] mb-1">日记时间</label>
-            <input type="datetime-local" value={newEventTime} onChange={e => setNewEventTime(e.target.value)}
-              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
-
-            <textarea value={newContent} onChange={e => setNewContent(e.target.value)}
-              placeholder="写点什么…"
-              className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:border-[var(--color-primary)] transition-colors resize-none leading-relaxed flex-1 min-h-0" />
-
-            <div className="flex items-center justify-between flex-wrap gap-3 mb-3 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                {(['言之', '小羊', '共同'] as Author[]).map(a => (
-                  <button key={a} onClick={() => setNewAuthor(a)}
-                    className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                      newAuthor === a ? authorColor(a) : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]'
-                    }`}>
-                    {a}
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] cursor-pointer select-none">
-                <input type="checkbox" checked={newLocked} onChange={e => setNewLocked(e.target.checked)}
-                  className="accent-[var(--color-primary)]" />
-                上锁
-              </label>
-            </div>
-
-            {newLocked && (
-              <input value={newUnlockHint} onChange={e => setNewUnlockHint(e.target.value)}
-                placeholder="解锁提示（日期如 2026-07-01 到点自动解锁，其他文本保持锁定当提示用）"
-                className="w-full border border-[var(--color-border)] rounded-xl px-3 py-2 text-xs mb-3 outline-none focus:border-[var(--color-primary)] transition-colors flex-shrink-0" />
-            )}
-
-            <div className="flex justify-end gap-3 pt-1 flex-shrink-0">
-              <button onClick={() => setShowAdd(false)}
-                className="text-sm px-4 py-2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
-                取消
-              </button>
-              <button onClick={submitNew} disabled={submitting || !newContent.trim()}
-                className="text-sm text-[var(--color-on-primary)] px-5 py-2 rounded-full disabled:opacity-50 transition-all hover:shadow-md"
-                style={{ background: 'linear-gradient(135deg, var(--color-primary-gradient), var(--color-primary))' }}>
-                {submitting ? '保存中…' : '保存日记'}
-              </button>
-            </div>
-        </div>
-        </DetailPanel>
-
-      {/* 悬浮加号 */}
-      <button onClick={() => { setShowAdd(true); resetNewForm() }}
-        className="fixed bottom-28 md:bottom-8 right-4 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] text-xl sm:text-2xl shadow-lg hover:bg-[var(--color-primary-hover)] active:scale-90 transition-all flex items-center justify-center z-50">
-        +
-      </button>
-    </div>
-  )
+  return <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28 pt-5 text-[var(--color-text-primary)]">
+    <div className="flex items-center justify-between"><SubpageBackButton href="/" label="返回主页" />{years.length > 1 && <div className="relative"><button type="button" onClick={() => setYearMenu(!yearMenu)} aria-label="选择年份" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] shadow-[var(--glass-shadow)]">▦</button>{yearMenu && <div className="cc-popmenu absolute right-0 top-11 z-20 rounded-[var(--radius-xl)] p-2">{years.map(year => <button key={year} type="button" onClick={() => jump(months.find(([month]) => month.startsWith(year))![0])} className="block w-full px-4 py-2 text-left font-[var(--font-display)]">{year}</button>)}</div>}</div>}</div>
+    <header className="mt-5"><p className="text-xs uppercase tracking-[var(--label-tracking)] text-[var(--color-primary)]">JOURNAL · 日记本</p><h1 className="mt-1 font-[var(--font-display)] text-3xl text-[var(--color-text-heading)]">日记本</h1><p className="mt-2 text-sm text-[var(--color-text-tertiary)]">言之 {counts.yz} · 小羊 {counts.xy} · 一起写的 {counts.together}</p></header>
+    <div className="mt-5 flex gap-2 overflow-x-auto pb-2">{months.map(([month, items], index) => <div key={month} className="flex shrink-0 items-center gap-2">{years.length > 1 && (index === 0 || months[index - 1][0].slice(0, 4) !== month.slice(0, 4)) && <span className="font-[var(--font-display)] text-xs text-[var(--color-text-tertiary)]">{month.slice(0, 4)}</span>}<button type="button" onClick={() => jump(month)} className={`rounded-full px-3 py-1.5 text-xs ${activeMonth === month || (!activeMonth && index === 0) ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'}`}>{MONTHS_ZH[Number(month.slice(5)) - 1]} {items.length}</button></div>)}</div>
+    <div className="mt-3"><SearchBar value={search} onChange={setSearch} placeholder="搜索日记标题或内容…" /></div>
+    {error && <p className="mt-4 rounded-[var(--radius-lg)] bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+    {loading ? <p className="py-12 text-sm text-[var(--color-text-tertiary)]">读取中…</p> : !filtered.length ? <p className="py-16 text-center text-sm text-[var(--color-text-tertiary)]">{search ? '没有匹配的日记' : '还没有日记'}</p> : months.map(([month, items], index) => {
+      const monthNumber = Number(month.slice(5))
+      const days = new Map<string, JournalEntry[]>()
+      for (const entry of items) { const day = journalDate(entry); if (!days.has(day)) days.set(day, []); days.get(day)!.push(entry) }
+      return <section id={`journal-${month}`} key={month} className="scroll-mt-5 pt-7">{years.length > 1 && (index === 0 || months[index - 1][0].slice(0, 4) !== month.slice(0, 4)) && <div className="mb-4 font-[var(--font-display)] text-3xl">{month.slice(0, 4)}</div>}<p className="text-xs uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">{new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(2000, monthNumber - 1))} {month.slice(0, 4)}</p><h2 className="mt-1 font-[var(--font-display)] text-xl">{MONTHS_ZH[monthNumber - 1]} <span className="ml-2 text-sm text-[var(--color-text-tertiary)]">{chapters[month]?.name}</span></h2>{Array.from(days.entries()).map(([day, list]) => <div key={day} className="mt-5"><div className="mb-3 flex items-baseline gap-2"><span className="font-[var(--font-display)] text-2xl">{Number(day.slice(8))}</span><span className="text-xs text-[var(--color-text-tertiary)]">{getBeijingDayOfWeek(`${day}T12:00:00+08:00`)}</span></div><div className="space-y-2">{list.map(entry => <Link key={entry.id} href={`/journal/${encodeURIComponent(entry.id)}`} onClick={() => sessionStorage.setItem('journal-scroll', String(window.scrollY))} className="block rounded-[var(--radius-reading-card)] border border-[var(--color-border-light)] bg-[var(--memory-card-fill)] p-4 shadow-[var(--memory-card-shadow)]"><div className="flex justify-between gap-2 text-xs text-[var(--color-text-tertiary)]"><span className="flex items-center gap-2"><span className={`h-1.5 w-1.5 rounded-full ${entry.author === '言之' ? 'bg-[var(--color-primary)]' : entry.author === '小羊' ? 'journal-author-sheep' : 'journal-author-joint'}`} />{entry.author === '共同' ? '一起写的' : entry.author}</span><span>{(entry.content || '').length.toLocaleString()} 字</span></div><h3 className="mt-2 font-[var(--font-display)] text-lg">{entry.name}</h3><p className={`mt-2 text-sm leading-[1.8] text-[var(--color-text-secondary)] ${entry.locked ? 'italic' : 'line-clamp-4 whitespace-pre-wrap'}`}>{entry.locked ? `上了锁${entry.unlock_hint ? ` · ${entry.unlock_hint}` : ''}` : entry.content}</p></Link>)}</div></div>)}</section>
+    })}
+    <DetailPanel open={showAdd} onClose={() => setShowAdd(false)} mode="modal" width="max-w-2xl"><div className="flex max-h-[var(--journal-dialog-max-height)] flex-col gap-3 p-1"><h2 className="font-[var(--font-display)] text-xl">写新日记</h2><input aria-label="标题" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="标题（可选）" className={field} /><input aria-label="日记时间" type="datetime-local" value={form.eventTime} onChange={e => setForm({ ...form, eventTime: e.target.value })} className={field} /><textarea aria-label="正文" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} placeholder="写点什么…" className={`${field} min-h-[var(--journal-new-body-min-height)] flex-1`} /><div className="flex items-center gap-2">{(['言之', '小羊', '共同'] as Author[]).map(value => <button key={value} type="button" onClick={() => setForm({ ...form, author: value })} className={`rounded-full px-3 py-1.5 text-xs ${form.author === value ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-tertiary)]'}`}>{value}</button>)}<label className="ml-auto text-xs"><input type="checkbox" checked={form.locked} onChange={e => setForm({ ...form, locked: e.target.checked })} className="accent-[var(--color-primary)]" /> 上锁</label></div>{form.locked && <input aria-label="解锁提示" value={form.unlockHint} onChange={e => setForm({ ...form, unlockHint: e.target.value })} placeholder="解锁提示" className={field} />}<div className="flex justify-end gap-3"><button type="button" onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm">取消</button><button type="button" onClick={() => void submit()} disabled={submitting || !form.content.trim()} className="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm text-[var(--color-on-primary)] disabled:opacity-50">{submitting ? '保存中…' : '保存日记'}</button></div></div></DetailPanel>
+    <button type="button" onClick={() => { setForm({ name: '', content: '', author: '共同', eventTime: nowLocal(), locked: false, unlockHint: '' }); setShowAdd(true) }} aria-label="写新日记" className="fixed bottom-28 right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-primary)] text-xl text-[var(--color-on-primary)] shadow-[var(--shadow-md)] md:bottom-8">＋</button>
+  </main>
 }

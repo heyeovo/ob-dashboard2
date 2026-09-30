@@ -131,6 +131,13 @@ html {
   --glass-opacity:         .78;
   --glass-fill:            rgb(var(--theme-tint) / var(--glass-opacity));
   --memory-card-fill:      rgb(var(--theme-tint) / .76);
+  --journal-paper-fill:    rgb(var(--theme-tint) / .84);
+  --journal-sheep-dot:     color-mix(in srgb, var(--color-primary) 45%, var(--color-resolved));
+  --journal-joint-dot:     linear-gradient(90deg, var(--color-primary) 50%, var(--journal-sheep-dot) 50%);
+  --todo-check-size:       21px;
+  --journal-editor-min-height: 55vh;
+  --journal-dialog-max-height: 75vh;
+  --journal-new-body-min-height: 35vh;
   --memory-search-fill:    var(--glass-fill);
   --memory-ago-fill:       color-mix(in srgb, var(--theme-accent) 9%, rgb(var(--theme-tint) / .72));
   --memory-filter-fill:    color-mix(in srgb, var(--theme-ink) 6%, transparent);
@@ -186,6 +193,8 @@ html {
   --radius-lg:              14px;
   --radius-xl:              16px;
   --radius-2xl:             22px;
+  --radius-reading-card:    18px;
+  --radius-journal-paper:   20px;
   --radius-window:          30px;
 
   /* ---- Spacing / 间距层级 ---- */
@@ -1874,6 +1883,9 @@ body:has(.home-page) > .rain-layer { display: none; }
 }
 
 /* Stage 3b memory surfaces */
+.journal-author-sheep { background: var(--journal-sheep-dot); }
+.journal-author-joint { background: var(--journal-joint-dot); }
+.journal-paper p + p { margin-top: 1em; }
 .memory-card { display:flex; flex-direction:column; width:100%; min-width:0; padding:12px 14px 11px; border:0; border-radius:var(--radius-xl); background:var(--memory-card-fill); box-shadow:var(--memory-card-shadow); text-align:left; color:var(--color-text-primary); cursor:pointer; transition:transform var(--duration-normal) var(--ease-standard), box-shadow var(--duration-normal) var(--ease-standard); }
 /* 只在有鼠标的设备上浮起：iPhone 点一下会留下粘住的 :hover；按下缩放用全站那条 */
 @media (hover: hover) { .memory-card:hover { transform:translateY(-2px); box-shadow:var(--memory-card-shadow), var(--shadow-hover); } }
