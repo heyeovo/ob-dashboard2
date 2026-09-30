@@ -164,6 +164,8 @@ type LiveSession = {
   /** 当前窗口快照的兼容数字；不发 getContextUsage() 控制请求。 */
   contextTokens: number
   contextMaxTokens: number
+  /** SDK result 报过的真实 Context 上限（按模型记）；之后流式快照沿用，不再退回回退表 */
+  reportedContextWindow: { model: string; tokens: number } | null
   contextSnapshot: CcContextSnapshot | null
   /** 用户手动读取的 SDK 官方 Context 分析；每次模型调用结束后失效。 */
   contextAnalysis: CcExactContextAnalysis | null
@@ -564,6 +566,7 @@ export function ensureSession(input: EnsureSessionInput): LiveSession {
     recentCostUsd: [],
     contextTokens: 0,
     contextMaxTokens: 0,
+    reportedContextWindow: null,
     contextSnapshot: null,
     contextAnalysis: null,
     contextAnalysisPending: null,
@@ -944,8 +947,11 @@ export function noteContextSnapshot(
   const inputTokens = Math.max(0, Number(usage.inputTokens) || 0)
   const outputTokens = Math.max(0, Number(usage.outputTokens) || 0)
   const totalTokens = inputTokens + outputTokens
-  const maxTokens = Number.isFinite(contextWindow) && Number(contextWindow) > 0
-    ? Number(contextWindow)
+  if (Number.isFinite(contextWindow) && Number(contextWindow) > 0) {
+    live.reportedContextWindow = { model, tokens: Number(contextWindow) }
+  }
+  const maxTokens = live.reportedContextWindow?.model === model
+    ? live.reportedContextWindow.tokens
     : contextLimitFor(model)
   const snapshot: CcContextSnapshot = {
     totalTokens,
