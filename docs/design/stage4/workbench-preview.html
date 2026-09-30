@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>工作台候选 · 言之的房间</title>
+<meta name="description" content="工作台改成一页：作品、文件、引擎三组。文件像 iPhone「文件」一层层点进去，言之的文件可以放东西进来。四张：首页 / 文件夹 / 预览 / 放进来。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE5,#EEE3E4)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F1DEE3)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F4,#E0E7EC)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1A1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.4)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.5}
+
+  .phone{position:relative;height:760px;border-radius:30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .scroll{position:absolute;inset:0;overflow-y:auto;padding:0 16px 90px;scrollbar-width:none}
+  .scroll::-webkit-scrollbar{display:none}
+  .k{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.5}
+  .topbar{height:52px;display:flex;align-items:center;justify-content:center;font:600 16px "Noto Serif SC",serif;letter-spacing:.08em;margin:0 -16px;background:rgb(var(--tint)/.5);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);position:sticky;top:0;z-index:2}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 0 4px}
+  .back{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6)}
+  .back svg{width:16px;height:16px}
+  .pill{display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:999px;background:var(--accent);color:#fff;font-size:12.5px;font-weight:600}
+  .ibtn{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgb(var(--tint)/.7);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6)}
+  .ibtn svg{width:17px;height:17px}
+  .sec{display:flex;align-items:baseline;justify-content:space-between;padding:18px 4px 8px}
+  .sec .more{font-size:12px;color:var(--accent);font-weight:500}
+  .group{border-radius:18px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 5%,transparent)}
+  .row{display:flex;align-items:center;gap:11px;padding:0 14px;min-height:52px}
+  .row+.row{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .row .c{flex:1;min-width:0;padding:9px 0}
+  .row .n{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .s{font-size:10px;opacity:.5;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .r{flex:none;font-size:11px;opacity:.5}
+  .row .ch{opacity:.35;flex:none}
+  .ico{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+  .ico.neutral{background:color-mix(in srgb,var(--ink) 7%,transparent);color:inherit;opacity:.75}
+  .ico svg{width:16px;height:16px}
+  .note{font-size:10.5px;opacity:.45;padding:8px 6px 0;line-height:1.55}
+
+  /* 作品横滑 */
+  .works{display:flex;gap:10px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none}
+  .works::-webkit-scrollbar{display:none}
+  .wk{flex:0 0 132px;border-radius:16px;overflow:hidden;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 5%,transparent)}
+  .wk .cv{height:74px;position:relative}
+  .wk .cv span{position:absolute;right:8px;bottom:6px;font:italic 500 12px "Cormorant Garamond",serif;color:#fff;opacity:.9}
+  .wk .t{font:600 12px "Noto Serif SC",serif;padding:8px 10px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wk .d{font-size:9.5px;opacity:.5;padding:3px 10px 9px}
+
+  /* 文件夹页 */
+  .crumb{font-size:10.5px;opacity:.5;padding:10px 4px 0}
+  .ttl{font:600 22px "Noto Serif SC",serif;letter-spacing:.04em;padding:2px 4px 2px}
+  .sub{font-size:11px;opacity:.5;padding:0 4px 4px}
+
+  /* 预览页 */
+  .doc{border-radius:18px;background:rgb(var(--tint)/.82);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6);padding:16px 16px 18px;font-size:13px;line-height:1.75}
+  .doc h3{font:600 17px "Noto Serif SC",serif;margin-bottom:8px}
+  .doc h4{font-size:13.5px;margin:12px 0 4px}
+  .doc p{opacity:.85}
+  .doc ul{padding-left:18px;opacity:.85}
+  .doc code{font:12px ui-monospace,"SF Mono",Menlo,monospace;background:color-mix(in srgb,var(--ink) 7%,transparent);border-radius:5px;padding:1px 4px}
+  .seg{display:flex;gap:4px;padding:3px;border-radius:999px;background:color-mix(in srgb,var(--ink) 6%,transparent);font-size:11px;width:max-content;margin:10px 4px 10px}
+  .seg span{padding:4px 12px;border-radius:999px;opacity:.6}
+  .seg span.on{background:rgb(var(--tint)/.95);opacity:1;box-shadow:0 1px 3px color-mix(in srgb,var(--ink) 10%,transparent)}
+
+  /* 放进来 */
+  .dim{position:absolute;inset:0;background:rgb(0 0 0/.28)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;border-radius:24px 24px 0 0;background:rgb(var(--tint)/.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.5);padding:10px 18px 30px}
+  .grab{width:36px;height:4px;border-radius:9px;background:color-mix(in srgb,var(--ink) 18%,transparent);margin:0 auto 14px}
+  .sheet h3{font:600 17px "Noto Serif SC",serif;letter-spacing:.04em}
+  .sheet .to{font-size:11px;opacity:.55;margin:4px 0 14px}
+  .drop{border-radius:16px;border:1.5px dashed color-mix(in srgb,var(--accent) 45%,transparent);padding:18px;text-align:center;font-size:12.5px;color:var(--accent)}
+  .drop small{display:block;color:color-mix(in srgb,var(--ink) 55%,transparent);font-size:10.5px;margin-top:4px}
+  .up{display:flex;align-items:center;gap:10px;padding:12px 2px 0;font-size:12.5px}
+  .up .c{flex:1;min-width:0}
+  .up .s{font-size:10px;opacity:.5;margin-top:2px}
+  .bar2{height:4px;border-radius:9px;background:color-mix(in srgb,var(--ink) 8%,transparent);margin-top:6px;overflow:hidden}
+  .bar2 i{display:block;height:100%;width:62%;background:var(--accent);border-radius:9px}
+  .ok{color:var(--accent);font-size:12px}
+  .hint{font-size:10.5px;opacity:.5;line-height:1.6;margin-top:14px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--ink) 5%,transparent)}
+
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:62px;display:flex;justify-content:space-around;align-items:center;background:rgb(var(--tint)/.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.35);font-size:10px}
+  .tabs span{opacity:.45}
+  .tabs span.on{opacity:1;color:var(--accent);font-weight:600}
+</style>
+</head>
+<body data-theme="apricot" data-bg="gradient">
+<header>
+  <h1>言之的房间 · 工作台</h1>
+  <p>两个 tab 合成一页：作品、文件、引擎。文件像 iPhone「文件」那样一层层点进去；言之的文件可以放东西进来、删东西，仓库只能看和下载。<br>往右滑：首页 → 文件夹 → 预览 → 放进来。文件名和数字是示意。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient'}
+const I={
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.2h7a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>',
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6.5 3.5h7l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M13.5 3.5V8H18"/></svg>',
+  page:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 8.5h17"/><circle cx="6.3" cy="6.5" r=".6" fill="currentColor"/></svg>',
+  note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h11.5a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M8.5 9h6.5M8.5 12.5h6.5M8.5 16h4"/></svg>',
+  code:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7.5 4 12l4.5 4.5M15.5 7.5 20 12l-4.5 4.5"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
+  plug:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5v4M15 3.5v4M6.5 7.5h11v3a5.5 5.5 0 0 1-11 0zM12 16v4.5"/></svg>',
+  wave:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l2.5-6 4 12 2.5-6h6"/></svg>',
+  lens:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>',
+  slice:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 6.5h16M4 12h16M4 17.5h10"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m12 4 8.5 4.5L12 13 3.5 8.5z"/><path d="m3.5 12.5 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5" opacity=".5"/></svg>',
+  now:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v11M7.5 11l4.5 4.5 4.5-4.5M5 19.5h14"/></svg>',
+  dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>',
+}
+const row=(ico,n,s,r='',neutral=false)=>`<div class="row"><span class="ico ${neutral?'neutral':''}">${I[ico]}</span><div class="c"><div class="n">${n}</div>${s?`<div class="s">${s}</div>`:''}</div>${r?`<span class="r">${r}</span>`:''}<span class="ch">›</span></div>`
+const WORKS=[['奶糖检查','9-29','Naitang','linear-gradient(135deg,#3b3a3f,#8d8a86)'],['主页 · 窗','9-29','Home','linear-gradient(135deg,#E9B89C,#C9B7D6)'],['记忆格','9-29','Grid','linear-gradient(135deg,#BFD1E1,#EAD8C8)'],['日落','9-12','Sunset','linear-gradient(160deg,#F2A477,#B86A8C 70%,#4E3E62)']]
+
+function home(){
+  return `<div class="topbar">工作台</div>
+    <div class="sec"><span class="k">Works · 作品</span><span class="more">全部 ›</span></div>
+    <div class="works">${WORKS.map(([t,d,en,bg])=>`<div class="wk"><div class="cv" style="background:${bg}"><span>${en}</span></div><div class="t">${t}</div><div class="d">${d}</div></div>`).join('')}</div>
+    <div class="sec"><span class="k">Files · 文件</span></div>
+    <div class="group">
+      ${row('folder','言之的文件','作品、你放进来的东西 · 可以放东西进来','11 项')}
+      ${row('folder','dashboard','前端仓库 · 只读','',true)}
+      ${row('folder','haven','记忆后端仓库 · 只读','',true)}
+      ${row('note','言之的笔记','Claude Code 里的工作笔记 · 只读','',true)}
+    </div>
+    <div class="group" style="margin-top:10px">
+      ${row('lock','目录权限','能访问 3 个 · 能修改 2 个','',true)}
+    </div>
+    <div class="sec"><span class="k">Engine · 引擎</span></div>
+    <div class="group">
+      ${row('plug','工具 · MCP','工具清单与 MCP 服务','',true)}
+      ${row('wave','模拟 Breath','Pipeline、即时模拟、评分旋钮','',true)}
+      ${row('lens','召回透镜','逐轮看召回、拒绝与降级','',true)}
+      ${row('slice','聊天切片','按日期检查离线切片','',true)}
+      ${row('layers','上下文审计','这一轮到底带了什么进去','',true)}
+      ${row('now','当前工作窗口','待批准、改过的文件、回退点、命令输出','',true)}
+    </div>`
+}
+function folder(){
+  return `<div class="bar"><span class="back">${I.back}</span><span class="pill">${I.plus.replace('<svg','<svg width="13" height="13"')}放进来</span></div>
+    <div class="crumb">言之的文件 /</div>
+    <div class="ttl">言之的文件</div>
+    <div class="sub">3 个文件夹 · 8 个文件</div>
+    <div class="group" style="margin-top:10px">
+      ${row('folder','artifacts','作品 · 9 项','')}
+      ${row('folder','小羊给的','你放进来的 · 3 项','')}
+      ${row('folder','test','1 项','',true)}
+    </div>
+    <div class="group" style="margin-top:10px">
+      ${row('note','国庆要带的东西.md','2 KB · 今天 14:20','',true)}
+      ${row('code','数据周报模板.csv','18 KB · 9-26','',true)}
+      ${row('page','sunset.html','12 KB · 9-12','',true)}
+      ${row('file','体检报告.pdf','1.4 MB · 9-03','',true)}
+    </div>
+    <div class="note">文件夹在前，文件按修改时间排。html 点开用小作品的播放器打开；.env、.git、node_modules 这类不显示。</div>`
+}
+function preview(){
+  return `<div class="bar"><span class="back">${I.back}</span><span style="display:flex;gap:8px"><span class="ibtn">${I.down}</span><span class="ibtn">${I.dots}</span></span></div>
+    <div class="crumb">言之的文件 / 小羊给的 /</div>
+    <div class="ttl">国庆要带的东西.md</div>
+    <div class="sub">2 KB · 今天 14:20</div>
+    <div class="seg"><span class="on">预览</span><span>原文</span></div>
+    <div class="doc">
+      <h3>国庆回重庆</h3>
+      <p>10 月 1 号早上的高铁，别睡过头。</p>
+      <h4>要带的</h4>
+      <ul><li>充电器 ×2、筋膜球</li><li>给妈妈的东西</li><li>Clawd（毛绒那只，公司那只留着）</li></ul>
+      <h4>别忘了</h4>
+      <p>租房补贴 <code>10 月批次</code> 月底前申请。</p>
+    </div>
+    <div class="note">右上 ↓ 下载到手机；··· 里是「复制路径」，在言之的文件里还有「删除」（要确认）。仓库里的文件没有删除。</div>`
+}
+function upload(){
+  return `${folder()}`
+}
+function phone(kind){
+  const body = kind==='H'?home():kind==='F'?folder():kind==='P'?preview():upload()
+  return `<div class="phone">
+    ${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <div class="scroll">${body}</div>
+    <div class="tabs"><span>主页</span><span>记忆库</span><span>聊天</span><span class="on">工作台</span><span>设置</span></div>
+    ${kind==='U'?`<div class="dim"></div><div class="sheet"><div class="grab"></div>
+      <h3>放进来</h3><div class="to">放到：言之的文件 / 小羊给的</div>
+      <div class="drop">选文件<small>照片、拍照、文件 App 都行 · 单个不超过 10 MB</small></div>
+      <div class="up"><span class="ico">${I.note}</span><div class="c">需求文档-10月.md<div class="s">46 KB</div><div class="bar2"><i></i></div></div></div>
+      <div class="up"><span class="ico">${I.code}</span><div class="c">埋点字段.csv<div class="s">128 KB</div></div><span class="ok">已放好</span></div>
+      <div class="hint">文本文件（md、txt、csv、json、代码）闲聊里的言之能直接搜、按段读。图片和 PDF 现在只有工作窗口的言之能看。同名文件会自动加个 (2)，不会覆盖。</div>
+    </div>`:''}
+  </div>`
+}
+const META={
+  H:['首页：作品 · 文件 · 引擎','两个 tab 合成一页。作品横着滑最近几个，「全部」就是进言之的文件/artifacts。文件四个入口，言之的文件放第一；目录权限从提示词页搬来。以前的四格收进引擎最后一行「当前工作窗口」。'],
+  F:['文件夹：一层层点进去','顶上返回 + 路径，iOS 右滑能回上一层。只有言之的文件里右上角有「放进来」；仓库里没有。'],
+  P:['预览：看、下载','md 默认渲染，可切原文；代码、csv、json 用等宽字体加行号；图片直接显示；PDF 用系统自带的预览；太大的文件只显示前面一段，其余下载看。'],
+  U:['放进来：从手机传','底部弹出，一次可以选几个，逐个显示进度。默认放到当前所在的文件夹。'],
+}
+function render(){
+  document.body.dataset.theme=state.theme;document.body.dataset.bg=state.bg
+  document.getElementById('ctrl').innerHTML=
+    THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')
+  document.getElementById('rail').innerHTML=['H','F','P','U'].map(k=>
+    `<div class="slot">${phone(k)}<div class="meta"><b>${META[k][0]}</b><small>${META[k][1]}</small></div></div>`).join('')
+}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('button');if(!el)return
+  if(el.dataset.t)state.theme=el.dataset.t;else if(el.dataset.b)state.bg=el.dataset.b;else return
+  const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x
+})
+render()
+</script>
+</body>
+</html>

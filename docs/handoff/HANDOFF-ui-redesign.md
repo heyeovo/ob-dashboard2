@@ -521,11 +521,70 @@ CARE · 照顾                              ›
 
 2026-09-30：已在 `feat/settings-page` 实现明确列出的 10 个入口、外观状态、退出确认及标题对齐，build 通过，`text-[Npx]` 为 0。全量 Vitest 为 386 通过、2 项因当前 Windows 环境拒绝创建符号链接而失败、1 跳过；手机主题 / 背景组合及入口点击仍待实机验收。上文「12 个入口」与逐项清单的 10 个不一致，以逐项清单为实现范围。
 
-### 阶段 4：其余页面统一 + 工作台（布局待讨论）
+### 阶段 4b：工作台（✅ 布局已定）
 
-- 日记、关系轨迹、日回顾、Persona、照顾备忘、设置各子页，逐页对齐新组件和间距。
+2026-09-30 用户和 CC 定案。预览 `docs/design/stage4/workbench-preview.html`（四张：首页 / 文件夹 / 预览 / 放进来），颜色、间距照抄。分支 `feat/stage4b-workbench`（dashboard），不推 main。Haven 不动。
+
+**起因**：用户几乎没用过现在的四格（待批准在聊天里就能点）；真正缺的是「一个能看到 VPS 上文件的渠道」，最常翻的是 yanzhi's files。窗口选择不做：用户一次只开一个工作窗口，照旧跟着 `ACTIVE_SESSION_KEY`。
+
+**A. 首页 `/workbench`**（去掉「工作台 / 调参」两个 tab，改成一页往下滚）
+- 顶栏同设置页：手机 `mobile-page-topbar`，标题「工作台」用 `--font-display`；桌面一个 h1，不放副标题。宽度 `max-w-2xl`。
+- 分组与行复用设置页的 `.prompt-group` / `.prompt-row` 和 `Section` 分组标题。每行左边加一个 30px 圆角小图标块（细线 SVG，1.6 描边；「言之的文件」用强调色 14% 底 + 强调色图标，其余用中性色底），中间名字 + 一行淡色说明，右边 `›`，最小高度 52px。图标抽一个小组件放 `app/workbench/`，别散写在各行。
+1. `WORKS · 作品`，右侧「全部 ›」→ `/workbench/files/yanzhi/artifacts`。下面一排横滑小卡（宽约 132px，最多 8 个，数据用现有 `/api/artifacts`，按修改时间），卡上半是封面：用 `--theme-mesh` 并按序号错开 `background-position`，右下角衬线斜体写英文 / 文件名；下半是标题（衬线）+ 日期。点卡 → 现有 `/artifacts/[name]` 播放器。没有作品时这一组不显示。横滑容器不加 blur。
+2. `FILES · 文件`：四行 → 言之的文件（`/workbench/files/yanzhi`，说明「作品、你放进来的东西」，右侧显示顶层项数）、dashboard、haven、言之的笔记（后三个说明带「只读」）。下面另起一块同款分组，一行「目录权限 · 能访问 N 个 · 能修改 N 个」→ `/workbench/dirs`。
+3. `ENGINE · 引擎`：六行 → 工具 · MCP（`/tools/mcp`）、模拟 Breath（`/breath-sim`）、召回透镜（`/recall-lens`）、聊天切片（`/conversation-slices`）、上下文审计（新子页 `/workbench/context`，里面放现有 `ContextAuditPanel`）、当前工作窗口（新子页 `/workbench/session`，里面放现有 `CcWorkbenchPanel`，说明「待批准、改过的文件、回退点、命令输出」）。两个新子页只加 `SubpageBackButton` + 大标题，面板本身不改。
+- 删掉 `EntryGrid` 在本页的使用；若 `EntryGrid` 因此无人引用，删掉组件并确认无引用。
+
+**B. 文件浏览**
+- **根**（只在服务端映射，前端只传 key）：
+  | key | 显示名 | 实际路径 | 权限 |
+  |---|---|---|---|
+  | `yanzhi` | 言之的文件 | `YANZHI_FILES_ROOT`（`/data/cc-chat-files`） | 看、下载、放进来、删文件 |
+  | `dashboard` | dashboard | `/workspace/dashboard` | 看、下载 |
+  | `haven` | haven | `/workspace/haven` | 看、下载 |
+  | `notes` | 言之的笔记 | `/home/cc/.claude/projects/*/memory` | 看、下载 |
+  - `notes` 根下列出每个**非空**的 `projects/<项目>/memory` 作为一个文件夹，显示名去掉 `-workspace-` 前缀（`-workspace-dashboard` → `dashboard`）；**`/home/cc/.claude` 下别的东西一律不可见**（那里有 `.credentials.json`、会话存档）。
+  - 路径不存在的根（本机开发时）在首页那一行显示「这台机器上没有」且不可点，不报错。
+- **API** `app/api/files/route.ts`（`runtime = 'nodejs'`）：
+  - `GET ?root=&path=`：`path` 是相对路径。先 `realpath`，必须仍在根内（照 `app/lib/ccDirs.ts` 的 `isInside` 做，挡住 `..` 和软链接逃逸）。目录返回 `{ kind: 'dir', entries: [{ name, kind, size, mtime, count? }] }`，文件夹在前、其余按修改时间倒序；文件返回 `{ kind: 'file', name, size, mtime, mime, text?, truncated }`，文本只给前 256 KB。
+  - `GET ?root=&path=&raw=1`：原样返回文件，带正确 `Content-Type`（图片、PDF 预览用）；加 `&download=1` 时带 `Content-Disposition: attachment`（文件名用 RFC 5987 编码，中文名不乱码）。
+  - `POST`（multipart）：只允许 `root=yanzhi`，目标目录必须已在根内；单个文件不超过 10 MB，一次可多个；文件名只取 basename，去掉开头的点和路径字符；同名自动改成 `名字 (2).扩展名`，**永不覆盖**。在 yanzhi 根目录上传时放进 `小羊给的/`（不存在就建），在任何子文件夹里上传就放进当前文件夹。
+  - `DELETE ?root=yanzhi&path=`：只删文件，不删文件夹；别的根一律 403。
+  - **拦截规则**（列表隐藏 + 读 / 下载拒绝，所有根都适用）：任何一段以 `.` 开头（`.env*`、`.git`、`.git-credentials`、`.next` 等全在内）、`node_modules`，以及文件名匹配 `*.pem`、`*.key`、`*credential*`、`*secret*`。写一个纯函数放 `app/lib/fileBrowser.ts` 并补 Vitest（`..`、软链接、各拦截名、notes 根外路径、上传改名）。
+- **页面** `/workbench/files/[root]/[[...path]]`：一个页面按 API 返回的 `kind` 显示文件夹或预览。顶上 `SubpageBackButton`，iOS 右滑回上一层；下面一行淡色路径（`言之的文件 / 小羊给的 /`），衬线大标题（当前文件夹名 / 文件名），小字 `3 个文件夹 · 8 个文件` 或 `2 KB · 今天 14:20`。
+  - **文件夹**：两块同款分组，文件夹一块、文件一块（没有就不显示那块）。每行图标按类型（文件夹 / 文本 / 代码 / 网页 / 其他），名字 + `大小 · 日期`（文件夹写 `N 项`），右边 `›`。只在 `yanzhi` 根里，右上角一个强调色药丸「＋ 放进来」。空文件夹显示一句淡色「这里还是空的」。
+  - **放进来**：底部弹出（`DetailPanel` 或同款底部抽屉，包 `BodyPortal`），标题「放进来」+ 小字「放到：言之的文件 / 小羊给的」；一块虚线框「选文件」（`<input type="file" multiple>`，不限 `accept`，iOS 会给照片 / 拍照 / 文件三个来源）；选完逐个显示进度条，完成显示「已放好」，失败显示原因；底部淡色说明：「文本文件（md、txt、csv、json、代码）闲聊里的言之能直接搜、按段读。图片和 PDF 现在只有工作窗口的言之能看。同名文件会自动加个 (2)，不会覆盖。」全部完成后刷新列表。
+  - **预览**：右上角两个圆形玻璃按钮：下载、`···`。`···` 菜单：复制路径（复制服务器上的绝对路径，方便贴给工作窗口）；`yanzhi` 根里再加「删除」（危险色，`confirm` 后删并返回上一层）。
+    - `.md`：默认渲染，顶部「预览 / 原文」小分段切换；渲染复用聊天里现有的 Markdown 组件（不另引依赖）。
+    - 其余文本（代码、csv、json、txt、html 源码等）：等宽字体 + 行号，横向可滚，不自动换行。
+    - 图片：`<img>` 直接显示（`raw=1`）。PDF：`<iframe>` 或新开 `raw=1`，交给系统预览。
+    - `yanzhi/artifacts/` 下的 html / svg：多一个强调色「打开」按钮 → `/artifacts/[name]`。
+    - 超过 256 KB 的文本只显示前面一段，底部提示「只显示了前面一段，完整的下载看」；二进制显示「这个类型看不了，可以下载」。
+    - 文本区用玻璃块底（同提示词编辑页 `.ed` 的做法），**不加 blur**。
+
+**C. 目录权限搬家**
+- 新子页 `/workbench/dirs`：把 `app/collaborators/CollaboratorPage.tsx` 里「能访问的目录 / 能修改的目录」两个编辑区（`saveDirs` / `removeDir` 那段）原样搬过来，数据仍走 `/api/cc-personas` 整对象保存。编辑的是**当前协作者**，取法和主页抽屉「言」卡片同一来源；标题下小字写「言之 的目录」，协作者多于一个时旁边给一个下拉切换。
+- `CollaboratorPage` 删掉 `DIRECTORIES · 目录` 整段及只为它存在的状态。
+
+**D. 同批顺带：切页停顿**（OB Todo `e8b1b139967b482d`，单独一个 commit）
+- 加 app 级 `loading.tsx`，切页时立刻有反馈（淡色，和现有切页淡入一致，不做转圈大图）。
+- 查 `Link` 预取在 `proxy.ts` 登录校验下是否真的生效（生产 build 下看 Network 里的 prefetch 请求是 200 还是被重定向）；没生效就在 `proxy.ts` 放行预取请求所需的头，且不能绕过登录。结论写进最终回复。
+
+**不做**：窗口选择；在手机上编辑文件；删除 / 新建文件夹；给闲聊工具加读图片 / PDF（OB Todo `dd33744ef2c947ec`）。
+
+**文档同步**：`docs/reference.md`「文件结构速查」加新页面和 `app/api/files`（写明根映射与拦截规则）；「cc 数据持久化契约」里补一句：上传写入 `YANZHI_FILES_ROOT`（宿主机挂载卷，持久），不写别处。
+
+**验收**
+- build、全量 Vitest 通过；`text-[Npx]` 为 0；新子页都有引用，`EntryGrid` 若删则无引用。
+- 手机：首页三组清楚、作品能横滑并打开；四个根都能一层层点进去再右滑回来；dashboard 根下看不到 `.env`、`.git`、`node_modules`，直接改 URL 访问 `.env` 返回 403；notes 根下只看得到 memory 文件。
+- 在言之的文件根上传一个 md 和一张图 → 出现在「小羊给的」；再传一次同名 → 变成 `(2)`；md 能渲染 / 切原文，图片能看，下载后手机能打开；删除有确认。仓库里没有「放进来」和「删除」。
+- 目录权限在工作台改完刷新仍在，新开工作窗口能按新目录读写；提示词页没有目录段了。
+- 四主题 × 渐变 / 照片各看一眼首页和预览页。
+
+### 阶段 4：其余页面统一
+
+- 日记、关系轨迹、日回顾、Persona、照顾备忘、设置各子页，逐页对齐新组件和间距（= 阶段 4c）。
 - 设置分层：日常用的和调参用的分开，调参类收进「高级」。
-- 工作台优化按新风格做（含旧 handoff 里的文件浏览器需求）。
 
 ### 阶段 5：扩展
 
@@ -564,7 +623,7 @@ CARE · 照顾                              ›
   - 2026-09-30 功能分支实现：Haven `feat/window-recall`（`9936dd2`）已推，独立 `recall_mode`、兼容迁移和空模块保存；dashboard `feat/prompt-page` 实现 A–D 并推同名分支。Haven 状态契约 48 项通过；dashboard build 通过，定向 Vitest 22 项通过，全量 385 项通过、1 跳过、2 项因本机 Windows symlink `EPERM` 未通过。`text-[Npx]` 和旧弹窗引用均为 0。下一步：先合并部署 Haven，再合并 dashboard；按本节手机验收逐项走查持久化、提示词一致性与 CHAT/WORK 召回，正式环境未验收前不勾选。
   - 2026-09-30 合并上线：Haven `9936dd2`，dashboard `b32aa7b`；用户手机走查后 CC 修 `d185c2f`（页面顶部重复安全区、定位截两行、定位编辑框加高、拖动把手屏蔽 iOS 长按选择）。
 - [x] 阶段 4a：设置页。GPT `f186d9c`，2026-09-30 上线，用户手机确认样式。
-- [ ] 阶段 4b：工作台（下一个工作窗口，布局待讨论）。同窗顺带交 GPT：切页停顿（OB Todo `e8b1b139967b482d`：`loading.tsx` + 预取在登录代理下是否生效）。
+- [ ] 阶段 4b：工作台。2026-09-30 布局已定（预览 `docs/design/stage4/workbench-preview.html`），交 GPT 在 `feat/stage4b-workbench` 实现，同分支单独 commit 做切页停顿（OB Todo `e8b1b139967b482d`）。
 - [ ] 阶段 4c：其余子页面与弹窗样式逐页打磨。
 - 2026-09-30 其他已上线：全站浮层挂 body（`BodyPortal`，弹窗不再被底栏压住）、聊天月历选日期后确认跳转、对话列表加载更多、记忆库去热门标签 / 往日卡放宽 / 屏外卡片跳过渲染（`35173d2`、`d185c2f`）；GPT 批次 `feat/batch-0930`：头像跟随主题、Context 上限用 SDK 真实值（Opus 5.5 = 1M）、中文粗体（`bba8117`、`91020cf`）。
 - 窗台插画：Clawd 已画好（带透明通道，用户在聊天里发过），待抠图摆上窗台；窗帘可不做。
