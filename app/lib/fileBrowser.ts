@@ -1,12 +1,13 @@
 import path from 'node:path'
 import { realpath } from 'node:fs/promises'
+import { YANZHI_FILES_ROOT } from '@/app/lib/artifactMeta'
 
 export type FileRoot = 'yanzhi' | 'dashboard' | 'haven' | 'notes'
 export const ROOT_NAMES: Record<FileRoot, string> = {
   yanzhi: '言之的文件', dashboard: 'dashboard', haven: 'haven', notes: '言之的笔记',
 }
 export const ROOT_PATHS: Record<Exclude<FileRoot, 'notes'>, string> = {
-  yanzhi: '/data/cc-chat-files', dashboard: '/workspace/dashboard', haven: '/workspace/haven',
+  yanzhi: YANZHI_FILES_ROOT, dashboard: '/workspace/dashboard', haven: '/workspace/haven',
 }
 export const NOTES_PROJECTS = '/home/cc/.claude/projects'
 export const TEXT_LIMIT = 256 * 1024

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import CcMarkdown from '@/app/cc/CcMarkdown'
@@ -29,7 +29,6 @@ export default function FileBrowserPage({ root, parts }: { root: string; parts: 
   const [uploads, setUploads] = useState<Upload[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [source, setSource] = useState(false)
-  const swipeX = useRef<number | null>(null)
   const relative = parts.join('/')
   const back = parts.length ? fileHref(root, parts.slice(0, -1)) : '/workbench'
   const load = useCallback(async () => {
@@ -79,7 +78,7 @@ export default function FileBrowserPage({ root, parts }: { root: string; parts: 
   const isPdf = data?.kind === 'file' && data.mime === 'application/pdf'
   const canOpen = root === 'yanzhi' && parts[0] === 'artifacts' && parts.length === 2 && /\.(html|svg)$/i.test(parts[1])
 
-  return <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28 pt-3 text-[var(--color-text-primary)]" onTouchStart={event => { swipeX.current = event.touches[0].clientX < 40 ? event.touches[0].clientX : null }} onTouchEnd={event => { if (swipeX.current !== null && event.changedTouches[0].clientX - swipeX.current > 80) router.push(back); swipeX.current = null }}>
+  return <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28 pt-3 text-[var(--color-text-primary)]">
     <div className="flex items-center justify-between"><SubpageBackButton label="返回上一层" href={back} />
       <div className="flex items-center gap-2">{data?.kind === 'dir' && root === 'yanzhi' && <button type="button" onClick={() => { setUploads([]); setUploadOpen(true) }} className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-note font-semibold text-[var(--color-on-primary)]">＋ 放进来</button>}
       {data?.kind === 'file' && <><a href={apiHref(root, parts, '&raw=1&download=1')} aria-label="下载文件" className="subpage-back-button inline-flex items-center justify-center">↓</a><div className="relative"><button type="button" aria-label="更多操作" onClick={() => setMenuOpen(!menuOpen)} className="subpage-back-button inline-flex items-center justify-center">···</button>{menuOpen && <div className="float-surface absolute right-0 top-11 z-50 min-w-32 overflow-hidden rounded-[var(--radius-lg)] shadow-[var(--shadow-md)]"><button type="button" onClick={() => { void navigator.clipboard.writeText(data.serverPath).then(() => setMenuOpen(false)).catch(() => setError('复制路径失败')) }} className="block w-full px-4 py-3 text-left text-note">复制路径</button>{root === 'yanzhi' && <button type="button" onClick={() => { setMenuOpen(false); void remove() }} className="block w-full px-4 py-3 text-left text-note text-[var(--color-danger)]">删除</button>}</div>}</div></>}</div>
