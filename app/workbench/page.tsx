@@ -36,13 +36,17 @@ function Row({ entry, status }: { entry: Entry; status?: string }) {
     : <Link href={entry.href} className="prompt-row flex min-h-13 items-center gap-3 px-4 py-2">{content}</Link>
 }
 
+// 跨切页缓存：回到工作台先用上次的结果画出来，后台再刷新，作品行不再晚一拍冒出来把下面顶下去
+let artifactsCache: Artifact[] | null = null
+let rootsCache: RootInfo[] = []
+
 export default function WorkbenchPage() {
   const people = usePersonas()
-  const [artifacts, setArtifacts] = useState<Artifact[]>([])
-  const [roots, setRoots] = useState<RootInfo[]>([])
+  const [artifacts, setArtifacts] = useState<Artifact[] | null>(artifactsCache)
+  const [roots, setRoots] = useState<RootInfo[]>(rootsCache)
   useEffect(() => {
-    void fetch('/api/artifacts').then(r => r.json()).then(data => { if (data.ok) setArtifacts(data.items.slice(0, 8)) }).catch(() => {})
-    void fetch('/api/files?root=all').then(r => r.json()).then(data => { if (data.ok) setRoots(data.roots) }).catch(() => {})
+    void fetch('/api/artifacts').then(r => r.json()).then(data => { artifactsCache = data.ok ? data.items.slice(0, 8) : []; setArtifacts(artifactsCache) }).catch(() => { artifactsCache = artifactsCache || []; setArtifacts(artifactsCache) })
+    void fetch('/api/files?root=all').then(r => r.json()).then(data => { if (data.ok) { rootsCache = data.roots; setRoots(rootsCache) } }).catch(() => {})
   }, [])
   const rootStatus = (key: string) => {
     const root = roots.find(item => item.key === key)
@@ -52,7 +56,7 @@ export default function WorkbenchPage() {
     <header className="mobile-page-topbar flex items-center px-3 md:hidden"><span className="text-xl font-semibold" style={{ fontFamily: 'var(--font-display)' }}>工作台</span></header>
     <main className="mx-auto max-w-2xl px-3 pt-5 sm:px-6 sm:pt-10">
       <h1 className="mb-6 hidden text-3xl font-bold tracking-tight text-[var(--color-text-heading)] md:block">工作台</h1>
-      {artifacts.length > 0 && <section><Section title="Works · 作品" action={<Link href="/workbench/files/yanzhi/artifacts" className="text-xs text-[var(--color-primary)]">全部 ›</Link>} /><div className="-mx-3 flex gap-2.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">{artifacts.map((item, index) => <Link key={item.name} href={`/artifacts/${encodeURIComponent(item.name)}`} className="w-[132px] shrink-0 overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]"><div className="relative h-[74px] bg-[image:var(--theme-mesh)] bg-[length:160%_160%]" style={{ backgroundPosition: `${index * 19 % 100}% ${index * 27 % 100}%` }}><span className="absolute bottom-1.5 right-2 max-w-[110px] truncate font-[family-name:var(--font-display)] text-xs italic text-[var(--color-text-heading)]">{item.name.replace(/\.(html|svg)$/i, '')}</span></div><div className="truncate px-2.5 pt-2 font-[family-name:var(--font-display)] text-xs font-semibold">{item.title}</div><div className="px-2.5 pb-2 pt-0.5 text-3xs text-[var(--color-text-tertiary)]">{new Date(item.updated_at).toLocaleDateString('zh-CN')}</div></Link>)}</div></section>}
+      {(artifacts === null || artifacts.length > 0) && <section><Section title="Works · 作品" action={<Link href="/workbench/files/yanzhi/artifacts" className="text-xs text-[var(--color-primary)]">全部 ›</Link>} /><div className="-mx-3 flex gap-2.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">{artifacts === null ? [0, 1, 2].map(index => <div key={index} aria-hidden="true" className="w-[132px] shrink-0 overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)] opacity-60"><div className="h-[74px]" /><div className="px-2.5 pt-2 text-xs">&nbsp;</div><div className="px-2.5 pb-2 pt-0.5 text-3xs">&nbsp;</div></div>) : artifacts.map((item, index) => <Link key={item.name} href={`/artifacts/${encodeURIComponent(item.name)}`} className="w-[132px] shrink-0 overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]"><div className="relative h-[74px] bg-[image:var(--theme-mesh)] bg-[length:160%_160%]" style={{ backgroundPosition: `${index * 19 % 100}% ${index * 27 % 100}%` }}><span className="absolute bottom-1.5 right-2 max-w-[110px] truncate font-[family-name:var(--font-display)] text-xs italic text-[var(--color-text-heading)]">{item.name.replace(/\.(html|svg)$/i, '')}</span></div><div className="truncate px-2.5 pt-2 font-[family-name:var(--font-display)] text-xs font-semibold">{item.title}</div><div className="px-2.5 pb-2 pt-0.5 text-3xs text-[var(--color-text-tertiary)]">{new Date(item.updated_at).toLocaleDateString('zh-CN')}</div></Link>)}</div></section>}
       <section><Section title="Files · 文件" /><div className="prompt-group">{FILES.map(entry => <Row key={entry.href} entry={entry} status={rootStatus(entry.root!)} />)}</div><div className="prompt-group mt-2.5"><Row entry={{ label: '目录权限', description: `能访问 ${people.active.dirs.length} 个 · 能修改 ${people.active.writeDirs.length} 个`, href: '/workbench/dirs', icon: 'lock' }} /></div></section>
       <section><Section title="Engine · 引擎" /><div className="prompt-group">{ENGINE.map(entry => <Row key={entry.href} entry={entry} />)}</div></section>
     </main>
