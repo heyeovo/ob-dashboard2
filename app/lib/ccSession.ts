@@ -49,6 +49,8 @@ export const CACHE_TTL_SESSION_MS = 5 * 60 * 1000
 
 /** 一轮的用量。每条消息右下角那个 token 面板要的就是这些。 */
 export type TurnUsage = {
+  /** SDK result 报告的本轮模型 Context 上限；旧历史记录可为空。 */
+  contextWindow?: number
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -935,13 +937,16 @@ export function noteContextSnapshot(
   usage: { inputTokens: number; outputTokens: number },
   model: string,
   source: CcContextSnapshot['source'] = 'stream',
+  contextWindow?: number,
 ): CcContextSnapshot | null {
   const live = registry.get(sessionId)
   if (!live) return null
   const inputTokens = Math.max(0, Number(usage.inputTokens) || 0)
   const outputTokens = Math.max(0, Number(usage.outputTokens) || 0)
   const totalTokens = inputTokens + outputTokens
-  const maxTokens = contextLimitFor(model)
+  const maxTokens = Number.isFinite(contextWindow) && Number(contextWindow) > 0
+    ? Number(contextWindow)
+    : contextLimitFor(model)
   const snapshot: CcContextSnapshot = {
     totalTokens,
     inputTokens,
@@ -1111,7 +1116,7 @@ export async function compactSession(sessionId: string): Promise<CompactSessionR
 }
 
 /**
- * 上下文上限。中转站不报这个值，按模型名认。
+ * SDK result 没有可用 contextWindow 时的上下文上限回退表。
  * 认不出来就给 0 —— 前端拿 0 会只显示实际数字、不显示「/ 上限」。
  */
 export function contextLimitFor(model: string): number {

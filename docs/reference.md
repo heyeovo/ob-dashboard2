@@ -62,6 +62,7 @@ production 必须配置以下六项：
 - 正常用户 turn 成功提交时在 Haven 事务内只采样一次 conversation silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer。缓存保活临时暂停会在下一条用户消息进入模型前解除，或在 Claude 正式主动消息成功保存时于同一 Haven 事务解除；后台 no-op、失败和 deferred 不解除。新 assistant 轮次保存版本化 `display_segments`，历史仍保留一轮一条原文；页面可见且空闲时按 round 游标增量刷新后台 wake 消息。
 - Haven 每 30 秒按持久 `due_at` claim 后调用 `cc-agent-wake-runner`；Dashboard 只有取得同一 `SessionTurnCoordinator` 的后台门禁后才向 Haven 原子 begin。旧 schedule version、无效 silence 来源、重复 `wake_id`、busy/compacting/待审批、失败退避、过期 lease、24 小时无用户活动和滚动后台 turn 上限均在模型请求前处理；deferred 不生成 wake event。
 - Bark profile 配置和密钥只存 Haven，Dashboard 读取只得到掩码；窗口设置只持久化 `bark_notification_enabled` 并显示该 scope 最近状态。可见 agent wake 与 outbox 在 Haven 同一事务提交，no-op 和普通前台回复不推送；通知复用已保存 `display_segments`，首条 active、后续 passive，支持持久重试、AES-128-CBC 正文加密和 `/cc?session_id=...` deep link。
+- CC 每轮 Context 快照优先采用 Agent SDK result 的 `modelUsage[当前模型].contextWindow`，同步本轮 usage 和本窗设置的百分比；缺值才按模型名回退到预置上限。selfhost 的 Context 预算另行计算。
 - cc 换窗的折叠逐项选择、统一 token 预算、Haven 固定快照及 CC/selfhost 一致注入契约见 `docs/architecture.md`
 - 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 单行引用为“召回内容已清理：title（bucket_id）”，工具结果单行以“已清理：…”标识，原工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭。固定窗口保持原行为；按天滚动窗口在 RollingSeedStore 版 GC 完成并通过真实验收前，服务端硬性禁止手动减负且自动 runner 无条件跳过。
 

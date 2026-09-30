@@ -789,6 +789,27 @@ describe('runTurn：普通回复', () => {
     dropSession(compactSessionId)
   })
 
+  it('用 SDK result 的实际 contextWindow 覆盖 200k 回退值并保存到本轮用量', async () => {
+    const sessionId = 'ob2-context-window-test'
+    const handle = driveTurn([
+      initMsg(),
+      messageStart({ input_tokens: 278_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }),
+      textDelta('继续'),
+      { ...resultMsg(), modelUsage: { 'claude-opus-4-6': { contextWindow: 1_000_000 } } } as SDKMessage,
+    ], {
+      sessionId,
+      config: makeConfig({ sessionId, model: 'claude-opus-4-6', sdkModel: 'claude-opus-4-6' }),
+    })
+    await handle.promise
+
+    const snapshot = turns.recordTurn.mock.calls[0][0].raw.context_snapshot
+    expect(snapshot).toMatchObject({ maxTokens: 1_000_000, totalTokens: 278_000 })
+    expect(snapshot.percentage).toBeCloseTo(27.8)
+    expect(turns.recordTurn.mock.calls[0][0].raw.usage.contextWindow).toBe(1_000_000)
+    expect(handle.events.filter(event => event.event === 'context_snapshot').at(-1)?.data.maxTokens).toBe(1_000_000)
+    dropSession(sessionId)
+  })
+
   it('把当前 CC 线路游标后的其他线路原文一次性补入 SDK 消息，并记录补齐元数据', async () => {
     turns.getSession.mockResolvedValueOnce({
       ok: true,

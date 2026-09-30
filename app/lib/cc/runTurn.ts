@@ -47,6 +47,7 @@ import {
   acknowledgePendingCompactions,
   ccResumeKey,
   consumeTurnInterrupted,
+  contextLimitFor,
   dropSession,
   ensureSession,
   forgetResumePoint,
@@ -1268,6 +1269,17 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         live.compacting = false
         recordTurnCost(sessionId, Number(msg.total_cost_usd || 0))
         turnUsage = usageFromResult(msg.usage, msg.duration_ms, msg.total_cost_usd)
+        const resultModel = String(live.contextSnapshot?.model || initInfo?.model || sdkModelForProvider(live.model, live.boot.credKind))
+        const reportedWindow = Number(msg.modelUsage?.[resultModel]?.contextWindow)
+        const contextWindow = Number.isFinite(reportedWindow) && reportedWindow > 0
+          ? reportedWindow
+          : contextLimitFor(resultModel)
+        turnUsage.contextWindow = contextWindow
+        if (currentRequestUsage && live.contextSnapshot) {
+          const snapshot = noteContextSnapshot(sessionId, live.contextSnapshot, resultModel,
+            live.contextSnapshot.source, contextWindow)
+          if (snapshot) send('context_snapshot', snapshot)
+        }
         if (msg.subtype === 'success' && !msg.is_error) {
           live.lastModelActivityAt = modelRequestStartedAt
           if (turnUsage.cacheReadTokens + turnUsage.cacheWriteTokens > 0) {
