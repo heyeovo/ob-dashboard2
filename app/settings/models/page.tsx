@@ -233,7 +233,7 @@ export default function ModelsSettingsPage() {
         <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="mb-6">
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
-            召回、自动记忆与日回顾模型
+            记忆用的模型
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)]">
             分别配置召回判断、已暂停的自动记忆，以及每天独立生成的日回顾。

@@ -118,7 +118,7 @@ export default function NotificationSettingsPage() {
     <main className="mx-auto min-h-screen max-w-3xl px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-8 text-[var(--color-text-primary)] sm:px-6 md:pb-8">
       <SubpageBackButton href="/settings" label="返回设置" className="md:hidden" />
       <Link href="/settings" className="hidden text-xs text-[var(--color-text-tertiary)] md:inline-flex">← 返回设置</Link>
-      <h1 className="mt-4 text-2xl font-bold text-[var(--color-text-heading)]">Bark 通知</h1>
+      <h1 className="mt-4 text-2xl font-bold text-[var(--color-text-heading)]">通知</h1>
       <p className="mt-2 text-sm leading-6 text-[var(--color-text-tertiary)]">
         Claude 主动发来正式消息后，由 Haven 服务端推送到 iPhone。Device Key 和加密密钥不会返回浏览器。
       </p>

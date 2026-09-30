@@ -134,7 +134,7 @@ export default function UpstreamSettingsPage() {
         <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="mb-6">
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
-            上游模型配置
+            模型与中转站
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)]">
             这里配好的中转站和模型名，会出现在 /cc 的「本窗口设置」里。改完记得保存。

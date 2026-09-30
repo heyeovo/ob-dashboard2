@@ -6,6 +6,7 @@ import { useRef, useState } from 'react'
 import { useAppearance } from '@/app/components/AppearanceProvider'
 import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 import type { Appearance } from '@/app/lib/appearance'
+import { APPEARANCE_THEMES } from '@/app/lib/appearanceThemes'
 
 const optionClass = (active: boolean) =>
   `min-h-11 rounded-[var(--radius-lg)] border px-4 py-2 text-sm transition-colors ${
@@ -13,13 +14,6 @@ const optionClass = (active: boolean) =>
       ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
       : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
   }`
-
-const themes = [
-  { id: 'apricot', name: '杏雾', detail: '柔和杏色与暖棕文字' },
-  { id: 'sakura', name: '樱粉', detail: '轻粉色与柔和玻璃' },
-  { id: 'mist', name: '雾蓝', detail: '清冷蓝灰与浅色玻璃' },
-  { id: 'dusk', name: '夜', detail: '深色背景与暖色强调' },
-] as const
 
 function Slider({
   label,
@@ -107,7 +101,7 @@ export default function AppearancePage() {
           <p className="text-2xs font-semibold uppercase tracking-[var(--label-tracking)] text-[var(--color-text-tertiary)]">Theme</p>
           <h2 className="mt-1 text-2xl text-[var(--color-text-heading)]">主题</h2>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            {themes.map(theme => (
+            {APPEARANCE_THEMES.map(theme => (
               <button
                 key={theme.id}
                 type="button"

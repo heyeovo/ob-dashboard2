@@ -469,7 +469,7 @@ export default function AutomationSettingsPage() {
         <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="mb-6">
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
-            自动化与状态
+            自动化
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)]">
             Persona / 夜梦 / 关系整理 / 每日画像等后台引擎的开关与参数。保存后立即生效，并由 Haven 跨部署保留。

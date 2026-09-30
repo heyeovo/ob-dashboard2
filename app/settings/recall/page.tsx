@@ -325,7 +325,7 @@ export default function RecallSettingsPage() {
         <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="mb-6">
           <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--color-text-heading)]">
-            记忆浮现配置
+            记忆浮现
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)]">
             控制 Haven 何时召回记忆、注入多少上下文，以及如何沿关系图扩散。

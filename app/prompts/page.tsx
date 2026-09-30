@@ -191,7 +191,7 @@ export default function PromptsPage() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10">
         <SubpageBackButton href="/settings" label="返回设置" className="mb-5 md:hidden" />
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)]">Prompt 配置</h1>
+          <h1 className="text-xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-heading)]">权重配置</h1>
           <p className="text-[var(--color-text-tertiary)] text-xs sm:text-sm mt-2">由 Haven 持久保存 · 保存后立即生效 · 重启和重新部署后继续保留</p>
           <p className="text-meta text-[var(--color-text-disabled)] mt-1">这里只调整文风、关注重点、判断尺度和篇幅；结构协议、证据边界与写入安全规则不可覆盖。</p>
         </div>

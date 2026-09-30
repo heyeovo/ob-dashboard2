@@ -30,7 +30,7 @@ production 必须配置以下六项：
 | `app/workbench/` | 工作台；“调参”下提供默认收起的本轮上下文审计，按当前会话只读展示滚动原文、各长期层的已保存/实际生效 ID、背景拼接、SDK SessionStore 实际落盘的文本/召回/`tool_use`/`tool_result`、正文恢复标记、最近一次持久重建凭据、最近实际与当前/下一轮 Dashboard system prompt、Claude 工具名称，以及安全去密后的 MCP instructions/description/input schema、最近实际/当前定义 hash 和模型表面的上一版/本轮期望/iterator 启动指纹，不触发额外模型请求 |
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
-| `app/settings/` | 设置聚合页及子页 |
+| `app/settings/` | 设置聚合页按常用、记忆与引擎、数据三组提供 10 个入口；外观行即时显示当前主题与背景状态，底部退出登录需确认。子页保留各自配置功能 |
 | `app/settings/appearance/` | 外观设置：杏雾/樱粉/雾蓝/夜四主题、背景（含背景浓度、照片强调色跟随主题 / 图片）、玻璃强度、标题字体、字号、雨痕；「聊天显示」两个本机开关语义不变 |
 | `app/impressions/` | 日回顾月历 |
 | `app/journal/` | 日记页 |
