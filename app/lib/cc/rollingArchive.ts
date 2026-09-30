@@ -139,8 +139,10 @@ export function archiveChatDay(timestamp: string, context: ArchiveContext): stri
 }
 
 export function archiveEnvelopes(entries: SessionStoreEntry[], context: ArchiveContext) {
-  const revisionEntries = archiveEligibleEntries(entries).filter(entry =>
-    !(entry.type === 'system' && entry.subtype === 'compact_boundary')
+  // Only parentUuid chain nodes go into a revision. forkSession writes a `custom-title`
+  // that carries a uuid but no parentUuid; linking it into the chain makes resume stop there.
+  const revisionEntries = archiveEligibleEntries(entries).filter(entry => 'parentUuid' in entry
+    && !(entry.type === 'system' && entry.subtype === 'compact_boundary')
     && !(entry.type === 'user' && entry.isCompactSummary === true))
   return transcriptEnvelopes(revisionEntries).envelopes.map(envelope => ({
     ...envelope, day: archiveChatDay(envelope.timestamp, context),

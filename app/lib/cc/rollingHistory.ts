@@ -604,7 +604,7 @@ export function cloneRollingTranscriptForSession(
     if (oldUuid) entry.uuid = uuidMap.get(oldUuid)!
     if ('sessionId' in entry) entry.sessionId = sessionId
     if ('parentUuid' in entry) entry.parentUuid = previousUuid
-    if (typeof entry.uuid === 'string' && entry.uuid) previousUuid = entry.uuid
+    if (typeof entry.uuid === 'string' && entry.uuid && 'parentUuid' in entry) previousUuid = entry.uuid
   }
   return cloned
 }

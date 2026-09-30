@@ -188,8 +188,8 @@ function nativeRound(id: string, timestamp: string): SessionStoreEntry[] {
     ]),
     entry(`${id}-r`, 'user', timestamp, [{ type: 'tool_result', tool_use_id: `tool-${id}`, content: `result-${id}` }]),
     entry(`${id}-end`, 'assistant', timestamp, [{ type: 'text', text: `answer-${id}` }]),
-    { type: 'attachment', uuid: `${id}-env`, timestamp, attachment: { type: 'environment', content: 'old environment' } },
-    { type: 'attachment', uuid: `${id}-file`, timestamp, attachment: { type: 'file', content: 'keep file' } },
+    { type: 'attachment', parentUuid: null, uuid: `${id}-env`, timestamp, attachment: { type: 'environment', content: 'old environment' } },
+    { type: 'attachment', parentUuid: null, uuid: `${id}-file`, timestamp, attachment: { type: 'file', content: 'keep file' } },
   ] as SessionStoreEntry[]
 }
 async function withStore(test: (storeRoot: string, claudeConfigDir: string) => Promise<void>) {
@@ -465,6 +465,26 @@ describe('archive IO and migration', () => {
       available: true, entryCount: 6, firstDay: '2026-09-12', lastDay: '2026-09-12', days: [{ day: '2026-09-12', envelopeCount: 1 }],
     })
     expect(await readRollingArchive(key, { storeRoot })).toEqual(archive)
+  }))
+
+  it('keeps the revision parentUuid chain unbroken when a forked source carries a uuid-bearing custom-title', async () => withStore(async storeRoot => {
+    const source = [
+      ...nativeRound('before', '2026-09-11T10:00:00Z'),
+      { type: 'custom-title', uuid: 'fork-title', customTitle: 'Context GC cleaned fork', sessionId: 'synthetic-native' },
+      ...nativeRound('after', '2026-09-12T10:00:00Z'),
+    ] as SessionStoreEntry[]
+    await appendRollingArchive(key, source, { storeRoot })
+    const seed = createArchiveRevisionSeed((await readRollingArchive(key, { storeRoot }))!, context, [], { ...seedOptions, storeRoot })!
+    expect(seed.entries.some(item => item.type === 'custom-title')).toBe(false)
+    const byUuid = new Map(seed.entries.map(item => [item.uuid, item]))
+    let current = seed.entries.at(-1)
+    let reachable = 0
+    while (current) {
+      reachable += 1
+      current = current.parentUuid ? byUuid.get(current.parentUuid as string) : undefined
+    }
+    expect(reachable).toBe(seed.entries.length)
+    expect(JSON.stringify(seed.entries)).toContain('question-before')
   }))
 
   it('keeps resume keys isolated by lane/revision and permanent Haven IDs in visible history', () => {
