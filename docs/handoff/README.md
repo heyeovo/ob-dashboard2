@@ -7,7 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
-| `HANDOFF-4c-1-polish.md` | 🔨 第二轮待 CC 验收 | 首轮已合并 main `f0cc3bd`；`fix/4c-1-polish-2` 修手机待办全屏表单、日期补写与共享周条样式；Linux 补跑符号链接测试及 iPhone 走查；不动 main |
+| `HANDOFF-4c-1-polish.md` | 🔎 待 iPhone 走查 | 两轮均由 CC 验收（Linux 全量测试含符号链接用例、build）并于 2026-10-01 合并 main（`f0cc3bd`、`6b262c6`）：提示词页、全高加载态、日记日期与缓存、日回顾共享周条与补写入口、待办手机全屏编辑 |
 | `HANDOFF-auto-tag-runtime.md` | 📦 已完成归档 | 已提交：Dashboard `8d29fdc`、Haven `4efd135` / `6cc656b` |
 | `HANDOFF-cc-VPS迁移.md` | 📦 已完成归档 | 核心迁移、B2 每日备份已完成；§21 列的附加项（额外加密副本、备份失败通知等）未排期 |
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
