@@ -1,5 +1,5 @@
 'use client'
-import { Suspense } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import BottomTabBar from './BottomTabBar'
 import SideRail from './SideRail'
@@ -14,6 +14,18 @@ import type { ReactNode } from 'react'
  */
 export default function MobileShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  // 点链接进新页面时回到顶部。Next 自己的滚动判断是「新页面顶边还在视口里就不滚」，
+  // 从滚过一截的工作台点进子页面时会停在半截、标题压在状态栏下。浏览器前进 / 后退不动，留给原生恢复。
+  const popped = useRef(false)
+  useEffect(() => {
+    const onPop = () => { popped.current = true }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  useLayoutEffect(() => {
+    if (popped.current) { popped.current = false; return }
+    window.scrollTo(0, 0)
+  }, [pathname])
   return (
     <>
       <Suspense fallback={null}>
