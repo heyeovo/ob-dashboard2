@@ -17,7 +17,7 @@
 | `HANDOFF-daily-review-input-budget.md` | 📦 已完成归档 | |
 | `HANDOFF-memory-continuity-fixes.md` | 📦 已完成归档 | |
 | `HANDOFF-cc-auto-chat-slices.md` | ⏸ 暂停 | 阶段一、二代码已提交（Haven `c250299` / `ab43aa3`，Dashboard `96a2668`），9.13 与日回顾解耦后停下。重开时以本文件为事实源；OB Todo「自动化原文切片摘要」 |
-| `HANDOFF-rolling-archive-slicing.md` | 🔨 进行中 | §五 1–6 已由 CC 验收（Linux 全量测试／build、主窗真实数据离线切片）并于 2026-10-01 合并 main；下一步 §四 主窗「窗口3」修复（CC 执行）后按 §六 实测。OB Todo `0a39f9fba0434c3c` |
+| `HANDOFF-rolling-archive-slicing.md` | 🔎 观察中 | 2026-10-01 上线（`691a86f` + 断链修复 `92cc2f5`），主窗「窗口3」已从存档修复。剩 §六 测试窗口全流程未专门跑，先观察主窗日常跨日重建；Haven 旧字段 `allow_fixed_body_restore` / `previous_day_modes` 待清理。OB Todo `0a39f9fba0434c3c` |
 | `HANDOFF-ui-design-system.md` | 📦 已被取代 | 第一步清理硬编码已完成；其余草案以 `HANDOFF-ui-redesign.md` 为准 |
 | `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1/1.5、2a、3a/3b 待 iPhone 走查勾选；阶段 2 前置 / 2b / 4 前置 / 4a / 4b 已上线。4c-1 日记本／日回顾／待办由 CC 验收，2026-10-01 与 Haven `feat/todo-delete` 一起合并 main，待 iPhone 走查；下一步 4c-② 模型与中转站（底栏高度备选在 `try/tabbar-74`）。Clawd 待摆上窗台。Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
 | `OB待处理大问题清单.md` | 📦 已完成归档 | P0 两项、journey、聊天原文库已完成；语录、moments、官端开窗已转入 OB Todo |
