@@ -4,7 +4,8 @@ import { useRouter, usePathname } from 'next/navigation'
 import { ccReturnHref } from '@/app/cc/ccNavMemory'
 
 // 4.6 导航重构后的 5 Tab（用户自己定的顺序）：
-//   Home / 记忆库 / 聊天(cc，中间突起) / 工作台+调参 / 设置
+//   Home / 记忆库 / 聊天 / 工作台+调参 / 设置
+// 2026-09-30 改成满宽只留图标（label 只作读屏用），当前页由 .tab-pill 淡底标出，聊天不再突起
 // 「设置」从弹出菜单改成一个真正的页面（/settings），次级入口都收在那里和 Home 里。
 const TABS = [
   { slug: 'home',      label: '主页',   href: '/' },
@@ -14,14 +15,15 @@ const TABS = [
   { slug: 'settings',  label: '设置',   href: '/settings' },
 ]
 
-function TabIcon({ slug, active }: { slug: string; active: boolean }) {
-  const stroke = active ? 'var(--color-primary)' : 'currentColor'
-  const p = { className: 'w-5 h-5', viewBox: '0 0 20 20', fill: 'none', stroke, strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+function TabIcon({ slug }: { slug: string }) {
+  const p = { className: 'h-[22px] w-[22px]', viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
   switch (slug) {
     case 'home':
       return <svg {...p}><path d="M3 8.5 10 3l7 5.5V16a1 1 0 0 1-1 1h-3.5v-5h-5v5H4a1 1 0 0 1-1-1V8.5Z" /></svg>
     case 'memory':
       return <svg {...p}><circle cx="10" cy="10" r="7" /><path d="M10 5.5v4.5l3 2" /></svg>
+    case 'cc':
+      return <svg {...p}><path d="M3.5 9.5c0-3 2.9-5.5 6.5-5.5s6.5 2.5 6.5 5.5S13.6 15 10 15c-.8 0-1.6-.1-2.3-.3L4 16l.9-2.6c-.9-1-1.4-2.3-1.4-3.9Z" /></svg>
     case 'workbench':
       return <svg {...p}><path d="M3 12h14M5.5 12V8.5m4 3.5v-6m4 6V9.5M3 16h14" /></svg>
     case 'settings':
@@ -65,74 +67,33 @@ export default function BottomTabBar() {
   }
 
   return (
-    <nav
-      className="mobile-bottom-tabbar fixed bottom-0 left-0 right-0 z-40 border-t pt-2"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-    >
-      <div className="mx-auto flex max-w-lg items-start justify-around" style={{ minHeight: 48 }}>
-        {TABS.map(tab => {
-          const isActive = active(tab.slug)
-
-          // 中间那格：聊天，圆形突起（新架构里聊天是中心）
-          if (tab.slug === 'cc') {
-            return (
-              <button
-                key={tab.slug}
-                onClick={() => {
-                  // 已经在聊天里：点「聊天」回对话列表（同 iOS 点当前 Tab 回这一栏顶层）。
-                  // 从别的页面过来：回到离开时的那个对话；离开时在列表就回列表。
-                  if (pathname.startsWith('/cc')) {
-                    window.dispatchEvent(new Event('cc:show-list'))
-                    router.push(tab.href)
-                    return
-                  }
-                  go(tab.slug, ccReturnHref(window.sessionStorage))
-                }}
-                className="flex min-w-[64px] flex-col items-center gap-1 transition-all duration-200 active:scale-90"
-              >
-                <div
-                  className={`-mt-4 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 ${
-                    isActive
-                      ? 'bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-gradient)]'
-                      : 'bg-gradient-to-br from-[var(--color-primary)]/85 to-[var(--color-primary-gradient)]/85'
-                  }`}
-                >
-                  <svg className="h-6 w-6" viewBox="0 0 20 20" fill="none" stroke="white" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3.5 9.5c0-3 2.9-5.5 6.5-5.5s6.5 2.5 6.5 5.5S13.6 15 10 15c-.8 0-1.6-.1-2.3-.3L4 16l.9-2.6c-.9-1-1.4-2.3-1.4-3.9Z" />
-                  </svg>
-                </div>
-                <span className={`text-meta leading-none tracking-wide ${
-                  isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'
-                }`}>
-                  {tab.label}
-                </span>
-              </button>
-            )
-          }
-
-          return (
-            <button
-              key={tab.slug}
-              onClick={() => go(tab.slug, tab.href)}
-              className="group flex min-w-[64px] flex-col items-center gap-1 transition-all duration-200 active:scale-90"
-            >
-              <div className="flex h-6 w-6 items-center justify-center text-[var(--color-text-tertiary)] transition-all duration-200">
-                <TabIcon slug={tab.slug} active={isActive} />
-              </div>
-              <span className={`text-meta leading-none tracking-wide transition-all duration-200 ${
-                isActive ? 'font-semibold text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'
-              }`}>
-                {tab.label}
-              </span>
-              {/* Active dot indicator */}
-              <div className="flex h-1 items-center justify-center">
-                <div className={`h-1 w-1 rounded-full bg-[var(--color-primary)] transition-all duration-200 ${
-                  isActive ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
-                }`} />
-              </div>
-            </button>
-          )
-        })}
+    <nav className="mobile-bottom-tabbar fixed bottom-0 left-0 right-0 z-40 border-t" aria-label="主导航">
+      <div className="mx-auto flex max-w-lg px-1">
+        {TABS.map(tab => (
+          <button
+            key={tab.slug}
+            type="button"
+            aria-label={tab.label}
+            aria-current={active(tab.slug) ? 'page' : undefined}
+            onClick={() => {
+              if (tab.slug === 'cc') {
+                // 已经在聊天里：点「聊天」回对话列表（同 iOS 点当前 Tab 回这一栏顶层）。
+                // 从别的页面过来：回到离开时的那个对话；离开时在列表就回列表。
+                if (pathname.startsWith('/cc')) {
+                  window.dispatchEvent(new Event('cc:show-list'))
+                  router.push(tab.href)
+                  return
+                }
+                go(tab.slug, ccReturnHref(window.sessionStorage))
+                return
+              }
+              go(tab.slug, tab.href)
+            }}
+            className="tab-item"
+          >
+            <span className="tab-pill"><TabIcon slug={tab.slug} /></span>
+          </button>
+        ))}
       </div>
     </nav>
   )
