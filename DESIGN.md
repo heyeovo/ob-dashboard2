@@ -266,7 +266,7 @@ BottomTabBar 在底部显示 5 个 Tab：
 - **工作台** → `/workbench`
 - **设置** → `/settings`；外观在 `/settings/appearance`
 
-底栏满宽、只放图标（文字只作 `aria-label`），当前页用 `.tab-pill` 强调色淡底（`--color-primary-soft`）托住图标，按下时小胶囊缩到 .86 再弹回；聊天与其他 Tab 同样式，不突起。内容高 `--mobile-tabbar-height`（44px），下沿 `--mobile-tabbar-bottom` 只保留一部分 Home 条安全区（`env(safe-area-inset-bottom) - 14px`，最少 8px）；页面避让底栏一律用这两个变量相加，不再直接加 `env(safe-area-inset-bottom)`。主页、记忆库、工作台和设置的手机顶栏固定在状态栏下方，聊天页的消息区域独立滚动。
+底栏满宽、只放图标（文字只作 `aria-label`），当前页用 `.tab-pill` 强调色淡底（`--color-primary-soft`）托住图标，按下时小胶囊缩到 .86 再弹回；聊天与其他 Tab 同样式，不突起。内容高 `--mobile-tabbar-height`（48px），下沿 `--mobile-tabbar-bottom` 只保留一部分 Home 条安全区（`env(safe-area-inset-bottom) - 8px`，最少 8px）；页面避让底栏一律用这两个变量相加，不再直接加 `env(safe-area-inset-bottom)`。主页、记忆库、工作台和设置的手机顶栏固定在状态栏下方，聊天页的消息区域独立滚动。
 
 普通子页面的手机标题随正文自然滚动；返回按钮放在标题上方。小作品全屏查看器和登录页保留专用布局。五个主页面的顶栏内容随各自页面重设计阶段再定：聊天阶段 2，主页/记忆库阶段 3，工作台/设置阶段 4。
 

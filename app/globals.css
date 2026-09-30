@@ -150,9 +150,9 @@ html {
   --home-cat-width:        min(36vw, 140px);
   --home-clawd-glasses:    #2A2320;
   --mobile-topbar-height:   48px;
-  --mobile-tabbar-height:   44px;
-  /* 底栏下沿：Home 条安全区只留一部分（iPhone 34 → 20），没有 Home 条的设备留 8 */
-  --mobile-tabbar-bottom:   max(calc(env(safe-area-inset-bottom, 0px) - 14px), 8px);
+  --mobile-tabbar-height:   48px;
+  /* 底栏下沿：Home 条安全区只留一部分（iPhone 34 → 26），没有 Home 条的设备留 8 */
+  --mobile-tabbar-bottom:   max(calc(env(safe-area-inset-bottom, 0px) - 8px), 8px);
   --mobile-chrome-fill:     var(--glass-fill);
   --font-display:          var(--font-cormorant), var(--font-noto-serif-sc), Georgia, serif;
   --font-body:             var(--font-geist-sans), "Noto Sans SC", system-ui, sans-serif;
@@ -708,7 +708,7 @@ body:has(.home-page) > .rain-layer { display: none; }
 @media (min-width: 768px) { .home-page { padding-bottom: 40px; } .home-lintel { max-width: 640px; margin: auto; } .home-main { padding-top: 0; } .home-pane { height: 300px; } }
 
 /* ---- 底部 5 Tab：满宽、只留图标，当前页一颗强调色淡底的小胶囊托着图标 ---- */
-.tab-item { display: flex; flex: 1; min-width: 0; height: 39px; align-items: center; justify-content: center; color: var(--color-text-tertiary); -webkit-tap-highlight-color: transparent; transition: color var(--duration-normal) var(--ease-standard); }
+.tab-item { display: flex; flex: 1; min-width: 0; height: 43px; align-items: center; justify-content: center; color: var(--color-text-tertiary); -webkit-tap-highlight-color: transparent; transition: color var(--duration-normal) var(--ease-standard); }
 .tab-pill { display: grid; place-items: center; width: 52px; height: 34px; border-radius: 999px; transition: background-color var(--duration-normal) var(--ease-standard), transform 180ms cubic-bezier(.3, 1.4, .5, 1); }
 .tab-item[aria-current="page"] { color: var(--color-primary); }
 .tab-item[aria-current="page"] .tab-pill { background: var(--color-primary-soft); }
