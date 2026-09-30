@@ -23,6 +23,9 @@ export default function ArtifactViewPage({ params }: { params: Promise<{ name: s
   }
 
   return (
+    // 外面这层 min-h-screen 只是把文档撑满一屏：iOS 26 主屏幕模式下文档太矮时，
+    // fixed + bottom:0 会停在屏幕底上方一截，露出一条空白（同 app/loading.tsx）
+    <div className="min-h-screen">
     <div className="artifact-viewer z-50 flex flex-col bg-[var(--color-bg)]">
       <header
         className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-2"
@@ -65,6 +68,7 @@ export default function ArtifactViewPage({ params }: { params: Promise<{ name: s
       ) : (
         <div className="m-auto text-sm text-[var(--color-text-tertiary)]">这个名字不对，找不到作品。</div>
       )}
+    </div>
     </div>
   )
 }
