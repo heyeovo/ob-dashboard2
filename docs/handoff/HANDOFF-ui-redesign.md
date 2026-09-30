@@ -489,7 +489,7 @@ CARE · 照顾                              ›
 - 手机：抽屉「言」卡片秒开页面；改名字 / 头像 / 称呼 / 定位、改基础提示词、改模块内容、改名、开关、拖动排序、新增、删除，刷新后都在；新开窗口的系统提示词与改之前一致（Context 分析页对比）。
 - 新开 CHAT 窗口有召回按钮、WORK 窗口没有；本窗设置改成「开 / 关」后下一轮跟着变；刷新后仍在。
 
-### 阶段 4a：设置页（✅ 已实现，待合并与手机验收）
+### 阶段 4a：设置页（✅ 已上线）
 
 2026-09-30 用户和 CC 定案。分支 `feat/settings-page`（dashboard），不推 main。只改 `app/settings/page.tsx`（及必要的共享常量），各子页面本身不动。
 
@@ -560,7 +560,12 @@ CARE · 照顾                              ›
 - [ ] 阶段 3b：记忆库。布局已定（时间线预览 D、记忆格两列方格）；前置拆分在 `feat/stage3b-split` 完成，旧 `?tab=review` 回到时间线，保留原有分类筛选与每日记忆 API。build 通过；Vitest 378 通过、1 跳过，另 2 项因本机 Windows symlink `EPERM` 失败；拆分后保留区域的 className、onClick、aria-label 与中文注释计数和拆分前对齐。待 iPhone 按 3b 前置验收做交互走查；卡片样式待 CC 预览定稿。CC 复核：合并 main 后 build 通过、Vitest 61 文件 / 381 项全过、`text-[Npx]` 为 0，合并 main。下一步 GPT 按「3b 布局」在 `feat/stage3b-memory` 实现。
   - 2026-09-29 `feat/stage3b-memory` 按「3b 布局」1–9 实现：D 时间线、两列记忆格、薄玻璃搜索与筛选、往日同日、年度章节、年轮、统一 `bucketDate`、最新/最重要排序；分类筛选行及旧权重/升降序/列表切换移除，后端算法、详情抽屉和新增入口不变。build 通过；记忆定向测试 8 项通过；全量 Vitest 382 通过、1 跳过、2 项因 Windows symlink `EPERM` 失败。`text-[Npx]` 为 0。下一步由用户在 iPhone 主屏幕 PWA 按「3b 验收」核对四主题 × 渐变/照片、8.29 往日记忆、9 月「日常」和章节句、年轮、日期、默认排序；随后 CC 验收并合并，禁止直接推 main。
   - 2026-09-29 CC 验收：合并 main 后 build 通过、Vitest 61 文件 / 385 项全过；修卡片在触屏上粘住的 hover 上浮、去掉与全站重复的按下缩放（`8640440`），合并 main（`9788058`）并部署。待用户 iPhone 走查。
-- [ ] 阶段 4 前置：提示词页 + 注入记忆按窗口。2026-09-29 布局已定（预览 `docs/design/stage4/prompt-page-preview.html`），排在 3b 之后交 GPT；Haven `feat/window-recall` 先合。
+- [x] 阶段 4 前置：提示词页 + 注入记忆按窗口。2026-09-29 布局已定（预览 `docs/design/stage4/prompt-page-preview.html`），排在 3b 之后交 GPT；Haven `feat/window-recall` 先合。
   - 2026-09-30 功能分支实现：Haven `feat/window-recall`（`9936dd2`）已推，独立 `recall_mode`、兼容迁移和空模块保存；dashboard `feat/prompt-page` 实现 A–D 并推同名分支。Haven 状态契约 48 项通过；dashboard build 通过，定向 Vitest 22 项通过，全量 385 项通过、1 跳过、2 项因本机 Windows symlink `EPERM` 未通过。`text-[Npx]` 和旧弹窗引用均为 0。下一步：先合并部署 Haven，再合并 dashboard；按本节手机验收逐项走查持久化、提示词一致性与 CHAT/WORK 召回，正式环境未验收前不勾选。
-- [ ] 阶段 4
+  - 2026-09-30 合并上线：Haven `9936dd2`，dashboard `b32aa7b`；用户手机走查后 CC 修 `d185c2f`（页面顶部重复安全区、定位截两行、定位编辑框加高、拖动把手屏蔽 iOS 长按选择）。
+- [x] 阶段 4a：设置页。GPT `f186d9c`，2026-09-30 上线，用户手机确认样式。
+- [ ] 阶段 4b：工作台（下一个工作窗口，布局待讨论）。同窗顺带交 GPT：切页停顿（OB Todo `e8b1b139967b482d`：`loading.tsx` + 预取在登录代理下是否生效）。
+- [ ] 阶段 4c：其余子页面与弹窗样式逐页打磨。
+- 2026-09-30 其他已上线：全站浮层挂 body（`BodyPortal`，弹窗不再被底栏压住）、聊天月历选日期后确认跳转、对话列表加载更多、记忆库去热门标签 / 往日卡放宽 / 屏外卡片跳过渲染（`35173d2`、`d185c2f`）；GPT 批次 `feat/batch-0930`：头像跟随主题、Context 上限用 SDK 真实值（Opus 5.5 = 1M）、中文粗体（`bba8117`、`91020cf`）。
+- 窗台插画：Clawd 已画好（带透明通道，用户在聊天里发过），待抠图摆上窗台；窗帘可不做。
 - [ ] 阶段 5
