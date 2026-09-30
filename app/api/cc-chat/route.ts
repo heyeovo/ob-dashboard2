@@ -21,6 +21,7 @@ import {
   type TurnConfig,
 } from '@/app/lib/cc/ccOptions'
 import { clearRecallPrefs, runTurn, setRecallPrefs } from '@/app/lib/cc/runTurn'
+import { resolveRecallEnabled } from '@/app/lib/recallMode'
 import { clearTurnBucket } from '@/app/lib/cc/processCollector'
 import { encodeSse } from '@/app/lib/cc/sseEvents'
 import {
@@ -70,7 +71,7 @@ type ChatBody = {
   semantic?: boolean
   /** 传 false 就不查记忆（调试用） */
   recall?: boolean
-  /** 4.5b：用哪个协作者。提示词 / 记忆条目 / 两个召回开关 / 引擎都从它来 */
+  /** 4.5b：用哪个协作者。提示词、记忆条目、引擎及语义检索偏好从它来。 */
   persona_id?: string
   /** 5.2：chat = 闲聊（零工具），work = 工作。只在会话第一轮生效 */
   mode?: string
@@ -354,9 +355,9 @@ async function loadTurnInputs(body: ChatBody) {
   const writeDirs = await resolveWriteDirs(persona?.write_dirs)
   setWriteDirs(body.session_id || '', [...new Set([...writeDirs, ...builtInDirs])])
 
-  // 两个召回开关同样是 body 优先、协作者兜底，存进表让 runTurn 每轮重读
+  // 显式请求优先，其次本窗覆盖，最后按 CHAT/WORK 模式决定。
   setRecallPrefs(body.session_id || '', {
-    recall: body.recall !== undefined ? body.recall !== false : persona?.recall_on !== false,
+    recall: resolveRecallEnabled(body.recall === undefined ? undefined : body.recall !== false, sessionSnapshot.session?.recall_mode, mode),
     semantic: body.semantic !== undefined ? body.semantic !== false : persona?.semantic_on !== false,
   })
 

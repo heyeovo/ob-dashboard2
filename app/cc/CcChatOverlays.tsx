@@ -1,15 +1,15 @@
 'use client'
-import CcPersonaDialog from './CcPersonaDialog'
+import { useRouter } from 'next/navigation'
 import CcPersonaRail from './CcPersonaRail'
 import CcRecallDialog from './CcRecallDialog'
 import CcWindowSettings from './CcWindowSettings'
 import CcHandoffDialog from './CcHandoffDialog'
 import CcChatCalendar from './CcChatCalendar'
-import { draftPersona } from './persona'
 import type { CcChatScope } from './CcChatScope'
 
 export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
-  const { chat, people, personaRailOpen, setPersonaRailOpen, settingsFor, setSettingsFor,
+  const router = useRouter()
+  const { chat, people, personaRailOpen, setPersonaRailOpen,
     winSetOpen, setWinSetOpen, historyDateOpen, setHistoryDateOpen,
     handoffOpen, setHandoffOpen, recallDetail, setRecallDetail,
     pendingForward, setPendingForward, stopSelecting, confirmForwardTo,
@@ -41,7 +41,7 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
           }}
           onNew={() => {
             setPersonaRailOpen(false)
-            setSettingsFor(draftPersona())
+            router.push('/collaborators/new')
           }}
           onClose={() => setPersonaRailOpen(false)}
         />
@@ -51,27 +51,6 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
   return (
     <>
       {personaRail}
-      {settingsFor ? (
-        <CcPersonaDialog
-          // key = 换人就整个重挂，弹窗内部的草稿跟着重取
-          key={settingsFor.id}
-          persona={settingsFor}
-          canDelete={people.personas.length > 1 && people.personas.some(p => p.id === settingsFor.id)}
-          saving={people.saving}
-          onSave={async persona => {
-            const res = await people.savePersona(persona)
-            // 新建的：保存成功就切过去
-            if (res.ok && res.persona) {
-              people.selectPersona(res.persona.id)
-              setSettingsFor(res.persona)
-            }
-            return { ok: res.ok }
-          }}
-          onDelete={people.deletePersona}
-          onClose={() => setSettingsFor(null)}
-        />
-      ) : null}
-
       {people.error ? (
         <div className="cc-persona-error">{people.error}</div>
       ) : null}

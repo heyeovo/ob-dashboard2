@@ -121,6 +121,7 @@ export async function PATCH(request: NextRequest) {
     persona_id?: string
     local_engine_preference?: string
     prompt_module_overrides?: Record<string, boolean>
+    recall_mode?: '' | 'on' | 'off'
     expected_state_version?: number
     pinned?: boolean
     rolling_context?: import('@/app/lib/havenTurns').RollingContextConfig
@@ -129,6 +130,10 @@ export async function PATCH(request: NextRequest) {
   const title = (body?.title || '').trim()
   const preference = body?.local_engine_preference
   const hasPromptOverrides = body?.prompt_module_overrides !== undefined
+  const hasRecallMode = body?.recall_mode !== undefined
+  if (hasRecallMode && !['', 'on', 'off'].includes(String(body?.recall_mode))) {
+    return Response.json({ ok: false, error: 'recall_mode 必须是跟随模式、开或关' }, { status: 400 })
+  }
   const hasRollingContext = body?.rolling_context !== undefined
   const hasPinned = body?.pinned !== undefined
   if (!sessionId) {
@@ -160,7 +165,7 @@ export async function PATCH(request: NextRequest) {
     }
     session = result.session
     if (!title) return Response.json({ ok: true, session_id: sessionId, session })
-  } else if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides) {
+  } else if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides || hasRecallMode) {
     const result = await patchConversationSessionState({
       sessionId,
       personaId: String(body?.persona_id || ''),
@@ -169,6 +174,9 @@ export async function PATCH(request: NextRequest) {
         ? body?.prompt_module_overrides && typeof body.prompt_module_overrides === 'object'
           ? body.prompt_module_overrides
           : {}
+        : undefined,
+      recallMode: hasRecallMode && ['', 'on', 'off'].includes(String(body?.recall_mode))
+        ? body?.recall_mode as '' | 'on' | 'off'
         : undefined,
       expectedStateVersion: body?.expected_state_version,
     })

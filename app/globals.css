@@ -555,6 +555,19 @@ body::after {
   outline-offset: 2px;
 }
 
+/* 提示词页的薄玻璃分组：实填充与高光，不逐行模糊。 */
+.prompt-group {
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--chat-bubble-edge), var(--shadow-sm);
+}
+.prompt-row + .prompt-row { border-top: 1px solid var(--color-border-subtle); }
+:root[data-background="upload"] .prompt-group,
+:root[data-background="upload"] .prompt-group *,
+:root[data-background="upload"] textarea[aria-label="模块内容"],
+:root[data-background="upload"] textarea[aria-label="基础提示词内容"] { text-shadow: none; }
+
 /* In iOS standalone mode the CSS viewport can stop above the home-indicator
    area. Paint the full physical viewport on the document as well as the fixed
    layer, so the chat page does not expose the fallback color below the tabs. */

@@ -1,6 +1,5 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import type { CcMessage } from './types'
-import type { CcPersona } from './persona'
 import type { HistoricalConversation } from './historicalChats'
 import type { useCcChat } from './useCcChat'
 import type { usePersonas } from './usePersonas'
@@ -23,8 +22,6 @@ export type CcChatScope = {
   mobileComposerRef: RefObject<HTMLDivElement | null>
   personaRailOpen: boolean
   setPersonaRailOpen: Setter<boolean>
-  settingsFor: CcPersona | null
-  setSettingsFor: Setter<CcPersona | null>
   recallDetail: CcMessage | null
   setRecallDetail: Setter<CcMessage | null>
   winSetOpen: boolean

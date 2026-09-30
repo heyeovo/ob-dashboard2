@@ -43,7 +43,9 @@ export default function HomePage() {
   useEffect(() => {
     void fetch('/api/cc-personas', { cache: 'no-store' }).then(response => response.json()).then(data => {
       const items: Persona[] = Array.isArray(data.personas) ? data.personas : Array.isArray(data.items) ? data.items : []
-      const chosen = items.find(item => item.id === 'ombre') || items[0]
+      let activeId = ''
+      try { activeId = window.localStorage.getItem('ob2-cc-active-persona') || '' } catch { /* 本机偏好不可用时使用默认协作者 */ }
+      const chosen = items.find(item => item.id === activeId) || items.find(item => item.id === 'ombre') || items[0]
       if (chosen) setPersona(chosen)
     }).catch(() => undefined)
   }, [])

@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { RecallMode } from '@/app/lib/recallMode'
 import type { CcEngine, CcProUsage, CcSessionStats } from './types'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
@@ -138,7 +139,46 @@ export default function CcWindowSettings({
   onClose,
 }: Props) {
   const [compactNote, setCompactNote] = useState('')
+  const [recallMode, setRecallMode] = useState<RecallMode>('')
+  const [recallLoading, setRecallLoading] = useState(true)
+  const [recallSaving, setRecallSaving] = useState(false)
+  const [recallNote, setRecallNote] = useState('')
   const [activeTab, setActiveTab] = useState<'session' | 'rolling' | 'context' | 'gc' | 'wake'>('session')
+  useEffect(() => {
+    if (!sessionId) return
+    let live = true
+    void fetch(`/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&limit=1`, { cache: 'no-store' })
+      .then(response => response.json())
+      .then(payload => {
+        if (!live) return
+        if (payload?.ok !== true) throw new Error(String(payload?.error || '读取失败'))
+        const value = payload?.session?.recall_mode
+        setRecallMode(value === 'on' || value === 'off' ? value : '')
+      })
+      .catch(() => { if (live) setRecallNote('读取注入记忆设置失败') })
+      .finally(() => { if (live) setRecallLoading(false) })
+    return () => { live = false }
+  }, [sessionId])
+  const saveRecallMode = async (next: RecallMode) => {
+    if (recallLoading || recallSaving || !sessionId || !personaId || next === recallMode) return
+    setRecallSaving(true)
+    setRecallNote('')
+    try {
+      const response = await fetch('/api/cc-turns', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, persona_id: personaId, recall_mode: next }),
+      })
+      const payload = await response.json()
+      if (!response.ok || payload?.ok !== true) throw new Error(String(payload?.error || '保存失败'))
+      setRecallMode(next)
+      setRecallNote('下一轮生效')
+    } catch (error) {
+      setRecallNote(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setRecallSaving(false)
+    }
+  }
   const models = modelsFor(upstream, pick.kind, pick.providerId)
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
@@ -336,6 +376,15 @@ export default function CcWindowSettings({
               </div>
             </>
           ) : null}
+
+          <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
+          <div className={LABEL}>注入 OB 记忆</div>
+          <div className="mb-2 flex gap-1.5">
+            {([['', `跟随模式（现在：${mode === 'chat' ? '开' : '关'}）`], ['on', '开'], ['off', '关']] as const).map(([value, label]) => (
+              <button key={value} type="button" disabled={recallLoading || recallSaving} className={seg(recallMode === value)} onClick={() => void saveRecallMode(value)}>{label}</button>
+            ))}
+          </div>
+          <div className={HINT}>{recallNote || '修改后下一轮生效'}</div>
 
           <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
           <div className={LABEL}>引擎</div>

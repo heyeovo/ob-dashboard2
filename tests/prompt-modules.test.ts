@@ -7,6 +7,7 @@ import {
   DEFAULT_PERSONA_BASE_PROMPT,
   LEGACY_SELFHOST_BASE_PROMPT,
 } from '@/app/lib/personaPrompt'
+import { personaFromHaven, personaToPayload } from '@/app/cc/persona'
 
 function persona(overrides: Partial<HavenPersona> = {}): HavenPersona {
   return {
@@ -66,6 +67,15 @@ describe('提示词模块 system 组装', () => {
     const overridden = buildPersonaAppend(input, { interaction: false, sleep: true })
     expect(overridden).not.toContain('自然回应。')
     expect(overridden).toContain('检查睡前事项。')
+  })
+
+  it('空白新模块保留在编辑列表，但不改变新窗口的 system', () => {
+    const blank = { id: 'new-module', name: '未命名模块', content: '', enabled_by_default: false }
+    const row = { ...persona(), prompt_modules: [blank] }
+    const ui = personaFromHaven(row)
+    expect(ui.promptModules).toEqual([{ id: blank.id, name: blank.name, content: '', enabledByDefault: false }])
+    expect(personaToPayload(ui).prompt_modules).toEqual([blank])
+    expect(buildPersonaAppend(row)).toBe(buildPersonaAppend(persona()))
   })
 
   it('把旧整块提示词无损视为一个默认开启模块', () => {

@@ -96,8 +96,7 @@ export function personaFromHaven(row: Record<string, unknown>): CcPersona {
   const promptModules = rawModules.flatMap((item, index): CcPromptModule[] => {
     if (!item || typeof item !== 'object') return []
     const value = item as Record<string, unknown>
-    const content = String(value.content || '').trim()
-    if (!content) return []
+    const content = String(value.content || '')
     return [{
       id: String(value.id || `module-${index + 1}`).trim() || `module-${index + 1}`,
       name: String(value.name || '未命名模块').trim() || '未命名模块',

@@ -8,7 +8,7 @@ const rooms = [
   { label: '关系图谱', href: '/graph' },
 ]
 
-export default function HomeToolDrawer({ open, onClose, persona }: { open: boolean; onClose: () => void; persona: { name?: string; initial?: string } }) {
+export default function HomeToolDrawer({ open, onClose, persona }: { open: boolean; onClose: () => void; persona: { id?: string; name?: string; initial?: string } }) {
   useEffect(() => {
     if (!open) return
     const previousOverflow = document.body.style.overflow
@@ -26,7 +26,7 @@ export default function HomeToolDrawer({ open, onClose, persona }: { open: boole
       <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--color-text-heading)]">家里的其他房间</h2>
       <p className="mt-1 mb-5 text-3xs tracking-[0.2em] text-[var(--color-text-tertiary)]">ROOMS</p>
       {/* 言之的房间：提示词页（原来在聊天页 ··· 菜单里） */}
-      <Link href="/cc?prompt=1" onClick={onClose} className="home-room-persona mb-4 flex items-center gap-3 rounded-[var(--radius-2xl)] p-3.5">
+      <Link href={`/collaborators/${encodeURIComponent(persona.id || 'ombre')}`} onClick={onClose} className="home-room-persona mb-4 flex items-center gap-3 rounded-[var(--radius-2xl)] p-3.5">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--color-on-primary)]" aria-hidden="true">{persona.initial || persona.name?.slice(0, 1) || '言'}</span>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-[family-name:var(--font-display)] text-md font-semibold text-[var(--color-text-heading)]">{persona.name || '言之'}</span>
