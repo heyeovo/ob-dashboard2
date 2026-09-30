@@ -1595,12 +1595,25 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           onContextSnapshot: payload => {
             const snapshot = payload as unknown as CcContextSnapshot
             patch(message => ({ ...message, contextSnapshot: snapshot }))
-            setStats(current => ({
-              ...current,
-              contextSnapshot: snapshot,
-              contextTokens: snapshot.totalTokens,
-              contextMaxTokens: snapshot.maxTokens,
-            }))
+            setStats(current => {
+              // 服务重启后第一轮流式快照还不知道 SDK 报的上限，会先给回退表的 200k；
+              // 同一模型已经知道更大的上限时沿用，等本轮 result 带回真实值
+              const known = current.contextSnapshot
+              const next = snapshot.source === 'stream' && known?.model === snapshot.model && known.maxTokens > snapshot.maxTokens
+                ? {
+                  ...snapshot,
+                  maxTokens: known.maxTokens,
+                  remainingTokens: Math.max(0, known.maxTokens - snapshot.totalTokens),
+                  percentage: Math.min(100, snapshot.totalTokens / known.maxTokens * 100),
+                }
+                : snapshot
+              return {
+                ...current,
+                contextSnapshot: next,
+                contextTokens: next.totalTokens,
+                contextMaxTokens: next.maxTokens,
+              }
+            })
           },
           onCompact: payload => {
             const compaction = payload as unknown as CcCompactionEvent

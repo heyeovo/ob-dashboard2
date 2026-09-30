@@ -935,6 +935,9 @@ export async function applyRuntimeSettings(
  * （按 opus 计费），而且两次分段计时都等满 3s 超时不回 —— 顶部数字一直是旧值。
  * 详见 HANDOFF「一条消息 5 个请求」那节（2026-07-26 已定论）。
  */
+// SDK 报过的上下文上限按模型记在进程里：会话闲置回收后重开，第一轮流式期间不会先掉回回退表的 200k
+const reportedWindowByModel = new Map<string, number>()
+
 export function noteContextSnapshot(
   sessionId: string,
   usage: { inputTokens: number; outputTokens: number },
@@ -949,10 +952,11 @@ export function noteContextSnapshot(
   const totalTokens = inputTokens + outputTokens
   if (Number.isFinite(contextWindow) && Number(contextWindow) > 0) {
     live.reportedContextWindow = { model, tokens: Number(contextWindow) }
+    reportedWindowByModel.set(model, Number(contextWindow))
   }
   const maxTokens = live.reportedContextWindow?.model === model
     ? live.reportedContextWindow.tokens
-    : contextLimitFor(model)
+    : reportedWindowByModel.get(model) || contextLimitFor(model)
   const snapshot: CcContextSnapshot = {
     totalTokens,
     inputTokens,
