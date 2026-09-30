@@ -9,9 +9,11 @@ const haven = vi.hoisted(() => ({
 const personas = vi.hoisted(() => ({ getPersona: vi.fn() }))
 const dirs = vi.hoisted(() => ({ resolveDirs: vi.fn() }))
 const rolling = vi.hoisted(() => ({
-  createManualRollingBodyRecoverySeed: vi.fn(),
+  captureLocalTranscript: vi.fn(),
+  openRollingHistoryResume: vi.fn(),
   materializeRollingHistorySeed: vi.fn(),
 }))
+const archive = vi.hoisted(() => ({ readRollingArchive: vi.fn(), createManualRollingArchiveRecoverySeed: vi.fn() }))
 const windowPrompt = vi.hoisted(() => ({ buildRollingWindowHistory: vi.fn() }))
 const sessions = vi.hoisted(() => ({
   prepareSessionForRollingRecovery: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('@/app/lib/cc/ccOptions', () => ({
   ccLaneId: (cred: string, providerId: string) => cred === 'subscription' ? 'subscription' : `api:${providerId || 'default'}`,
 }))
 vi.mock('@/app/lib/cc/rollingHistory', () => rolling)
+vi.mock('@/app/lib/cc/rollingArchive', () => archive)
 vi.mock('@/app/lib/cc/windowPrompt', () => windowPrompt)
 vi.mock('@/app/lib/ccSession', () => sessions)
 
@@ -54,7 +57,10 @@ beforeEach(() => {
   personas.getPersona.mockResolvedValue({ ok: true, persona: { id: 'ombre', dirs: [] } })
   dirs.resolveDirs.mockResolvedValue({ cwd: 'C:/workspace', additionalDirectories: [] })
   windowPrompt.buildRollingWindowHistory.mockReturnValue([{ id: 1 }, { id: 2 }])
-  rolling.createManualRollingBodyRecoverySeed.mockReturnValue({
+  archive.readRollingArchive.mockResolvedValue(null)
+  rolling.captureLocalTranscript.mockResolvedValue(null)
+  rolling.openRollingHistoryResume.mockReturnValue(null)
+  archive.createManualRollingArchiveRecoverySeed.mockResolvedValue({
     resumeFrom: 'restored-native', entries: [{}, {}, {}, {}], sessionStore: {},
   })
   rolling.materializeRollingHistorySeed.mockResolvedValue(undefined)
@@ -79,6 +85,36 @@ describe('/api/cc-rolling-recovery', () => {
     expect(sessions.activateRollingRecovery).toHaveBeenCalledWith(
       'session-1', 'subscription', 3, 'restored-native',
     )
+  })
+
+  it('initializes the archive from all Haven dates, not just current raw dates', async () => {
+    await POST(request())
+    expect(archive.createManualRollingArchiveRecoverySeed).toHaveBeenCalledWith(
+      { havenSessionId: 'session-1', laneId: 'subscription' }, [{ id: 1 }], session.rolling_context,
+      expect.objectContaining({ cwd: 'C:/workspace' }),
+    )
+  })
+
+  it('refuses body replacement when an archive exists', async () => {
+    archive.readRollingArchive.mockResolvedValueOnce([])
+    const response = await POST(request())
+    expect(response.status).toBe(409)
+    expect(archive.createManualRollingArchiveRecoverySeed).not.toHaveBeenCalled()
+    expect(haven.commitConversationRollingRecovery).not.toHaveBeenCalled()
+  })
+
+  it('refuses body replacement when a durable revision can initialize the archive', async () => {
+    rolling.openRollingHistoryResume.mockReturnValueOnce({ resumeFrom: 'durable' })
+    const response = await POST(request())
+    expect(response.status).toBe(409)
+    expect(archive.createManualRollingArchiveRecoverySeed).not.toHaveBeenCalled()
+  })
+
+  it('refuses body replacement when native transcript exists', async () => {
+    rolling.captureLocalTranscript.mockResolvedValueOnce([{ uuid: 'native' }])
+    const response = await POST(request())
+    expect(response.status).toBe(409)
+    expect(archive.createManualRollingArchiveRecoverySeed).not.toHaveBeenCalled()
   })
 
   it('does not activate the new resume point when Haven rejects the CAS switch', async () => {

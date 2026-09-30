@@ -34,7 +34,6 @@ import { resolveAttachments } from '@/app/lib/havenAttachments'
 import { handoffSnapshotContent, type HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
 import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
-import { rollingRevisionRequiresSource } from '@/app/lib/cc/rollingHistory'
 import { runForegroundSessionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 // 聊天页的流式路由（第 4 步建，第 5 步加写权限，9.5 步瘦身成薄壳）。
@@ -306,11 +305,6 @@ async function loadTurnInputs(body: ChatBody) {
     ? String((promptLaneState as Record<string, unknown> | undefined)?.cc_session_id || '').trim()
     : ''
   const rollingPreviousStrategy = String(promptSession.rolling_context?.previous_strategy || '').trim()
-  // 只有 Haven 明确证明这是 fixed → rolling 的首次建种，才允许从 Haven 正文起步。
-  // daily → daily 以及旧版本没有 previous_strategy 的未知迁移一律失败关闭，避免 raw 静默退化。
-  const requireRollingSource = rollingRevisionRequiresSource(
-    isRolling, laneContextRevision, contextRevision, rollingPreviousStrategy,
-  )
   const resumeHint = ccResumeHintForContext({
     persistedHint: persistedResumeHint,
     legacyHint: legacyResumeHint,
@@ -322,17 +316,7 @@ async function loadTurnInputs(body: ChatBody) {
     String(body.session_id || ''),
     promptSession,
     sessionSnapshot.contextDays,
-    { includeAllTurns: Boolean(rollingSourceResumeFrom) },
   )
-  const previousDayModes = promptSession.rolling_context?.previous_day_modes || {}
-  const allowFixedBodyRestore = promptSession.rolling_context?.allow_fixed_body_restore === true
-  const rollingRequiredFullRawDays = [...new Set(rolling.history
-    .map(turn => turn.chat_day || '')
-    .filter(day => {
-      if (!day || !rollingRevisionChanged) return false
-      if (rollingPreviousStrategy === 'fixed_window') return !allowFixedBodyRestore
-      return (previousDayModes[day] || 'raw') === 'raw'
-    }))]
   sessionSnapshot = {
     ...sessionSnapshot,
     bucketExclusionIds: [...new Set([...sessionSnapshot.bucketExclusionIds, ...rolling.pinnedBucketIds])],
@@ -368,14 +352,9 @@ async function loadTurnInputs(body: ChatBody) {
     contextRevision,
     rollingHistory: isRolling ? rolling.history : undefined,
     rollingSourceResumeFrom: rollingSourceResumeFrom || undefined,
-    rollingAllHistory: rollingSourceResumeFrom ? rolling.allTurns : undefined,
-    requireRollingSource,
     rollingPreviousStrategy,
-    rollingRequiredFullRawDays,
-    allowFixedBodyRestore,
-    allowRollingBodySeed: rollingRevisionChanged
-      && rollingPreviousStrategy === 'fixed_window'
-      && allowFixedBodyRestore,
+    rollingContext: promptSession.rolling_context,
+    rollingHasHistory: sessionSnapshot.contextDays.some(day => day.turn_count > 0),
     systemPromptKey: '',
     modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({

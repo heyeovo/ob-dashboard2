@@ -71,7 +71,6 @@ describe('Dashboard proxy protection', () => {
       '/api/health',
       '/api/automation-pro-runner',
       '/api/cc-agent-wake-runner',
-      '/api/cc-diagnostics/rolling-ab',
       '/manifest.json',
       '/sw.js',
       '/favicon.ico',
@@ -87,7 +86,6 @@ describe('Dashboard proxy protection', () => {
       '/api/provider-relay',
       '/api/automation-pro-runner/private',
       '/api/cc-agent-wake-runner/private',
-      '/api/cc-diagnostics/rolling-ab/private',
     ]) {
       expect(proxy(request(path)).status, path).not.toBe(200)
     }

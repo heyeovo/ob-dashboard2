@@ -17,6 +17,13 @@ type AuditMessage = {
   chars: number
 }
 
+type ArchiveDay = {
+  day: string; envelopeCount: number; treatment: 'full' | 'pruned' | 'removed' | 'body_restored'
+  thinkingPrunedBlockCount: number; memoryRecallPrunedBlockCount: number; attachmentPrunedBlockCount: number
+}
+
+const archiveTreatment = { full: '完整', pruned: '删 thinking＋召回＋过期提醒', removed: '去掉', body_restored: 'body_restored（整天正文恢复）' }
+
 type AuditData = {
   ok: true
   session_id: string
@@ -45,8 +52,6 @@ type AuditData = {
     available: boolean
     entry_count: number
     message_count: number
-    matched_source_messages: number
-    expected_source_messages: number
     rolling_wrapper_messages: number
     memory_recall_messages: number
     tool_use_messages: number
@@ -66,38 +71,14 @@ type AuditData = {
     }>
   }
   rolling_seed: Record<string, unknown> | null
-  rolling_alignment: {
+  rolling_archive: {
     available: boolean
-    aligned: boolean
-    envelopeCount: number
-    matchedTurnCount: number
-    isolatedIncompleteCount: number
-    error: string
-    issues: Array<{
-      envelopeIndex: number
-      entryIndex: number
-      userUuid: string
-      timestamp: string
-      agentWake: boolean
-      reason: 'missing_haven_user' | 'assistant_mismatch'
-      havenUserCandidateCount: number
-      havenUserCandidateIds: number[]
-    }>
-    missingRawTurns: Array<{
-      id: number
-      day: string
-      createdAt: string
-      turnKind: string
-      userChars: number
-      assistantChars: number
-      fullSourceRequired: boolean
-    }>
-    unrepresentedEmptyWakeCount: number
-    recoveredAssistantMismatchCount: number
-    isolatedWakeRaceCount: number
-    excludedAgentWakeLimitCount: number
-    isolatedExplicitFailureCount: number
-    indeterminateOutcomeCount: number
+    entryCount: number
+    firstDay: string
+    lastDay: string
+    days: Array<{ day: string; envelopeCount: number }>
+    revisionDays: ArchiveDay[]
+    currentRevisionDays: ArchiveDay[] | null
   } | null
   system_prompt: {
     current: {
@@ -218,12 +199,6 @@ export default function ContextAuditPanel() {
   const cache = data?.latest.cache_diagnostic
   const rawDays = data?.days.filter(day => day.mode === 'raw' && day.turn_count > 0) || []
   const reportedContext = data?.stats.contextSnapshot?.totalTokens || data?.stats.contextTokens || 0
-  const transcriptVerified = Boolean(
-    data?.transcript.available
-    && data.transcript.expected_source_messages > 0
-    && data.transcript.matched_source_messages === data.transcript.expected_source_messages
-    && data.transcript.rolling_wrapper_messages === 0,
-  )
 
   return (
     <details
@@ -294,62 +269,26 @@ export default function ContextAuditPanel() {
             <details className="rounded-xl border border-[var(--color-border)]">
               <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium">SDK transcript 落盘验证</summary>
               <div className="space-y-3 border-t border-[var(--color-border)] p-3">
-                {!data.transcript.available ? (
-                  <p className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-xs text-[var(--color-text-tertiary)]">未找到这条会话的持久 transcript。常见原因是固定窗口、尚未发出新消息，或旧 session ID 没有对应的持久文件。</p>
-                ) : transcriptVerified ? (
-                  <p className="rounded-lg bg-[var(--color-digested-bg)] px-3 py-2 text-xs text-[var(--color-digested)]">已验证：{data.transcript.matched_source_messages}/{data.transcript.expected_source_messages} 条 Haven 原文在 SDK transcript 中以独立 user/assistant 消息存在；rolling_window_context 包装命中 0 条。</p>
-                ) : (
-                  <p className="rounded-lg bg-[var(--color-pending-bg)] px-3 py-2 text-xs text-[var(--color-pending)]">需要检查：原文匹配 {data.transcript.matched_source_messages}/{data.transcript.expected_source_messages} 条，rolling_window_context 包装命中 {data.transcript.rolling_wrapper_messages} 条。</p>
-                )}
-                {data.rolling_alignment ? (
-                  <p className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.aligned ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'}`}>
-                    {data.rolling_alignment.aligned
-                      ? `滚动对齐只读预检通过：${number(data.rolling_alignment.matchedTurnCount)}/${number(data.rolling_alignment.envelopeCount)} 个完整轮次可对应 Haven；按终态凭据隔离明确失败轮次 ${number(data.rolling_alignment.isolatedExplicitFailureCount)} 条；兼容隔离失败/中断半截轮次 ${number(data.rolling_alignment.isolatedIncompleteCount)} 条；隔离 wake 并发简单错误轮次 ${number(data.rolling_alignment.isolatedWakeRaceCount)} 条。未保存设置。`
-                      : `滚动对齐只读预检未通过：${data.rolling_alignment.error}。未保存设置。`}
-                  </p>
-                ) : null}
-                {data.rolling_alignment?.aligned ? (
-                  <div className={`rounded-lg px-3 py-2 text-xs ${data.rolling_alignment.missingRawTurns.length ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]'}`}>
-                    {data.rolling_alignment.missingRawTurns.length
-                      ? `原文反向检查：${data.rolling_alignment.missingRawTurns.length} 个 Haven 原文轮次在旧 transcript 中缺少完整记录。以下仅列编号和时间，不含正文。`
-                      : '原文反向检查通过：需要保留完整内容的 Haven 轮次均有对应的旧 transcript 记录。'}
-                    {data.rolling_alignment.unrepresentedEmptyWakeCount ? (
-                      <div className="mt-1">另有 {data.rolling_alignment.unrepresentedEmptyWakeCount} 条无用户/助手正文、且旧 transcript 没有对应轮次的空唤醒：记录保留在 Haven，不阻止重建；旧 transcript 中已有轮次的唤醒仍保留。</div>
-                    ) : null}
-                    {data.rolling_alignment.recoveredAssistantMismatchCount ? (
-                      <div className="mt-1">另有 {data.rolling_alignment.recoveredAssistantMismatchCount} 条旧并发轮次已按唯一近时间 Haven 输入恢复关联：重建保留旧 transcript 的完整原生内容，不使用 Haven 的不同助手正文覆盖。</div>
-                    ) : null}
-                    {data.rolling_alignment.isolatedWakeRaceCount ? (
-                      <div className="mt-1">另有 {data.rolling_alignment.isolatedWakeRaceCount} 条紧接 wake、未写入 Haven 且仅含一问一答短纯文字的简单错误轮次：只在新重建副本中省略，旧 transcript 不修改。</div>
-                    ) : null}
-                    {data.rolling_alignment.isolatedExplicitFailureCount ? (
-                      <div className="mt-1">另有 {data.rolling_alignment.isolatedExplicitFailureCount} 条请求已有明确失败终态、且没有 Haven 成功凭据：只在新重建副本中省略；旧 transcript 不修改。新请求按持久终态判断，不依赖具体错误文案。</div>
-                    ) : null}
-                    {data.rolling_alignment.indeterminateOutcomeCount ? (
-                      <div className="mt-1">仍有 {data.rolling_alignment.indeterminateOutcomeCount} 条请求终态无法确认：为防止丢失真实回复，继续阻止重建。</div>
-                    ) : null}
-                    {data.rolling_alignment.excludedAgentWakeLimitCount ? (
-                      <div className="mt-1">另有 {data.rolling_alignment.excludedAgentWakeLimitCount} 条主动唤醒额度失败记录：额度提示是 CLI/SDK 状态而非 Claude 回答，记录保留在 Haven，但不进入新 transcript，也不阻止重建。</div>
-                    ) : null}
-                    {data.rolling_alignment.missingRawTurns.length ? (
-                      <div className="mt-2 max-h-48 space-y-1 overflow-auto">
-                        {data.rolling_alignment.missingRawTurns.map(turn => (
-                          <div key={turn.id}>
-                            Haven #{turn.id} · {turn.day || '日期未知'} · {turn.createdAt || '时间未知'} · {turn.turnKind} · 用户 {turn.userChars} 字 / 助手 {turn.assistantChars} 字 · {turn.fullSourceRequired ? '要求完整旧轮次：重建会拦截正文降级' : '允许仅从 Haven 正文恢复'}
-                          </div>
-                        ))}
+                <p className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-xs text-[var(--color-text-tertiary)]">
+                  {data.transcript.available ? '以下统计直接读取持久原生 transcript。' : '尚未找到当前线路的持久 transcript。'}
+                </p>
+                {data.rolling_archive ? (
+                  <div className="space-y-2 rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-meta text-[var(--color-text-secondary)]">
+                    <div>{data.rolling_archive.available
+                      ? `原生存档：${number(data.rolling_archive.entryCount)} 条记录 · ${data.rolling_archive.firstDay || '无日期'} 至 ${data.rolling_archive.lastDay || '无日期'}`
+                      : '尚未建立原生存档；首次切换或存量窗口下次启动时建立。'}</div>
+                    {data.rolling_archive.days.map(day => <div key={day.day}>{day.day} · {number(day.envelopeCount)} 轮</div>)}
+                    <div className="font-medium">本 revision 重建时的处理</div>
+                    {data.rolling_archive.currentRevisionDays ? data.rolling_archive.currentRevisionDays.map(day => (
+                      <div key={day.day}>
+                        {day.day} · {archiveTreatment[day.treatment]} · thinking 删除 {day.thinkingPrunedBlockCount} · 召回删除 {day.memoryRecallPrunedBlockCount} · attachment／提醒删除 {day.attachmentPrunedBlockCount}
                       </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {data.rolling_alignment?.issues?.length ? (
-                  <div className="space-y-2 text-xs">
-                    <div className="font-medium text-[var(--color-text-secondary)]">无法对应的完整轮次（只读定位，不含聊天正文）</div>
-                    {data.rolling_alignment.issues.map(issue => (
-                      <div key={`${issue.envelopeIndex}-${issue.userUuid}`} className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-[var(--color-text-secondary)]">
-                        <div>轮次 #{issue.envelopeIndex} · transcript 消息 #{issue.entryIndex} · {issue.agentWake ? '主动唤醒标记：有' : '主动唤醒标记：无'}</div>
-                        <div>{issue.reason === 'missing_haven_user' ? 'Haven 没有相符的输入轮次' : 'Haven 有相符输入，但助手正文不一致'} · 输入候选 {issue.havenUserCandidateCount} 条{issue.havenUserCandidateIds.length ? `（Haven ID：${issue.havenUserCandidateIds.join('、')}${issue.havenUserCandidateCount > issue.havenUserCandidateIds.length ? '…' : ''}）` : ''}</div>
-                        <div className="break-all text-[var(--color-text-tertiary)]">时间：{issue.timestamp || '未记录'} · UUID：{issue.userUuid || '未记录'}</div>
+                    )) : <div>尚无本 revision 的重建凭据；筛选为空时不会生成 seed。</div>}
+                    <div className="font-medium">按当前配置重建预览（只读）</div>
+                    {data.rolling_archive.revisionDays.map(day => (
+                      <div key={day.day}>
+                        {day.day} · {archiveTreatment[day.treatment]}
+                        {' · '}thinking 删除 {day.thinkingPrunedBlockCount} · 召回删除 {day.memoryRecallPrunedBlockCount} · attachment／提醒删除 {day.attachmentPrunedBlockCount}
                       </div>
                     ))}
                   </div>

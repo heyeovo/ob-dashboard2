@@ -18,6 +18,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { createRollingHistorySeed, materializeRollingNativeSession } from '@/app/lib/cc/rollingHistory'
+import { appendRollingArchive, createArchiveRevisionSeed, readRollingArchive } from '@/app/lib/cc/rollingArchive'
 import { runTurn, type RunTurnInput } from '@/app/lib/cc/runTurn'
 import { applyRuntimeSettings, dropSession, getProUsage } from '@/app/lib/ccSession'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
@@ -432,6 +434,41 @@ describe('runTurn：普通回复', () => {
     }
   })
 
+  it('starts without resume after empty slicing, archives the new round, then restores an old raw date with it', async () => {
+    const sessionId = 'ob2-empty-archive'
+    const context = { strategy: 'daily_rolling' as const, timezone: 'Asia/Shanghai', day_start_hour: 4,
+      day_modes: { '2026-09-11': 'omit' as const, '2026-09-12': 'review' as const } }
+    const config = makeConfig({ sessionId, cwd: rollingTestConfigDir, contextRevision: 3,
+      rollingHistory: [], rollingHasHistory: true, rollingContext: context })
+    const key = { havenSessionId: sessionId, laneId: config.laneId }
+    const historical = [11, 12].map(day => ({ id: day, session_id: sessionId, round_id: day,
+      chat_day: `2026-09-${day}`, created_at: `2026-09-${day}T10:00:00Z`, user_text: `old-${day}`,
+      assistant_text: `answer-${day}`, model: 'test-model', client: 'test', route: '/test', source: 'cc' }))
+    const oldSeed = createRollingHistorySeed(historical, { cwd: config.cwd, fallbackModel: config.model })!
+    await appendRollingArchive(key, oldSeed.entries)
+    const freshTurn = [{ ...historical[0], id: 13, chat_day: '2026-09-13', created_at: '2026-09-13T10:00:00Z',
+      user_text: 'fresh-round', assistant_text: 'fresh-answer' }]
+    // The mocked CLI's successful transcript is on native disk, as it is before sync in production.
+    const freshSeed = createRollingHistorySeed(freshTurn, { cwd: config.cwd, fallbackModel: config.model })!
+    await materializeRollingNativeSession(freshSeed, config.cwd)
+    const handle = await driveTurn([initMsg(freshSeed.resumeFrom), textDelta('fresh-answer'), resultMsg()], {
+      sessionId, config, text: 'fresh-round',
+    }).promise
+    expect(handle).toMatchObject({ ok: true })
+    expect(sdk.queryOptions.at(-1)!.resume).toBeUndefined()
+    expect(sdk.queryOptions.at(-1)!.sessionStore).toBeUndefined()
+    const archive = (await readRollingArchive(key))!
+    expect(archive).toHaveLength(6)
+    expect(archive.every(item => item.uuid && item.ob2ArchiveUuid)).toBe(true)
+    const restored = createArchiveRevisionSeed(archive, { ...context,
+      day_modes: { ...context.day_modes, '2026-09-11': 'raw' } }, [], { cwd: config.cwd, fallbackModel: config.model })!
+    const text = JSON.stringify(restored.entries)
+    expect(text).toContain('old-11')
+    expect(text).toContain('fresh-round')
+    expect(text).not.toContain('old-12')
+    dropSession(sessionId)
+  })
+
   it('cold-starts rolling history through a native resume and streams only the new user turn', async () => {
     const sessionId = 'ob2-test-rolling-seed'
     const config = makeConfig({
@@ -441,22 +478,23 @@ describe('runTurn：普通回复', () => {
       cwd: rollingTestConfigDir,
       contextRevision: 3,
       rollingPreviousStrategy: 'fixed_window',
-      allowFixedBodyRestore: true,
-      allowRollingBodySeed: true,
       rollingHistory: [
         {
           id: 1, session_id: sessionId, round_id: 1,
-          created_at: '2026-09-11T10:00:00Z', user_text: '之前的问题', assistant_text: '之前的回答',
+          created_at: '2026-09-11T10:00:00Z', chat_day: '2026-09-11', user_text: '之前的问题', assistant_text: '之前的回答',
           model: 'test-model', client: 'test', route: '/test', source: 'cc', turn_kind: 'user',
         },
         {
           id: 2, session_id: sessionId, round_id: 2,
-          created_at: '2026-09-11T11:00:00Z', user_text: '', assistant_text: '我主动想起一件事',
+          created_at: '2026-09-11T11:00:00Z', chat_day: '2026-09-11', user_text: '', assistant_text: '我主动想起一件事',
           model: 'test-model', client: 'test', route: '/test', source: 'cc', turn_kind: 'agent_wake',
           raw_json: JSON.stringify({ agent_wake: { cause: 'agent_schedule', reason: '想起这件事' } }),
         },
       ],
     })
+    const fixedSeed = createRollingHistorySeed(config.rollingHistory!, { cwd: config.cwd, fallbackModel: 'test-model' })!
+    await materializeRollingNativeSession(fixedSeed, config.cwd)
+    config.rollingSourceResumeFrom = fixedSeed.resumeFrom
     try {
       await driveTurn([initMsg('native-rolling-seed'), textDelta('新回复'), resultMsg()], {
         sessionId, config, text: '现在继续',

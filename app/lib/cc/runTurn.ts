@@ -19,19 +19,13 @@ import { randomUUID } from 'node:crypto'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import {
   createModelSurfaceRebaseSeed,
-  createRollingHistoryRevisionSeed,
   createRollingHistorySeed,
-  createRollingTranscriptRecoverySeed,
-  createFixedTranscriptMigrationSeed,
-  assertRequiredRollingRevisionSeed,
-  assertFixedMigrationSeed,
-  assertRollingResumeRecovered,
-  assertRollingSeedAvailable,
   materializeRollingNativeSession,
   openRollingHistoryResume,
-  syncRollingNativeSession,
   type RollingSeedDiagnostic,
+  type RollingHistorySeed,
 } from '@/app/lib/cc/rollingHistory'
+import { createArchiveRevisionSeed, ensureRollingArchive, syncRollingNativeSession } from '@/app/lib/cc/rollingArchive'
 import {
   attachSend,
   detachSend,
@@ -531,14 +525,12 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     outcome: 'explicit_failure' | 'indeterminate',
     reason: string,
   ) => {
-    // Fixed windows can later migrate their native transcript into rolling mode, so
-    // every CC request needs the same durable terminal evidence from day one.
+    // Keep terminal evidence for request diagnostics; archive slicing does not read it.
     if (!nativeTurnUuid) return
     try {
       await recordTurnOutcome({ turnUuid: nativeTurnUuid, requestId, outcome, reason })
     } catch (error) {
-      // Losing the outcome marker must never turn a failed model call into a successful
-      // request. A later rebuild will treat the unmarked envelope as unknown and block.
+      // Losing diagnostic evidence must never turn a failed model call into success.
       console.error(`[cc-turn-outcome ${sessionId} request=${requestId}] write failed`, {
         outcome, reason, error: (error as Error).message || String(error),
       })
@@ -598,80 +590,42 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     const modelSurfaceChanged = Boolean(
       sourceResumeFrom && previousModelSurfaceHash && previousModelSurfaceHash !== config.modelSurfaceKey,
     )
-    let surfaceRebaseSeed = modelSurfaceChanged
-      ? await createModelSurfaceRebaseSeed(sourceResumeFrom, { cwd: config.cwd })
-      : null
-    if (modelSurfaceChanged && !surfaceRebaseSeed) {
-      let fallbackTurns = rollingHistory
-      if (!isRolling) {
+    let historySeed: RollingHistorySeed | null = null
+    if (isRolling && (shouldPrepareHistorySeed || modelSurfaceChanged)) {
+      const archive = await ensureRollingArchive({ havenSessionId: sessionId, laneId: config.laneId }, {
+        cwd: config.cwd,
+        sourceResumeFrom: config.rollingSourceResumeFrom || sourceResumeFrom,
+        fixedMigration: Boolean(config.rollingSourceResumeFrom && config.rollingPreviousStrategy === 'fixed_window'),
+        hasHistory: config.rollingHasHistory || rollingHistory.length > 0,
+      })
+      historySeed = !modelSurfaceChanged && !config.rollingSourceResumeFrom && persistedRollingResume
+        ? persistedRollingResume
+        : createArchiveRevisionSeed(archive, config.rollingContext || {
+          timezone: 'Asia/Shanghai', day_start_hour: 4, day_modes: {},
+        }, rollingHistory, {
+          cwd: config.cwd, fallbackModel: config.sdkModel || config.model,
+          sourceSessionId: config.rollingSourceResumeFrom || sourceResumeFrom, rebase: modelSurfaceChanged,
+        })
+      if (!historySeed) {
+        // All dates omitted/reviewed: start fresh, keeping the append-only archive.
+        forgetResumePoint(resumeKey)
+        if (currentLive) dropSession(sessionId, 'rolling_empty_revision')
+      }
+    } else if (!isRolling && modelSurfaceChanged) {
+      // Fixed-window behavior remains unchanged.
+      historySeed = await createModelSurfaceRebaseSeed(sourceResumeFrom, { cwd: config.cwd })
+      if (!historySeed) {
         const fallback = await listAllTurns(sessionId, { includeRaw: true, signal })
         if (!fallback.ok) throw new Error(`模型表面升级时读取对话历史失败：${fallback.error}`)
-        fallbackTurns = fallback.turns
-        if (fallbackTurns.length === 0) {
-          throw new Error('模型表面升级时未找到可重建的对话历史，原始 transcript 未改动，已停止本轮')
-        }
+        if (!fallback.turns.length) throw new Error('模型表面升级时未找到可重建的对话历史，原始 transcript 未改动，已停止本轮')
+        historySeed = createRollingHistorySeed(fallback.turns, {
+          cwd: config.cwd, fallbackModel: config.sdkModel || config.model,
+        })
       }
-      surfaceRebaseSeed = createRollingHistorySeed(fallbackTurns, {
-        cwd: config.cwd,
-        fallbackModel: config.sdkModel || config.model,
-      })
-    }
-    if (modelSurfaceChanged && !surfaceRebaseSeed) forgetResumePoint(resumeKey)
-    if (!modelSurfaceChanged && (!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
+      if (!historySeed) forgetResumePoint(resumeKey)
+    } else if (!isRolling && (!currentLive || currentLive.resumeKey !== resumeKey) && effectiveResumeHint) {
       rememberResumePoint(resumeKey, effectiveResumeHint)
     }
-    const fixedMigration = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling
-      && config.rollingPreviousStrategy === 'fixed_window'
-    const revisionSeed = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling && config.rollingSourceResumeFrom
-      ? await (fixedMigration ? createFixedTranscriptMigrationSeed : createRollingHistoryRevisionSeed)(
-        config.rollingSourceResumeFrom,
-        config.rollingAllHistory || rollingHistory,
-        rollingHistory,
-        {
-          cwd: config.cwd,
-          fallbackModel: config.sdkModel || config.model,
-          requiredFullRawDays: config.rollingRequiredFullRawDays,
-        },
-      )
-      : null
-    const rollingResumeRecoveryRequired = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling
-      && Boolean(input.resumeHint) && !config.rollingSourceResumeFrom
-    const recoveredRollingResume = rollingResumeRecoveryRequired && !persistedRollingResume
-      ? await createRollingTranscriptRecoverySeed(input.resumeHint!, { cwd: config.cwd })
-      : null
-    assertRollingResumeRecovered(
-      rollingResumeRecoveryRequired,
-      persistedRollingResume,
-      recoveredRollingResume,
-    )
-    assertFixedMigrationSeed(
-      fixedMigration,
-      rollingHistory.length,
-      Boolean(config.allowFixedBodyRestore),
-      revisionSeed,
-    )
-    if (!modelSurfaceChanged && shouldPrepareHistorySeed && isRolling) {
-      assertRequiredRollingRevisionSeed(
-        Boolean(config.requireRollingSource),
-        rollingHistory.length,
-        config.rollingSourceResumeFrom || '',
-        revisionSeed,
-      )
-    }
-    const confirmedBodySeed = !modelSurfaceChanged && shouldPrepareHistorySeed && isRolling && config.allowRollingBodySeed
-      ? createRollingHistorySeed(rollingHistory, {
-          cwd: config.cwd,
-          fallbackModel: config.sdkModel || config.model,
-        })
-      : null
-    const historySeed = surfaceRebaseSeed || (shouldPrepareHistorySeed && isRolling
-      ? persistedRollingResume || revisionSeed || recoveredRollingResume || confirmedBodySeed
-      : null)
-    assertRollingSeedAvailable(
-      shouldPrepareHistorySeed && isRolling,
-      rollingHistory.length,
-      historySeed,
-    )
     const nativeSeed = await materializeRollingNativeSession(historySeed, config.cwd)
     if (historySeed?.resumeFrom) rememberResumePoint(resumeKey, historySeed.resumeFrom)
     rollingSeedDiagnostic = historySeed?.diagnostic ? {
@@ -696,7 +650,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       nativeSeedCreated: nativeSeed.created,
       nativeSeedEntryCount: nativeSeed.entryCount,
       rollingSourceResumeFrom: config.rollingSourceResumeFrom || '',
-      requireRollingSource: Boolean(config.requireRollingSource),
       previousStrategy: config.rollingPreviousStrategy || '',
       diagnostic: rollingSeedDiagnostic,
       contextRevision: config.contextRevision,
@@ -723,7 +676,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     const reusedIterator = currentLive === live
     const iteratorResumeHint = reusedIterator
       ? ''
-      : historySeed?.resumeFrom || (!modelSurfaceChanged ? sourceResumeFrom : '')
+      : historySeed?.resumeFrom || (!isRolling && !modelSurfaceChanged ? sourceResumeFrom : '')
     const iterator = reusedIterator
       ? 'reused'
       : modelSurfaceChanged
@@ -1297,7 +1250,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
     if (isRolling && live.ccSessionId) {
       try {
-        const syncedEntryCount = await syncRollingNativeSession(live.ccSessionId, config.cwd)
+        const syncedEntryCount = await syncRollingNativeSession(live.ccSessionId, config.cwd, { havenSessionId: sessionId, laneId: config.laneId })
         console.info(`[cc-rolling-sync ${sessionId}]`, {
           resumeKey,
           contextRevision: config.contextRevision,

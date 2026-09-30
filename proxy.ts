@@ -14,7 +14,6 @@ const PUBLIC_PATHS = new Set([
   '/api/health',
   '/api/automation-pro-runner',
   '/api/cc-agent-wake-runner',
-  '/api/cc-diagnostics/rolling-ab',
   '/favicon.ico',
   '/manifest.json',
   '/ob-icon-192.png',

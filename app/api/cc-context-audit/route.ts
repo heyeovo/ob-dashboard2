@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server'
 import { getSessionStats } from '@/app/lib/ccSession'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
-import { inspectRollingHistoryAlignment, inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
-import { getConversationSession, listAllTurns, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
+import { inspectRollingArchive } from '@/app/lib/cc/rollingArchive'
+import { ccLaneId } from '@/app/lib/cc/ccOptions'
+import { inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
+import { getConversationSession, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
 import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/lib/havenPersonas'
 import { claudeToolAudit, mcpToolsContentHash, systemPromptContentHash } from '@/app/lib/cc/ccOptions'
 import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
@@ -52,25 +54,6 @@ function auditMessages(turns: HavenTurn[]) {
   })
 }
 
-function matchTranscriptMessages(
-  source: ReturnType<typeof auditMessages>,
-  transcript: Awaited<ReturnType<typeof inspectRollingHistoryTranscript>>,
-): number {
-  if (!transcript) return 0
-  const available = transcript.messages.map(message => ({ ...message, used: false }))
-  let matched = 0
-  for (const message of source) {
-    const candidate = available.find(item => !item.used
-      && item.role === message.role
-      && item.content.includes(message.content))
-    if (candidate) {
-      matched += 1
-      candidate.used = true
-    }
-  }
-  return matched
-}
-
 export async function GET(request: NextRequest) {
   const sessionId = (request.nextUrl.searchParams.get('session_id') || '').trim()
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
@@ -92,11 +75,6 @@ export async function GET(request: NextRequest) {
     ])
     const latestTurn = latestResult.ok ? latestResult.turns.at(-1) : undefined
     const latestRaw = rawRecord(latestTurn?.raw_json)
-    const rollingSeedRaw = latestResult.ok
-      ? [...latestResult.turns].reverse()
-        .map(turn => objectValue(rawRecord(turn.raw_json).rolling_seed))
-        .find(Boolean) || null
-      : null
     const latestCacheRaw = objectValue(latestRaw.cache_diagnostic)
     const usage = pickFields(latestRaw.usage, [
       'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens',
@@ -129,36 +107,20 @@ export async function GET(request: NextRequest) {
     const modes = session.rolling_context?.day_modes || {}
     const messages = auditMessages(rolling.history)
     const stats = getSessionStats(sessionId)
-    const transcriptSessionId = String(latestCacheRaw?.cc_session_id || latestCacheRaw?.resume_hint || stats.ccSessionId || '')
+    const cred = session.cc_overrides?.active_cred === 'subscription' ? 'subscription' : 'api'
+    const laneId = ccLaneId(cred, cred === 'api' ? String(session.cc_overrides?.api?.provider_id || '') : '')
+    const transcriptSessionId = String(session.cc_lanes?.[laneId]?.cc_session_id
+      || stats.ccSessionId || (latestCacheRaw?.lane === laneId ? latestCacheRaw?.cc_session_id || latestCacheRaw?.resume_hint : '') || '')
+    const rollingSeedRaw = latestResult.ok
+      ? [...latestResult.turns].reverse()
+        .map(turn => objectValue(rawRecord(turn.raw_json).rolling_seed))
+        .find(seed => seed?.contextRevision === session.context_revision && seed?.newSessionId === transcriptSessionId) || null
+      : null
     const transcript = transcriptSessionId
       ? await inspectRollingHistoryTranscript(transcriptSessionId)
       : null
-    const previousModes = session.rolling_context?.previous_day_modes || {}
-    const requiredFullRawDays = [...new Set(rolling.history
-      .map(turn => turn.chat_day || '')
-      .filter(day => {
-        if (!day) return false
-        if (session.rolling_context?.previous_strategy === 'fixed_window') {
-          return session.rolling_context.allow_fixed_body_restore !== true
-        }
-        return (previousModes[day] || 'raw') === 'raw'
-      }))]
-    const alignment = session.rolling_context?.strategy === 'daily_rolling' && transcriptSessionId
-      ? await listAllTurns(sessionId, { includeRaw: true }).then(result => result.ok
-        ? inspectRollingHistoryAlignment(transcriptSessionId, result.turns, {
-            rawTurns: rolling.history, requiredFullRawDays,
-          })
-        : {
-            available: false, aligned: false, envelopeCount: 0,
-            matchedTurnCount: 0, isolatedIncompleteCount: 0,
-            error: result.error || '无法读取 Haven 轮次',
-            issues: [], missingRawTurns: [], unrepresentedEmptyWakeCount: 0,
-            recoveredAssistantMismatchCount: 0,
-            isolatedWakeRaceCount: 0,
-            excludedAgentWakeLimitCount: 0,
-            isolatedExplicitFailureCount: 0,
-            indeterminateOutcomeCount: 0,
-          })
+    const archive = session.rolling_context?.strategy === 'daily_rolling'
+      ? await inspectRollingArchive({ havenSessionId: sessionId, laneId }, session.rolling_context, rolling.history)
       : null
     const personaResult = await getPersona(session.persona_id)
     const persona = personaResult.persona
@@ -229,8 +191,6 @@ export async function GET(request: NextRequest) {
         available: true,
         entry_count: transcript.entryCount,
         message_count: transcript.messages.length,
-        matched_source_messages: matchTranscriptMessages(messages, transcript),
-        expected_source_messages: messages.length,
         rolling_wrapper_messages: transcript.messages.filter(message => message.containsRollingWindowContext).length,
         memory_recall_messages: transcript.messages.filter(message => message.containsMemoryRecall).length,
         tool_use_messages: transcript.messages.filter(message => message.blockTypes.includes('tool_use')).length,
@@ -241,8 +201,6 @@ export async function GET(request: NextRequest) {
         available: false,
         entry_count: 0,
         message_count: 0,
-        matched_source_messages: 0,
-        expected_source_messages: messages.length,
         rolling_wrapper_messages: 0,
         memory_recall_messages: 0,
         tool_use_messages: 0,
@@ -251,7 +209,12 @@ export async function GET(request: NextRequest) {
         messages: [],
       },
       rolling_seed: rollingSeedRaw,
-      rolling_alignment: alignment,
+      rolling_archive: archive ? {
+        ...archive,
+        currentRevisionDays: rollingSeedRaw?.contextRevision === session.context_revision
+          && rollingSeedRaw?.newSessionId === transcriptSessionId && Array.isArray(rollingSeedRaw?.days)
+          ? rollingSeedRaw.days : null,
+      } : null,
       system_prompt: {
         current: {
           mode: session.mode,

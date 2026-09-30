@@ -182,11 +182,10 @@ export async function loadRollingWindowAppend(
   sessionId: string,
   session: FixedWindowSource,
   days: ConversationContextDay[],
-  options: { upToTurnId?: number; logDiagnostics?: boolean; includeAllTurns?: boolean } = {},
+  options: { upToTurnId?: number; logDiagnostics?: boolean } = {},
 ): Promise<{
   content: string
   history: HavenTurn[]
-  allTurns: HavenTurn[]
   pinnedBucketIds: string[]
   journalIds: string[]
   recentBucketIds: string[]
@@ -195,7 +194,7 @@ export async function loadRollingWindowAppend(
 }> {
   if (session.rolling_context?.strategy !== 'daily_rolling') {
     return {
-      content: '', history: [], allTurns: [], pinnedBucketIds: [], journalIds: [],
+      content: '', history: [], pinnedBucketIds: [], journalIds: [],
       recentBucketIds: [], feelBucketIds: [], randomHighImportanceBucketIds: [],
     }
   }
@@ -209,8 +208,8 @@ export async function loadRollingWindowAppend(
     .filter(day => day.turn_count > 0 && (modes[day.day] || 'raw') === 'raw')
     .map(day => day.day)
   const [turnResult, bucketPayload, journalPayload] = await Promise.all([
-    rawDays.length > 0 || options.includeAllTurns
-      ? listAllTurns(sessionId, options.includeAllTurns ? { includeRaw: true } : { chatDays: rawDays, includeRaw: true })
+    rawDays.length > 0
+      ? listAllTurns(sessionId, { chatDays: rawDays, includeRaw: true })
       : Promise.resolve({ ok: true, turns: [], error: '' }),
     getBuckets(true),
     selectedJournalIds !== null && selectedJournalIds !== undefined && selectedJournalIds.length > 0
@@ -268,7 +267,6 @@ export async function loadRollingWindowAppend(
       randomHighImportanceBuckets,
     ),
     history: buildRollingWindowHistory(session, effectiveTurns, days),
-    allTurns: effectiveTurns,
     pinnedBucketIds: pinnedBuckets.map(item => item.id),
     journalIds: journals.map(item => item.id),
     recentBucketIds: recentBuckets.map(item => item.id),

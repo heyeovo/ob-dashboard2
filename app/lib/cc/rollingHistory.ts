@@ -9,19 +9,15 @@ import {
   type SessionStoreEntry,
 } from '@anthropic-ai/claude-agent-sdk'
 import type { HavenTurn } from '@/app/lib/havenTurns'
+import type { ArchiveDayAudit } from './rollingArchive'
 import { isClaudeSessionLimitNotice } from '@/app/lib/cc/subscriptionLimit'
-import {
-  isLegacyClaudeTerminalStatus,
-  loadTurnOutcomes,
-  type TurnOutcomeRecord,
-} from '@/app/lib/cc/turnOutcome'
 import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
 
 export type RollingHistorySeed = {
   resumeFrom: string
   sessionStore: SessionStore
   entries: SessionStoreEntry[]
-  source: 'new_seed' | 'manual_body_recovery' | 'revision_seed' | 'fixed_transcript_migration' | 'legacy_transcript_recovery' | 'model_surface_rebase' | 'persisted'
+  source: 'new_seed' | 'manual_body_recovery' | 'archive_seed' | 'model_surface_rebase' | 'persisted'
   diagnostic?: RollingSeedDiagnostic
 }
 
@@ -37,14 +33,22 @@ export function stripStaleSystemReminders(entries: SessionStoreEntry[]): {
   removedBlockCount: number
 } {
   let removedBlockCount = 0
-  const stripText = (value: string) => value.replace(SYSTEM_REMINDER_BLOCK, () => {
-    removedBlockCount += 1
-    return ''
-  }).trim()
+  const stripText = (value: string) => {
+    const next = value.replace(SYSTEM_REMINDER_BLOCK, () => {
+      removedBlockCount += 1
+      return ''
+    })
+    return next === value ? value : next.trim()
+  }
 
   const cleaned = entries.flatMap(entry => {
     const cloned = JSON.parse(JSON.stringify(entry)) as SessionStoreEntry
-    if ((cloned as unknown as Record<string, unknown>).type === 'system') return []
+    const attachment = cloned.attachment as { type?: string } | undefined
+    if (cloned.type === 'system' || (cloned.type === 'attachment'
+      && ['environment', 'model', 'total_tokens_reminder', 'date'].includes(attachment?.type || ''))) {
+      removedBlockCount += 1
+      return []
+    }
     const message = messageRecord(cloned)
     if (message?.role !== 'user') return [cloned]
     if (typeof message.content === 'string') {
@@ -72,6 +76,8 @@ export type RollingSeedDiagnostic = {
   bodyRestoredTurnCount: number
   thinkingPrunedBlockCount: number
   memoryRecallPrunedBlockCount: number
+  attachmentPrunedBlockCount?: number
+  days?: ArchiveDayAudit[]
   toolUseCount: number
   toolResultCount: number
   memoryRecallCount: number
@@ -99,65 +105,7 @@ type TranscriptSeedOptions = {
   fallbackModel: string
 }
 
-type TranscriptEnvelope = {
-  entries: SessionStoreEntry[]
-  userText: string
-  assistantText: string
-  havenTurnId: number | null
-  havenTurnIdConflict: boolean
-  timestamp: string
-}
-
-export function rollingRevisionRequiresSource(
-  isRolling: boolean,
-  laneContextRevision: number,
-  contextRevision: number,
-  previousStrategy: string,
-): boolean {
-  return isRolling
-    && laneContextRevision !== contextRevision
-    && previousStrategy !== 'fixed_window'
-}
-
-export function assertRequiredRollingRevisionSeed(
-  required: boolean,
-  rawTurnCount: number,
-  sourceResumeFrom: string,
-  revisionSeed: RollingHistorySeed | null,
-): void {
-  if (!required || rawTurnCount === 0 || revisionSeed) return
-  throw new Error(sourceResumeFrom
-    ? '旧滚动 transcript 持久副本不存在或无法完整对齐，已停止本轮，raw 原文没有被正文替代'
-    : '无法确定旧滚动 transcript 的 session，已停止本轮，raw 原文没有被正文替代')
-}
-
-export function assertFixedMigrationSeed(
-  fixedMigration: boolean,
-  rawTurnCount: number,
-  allowBodyRestore: boolean,
-  migrationSeed: RollingHistorySeed | null,
-): void {
-  if (!fixedMigration || rawTurnCount === 0 || migrationSeed || allowBodyRestore) return
-  throw new Error('找不到固定窗口的原生 transcript，已停止首次开启滚动；如接受仅恢复 user/assistant 正文，请在设置中重新确认')
-}
-
-export function assertRollingResumeRecovered(
-  recoveryRequired: boolean,
-  persistedSeed: RollingHistorySeed | null,
-  recoveredSeed: RollingHistorySeed | null,
-): void {
-  if (!recoveryRequired || persistedSeed || recoveredSeed) return
-  throw new Error('滚动窗口的完整 transcript 存档不存在，已停止本轮，避免静默退化为仅有 user/assistant 正文')
-}
-
-export function assertRollingSeedAvailable(
-  required: boolean,
-  rawTurnCount: number,
-  seed: RollingHistorySeed | null,
-): void {
-  if (!required || rawTurnCount === 0 || seed) return
-  throw new Error('滚动窗口没有可用的完整 transcript，已停止本轮，禁止静默改用 Haven 正文新建会话')
-}
+export type TranscriptEnvelope = { entries: SessionStoreEntry[]; timestamp: string }
 
 // 与 package.json 固定的 @anthropic-ai/claude-agent-sdk 0.3.222 对应。
 const CLAUDE_CODE_VERSION = '2.1.222'
@@ -213,7 +161,7 @@ export function buildRollingTranscriptEntries(
     const uuid = randomUUID()
     entries.push({
       type: 'user', uuid, parentUuid, timestamp,
-      ob2HavenTurnId: turn.id, ob2ChatDay: turn.chat_day || '',
+      ob2ChatDay: turn.chat_day || '',
       sessionId: options.sessionId, cwd: options.cwd,
       isSidechain: false, userType: 'external',
       version: CLAUDE_CODE_VERSION, gitBranch: 'HEAD',
@@ -228,7 +176,7 @@ export function buildRollingTranscriptEntries(
     const uuid = randomUUID()
     entries.push({
       type: 'assistant', uuid, parentUuid, timestamp,
-      ob2HavenTurnId: turn.id, ob2ChatDay: turn.chat_day || '',
+      ob2ChatDay: turn.chat_day || '',
       sessionId: options.sessionId, cwd: options.cwd,
       isSidechain: false, userType: 'external',
       version: CLAUDE_CODE_VERSION, gitBranch: 'HEAD',
@@ -274,7 +222,7 @@ export function buildRollingTranscriptEntries(
   return entries
 }
 
-function rollingStoreRoot(): string {
+export function rollingStoreRoot(): string {
   const homeDir = process.env.USERPROFILE || process.env.HOME || '.'
   const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || `${homeDir}${path.sep}.claude`
   return path.join(/*turbopackIgnore: true*/ claudeConfigDir, 'ob2-rolling-session-store-v1')
@@ -284,7 +232,7 @@ function encodedPart(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url') || 'main'
 }
 
-class RollingSeedStore implements SessionStore {
+export class RollingSeedStore implements SessionStore {
   private readonly initialSessions = new Map<string, SessionStoreEntry[]>()
   private readonly pendingWrites = new Map<string, Promise<void>>()
 
@@ -472,7 +420,7 @@ function entryToolNames(message: Record<string, unknown> | null): string[] {
     .filter(Boolean)
 }
 
-function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<RollingSeedDiagnostic>): RollingSeedDiagnostic {
+export function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<RollingSeedDiagnostic>): RollingSeedDiagnostic {
   const messages = entries.map(entry => messageRecord(entry))
   return {
     sourceSessionId: '',
@@ -483,7 +431,7 @@ function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<Rolling
     memoryRecallPrunedBlockCount: 0,
     toolUseCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_use').length, 0),
     toolResultCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_result').length, 0),
-    memoryRecallCount: messages.filter(message => /<记忆召回>|<memory_card\b/i.test(transcriptMessageContent(message))).length,
+    memoryRecallCount: messages.filter(message => /<记忆召回>|<之前的记忆>|<memory_card\b/i.test(transcriptMessageContent(message))).length,
     ...overrides,
   }
 }
@@ -501,7 +449,7 @@ function contentBlocks(message: Record<string, unknown>): Array<Record<string, u
   return content.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
 }
 
-function pruneCompletedThinking(entries: SessionStoreEntry[]): {
+export function pruneCompletedThinking(entries: SessionStoreEntry[]): {
   entries: SessionStoreEntry[]
   removedBlockCount: number
 } {
@@ -546,7 +494,7 @@ const MEMORY_RECALL_BLOCKS = [
  * 旧日期的动态召回已经可从 Haven 重新获取，重建时直接从 user
  * 文本删掉。不留“已清理”占位符；真实用户正文和末尾时间戳保留。
  */
-function prunePersistedRecall(entries: SessionStoreEntry[]): {
+export function prunePersistedRecall(entries: SessionStoreEntry[]): {
   entries: SessionStoreEntry[]
   removedBlockCount: number
 } {
@@ -559,7 +507,7 @@ function prunePersistedRecall(entries: SessionStoreEntry[]): {
         return ''
       })
     }
-    return next.replace(/\n{3,}/g, '\n\n').trim()
+    return next === value ? value : next.replace(/\n{3,}/g, '\n\n').trim()
   }
 
   const prunedEntries = entries.flatMap(entry => {
@@ -599,9 +547,7 @@ function isInternalContinuationEntry(entry: SessionStoreEntry, current: SessionS
   if (!isPrimaryUserEntry(entry)) return false
   const content = transcriptMessageContent(messageRecord(entry)).trim()
   if (content === INTERRUPTED_REQUEST_MARKER) return true
-  if (content === CONTINUE_INTERRUPTED_REQUEST) {
-    return current.some(previous => transcriptMessageContent(messageRecord(previous)).trim() === INTERRUPTED_REQUEST_MARKER)
-  }
+  if (content === CONTINUE_INTERRUPTED_REQUEST || content.startsWith('Your response above was cut off')) return true
   if (content === NO_VISIBLE_OUTPUT_CONTINUATION) {
     return current.some(previous => {
       const message = messageRecord(previous)
@@ -612,11 +558,7 @@ function isInternalContinuationEntry(entry: SessionStoreEntry, current: SessionS
   return false
 }
 
-function normalized(value: string): string {
-  return value.trim().replace(/\s+/g, ' ')
-}
-
-function transcriptEnvelopes(entries: SessionStoreEntry[]): {
+export function transcriptEnvelopes(entries: SessionStoreEntry[]): {
   prefix: SessionStoreEntry[]
   envelopes: TranscriptEnvelope[]
 } {
@@ -639,474 +581,12 @@ function transcriptEnvelopes(entries: SessionStoreEntry[]): {
 
 function toEnvelope(entries: SessionStoreEntry[]): TranscriptEnvelope {
   const primaryUser = entries.find(entry => isPrimaryUserEntry(entry))
-  const userText = entries
-    .filter(entry => isPrimaryUserEntry(entry))
-    .map(entry => transcriptMessageContent(messageRecord(entry)))
-    .filter(Boolean)
-    .join('\n')
-  const assistantText = entries
-    .filter(entry => messageRecord(entry)?.role === 'assistant')
-    .map(entry => transcriptMessageContent(messageRecord(entry)))
-    .filter(Boolean)
-    .join('\n')
-  const havenTurnIds = [...new Set(entries
-    .map(entry => Number(entry.ob2HavenTurnId))
-    .filter(id => Number.isSafeInteger(id) && id > 0))]
-  return {
-    entries,
-    userText,
-    assistantText,
-    havenTurnId: havenTurnIds.length === 1 ? havenTurnIds[0] : null,
-    havenTurnIdConflict: havenTurnIds.length > 1,
-    timestamp: typeof primaryUser?.timestamp === 'string' ? primaryUser.timestamp : '',
-  }
-}
-
-function envelopeUserMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
-  const actualUser = normalized(envelope.userText)
-  return turn.turn_kind === 'agent_wake'
-    ? actualUser.includes('<agent_wake ')
-    : Boolean(normalized(turn.user_text)) && actualUser.includes(normalized(turn.user_text))
-}
-
-function envelopeMatchesTurn(envelope: TranscriptEnvelope, turn: HavenTurn): boolean {
-  const actualAssistant = normalized(envelope.assistantText)
-  const expectedAssistant = normalized(turn.assistant_text)
-  return envelopeUserMatchesTurn(envelope, turn)
-    && (!expectedAssistant || actualAssistant.includes(expectedAssistant))
-}
-
-function isPlainTextPairEnvelope(envelope: TranscriptEnvelope): boolean {
-  const messages = envelope.entries
-    .map(entry => messageRecord(entry))
-    .filter((message): message is Record<string, unknown> => Boolean(message))
-  const users = messages.filter(message => message.role === 'user')
-  const assistants = messages.filter(message => message.role === 'assistant')
-  if (messages.length !== 2 || users.length !== 1 || assistants.length !== 1) return false
-  if (transcriptMessageContent(users[0]).trim().length > 200
-    || transcriptMessageContent(assistants[0]).trim().length > 200) return false
-  return messages.every(message => {
-    if (typeof message.content === 'string') return Boolean(message.content.trim())
-    if (!Array.isArray(message.content) || message.content.length === 0) return false
-    return message.content.every(block => Boolean(block)
-      && typeof block === 'object'
-      && (block as Record<string, unknown>).type === 'text'
-      && typeof (block as Record<string, unknown>).text === 'string'
-      && Boolean(String((block as Record<string, unknown>).text).trim()))
-  })
-}
-
-function isInterruptedStatusOnlyEnvelope(envelope: TranscriptEnvelope): boolean {
-  const users = envelope.entries.filter(entry => isPrimaryUserEntry(entry))
-  if (users.length !== 3) return false
-  const userContents = users.map(entry => transcriptMessageContent(messageRecord(entry)).trim())
-  if (!userContents[0]
-    || userContents[0] === INTERRUPTED_REQUEST_MARKER
-    || userContents[0] === CONTINUE_INTERRUPTED_REQUEST
-    || userContents[1] !== INTERRUPTED_REQUEST_MARKER
-    || userContents[2] !== CONTINUE_INTERRUPTED_REQUEST) return false
-  const assistants = envelope.entries
-    .map(entry => messageRecord(entry))
-    .filter(message => message?.role === 'assistant')
-  if (assistants.length === 0) return false
-  return envelope.entries.every(entry => {
-    const message = messageRecord(entry)
-    if (!message) return true
-    if (typeof message.content === 'string') return true
-    return Array.isArray(message.content) && message.content.every(block =>
-      block && typeof block === 'object' && block.type === 'text' && typeof block.text === 'string')
-  }) && assistants.every(message => normalized(transcriptMessageContent(message)) === 'No response requested.')
-}
-
-/**
- * One-time compatibility for transcripts created before outcome receipts existed.
- * Only a pure text transport-status envelope is safe to omit. Any tool, thinking,
- * image, or unrecognized assistant body remains indeterminate and blocks rebuilding.
- */
-function isLegacyExplicitFailureEnvelope(envelope: TranscriptEnvelope): boolean {
-  const assistantTexts: string[] = []
-  for (const entry of envelope.entries) {
-    const message = messageRecord(entry)
-    if (!message) continue
-    if (typeof message.content === 'string') {
-      if (message.role === 'assistant') assistantTexts.push(message.content)
-      continue
-    }
-    if (!Array.isArray(message.content)) return false
-    for (const block of message.content) {
-      if (!block || typeof block !== 'object' || block.type !== 'text' || typeof block.text !== 'string') {
-        return false
-      }
-      if (message.role === 'assistant') assistantTexts.push(block.text)
-    }
-  }
-  return assistantTexts.length > 0 && assistantTexts.every(isLegacyClaudeTerminalStatus)
-}
-
-function havenNativeTurnUuid(turn: HavenTurn): string {
-  if (!turn.raw_json) return ''
-  try {
-    const raw = JSON.parse(turn.raw_json) as Record<string, unknown>
-    return typeof raw.cc_turn_uuid === 'string' ? raw.cc_turn_uuid.trim() : ''
-  } catch {
-    return ''
-  }
-}
-
-function closestCompletedTurnIndex(
-  envelopeTimestamp: string,
-  matches: Array<{ turn: HavenTurn; index: number }>,
-  maxDelayMs = 6 * 60 * 60 * 1000,
-): number | null {
-  const envelopeTime = new Date(envelopeTimestamp).getTime()
-  if (!Number.isFinite(envelopeTime)) return null
-  const ranked = matches
-    .map(match => ({
-      index: match.index,
-      // Haven created_at 是整轮完成落库时间；transcript timestamp 是用户进入时间。
-      delay: new Date(match.turn.created_at).getTime() - envelopeTime,
-    }))
-    .filter(match => Number.isFinite(match.delay) && match.delay >= -1000 && match.delay <= maxDelayMs)
-    .sort((a, b) => a.delay - b.delay)
-  if (ranked.length === 0) return null
-  if (ranked.length > 1 && ranked[0].delay === ranked[1].delay) return null
-  return ranked[0].index
-}
-
-function alignEnvelopesToTurns(
-  envelopes: TranscriptEnvelope[],
-  turns: HavenTurn[],
-  allowIncompleteUserOnly = false,
-  onNoCandidate?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
-  onAssistantMismatchRecovered?: (envelope: TranscriptEnvelope, envelopeIndex: number, turn: HavenTurn) => void,
-  onWakeRaceIsolated?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
-  outcomes: Map<string, TurnOutcomeRecord> = new Map(),
-  onExplicitFailureIsolated?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
-  onIndeterminateOutcome?: (envelope: TranscriptEnvelope, envelopeIndex: number) => void,
-): Map<number, TranscriptEnvelope> {
-  const orderedTurns = [...turns].sort((a, b) => a.id - b.id)
-  const diagnostics = {
-    skippedIncomplete: 0,
-    missingHavenId: 0,
-    conflictingIds: 0,
-    noCandidate: 0,
-    ambiguousCandidates: 0,
-    isolatedWakeRace: 0,
-    isolatedExplicitFailure: 0,
-    indeterminateOutcome: 0,
-  }
-  const active: Array<{ envelope: TranscriptEnvelope; candidates: Set<number> }> = []
-  for (const [envelopeIndex, envelope] of envelopes.entries()) {
-    const primaryUserUuid = envelope.entries.find(entry => isPrimaryUserEntry(entry))?.uuid || ''
-    const nativeUuidMatches = primaryUserUuid
-      ? orderedTurns
-          .map((turn, index) => ({ turn, index }))
-          .filter(({ turn }) => havenNativeTurnUuid(turn) === primaryUserUuid)
-      : []
-    if (envelope.havenTurnIdConflict || nativeUuidMatches.length > 1) {
-      diagnostics.conflictingIds += 1
-      active.push({ envelope, candidates: new Set() })
-      continue
-    }
-    if (envelope.havenTurnId !== null) {
-      const index = orderedTurns.findIndex(turn => turn.id === envelope.havenTurnId)
-      if (index < 0) diagnostics.missingHavenId += 1
-      if (nativeUuidMatches.length === 1 && nativeUuidMatches[0].index !== index) {
-        diagnostics.conflictingIds += 1
-        active.push({ envelope, candidates: new Set() })
-      } else {
-        active.push({ envelope, candidates: index < 0 ? new Set() : new Set([index]) })
-      }
-      continue
-    }
-    if (nativeUuidMatches.length > 0) {
-      active.push({ envelope, candidates: new Set(nativeUuidMatches.map(({ index }) => index)) })
-      continue
-    }
-    const recordedOutcome = primaryUserUuid ? outcomes.get(primaryUserUuid) : undefined
-    if (recordedOutcome?.outcome === 'explicit_failure'
-      || (allowIncompleteUserOnly && isLegacyExplicitFailureEnvelope(envelope))) {
-      diagnostics.isolatedExplicitFailure += 1
-      onExplicitFailureIsolated?.(envelope, envelopeIndex)
-      continue
-    }
-    if (recordedOutcome?.outcome === 'indeterminate') {
-      diagnostics.indeterminateOutcome += 1
-      diagnostics.noCandidate += 1
-      onIndeterminateOutcome?.(envelope, envelopeIndex)
-      onNoCandidate?.(envelope, envelopeIndex)
-      active.push({ envelope, candidates: new Set() })
-      continue
-    }
-    const textMatches = orderedTurns
-      .map((turn, index) => ({ turn, index }))
-      .filter(({ turn }) => envelopeMatchesTurn(envelope, turn))
-    // SDK/CLI 在失败发送后可能写入中断、自动续写和纯状态回复，Haven 却没有
-    // 保存这次尝试。旧存档保持原样；只有 revision 副本隔离这种精确形状的记录。
-    if (allowIncompleteUserOnly && textMatches.length === 0 && isInterruptedStatusOnlyEnvelope(envelope)) {
-      diagnostics.skippedIncomplete += 1
-      continue
-    }
-    const hasAssistantOrTool = envelope.entries.some(entry => {
-      const message = messageRecord(entry)
-      return message?.role === 'assistant'
-        || (message ? contentBlocks(message).some(block => block.type === 'tool_use' || block.type === 'tool_result') : false)
-    })
-    // 失败发送可能只写进 Claude transcript，Haven 没有成功轮次。仅在无
-    // assistant/工具、且没有任何空 assistant 的 Haven 候选时隔离它。
-    if (allowIncompleteUserOnly && !hasAssistantOrTool && !textMatches.some(({ turn }) => !turn.assistant_text.trim())) {
-      diagnostics.skippedIncomplete += 1
-      continue
-    }
-    // Legacy race recovery: the model-visible turn was fully written to the native
-    // transcript, but a simultaneous wake won Haven's CAS. Only bind a non-wake
-    // envelope immediately following a wake when its user body has one uniquely
-    // closest completion within ten minutes. The transcript envelope remains
-    // authoritative and is retained intact.
-    const isAgentWakeEnvelope = normalized(envelope.userText).includes('<agent_wake ')
-    const previousEnvelope = envelopes[envelopeIndex - 1]
-    const envelopeTime = new Date(envelope.timestamp).getTime()
-    const previousTime = new Date(previousEnvelope?.timestamp || '').getTime()
-    const immediatelyFollowsWake = Boolean(previousEnvelope)
-      && normalized(previousEnvelope.userText).includes('<agent_wake ')
-      && Number.isFinite(envelopeTime)
-      && Number.isFinite(previousTime)
-      && envelopeTime >= previousTime - 1000
-      && envelopeTime - previousTime <= 2 * 60 * 1000
-    if (allowIncompleteUserOnly && hasAssistantOrTool && !isAgentWakeEnvelope
-      && immediatelyFollowsWake && textMatches.length === 0) {
-      const userMatches = orderedTurns
-        .map((turn, index) => ({ turn, index }))
-        .filter(({ turn }) => turn.turn_kind !== 'agent_wake' && envelopeUserMatchesTurn(envelope, turn))
-      const closestIndex = closestCompletedTurnIndex(envelope.timestamp, userMatches, 10 * 60 * 1000)
-      if (closestIndex !== null) {
-        const matchedTurn = orderedTurns[closestIndex]
-        onAssistantMismatchRecovered?.(envelope, envelopeIndex, matchedTurn)
-        active.push({ envelope, candidates: new Set([closestIndex]) })
-        continue
-      }
-      if (isPlainTextPairEnvelope(envelope)) {
-        diagnostics.isolatedWakeRace += 1
-        onWakeRaceIsolated?.(envelope, envelopeIndex)
-        continue
-      }
-    }
-    if (textMatches.length > 1) {
-      const closestIndex = closestCompletedTurnIndex(envelope.timestamp, textMatches)
-      if (closestIndex !== null) {
-        active.push({ envelope, candidates: new Set([closestIndex]) })
-        continue
-      }
-    }
-    if (textMatches.length === 0) {
-      diagnostics.noCandidate += 1
-      onNoCandidate?.(envelope, envelopeIndex)
-    }
-    if (textMatches.length > 1) diagnostics.ambiguousCandidates += 1
-    active.push({ envelope, candidates: new Set(textMatches.map(({ index }) => index)) })
-  }
-  const ways = Array.from(
-    { length: active.length + 1 },
-    () => Array<number>(orderedTurns.length + 1).fill(0),
-  )
-  for (let turnIndex = 0; turnIndex <= orderedTurns.length; turnIndex += 1) {
-    ways[active.length][turnIndex] = 1
-  }
-  for (let envelopeIndex = active.length - 1; envelopeIndex >= 0; envelopeIndex -= 1) {
-    for (let turnIndex = orderedTurns.length - 1; turnIndex >= 0; turnIndex -= 1) {
-      const skip = ways[envelopeIndex][turnIndex + 1]
-      const use = active[envelopeIndex].candidates.has(turnIndex)
-        ? ways[envelopeIndex + 1][turnIndex + 1]
-        : 0
-      ways[envelopeIndex][turnIndex] = Math.min(2, skip + use)
-    }
-  }
-  if (ways[0][0] !== 1) {
-    const reason = ways[0][0] === 0 ? '缺少对应轮次或顺序冲突' : '存在多个对应方案'
-    throw new Error(
-      '旧滚动 transcript 的完整轮次无法唯一对应到 Haven，已停止更新上下文版本'
-      + `（${reason}；失败/中断的半截轮次已隔离 ${diagnostics.skippedIncomplete} 条；`
-      + `明确失败轮次已隔离 ${diagnostics.isolatedExplicitFailure} 条；状态不明 ${diagnostics.indeterminateOutcome} 条；`
-      + `wake 并发简单错误轮次已隔离 ${diagnostics.isolatedWakeRace} 条；`
-      + `Haven 编号缺失 ${diagnostics.missingHavenId} 条、编号冲突 ${diagnostics.conflictingIds} 条、`
-      + `无正文候选 ${diagnostics.noCandidate} 条、重复候选 ${diagnostics.ambiguousCandidates} 条）`,
-    )
-  }
-  const aligned = new Map<number, TranscriptEnvelope>()
-  let turnIndex = 0
-  for (let envelopeIndex = 0; envelopeIndex < active.length; envelopeIndex += 1) {
-    while (turnIndex < orderedTurns.length) {
-      const canUse = active[envelopeIndex].candidates.has(turnIndex)
-        && ways[envelopeIndex + 1][turnIndex + 1] > 0
-      if (canUse) {
-        aligned.set(orderedTurns[turnIndex].id, active[envelopeIndex].envelope)
-        turnIndex += 1
-        break
-      }
-      turnIndex += 1
-    }
-  }
-  return aligned
-}
-
-export type RollingAlignmentIssue = {
-  envelopeIndex: number
-  entryIndex: number
-  userUuid: string
-  timestamp: string
-  agentWake: boolean
-  reason: 'missing_haven_user' | 'assistant_mismatch'
-  havenUserCandidateCount: number
-  havenUserCandidateIds: number[]
-}
-
-export type RollingMissingRawTurn = {
-  id: number
-  day: string
-  createdAt: string
-  turnKind: string
-  userChars: number
-  assistantChars: number
-  fullSourceRequired: boolean
-}
-
-function isUnrepresentedEmptyWake(turn: HavenTurn): boolean {
-  return turn.turn_kind === 'agent_wake'
-    && !turn.user_text.trim()
-    && !turn.assistant_text.trim()
+  return { entries, timestamp: typeof primaryUser?.timestamp === 'string' ? primaryUser.timestamp : '' }
 }
 
 function isAgentWakeLimitTurn(turn: HavenTurn): boolean {
-  return turn.turn_kind === 'agent_wake'
-    && !turn.user_text.trim()
+  return turn.turn_kind === 'agent_wake' && !turn.user_text.trim()
     && isClaudeSessionLimitNotice(turn.assistant_text)
-}
-
-/** 设置页只读预检：不生成新 seed、不改 Haven 指针，也不返回聊天正文。 */
-export async function inspectRollingHistoryAlignment(
-  resumeFrom: string,
-  turns: HavenTurn[],
-  options: { storeRoot?: string; rawTurns?: HavenTurn[]; requiredFullRawDays?: string[] } = {},
-): Promise<{
-  available: boolean
-  aligned: boolean
-  envelopeCount: number
-  matchedTurnCount: number
-  isolatedIncompleteCount: number
-  error: string
-  issues: RollingAlignmentIssue[]
-  missingRawTurns: RollingMissingRawTurn[]
-  unrepresentedEmptyWakeCount: number
-  recoveredAssistantMismatchCount: number
-  isolatedWakeRaceCount: number
-  excludedAgentWakeLimitCount: number
-  isolatedExplicitFailureCount: number
-  indeterminateOutcomeCount: number
-}> {
-  const source = openRollingHistoryResume(resumeFrom, options)
-  if (!source) {
-    return {
-      available: false, aligned: false, envelopeCount: 0,
-      matchedTurnCount: 0, isolatedIncompleteCount: 0,
-      error: '滚动持久 transcript 不存在',
-      issues: [],
-      missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
-      isolatedWakeRaceCount: 0,
-      excludedAgentWakeLimitCount: 0,
-      isolatedExplicitFailureCount: 0,
-      indeterminateOutcomeCount: 0,
-    }
-  }
-  const entries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-  if (!entries?.length) {
-    return {
-      available: false, aligned: false, envelopeCount: 0,
-      matchedTurnCount: 0, isolatedIncompleteCount: 0,
-      error: '滚动持久 transcript 为空',
-      issues: [],
-      missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
-      isolatedWakeRaceCount: 0,
-      excludedAgentWakeLimitCount: 0,
-      isolatedExplicitFailureCount: 0,
-      indeterminateOutcomeCount: 0,
-    }
-  }
-  const envelopes = transcriptEnvelopes(entries).envelopes
-  const issues: RollingAlignmentIssue[] = []
-  let recoveredAssistantMismatchCount = 0
-  let isolatedWakeRaceCount = 0
-  let isolatedExplicitFailureCount = 0
-  let indeterminateOutcomeCount = 0
-  const recordNoCandidate = (envelope: TranscriptEnvelope, envelopeIndex: number) => {
-    const userMatches = turns.filter(turn => envelopeUserMatchesTurn(envelope, turn))
-    const primaryUser = envelope.entries.find(entry => isPrimaryUserEntry(entry))
-    issues.push({
-      envelopeIndex: envelopeIndex + 1,
-      entryIndex: primaryUser ? entries.indexOf(primaryUser) : -1,
-      userUuid: typeof primaryUser?.uuid === 'string' ? primaryUser.uuid : '',
-      timestamp: envelope.timestamp,
-      agentWake: normalized(envelope.userText).includes('<agent_wake '),
-      reason: userMatches.length ? 'assistant_mismatch' : 'missing_haven_user',
-      havenUserCandidateCount: userMatches.length,
-      havenUserCandidateIds: userMatches.slice(0, 5).map(turn => turn.id),
-    })
-  }
-  try {
-    const outcomes = await loadTurnOutcomes({ storeRoot: options.storeRoot })
-    const matched = alignEnvelopesToTurns(
-      envelopes,
-      turns,
-      true,
-      recordNoCandidate,
-      () => { recoveredAssistantMismatchCount += 1 },
-      () => { isolatedWakeRaceCount += 1 },
-      outcomes,
-      () => { isolatedExplicitFailureCount += 1 },
-      () => { indeterminateOutcomeCount += 1 },
-    )
-    const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
-    const unmatchedRawTurns = (options.rawTurns || []).filter(turn => !matched.has(turn.id))
-    const unrepresentedEmptyWakeCount = unmatchedRawTurns.filter(isUnrepresentedEmptyWake).length
-    const excludedAgentWakeLimitCount = (options.rawTurns || []).filter(isAgentWakeLimitTurn).length
-    const missingRawTurns = unmatchedRawTurns
-      .filter(turn => !isUnrepresentedEmptyWake(turn) && !isAgentWakeLimitTurn(turn))
-      .map(turn => ({
-        id: turn.id,
-        day: turn.chat_day || '',
-        createdAt: turn.created_at,
-        turnKind: turn.turn_kind || 'user',
-        userChars: turn.user_text.length,
-        assistantChars: turn.assistant_text.length,
-        fullSourceRequired: requiredFullRawDays.has(turn.chat_day || ''),
-      }))
-    return {
-      available: true, aligned: true, envelopeCount: envelopes.length,
-      matchedTurnCount: matched.size,
-      isolatedIncompleteCount: envelopes.length - matched.size
-        - isolatedWakeRaceCount - isolatedExplicitFailureCount,
-      error: '',
-      issues,
-      missingRawTurns,
-      unrepresentedEmptyWakeCount,
-      recoveredAssistantMismatchCount,
-      isolatedWakeRaceCount,
-      excludedAgentWakeLimitCount,
-      isolatedExplicitFailureCount,
-      indeterminateOutcomeCount,
-    }
-  } catch (error) {
-    return {
-      available: true, aligned: false, envelopeCount: envelopes.length,
-      matchedTurnCount: 0, isolatedIncompleteCount: 0,
-      error: error instanceof Error ? error.message : '滚动对齐预检失败',
-      issues,
-      missingRawTurns: [], unrepresentedEmptyWakeCount: 0, recoveredAssistantMismatchCount: 0,
-      isolatedWakeRaceCount: 0,
-      excludedAgentWakeLimitCount: 0,
-      isolatedExplicitFailureCount,
-      indeterminateOutcomeCount,
-    }
-  }
 }
 
 export function cloneRollingTranscriptForSession(
@@ -1155,7 +635,7 @@ export async function inspectRollingHistoryTranscript(
       content,
       chars: content.length,
       containsRollingWindowContext: /<rolling_window_context(?:\s|>)/i.test(content),
-      containsMemoryRecall: /<记忆召回>|<memory_card\b/i.test(content),
+      containsMemoryRecall: /<记忆召回>|<之前的记忆>|<memory_card\b/i.test(content),
       blockTypes,
       toolNames: entryToolNames(message),
       bodyRestored: record.ob2RollingFidelity === 'body_restored',
@@ -1232,7 +712,7 @@ function claudeConfigRoot(override?: string): string {
   return process.env.CLAUDE_CONFIG_DIR?.trim() || `${homeDir}${path.sep}.claude`
 }
 
-async function nativeClaudeSessionFile(
+export async function nativeClaudeSessionFile(
   sessionId: string,
   cwd: string,
   claudeConfigDir?: string,
@@ -1294,13 +774,13 @@ export async function materializeRollingNativeSession(
   return { created: true, entryCount: persistedEntries.length }
 }
 
-type ImportLocalSession = (
+export type ImportLocalSession = (
   sessionId: string,
   store: SessionStore,
   options: { dir: string; includeSubagents: boolean },
 ) => Promise<void>
 
-async function captureLocalTranscript(
+export async function captureLocalTranscript(
   sessionId: string,
   cwd: string,
   importLocalSession: ImportLocalSession = importSessionToStore,
@@ -1360,184 +840,3 @@ export async function createModelSurfaceRebaseSeed(
     }),
   }
 }
-
-/** 成功一轮后，把 Claude 原生 transcript 原子同步回滚动持久存档。 */
-export async function syncRollingNativeSession(
-  sessionId: string,
-  cwd: string,
-  options: { storeRoot?: string; importLocalSession?: ImportLocalSession } = {},
-): Promise<number> {
-  const normalized = sessionId.trim()
-  if (!normalized) throw new Error('滚动 transcript 同步缺少 Claude session id')
-  const entries = await captureLocalTranscript(normalized, cwd, options.importLocalSession)
-  if (!entries?.length) throw new Error('Claude 原生 transcript 不存在或为空，无法同步滚动存档')
-  const store = new RollingSeedStore(normalized, [], options.storeRoot)
-  await store.replace(normalized, entries)
-  return entries.length
-}
-
-/** 同一 rolling revision 重部署：专用 store 缺失时，从 SDK 默认 transcript 原样补回。 */
-export async function createRollingTranscriptRecoverySeed(
-  sourceResumeFrom: string,
-  options: {
-    cwd: string
-    storeRoot?: string
-    importLocalSession?: ImportLocalSession
-  },
-): Promise<RollingHistorySeed | null> {
-  const normalized = sourceResumeFrom.trim()
-  if (!normalized) return null
-  const entries = await captureLocalTranscript(normalized, options.cwd, options.importLocalSession)
-  if (!entries) return null
-  const envelopeCount = transcriptEnvelopes(entries).envelopes.length
-  return {
-    resumeFrom: normalized,
-    sessionStore: new RollingSeedStore(normalized, entries, options.storeRoot),
-    entries,
-    source: 'legacy_transcript_recovery',
-    diagnostic: seedDiagnostic(entries, {
-      sourceSessionId: normalized,
-      sourceEntryCount: entries.length,
-      retainedEnvelopeCount: envelopeCount,
-      bodyRestoredTurnCount: 0,
-    }),
-  }
-}
-
-/**
- * 新 revision 只按完整 Claude 轮次包裁剪旧 transcript。仍为 raw 的轮次保留
- * 原生 user/assistant/tool_use/tool_result 顺序；旧 transcript 中没有的 raw 轮次
- * 才从 Haven 降级恢复可见正文。
- */
-export async function createRollingHistoryRevisionSeed(
-  sourceResumeFrom: string,
-  allTurns: HavenTurn[],
-  rawTurns: HavenTurn[],
-  options: Omit<TranscriptSeedOptions, 'sessionId'> & {
-    storeRoot?: string
-    requiredFullRawDays?: string[]
-  },
-): Promise<RollingHistorySeed | null> {
-  const source = openRollingHistoryResume(sourceResumeFrom, options)
-  if (!source) return null
-  const sourceEntries = await source.sessionStore.load({ projectKey: '', sessionId: source.resumeFrom })
-  if (!sourceEntries?.length) return null
-  return createRevisionSeedFromEntries(
-    sourceResumeFrom, sourceEntries, allTurns, rawTurns, options, 'revision_seed',
-  )
-}
-
-async function createRevisionSeedFromEntries(
-  sourceResumeFrom: string,
-  sourceEntries: SessionStoreEntry[],
-  allTurns: HavenTurn[],
-  rawTurns: HavenTurn[],
-  options: Omit<TranscriptSeedOptions, 'sessionId'> & {
-    storeRoot?: string
-    requiredFullRawDays?: string[]
-  },
-  sourceKind: 'revision_seed' | 'fixed_transcript_migration',
-): Promise<RollingHistorySeed | null> {
-  const { prefix, envelopes } = transcriptEnvelopes(sourceEntries)
-  const outcomes = await loadTurnOutcomes({ storeRoot: options.storeRoot })
-  const aligned = alignEnvelopesToTurns(
-    envelopes, allTurns, sourceKind === 'revision_seed',
-    undefined, undefined, undefined, outcomes,
-  )
-  const nextSessionId = randomUUID()
-  const selectedEntries: SessionStoreEntry[] = [...prefix]
-  const requiredFullRawDays = new Set(options.requiredFullRawDays || [])
-  const latestRawDay = [...new Set(rawTurns.map(turn => turn.chat_day || '').filter(Boolean))]
-    .sort()
-    .at(-1) || ''
-  let retainedEnvelopeCount = 0
-  let bodyRestoredTurnCount = 0
-  let thinkingPrunedBlockCount = 0
-  let memoryRecallPrunedBlockCount = 0
-  for (const turn of [...rawTurns].sort((a, b) => a.id - b.id)) {
-    if (isAgentWakeLimitTurn(turn)) continue
-    const envelope = aligned.get(turn.id)
-    if (envelope) {
-      retainedEnvelopeCount += 1
-      const taggedEntries = envelope.entries.map(entry => ({
-        ...entry,
-        ob2HavenTurnId: turn.id,
-        ob2ChatDay: turn.chat_day || '',
-      }))
-      if (turn.chat_day && turn.chat_day !== latestRawDay) {
-        const recallPruned = prunePersistedRecall(taggedEntries)
-        memoryRecallPrunedBlockCount += recallPruned.removedBlockCount
-        const thinkingPruned = pruneCompletedThinking(recallPruned.entries)
-        thinkingPrunedBlockCount += thinkingPruned.removedBlockCount
-        selectedEntries.push(...thinkingPruned.entries)
-      } else {
-        selectedEntries.push(...taggedEntries)
-      }
-    } else {
-      // Haven keeps this wake and its raw metadata; only a missing model-visible
-      // transcript envelope has nothing to preserve or body-restore here.
-      if (isUnrepresentedEmptyWake(turn)) continue
-      if (requiredFullRawDays.has(turn.chat_day || '')) {
-        throw new Error(`旧滚动 transcript 缺少仍为 raw 的完整轮次：${turn.chat_day || '未知日期'}，已停止本轮`)
-      }
-      bodyRestoredTurnCount += 1
-      selectedEntries.push(...buildRollingTranscriptEntries([turn], {
-        sessionId: nextSessionId,
-        cwd: options.cwd,
-        fallbackModel: options.fallbackModel,
-      }).map(entry => ({
-        ...entry,
-        ob2RollingFidelity: 'body_restored',
-        ob2HavenTurnId: turn.id,
-        ob2ChatDay: turn.chat_day || '',
-      })))
-    }
-  }
-  if (selectedEntries.length === 0) return null
-  const entries = cloneRollingTranscriptForSession(selectedEntries, nextSessionId)
-  return {
-    resumeFrom: nextSessionId,
-    sessionStore: new RollingSeedStore(nextSessionId, entries, options.storeRoot),
-    entries,
-    source: sourceKind,
-    diagnostic: seedDiagnostic(entries, {
-      sourceSessionId: sourceResumeFrom,
-      sourceEntryCount: sourceEntries.length,
-      retainedEnvelopeCount,
-      bodyRestoredTurnCount,
-      thinkingPrunedBlockCount,
-      memoryRecallPrunedBlockCount,
-    }),
-  }
-}
-
-/** 首次 fixed → rolling：通过 SDK 官方导入接口读取默认本地 transcript。 */
-export async function createFixedTranscriptMigrationSeed(
-  sourceResumeFrom: string,
-  allTurns: HavenTurn[],
-  rawTurns: HavenTurn[],
-  options: Omit<TranscriptSeedOptions, 'sessionId'> & {
-    storeRoot?: string
-    requiredFullRawDays?: string[]
-    importLocalSession?: ImportLocalSession
-  },
-): Promise<RollingHistorySeed | null> {
-  const normalized = sourceResumeFrom.trim()
-  if (!normalized) return null
-  const entries = await captureLocalTranscript(normalized, options.cwd, options.importLocalSession)
-  if (!entries) return null
-  try {
-    return await createRevisionSeedFromEntries(
-      normalized, entries, allTurns, rawTurns, options, 'fixed_transcript_migration',
-    )
-  } catch (error) {
-    const explicitlyAllowsBodyRestore = (options.requiredFullRawDays || []).length === 0
-    const message = (error as Error).message || String(error)
-    if (explicitlyAllowsBodyRestore && /完整轮次无法唯一对应|缺少仍为 raw 的完整轮次/.test(message)) {
-      return null
-    }
-    throw error
-  }
-}
-
-export const rollingHistoryTest = { transcriptEnvelopes, alignEnvelopesToTurns }

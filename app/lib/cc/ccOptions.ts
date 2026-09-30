@@ -31,7 +31,7 @@ import {
   toSdkMcpServers,
 } from '@/app/lib/ccMcp'
 import type { CcMode } from '@/app/lib/ccModes'
-import type { HavenTurn } from '@/app/lib/havenTurns'
+import type { RollingContextConfig, HavenTurn } from '@/app/lib/havenTurns'
 import { autoAllowEdits, recordCommand, recordFileChange, requestPermission } from '@/app/lib/ccChannel'
 import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
 import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
@@ -112,18 +112,10 @@ export type TurnConfig = {
   rollingHistory?: HavenTurn[]
   /** revision 变化时用于完整轮次迁移的旧 RollingSeedStore session。 */
   rollingSourceResumeFrom?: string
-  /** 旧 transcript 轮次日期对齐所需的 Haven 全量永久轮次。 */
-  rollingAllHistory?: HavenTurn[]
-  /** 上一 revision 已是滚动模式时，旧持久 transcript 缺失必须失败，禁止正文降级。 */
-  requireRollingSource?: boolean
-  /** Haven 记录的紧邻上一 revision 策略；缺失时按未知高风险处理。 */
+  /** 仅用于首次 fixed → rolling 选择原生导入入口。 */
   rollingPreviousStrategy?: string
-  /** 上一 revision 已为 raw、这次仍为 raw 的日期；这些日期禁止正文降级。 */
-  rollingRequiredFullRawDays?: string[]
-  /** 首次 fixed → rolling 找不到旧原生轮次时，用户是否明确允许正文恢复。 */
-  allowFixedBodyRestore?: boolean
-  /** 只有本轮确实是 fixed → rolling 且用户已确认时，才允许从 Haven 正文新建 seed。 */
-  allowRollingBodySeed?: boolean
+  rollingContext?: RollingContextConfig
+  rollingHasHistory?: boolean
   /** 当前完整 request prefix 的稳定键；任一模型可见 system / tools / MCP 定义变化都会更新。 */
   systemPromptKey: string
   /** transcript 控制格式版本；只在一次性迁移时变化，不随普通 tools / MCP 定义变化。 */
