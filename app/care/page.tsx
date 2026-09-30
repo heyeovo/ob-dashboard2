@@ -4,6 +4,7 @@ import SubpageBackButton from '@/app/components/SubpageBackButton'
 import Link from 'next/link'
 import { ComponentProps, FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import BucketDetailDrawer from '../components/BucketDetailDrawer'
+import DetailPanel from '../components/DetailPanel'
 
 type ReminderStatus = 'active' | 'done' | 'archived'
 type Reminder = {
@@ -91,28 +92,35 @@ function displayTime(value?: string | null) {
   return value.replace('T', ' ').slice(0, 16)
 }
 
+function todoDate(value: string) {
+  if (!value || Number.isNaN(new Date(value).getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(new Date(value))
+  const part = (key: string) => Number(parts.find(item => item.type === key)?.value || 0)
+  const [year, month, day] = [part('year'), part('month'), part('day')]
+  if (!year || !month || !day) return ''
+  const currentYear = Number(new Intl.DateTimeFormat('en', { timeZone: 'Asia/Hong_Kong', year: 'numeric' }).format(new Date()))
+  return `${year === currentYear ? '' : `${year}年`}${month}月${day}日`
+}
+
 function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return <label className={wide ? 'space-y-1 md:col-span-2' : 'space-y-1'}><span className="text-xs text-[var(--color-text-tertiary)]">{label}</span>{children}</label>
 }
 
 export default function CarePage() {
-  const [tab, setTab] = useState<'reminders' | 'todos'>('reminders')
+  const [tab, setTab] = useState<'reminders' | 'todos'>('todos')
   const [message, setMessage] = useState('')
 
   return (
     <main className="min-h-screen bg-[var(--color-bg)] px-4 pb-24 pt-5 text-[var(--color-text-primary)] md:px-8 md:pt-8">
-      <div className="mx-auto max-w-5xl">
+      <div className={`mx-auto ${tab === 'reminders' ? 'max-w-5xl' : 'max-w-2xl'}`}>
         <header className="mb-6 flex flex-col items-start gap-4 md:flex-row md:gap-3">
           <SubpageBackButton href="/" label="返回主页" className="md:hidden" />
           <Link href="/" className={`${button} hidden border border-[var(--color-border)] bg-[var(--color-surface)] md:inline-flex`}>← Home</Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-[var(--color-text-heading)]">照顾备忘</h1>
-            <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">Reminder 与 Todo 分开保存、分开使用。</p>
-          </div>
+          {tab === 'reminders' && <div><h1 className="text-2xl font-semibold text-[var(--color-text-heading)]">照顾备忘</h1><p className="mt-1 text-sm text-[var(--color-text-tertiary)]">Reminder 与 Todo 分开保存、分开使用。</p></div>}
         </header>
 
-        <div className="mb-5 inline-flex rounded-xl bg-[var(--color-surface-tertiary)] p-1">
-          {([['reminders', '照顾备忘'], ['todos', 'Todo']] as const).map(([key, label]) => (
+        <div className="mb-5 inline-flex rounded-[var(--radius-xl)] bg-[var(--color-surface-tertiary)] p-1">
+          {([['todos', '待办'], ['reminders', '照顾备忘']] as const).map(([key, label]) => (
             <button key={key} type="button" onClick={() => { setTab(key); setMessage('') }}
               className={`${button} ${tab === key ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)]'}`}>
               {label}
@@ -251,8 +259,11 @@ function ReminderPanel({ onMessage }: { onMessage: (value: string) => void }) {
 
 function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
   const [items, setItems] = useState<TodoItem[]>([])
-  const [domain, setDomain] = useState<'all' | 'tech' | 'emotional'>('all')
-  const [done, setDone] = useState<'pending' | 'done' | 'all'>('pending')
+  const [completed, setCompleted] = useState<TodoItem[]>([])
+  const [completedCount, setCompletedCount] = useState(0)
+  const [domain, setDomain] = useState<TodoDomain>('tech')
+  const [showCompleted, setShowCompleted] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<TodoItem | null>(null)
@@ -266,14 +277,16 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
   const [copied, setCopied] = useState(false)
 
   const load = useCallback(async () => {
-    const query = new URLSearchParams({ limit: '500' })
-    if (domain !== 'all') query.set('domain', domain)
-    if (done !== 'all') query.set('done', done === 'done' ? 'true' : 'false')
     try {
-      const data = await api<{ todos: TodoItem[] }>(`todos?${query}`)
+      const [data, count] = await Promise.all([api<{ todos: TodoItem[] }>('todos?limit=500&done=false'), api<{ count: number }>('todos?limit=500&done=true&count_only=1')])
       setItems(data.todos || [])
+      setCompletedCount(count.count || 0)
+      if (showCompleted) {
+        const finished = await api<{ todos: TodoItem[] }>('todos?limit=500&done=true')
+        setCompleted(finished.todos || [])
+      }
     } catch (error) { onMessage(String(error)) } finally { setLoading(false) }
-  }, [domain, done, onMessage])
+  }, [showCompleted, onMessage])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load() }, 0)
@@ -285,6 +298,20 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
     for (const item of items) result[item.domain]?.push(item)
     return result
   }, [items])
+
+  const visible = groups[domain]
+  const completedVisible = completed.filter(item => item.domain === domain)
+  const domains: TodoDomain[] = groups.unclassified.length || completed.some(item => item.domain === 'unclassified') ? ['tech', 'emotional', 'unclassified'] : ['tech', 'emotional']
+
+  async function expandCompleted() {
+    if (!showCompleted) {
+      try {
+        const data = await api<{ todos: TodoItem[] }>('todos?limit=500&done=true')
+        setCompleted(data.todos || [])
+      } catch (error) { onMessage(String(error)); return }
+    }
+    setShowCompleted(!showCompleted)
+  }
 
   function startCreate() { setEditing(null); setForm(EMPTY_TODO); setFormOpen(true) }
   function startEdit(item: TodoItem) {
@@ -313,6 +340,15 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
   async function toggle(item: TodoItem) {
     try {
       await api(`todos/${encodeURIComponent(item.id)}`, { method: 'PATCH', body: JSON.stringify({ done: !item.done }) })
+      await load()
+    } catch (error) { onMessage(String(error)) }
+  }
+
+  async function remove(item: TodoItem) {
+    if (!window.confirm('确定删除这件待办？不可恢复。')) return
+    try {
+      await api(`todos/${encodeURIComponent(item.id)}`, { method: 'DELETE' })
+      setExpanded(null)
       await load()
     } catch (error) { onMessage(String(error)) }
   }
@@ -377,16 +413,14 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
     window.setTimeout(() => setCopied(false), 1500)
   }
 
-  return <section className="space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap gap-2">
-        {([['pending', '待完成'], ['done', '已完成'], ['all', '全部']] as const).map(([key, label]) => <button key={key} type="button" onClick={() => { setLoading(true); setDone(key) }} className={`${button} ${done === key ? 'bg-[var(--color-primary)] text-[var(--color-on-primary)]' : 'border border-[var(--color-border)] bg-[var(--color-surface)]'}`}>{label}</button>)}
-        <select aria-label="Todo 类型" className={`${input} w-auto`} value={domain} onChange={e => { setLoading(true); setDomain(e.target.value as typeof domain) }}><option value="all">全部类型</option><option value="tech">技术</option><option value="emotional">情感</option></select>
-      </div>
-      <div className="flex gap-2"><button type="button" onClick={() => { setLoading(true); void load() }} className={`${button} border border-[var(--color-border)] bg-[var(--color-surface)]`}>刷新</button><button type="button" onClick={startCreate} className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`}>新增 Todo</button></div>
+  return <section className="space-y-5">
+    <div className="flex items-start justify-between gap-3">
+      <div><p className="text-xs uppercase tracking-[var(--label-tracking)] text-[var(--color-primary)]">TODO · 待办</p><h1 className="mt-1 font-[var(--font-display)] text-3xl text-[var(--color-text-heading)]">待办</h1><p className="mt-1 text-sm text-[var(--color-text-tertiary)]">还有 {items.length} 件没做完</p></div>
+      <button type="button" onClick={startCreate} aria-label="新增待办" className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-fill)] text-xl text-[var(--color-primary)] shadow-[var(--glass-shadow)]">＋</button>
     </div>
+    <div className="flex gap-2">{domains.map(key => <button key={key} type="button" onClick={() => setDomain(key)} className={`rounded-full px-4 py-2 text-xs ${domain === key ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'}`}>{{ tech: '技术', emotional: '情感', unclassified: '未分类' }[key]} {groups[key].length}</button>)}</div>
 
-    {formOpen && <form onSubmit={submit} className={`${panel} space-y-4 p-4 md:p-5`}>
+    <DetailPanel open={formOpen} onClose={() => setFormOpen(false)} mode="modal" width="max-w-2xl"><form onSubmit={submit} className="space-y-4 p-2">
       <div className="flex items-center justify-between"><h2 className="font-medium">{editing ? '编辑 Todo' : '新增独立 Todo'}</h2><button type="button" onClick={() => setFormOpen(false)} className="text-sm text-[var(--color-text-tertiary)]">取消</button></div>
       <Field label="Todo 正文" wide><textarea required rows={3} className={input} value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} /></Field>
       <div className="grid gap-3 md:grid-cols-2">
@@ -395,21 +429,16 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
         {editing?.source !== 'bucket' && <Field label="背景说明（无关联桶时必填）" wide><textarea required={!form.source_bucket.trim()} rows={2} className={input} value={form.context} onChange={e => setForm({ ...form, context: e.target.value })} /></Field>}
       </div>
       <button className={`${button} bg-[var(--color-primary)] text-[var(--color-on-primary)]`} type="submit">保存</button>
-    </form>}
+    </form></DetailPanel>
 
-    {loading ? <Empty text="加载中…" /> : items.length === 0 ? <Empty text="这里还没有 Todo。" /> :
-      (['tech', 'emotional', 'unclassified'] as TodoDomain[]).map(group => groups[group].length > 0 && <div key={group}>
-        <h2 className="mb-2 text-sm font-medium text-[var(--color-text-secondary)]">{{ tech: '技术待办', emotional: '情感待办', unclassified: '未分类旧待办' }[group]}</h2>
-        <div className="grid gap-3 md:grid-cols-2">{groups[group].map(item => <article key={item.id} className={`${panel} p-4 ${item.done ? 'opacity-65' : ''}`}>
-          <div className="flex items-start gap-3">
-            <input aria-label={item.done ? '重新打开' : '标记完成'} type="checkbox" checked={item.done} onChange={() => void toggle(item)} className="mt-1 h-5 w-5 accent-[var(--color-primary)]" />
-            <div className="min-w-0 flex-1"><p className={`whitespace-pre-wrap text-sm leading-6 ${item.done ? 'line-through' : ''}`}>{item.content}</p>{item.context && <p className="mt-2 text-xs leading-5 text-[var(--color-text-tertiary)]">{item.context}</p>}
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-tertiary)]"><span>{item.source === 'bucket' ? '桶 Todo' : '独立 Todo'}</span>{item.source_bucket && <button type="button" onClick={() => void openBucket(item.source_bucket)} className="text-[var(--color-primary)] hover:underline">{item.source_bucket_name || item.source_bucket}{item.source_bucket_name ? ` · ${item.source_bucket}` : ''}</button>}</div>
-            </div>
-            <button type="button" onClick={() => startEdit(item)} className="text-sm text-[var(--color-primary)]">编辑</button>
-          </div>
-        </article>)}</div>
-      </div>)}
+    {loading ? <Empty text="加载中…" /> : <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]">{visible.length ? visible.map(item => <article key={item.id} className="flex gap-3 border-b border-[var(--color-border-light)] p-4 last:border-b-0">
+      <button type="button" aria-label="标记完成" onClick={() => void toggle(item)} className="mt-0.5 h-[var(--todo-check-size)] w-[var(--todo-check-size)] shrink-0 rounded-full border border-[var(--color-border-hover)]" />
+      <div className="min-w-0 flex-1"><button type="button" onClick={() => setExpanded(expanded === item.id ? null : item.id)} className="w-full text-left"><p className={`whitespace-pre-wrap text-sm leading-6 ${expanded === item.id ? '' : 'line-clamp-2'}`}>{item.content}</p>{item.context && <p className={`mt-1 text-xs text-[var(--color-text-tertiary)] ${expanded === item.id ? 'whitespace-pre-wrap' : 'truncate'}`}>{item.context}</p>}</button>
+      {expanded === item.id && <div className="mt-3 space-y-3 text-xs text-[var(--color-text-tertiary)]"><div>{item.source === 'bucket' ? <>来自 <button type="button" onClick={() => void openBucket(item.source_bucket)} className="text-[var(--color-primary)]">《{item.source_bucket_name || item.source_bucket}》</button></> : `独立 Todo · ${todoDate(item.created_at)}`}</div><div className="flex gap-2"><button type="button" onClick={() => startEdit(item)} className="rounded-full bg-[var(--color-surface-tertiary)] px-3 py-1.5">编辑</button><button type="button" onClick={() => void remove(item)} className="rounded-full bg-[var(--color-danger-bg)] px-3 py-1.5 text-[var(--color-danger)]">删除</button></div></div>}
+      </div><span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{todoDate(item.created_at)}</span>
+    </article>) : <p className="p-6 text-sm text-[var(--color-text-tertiary)]">这里还没有待办。</p>}</div>}
+
+    <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]"><button type="button" onClick={() => void expandCompleted()} className="w-full px-4 py-3 text-left text-sm text-[var(--color-text-secondary)]">已完成 · {completedCount} 件 {showCompleted ? '⌄' : '›'}</button>{showCompleted && <div>{completedVisible.map(item => <div key={item.id} className="flex gap-3 border-t border-[var(--color-border-light)] p-4"><button type="button" aria-label="重新打开" onClick={() => void toggle(item)} className="h-[var(--todo-check-size)] w-[var(--todo-check-size)] shrink-0 rounded-full bg-[var(--color-primary)] text-xs text-[var(--color-on-primary)]">✓</button><span className="flex-1 text-sm text-[var(--color-text-tertiary)] line-through">{item.content}</span><span className="text-2xs text-[var(--color-text-tertiary)]">{todoDate(item.created_at)}</span></div>)}</div>}</div>
 
     <BucketDetailDrawer
       selected={selectedBucket}

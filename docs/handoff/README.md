@@ -18,5 +18,5 @@
 | `HANDOFF-memory-continuity-fixes.md` | 📦 已完成归档 | |
 | `HANDOFF-cc-auto-chat-slices.md` | ⏸ 暂停 | 阶段一、二代码已提交（Haven `c250299` / `ab43aa3`，Dashboard `96a2668`），9.13 与日回顾解耦后停下。重开时以本文件为事实源；OB Todo「自动化原文切片摘要」 |
 | `HANDOFF-ui-design-system.md` | 📦 已被取代 | 第一步清理硬编码已完成；其余草案以 `HANDOFF-ui-redesign.md` 为准 |
-| `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1/1.5、2a、3a/3b 待 iPhone 走查勾选；阶段 2 前置 / 2b / 4 前置 / 4a 已上线。阶段 4b 工作台与底栏改版已上线；下一步 4c 子页面与弹窗逐页打磨（底栏高度待用户试用，备选在分支 `try/tabbar-74`）。Clawd 待摆上窗台。Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
+| `HANDOFF-ui-redesign.md` | 🔨 进行中 | 阶段 1/1.5、2a、3a/3b 待 iPhone 走查勾选；阶段 2 前置 / 2b / 4 前置 / 4a 已上线。阶段 4b 工作台与底栏改版已上线；4c-1 已在本地两功能分支实现，待提交与手机/正式环境验收，再按既定顺序继续 4c 子页面打磨（底栏高度备选在 `try/tabbar-74`）。Clawd 待摆上窗台。Codex 执行、CC 验收；OB Todo `ea074ff139f64c54` |
 | `OB待处理大问题清单.md` | 📦 已完成归档 | P0 两项、journey、聊天原文库已完成；语录、moments、官端开窗已转入 OB Todo |

@@ -37,3 +37,4 @@ async function relay(req: NextRequest, context: { params: Promise<{ path: string
 export const GET = relay
 export const POST = relay
 export const PATCH = relay
+export const DELETE = relay

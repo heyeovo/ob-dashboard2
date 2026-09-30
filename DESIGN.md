@@ -127,6 +127,7 @@
 | `--radius-xl` | 16px | Card(padding=lg) |
 | `--radius-2xl` | 22px | 弹窗/Modal |
 | `--radius-window` | 30px | 主页窗洞圆角 |
+| `--radius-reading-card` / `--radius-journal-paper` | 18px / 20px | 阶段 4c-1 阅读页列表卡与单篇正文纸张 |
 
 ### 动效
 
@@ -172,6 +173,8 @@
 | `--memory-card-fill`, `--memory-search-fill`, `--memory-ago-fill`, `--memory-filter-fill` | 阶段 3b 记忆卡片、搜索框、往日记忆条和筛选胶囊的主题材质；列表卡片不做逐卡模糊 |
 | `--memory-card-shadow`, `--memory-switch-shadow` | 记忆卡片顶部高光与轻阴影、两格切换器选中阴影 |
 | `--memory-card-gap`, `--memory-grid-min-height` | 记忆卡片 9px 间距与记忆格固定起始高度（两列等高） |
+| `--journal-paper-fill`, `--journal-sheep-dot`, `--journal-joint-dot` | 阶段 4c-1 日记正文纸张 84% tint、小羊的主题蓝灰圆点，以及共同作者由两色各占半边的小圆点 |
+| `--todo-check-size`, `--journal-editor-min-height`, `--journal-dialog-max-height`, `--journal-new-body-min-height` | 阶段 4c-1 待办圆圈 21px；日记编辑正文至少半屏、创建表单正文至少 35vh 且抽屉最高 75vh |
 | `--effect-rain-intensity` | 透明玻璃水珠的数量与可见度；低强度水珠较少且较淡，高强度叠加更多水珠；默认关闭，页面不可见暂停，减少动态效果时静止 |
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
 | `--color-chart-*`, `--color-graph-*`, `--color-memory-event` | 图表分类色与记忆事件标记 |
