@@ -26,8 +26,9 @@ production 必须配置以下六项：
 | `app/page.tsx` | 主页（时间线/记忆格） |
 | `app/memory/` | 记忆库（时间线 / 记忆格双视图） |
 | `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接和钉选桶、日记、最近普通桶、feel、随机高重要度桶长期层；滚动日期分列正文、工具、附件视觉/文件正文、召回、有效 thinking、时间戳、消息框架和 agent wake 的 token 预估，较早 raw 日期的留档 thinking 显示为已剥离，手动设为“不带”的日期默认折叠且不改变任何日期模式；损坏的滚动窗口可经二次确认舍弃旧原生细节并用当前 raw 日期的 Haven 正文重建 transcript，不复制窗口或页面历史；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
-| `app/collaborators/` | 协作者提示词独立页：`[id]` 身份、模块和目录，`[id]/base` 基础提示词，`[id]/modules/[moduleId]` 模块编辑，`new` 新建；经 `/api/cc-personas` 存 Haven。 |
-| `app/workbench/` | 工作台；“调参”下提供默认收起的本轮上下文审计，按当前会话只读展示滚动原文、各长期层的已保存/实际生效 ID、背景拼接、SDK SessionStore 实际落盘的文本/召回/`tool_use`/`tool_result`、正文恢复标记、最近一次持久重建凭据、最近实际与当前/下一轮 Dashboard system prompt、Claude 工具名称，以及安全去密后的 MCP instructions/description/input schema、最近实际/当前定义 hash 和模型表面的上一版/本轮期望/iterator 启动指纹，不触发额外模型请求 |
+| `app/collaborators/` | 协作者提示词独立页：`[id]` 身份和模块，`[id]/base` 基础提示词，`[id]/modules/[moduleId]` 模块编辑，`new` 新建；目录权限在工作台维护，经 `/api/cc-personas` 存 Haven。 |
+| `app/workbench/` | 工作台首页按作品、文件、引擎分组；`files/[root]/[[...path]]` 浏览和预览文件，`dirs` 编辑当前协作者的读写目录，`context` 展示只读上下文审计，`session` 展示当前工作窗口状态。 |
+| `app/api/files/` | 服务端文件浏览 API：`yanzhi` 映射 `YANZHI_FILES_ROOT`、`dashboard` 映射 `/workspace/dashboard`、`haven` 映射 `/workspace/haven`、`notes` 只映射 `/home/cc/.claude/projects/*/memory` 中非空目录。真实路径必须留在根内，隐藏以点开头的段、`node_modules`、`.pem`、`.key`、含 `credential` / `secret` 的名字；只有 yanzhi 可上传和删单个文件。 |
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页按常用、记忆与引擎、数据三组提供 10 个入口；外观行即时显示当前主题与背景状态，底部退出登录需确认。子页保留各自配置功能 |
@@ -67,4 +68,6 @@ production 必须配置以下六项：
 - 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 单行引用为“召回内容已清理：title（bucket_id）”，工具结果单行以“已清理：…”标识，原工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭。固定窗口保持原行为；按天滚动窗口在 RollingSeedStore 版 GC 完成并通过真实验收前，服务端硬性禁止手动减负且自动 runner 无条件跳过。
 
 - CC 闲聊模式使用纯自定义 persona system prompt，不加载 `Read` / `Grep` / `Glob` / `Write` / `Edit` / `Bash` 及 Claude Code preset；工作模式保持完整 Claude Code preset 与文件/命令工具。闲聊可通过 chat-only 内置 MCP `yanzhi`（管理页显示名 `yanzhi's files`）在固定挂载点 `/data/cc-chat-files` 下执行受限 `list` / `search` / `read` / `write` / `patch` / `mkdir`；无 server instructions，管理页关闭后整个定义不进入上下文，且工具拒绝绝对路径、`..`、符号链接越界、删除、移动和命令执行。工作模式不挂这个 MCP，而是由 `builtInWorkDirs()` 把同一挂载点内置追加到 `additionalDirectories` 和写目录（不走协作者配置与 VPS workspace 白名单；未挂载或挂载点是 symlink 时跳过），用原生 Read/Edit/Write/Bash 操作，写入仍按原有批准规则。两种模式写到 `artifacts/*.html|svg` 都会出聊天卡片并进入小作品页，存储时整页 content 统一瘦身为标题 + 字数（`artifactMeta.ts`）。CC 自动记忆（`~/.claude/projects/<cwd>/memory`）只给工作模式：闲聊传 `settings.autoMemoryEnabled: false`，不再收到 `MEMORY.md` 索引附件；该设置不进缓存指纹，已有闲聊窗口历史里的旧附件保持不动。模式或工具定义变化只回收 iterator 并 resume 原会话，不触发 transcript rebase。
+- 工作台上传文件写入 `YANZHI_FILES_ROOT`（宿主机挂载卷，持久），不写入 Dashboard 仓库或临时目录。目录权限仍经 `/api/cc-personas` 存 Haven。
 - 内置 MCP 权限以 Haven MCP JSON 中的 `builtInPermissions` 持久化，不进入模型表面 hash：Agent Wake 固定自动允许；`yanzhi's files` 默认自动允许，可在 MCP 页切换为每次询问。要完全禁止时直接关闭服务，避免保留无法使用的工具定义。
+
