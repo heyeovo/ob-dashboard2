@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getMonthChapters, getOnThisDay, getTopTags, groupByDate, groupByMonth, matchesDateFilter, matchesQuickFilter } from '../app/memory/memoryFilters'
+import { getMonthChapters, getOnThisDay, groupByDate, groupByMonth, matchesDateFilter, matchesQuickFilter } from '../app/memory/memoryFilters'
 import type { Bucket } from '../app/memory/memoryTypes'
 
 const bucket = (id: string, changes: Partial<Bucket> = {}): Bucket => ({
@@ -34,10 +34,6 @@ describe('memory filters and grouping', () => {
     const item = bucket('birthday', { event_time: '2026-09-29', last_active: '2026-09-30T04:00:00Z' })
     expect(groupByDate([item])[0].date).toBe('2026-09-29')
     expect(groupByMonth([item])[0].month).toBe('2026-09')
-  })
-
-  it('returns the most frequent tags', () => {
-    expect(getTopTags([bucket('a', { tags: ['x', 'y'] }), bucket('b', { tags: ['x'] })], 1)).toEqual(['x'])
   })
 
   it('parses month chapters only from pinned annual relationship timelines', () => {
