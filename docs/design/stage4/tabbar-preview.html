@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>底栏候选 · 言之的房间</title>
+<meta name="description" content="底部 5 Tab 的三种改法：A 收紧（样子不变，矮一截）、B 悬浮胶囊、C 窗台（只留图标）。每张都画了聊天页和主页两种底下的样子，最下面那条黑线是 iPhone 的 Home 条。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:#EDEAE6;font-family:-apple-system,"PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+  body[data-theme="dusk"]{background:#16151a}
+  [data-theme="apricot"]{--base:#F5EBE3;--accent:#C27B63;--ink:#3F3634;--tint:255 249 245;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 5% 18%,#EFC0A0,transparent 72%),radial-gradient(75% 55% at 100% 62%,#DCCBE0,transparent 72%),radial-gradient(70% 45% at 45% 100%,#F3D2BE,transparent 72%),linear-gradient(160deg,#F8EEE5,#EEE3E4)}
+  [data-theme="sakura"]{--base:#F6E8EA;--accent:#C0707F;--ink:#3F3236;--tint:255 247 248;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 92% 20%,#ECB6C4,transparent 72%),radial-gradient(75% 55% at 0% 55%,#F5CDBD,transparent 72%),radial-gradient(80% 50% at 65% 95%,#E5C1D3,transparent 72%),linear-gradient(180deg,#FAF0EF,#F1DEE3)}
+  [data-theme="mist"]{--base:#E8EDF1;--accent:#5F7F98;--ink:#2F3940;--tint:250 252 253;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 8% 20%,#BFD1E1,transparent 72%),radial-gradient(75% 55% at 100% 55%,#F3ECE2,transparent 72%),radial-gradient(80% 50% at 30% 98%,#C9DADE,transparent 72%),linear-gradient(180deg,#EEF2F4,#E0E7EC)}
+  [data-theme="dusk"]{--base:#1E1C23;--accent:#D9A08A;--ink:#EDE6E1;--tint:40 36 46;--hi:255 255 255;
+    --mesh:radial-gradient(80% 55% at 95% 20%,#433756,transparent 72%),radial-gradient(75% 55% at 0% 60%,#2A3546,transparent 72%),radial-gradient(65% 45% at 80% 95%,#553F38,transparent 72%),linear-gradient(180deg,#221F28,#1A1A20)}
+  [data-bg="photo"]{--tint:255 255 255}
+  [data-bg="photo"][data-theme="dusk"]{--tint:24 22 28}
+  .photo{position:absolute;inset:0;background:
+    radial-gradient(18% 14% at 20% 22%,#f7e27a,transparent 70%),radial-gradient(22% 16% at 78% 30%,#e98fb0,transparent 70%),
+    radial-gradient(26% 20% at 35% 58%,#6fae6a,transparent 72%),radial-gradient(20% 18% at 85% 70%,#f3b35e,transparent 70%),
+    radial-gradient(30% 22% at 10% 85%,#4f8f5c,transparent 72%),radial-gradient(24% 16% at 60% 92%,#d86f8f,transparent 70%),
+    radial-gradient(40% 30% at 55% 10%,#9cc7e8,transparent 75%),repeating-linear-gradient(115deg,rgba(255,255,255,.18) 0 6px,transparent 6px 22px),
+    linear-gradient(180deg,#b9d4c0,#7fa98a 60%,#5d8a6b)}
+  [data-theme="dusk"] .photo{filter:brightness(.55) saturate(.9)}
+  .photo-veil{position:absolute;inset:0;background:rgb(var(--tint)/.4)}
+
+  header{padding:18px 20px 4px;color:#4a4540}
+  body[data-theme="dusk"] header,body[data-theme="dusk"] .meta{color:#e6dfda}
+  header h1{font:600 26px/1.2 "Cormorant Garamond","Noto Serif SC",serif;letter-spacing:.02em}
+  header p{font-size:12px;opacity:.65;margin-top:4px;line-height:1.6}
+  .ctrl{display:flex;flex-wrap:wrap;gap:8px;padding:10px 20px 0}
+  .chip{border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);border-radius:999px;padding:6px 12px;font-size:12px;color:#4a4540}
+  body[data-theme="dusk"] .chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.16);color:#e6dfda}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .sep{width:1px;background:rgba(0,0,0,.12);margin:2px 4px}
+  .rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:14px 20px 34px;scrollbar-width:none}
+  .rail::-webkit-scrollbar{display:none}
+  .slot{flex:0 0 min(86vw,360px);scroll-snap-align:center}
+  .meta{padding:10px 4px 0;color:#4a4540}
+  .meta b{font:600 18px "Cormorant Garamond","Noto Serif SC",serif}
+  .meta small{display:block;font-size:11px;opacity:.65;margin-top:2px;line-height:1.5}
+
+  /* 只画手机下半截：上面一点内容 + 输入栏 / 窗台 + 底栏 + Home 条。真机 34pt 安全区按比例画 */
+  .phone{position:relative;height:420px;border-radius:0 0 30px 30px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.12);background-image:var(--mesh);color:color-mix(in srgb,var(--ink) 92%,var(--base))}
+  .phone + .phone{margin-top:12px}
+  .cap{position:absolute;left:12px;top:10px;font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.45;z-index:3}
+  .home{position:absolute;left:50%;bottom:8px;width:134px;height:5px;border-radius:9px;background:color-mix(in srgb,var(--ink) 85%,transparent);transform:translateX(-50%);z-index:9}
+  .safe{position:absolute;left:0;right:0;bottom:0;height:34px;border-top:1px dashed color-mix(in srgb,var(--ink) 20%,transparent);z-index:8;pointer-events:none}
+  .safe::after{content:"Home 条区域 34pt";position:absolute;right:8px;top:3px;font-size:8px;opacity:.35}
+  .show-safe .safe{display:block}
+  .safe{display:none}
+
+  /* 聊天内容 */
+  .bub{position:absolute;left:14px;right:40px;border-radius:18px;padding:10px 14px;font-size:13px;line-height:1.6;background:color-mix(in srgb,var(--accent) 6%,rgb(var(--tint)/.9));box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 7%,transparent)}
+  .ops{position:absolute;left:18px;font-size:10px;opacity:.4}
+  .composer{position:absolute;left:12px;right:12px;height:52px;border-radius:26px;background:rgb(var(--tint)/.72);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 4px 18px color-mix(in srgb,var(--ink) 8%,transparent);display:flex;align-items:center;padding:0 8px 0 16px;gap:10px;font:italic 13px "Cormorant Garamond","Noto Serif SC",serif;z-index:4}
+  .composer .ph{flex:1;opacity:.4}
+  .composer .send{width:36px;height:36px;border-radius:50%;background:var(--accent);opacity:.9}
+  .composer .plus{font:300 20px sans-serif;opacity:.5;font-style:normal}
+
+  /* 主页窗台内容 */
+  .card{position:absolute;left:14px;right:14px;height:92px;border-radius:20px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 12px color-mix(in srgb,var(--ink) 5%,transparent);padding:12px 14px;font-size:12px}
+  .card .k{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.5}
+  .card .t{font:600 15px "Noto Serif SC",serif;margin-top:6px}
+
+  /* 底栏公共 */
+  .tb{position:absolute;display:flex;justify-content:space-around;align-items:center;z-index:6}
+  .it{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;min-width:52px;opacity:.5}
+  .it svg{width:21px;height:21px}
+  .it.on{opacity:1;color:var(--accent);font-weight:600}
+
+  /* A 收紧：满宽，内容 48 + 安全区扣掉一截 */
+  .A{left:0;right:0;bottom:0;padding:6px 0 20px;background:rgb(var(--tint)/.62);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.4),0 -1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .A .chat{margin-top:-14px}
+  .A .chat i{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 70%,#fff));color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .A .chat{opacity:1}
+  .A .chat span{opacity:.5}
+
+  /* B 悬浮胶囊：两边各留 14，底下压在 Home 条上方 */
+  .B{left:14px;right:14px;bottom:18px;height:60px;border-radius:30px;padding:0 6px;background:rgb(var(--tint)/.7);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);box-shadow:inset 0 1px 0 rgb(var(--hi)/.65),inset 0 0 0 1px color-mix(in srgb,var(--ink) 6%,transparent),0 8px 28px color-mix(in srgb,var(--ink) 12%,transparent)}
+  .B .it{position:relative;min-width:0;flex:1;height:48px;justify-content:center;border-radius:24px}
+  .B .it.on{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+  .B .chat{opacity:1}
+  .B .chat i{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .B .chat svg{width:19px;height:19px}
+
+  /* C 窗台：满宽，只留图标，上沿是一道窗台的厚边 */
+  .C{left:0;right:0;bottom:0;padding:10px 0 22px;background:linear-gradient(180deg,rgb(var(--tint)/.8),rgb(var(--tint)/.62));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 2px 0 rgb(var(--hi)/.75),inset 0 3px 0 color-mix(in srgb,var(--ink) 6%,transparent),0 -6px 14px color-mix(in srgb,var(--ink) 6%,transparent)}
+  .C .it{gap:5px}
+  .C .it span{display:none}
+  .C .it::after{content:"";width:4px;height:4px;border-radius:50%;background:transparent}
+  .C .it.on::after{background:var(--accent)}
+  .C .it svg{width:23px;height:23px}
+  .C .chat{opacity:1}
+  .C .chat i{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:var(--accent);color:#fff;box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 30%,transparent)}
+  .C .chat i svg{width:20px;height:20px}
+  .C .chat::after{display:none}
+
+  /* 现状 */
+  .N{left:0;right:0;bottom:0;padding:8px 0 34px;background:rgb(var(--tint)/.62);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgb(var(--hi)/.4),0 -1px 0 color-mix(in srgb,var(--ink) 8%,transparent)}
+  .N .it{gap:4px}
+  .N .chat{margin-top:-18px;opacity:1}
+  .N .chat i{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 70%,#fff));color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .N .chat span{opacity:.5}
+
+  /* D 融进去（参考 1）：没有底板，只在最下面一层淡淡的渐隐，图标 + 可选小字 */
+  .D{left:0;right:0;bottom:0;padding:26px 8px 22px;background:linear-gradient(180deg,transparent,rgb(var(--tint)/.55) 45%,rgb(var(--tint)/.8))}
+  .D .it{gap:5px;opacity:.42}
+  .D .it.on{opacity:1;color:inherit;font-weight:600}
+  .D .it span{font-size:8.5px;letter-spacing:.18em;font-family:"Cormorant Garamond","Noto Serif SC",serif}
+  .D .chat i{display:contents}
+  .D .chat svg{stroke:currentColor}
+  .D .it.on svg{color:var(--accent)}
+  /* E 胶囊（参考 2）：浮起的玻璃胶囊，当前页一颗强调色淡底，聊天不突出 */
+  .E{left:16px;right:16px;bottom:16px;height:56px;border-radius:28px;padding:0 5px;background:rgb(var(--tint)/.74);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);box-shadow:inset 0 1px 0 rgb(var(--hi)/.7),inset 0 0 0 1px color-mix(in srgb,var(--ink) 5%,transparent),0 8px 26px color-mix(in srgb,var(--ink) 11%,transparent)}
+  .E .it{flex:1;min-width:0;height:46px;justify-content:center;border-radius:23px;gap:2px;opacity:.5}
+  .E .it.on{opacity:1;background:color-mix(in srgb,var(--accent) 15%,transparent)}
+  .E .it span{font-size:9px}
+  .E .chat i{display:contents}
+  .E .chat svg{stroke:currentColor}
+  .nolabel .D .it span,.nolabel .E .it span{display:none}
+  .nolabel .D{padding-top:22px;padding-bottom:24px}
+
+  /* E2 窄胶囊：按内容收窄、居中，比输入栏矮一号，一眼分得出主次 */
+  .E2{left:var(--pill-inset,28px);right:var(--pill-inset,28px);bottom:16px;height:50px;border-radius:25px;padding:0 5px;gap:2px;background:rgb(var(--tint)/.74);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);box-shadow:inset 0 1px 0 rgb(var(--hi)/.7),inset 0 0 0 1px color-mix(in srgb,var(--ink) 5%,transparent),0 8px 26px color-mix(in srgb,var(--ink) 11%,transparent)}
+  .E2 .it{flex:1;min-width:0;height:40px;justify-content:center;border-radius:20px;gap:1px;opacity:.5}
+  .E2 .it.on{opacity:1;background:color-mix(in srgb,var(--accent) 15%,transparent)}
+  .E2 .it span{font-size:8.5px}
+  .E2 .chat i{display:contents}
+  .E2 .chat svg{stroke:currentColor}
+  .nolabel .E2 .it span{display:none}
+  .E2 .it svg{width:20px;height:20px}
+
+  /* 记忆格 */
+  .grid{position:absolute;left:12px;right:12px;top:30px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .g{height:118px;border-radius:16px;background:rgb(var(--tint)/.76);box-shadow:inset 0 1px 0 rgb(var(--hi)/.6),0 2px 10px color-mix(in srgb,var(--ink) 5%,transparent);padding:10px 11px;font-size:10px;line-height:1.5;overflow:hidden}
+  .g b{display:block;font:600 12px "Noto Serif SC",serif;margin-bottom:4px}
+  .g span{opacity:.55}
+  /* 底部渐隐：iOS 26 自带 App 浮动底栏下面那层，内容滑到胶囊附近先淡掉，胶囊周围不乱 */
+  .fade{position:absolute;left:0;right:0;bottom:0;height:120px;z-index:5;pointer-events:none;
+    background:linear-gradient(180deg,transparent,rgb(var(--tint)/.55) 55%,rgb(var(--tint)/.8));
+    -webkit-mask-image:linear-gradient(180deg,transparent,#000 40%);mask-image:linear-gradient(180deg,transparent,#000 40%);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+
+  /* F 满宽 · 英文（新）：还是左右顶满，Home 条区只留 18，英文小字，当前页一颗淡色小胶囊托着图标 */
+  .F{left:0;right:0;bottom:0;padding:7px 4px 18px;align-items:flex-end;
+    background:linear-gradient(180deg,rgb(var(--tint)/.58),rgb(var(--tint)/.72));backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15);
+    box-shadow:inset 0 1px 0 rgb(var(--hi)/.55),0 -1px 0 color-mix(in srgb,var(--ink) 6%,transparent),0 -8px 24px color-mix(in srgb,var(--ink) 5%,transparent)}
+  .F .it{flex:1;min-width:0;gap:4px;opacity:1;color:color-mix(in srgb,var(--ink) 48%,transparent);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .2s}
+  .F .it .pill{display:grid;place-items:center;width:46px;height:28px;border-radius:14px;transition:background .25s,transform .18s cubic-bezier(.3,1.4,.5,1)}
+  .F .it svg{width:20px;height:20px}
+  .F .it span{font:600 8px/1 "Cormorant Garamond",serif;letter-spacing:.2em;padding-left:.2em;transition:letter-spacing .25s}
+  .F .it.on{color:var(--accent)}
+  .F .it.on .pill{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+  .F .it.on span{letter-spacing:.24em}
+  .F .it:active .pill{transform:scale(.86)}
+  /* 聊天：小一号的实心圆，外面一圈玻璃环把它和底栏隔开，只略微抬起 */
+  .F .chat .orb{display:grid;place-items:center;width:42px;height:42px;margin-top:-16px;margin-bottom:-2px;border-radius:50%;
+    background:radial-gradient(120% 120% at 30% 20%,color-mix(in srgb,var(--accent) 70%,#fff),var(--accent) 60%);
+    box-shadow:0 0 0 3px rgb(var(--tint)/.85),0 0 0 4px color-mix(in srgb,var(--ink) 6%,transparent),0 6px 16px color-mix(in srgb,var(--accent) 30%,transparent);
+    transition:transform .18s cubic-bezier(.3,1.4,.5,1),box-shadow .25s;opacity:.88}
+  .F .chat .orb svg{width:19px;height:19px;stroke:#fff}
+  .F .chat.on .orb{opacity:1;box-shadow:0 0 0 3px rgb(var(--tint)/.9),0 0 0 4px color-mix(in srgb,var(--accent) 30%,transparent),0 6px 20px color-mix(in srgb,var(--accent) 45%,transparent)}
+  .F .chat:active .orb{transform:scale(.9)}
+
+  /* 聊天不抬起：图标常驻强调色（淡一点），其余和别的格子一样 */
+  .F .chat{color:color-mix(in srgb,var(--accent) 75%,transparent)}
+  .F .chat .pill{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+  .F .chat.on .pill{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+  .F .chat svg{stroke:currentColor}
+  /* 无字：小胶囊稍大，底栏再矮一点 */
+  .F.nolab{padding:9px 4px 20px}
+  .F.nolab span:not(.pill){display:none}
+  .F.nolab .pill{width:52px;height:34px;border-radius:17px}
+  .F.nolab svg{width:22px;height:22px}
+</style>
+</head>
+<body data-theme="apricot" data-bg="gradient">
+<header>
+  <h1>言之的房间 · 底栏</h1>
+  <p>现在的底栏：图标 + 字大约 56pt，下面还垫着整条 Home 条安全区（34pt），所以看着高、离屏幕底有一截空。<br>往右滑：现状 → D 融进去 → E 胶囊 → A 收紧 → B 悬浮胶囊 → C 窗台。D / E 是照你的参考图新加的，「小字」切英文 / 中文 / 不要；「对话里收起底栏」是参考 3：进到某个对话就只剩输入栏，返回列表才有底栏。</p>
+</header>
+<div class="ctrl" id="ctrl"></div>
+<div class="rail" id="rail"></div>
+<script>
+const THEMES=[['apricot','杏雾'],['sakura','樱粉'],['mist','雾蓝'],['dusk','夜']]
+const BGS=[['gradient','渐变'],['photo','照片']]
+const state={theme:'apricot',bg:'gradient',safe:false,label:'none',hideInChat:false,inset:28,flip:false,fade:true}
+const S='fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 20 20"'
+const ICON={
+  home:`<svg ${S}><path d="M3.5 9 10 3.5 16.5 9v7a1 1 0 0 1-1 1h-3v-4.5h-5V17h-3a1 1 0 0 1-1-1z"/></svg>`,
+  mem:`<svg ${S}><circle cx="10" cy="10" r="6.5"/><path d="M10 6.5V10l2.5 1.5"/></svg>`,
+  chat:`<svg ${S} stroke="white" stroke-width="1.6"><path d="M3.5 9.5c0-3 2.9-5.5 6.5-5.5s6.5 2.5 6.5 5.5S13.6 15 10 15c-.8 0-1.6-.1-2.3-.3L4 16l.9-2.6c-.9-1-1.4-2.3-1.4-3.9Z"/></svg>`,
+  bench:`<svg ${S}><path d="M3.5 15.5h13M5 15.5V12M15 15.5V12M8 12V8M12 12V8M3.5 12h13"/></svg>`,
+  set:`<svg ${S}><circle cx="10" cy="10" r="2.5"/><path d="M10 3v1.8M10 15.2V17M3 10h1.8M15.2 10H17M5 5l1.3 1.3M13.7 13.7 15 15M5 15l1.3-1.3M13.7 6.3 15 5"/></svg>`,
+}
+function barF(active,nolab){
+  const en=[['home','HOME'],['mem','MEMORY'],['chat','CHAT'],['bench','DESK'],['set','SETTINGS']]
+  const a=state.fActive||active
+  return `<nav class="tb F ${nolab?'nolab':''}">${en.map(([k,l])=>k==='chat'
+    ?`<div class="it chat ${a===k?'on':''}" data-tab="${k}"><span class="pill">${ICON.chat}</span><span>${l}</span></div>`
+    :`<div class="it ${a===k?'on':''}" data-tab="${k}"><span class="pill">${ICON[k]}</span><span>${l}</span></div>`).join('')}</nav>`
+}
+function bar(kind,active){
+  if(kind==='F')return barF(active)
+  if(kind==='F0')return barF(active,true)
+  const zh=[['home','主页'],['mem','记忆库'],['chat','聊天'],['bench','工作台'],['set','设置']]
+  const en=[['home','HOME'],['mem','MEMORY'],['chat','CHAT'],['bench','DESK'],['set','SETTINGS']]
+  const tabs=(kind==='D'||kind==='E'||kind==='E2')&&state.label==='en'?en:zh
+  return `<nav class="tb ${kind}">${tabs.map(([k,l])=>k==='chat'
+    ?`<div class="it chat ${active===k?'on':''}"><i>${ICON.chat}</i><span>${l}</span></div>`
+    :`<div class="it ${active===k?'on':''}">${ICON[k]}<span>${l}</span></div>`).join('')}</nav>`
+}
+// 每种方案底栏顶边离屏幕底多高（用来摆输入栏 / 卡片）
+const TOP={F:74,F0:68,N:90,A:74,B:78,C:72,D:64,E:72,E2:66}
+function chat(kind){
+  const t=TOP[kind]
+  const hide=state.hideInChat&&kind!=='N'
+  return `<div class="phone">${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <span class="cap">${state.hideInChat&&kind!=='N'?'聊天页 · 底栏收起':'聊天页'}</span>
+    <div class="bub" style="top:40px">好，那就对上了：只有刚部署完的第一轮会闪一下，之后就一直是 1M。</div>
+    <div class="bub" style="top:128px">国庆前最后一个下午，工作台上线，两个小 bug 也清掉了。</div>
+    <div class="ops" style="top:200px">⧉ ✓ 15:41</div>
+    <div class="composer" style="bottom:${hide?30:t+10}px;${state.flip&&kind==='E2'?`left:${state.inset}px;right:${state.inset}px`:''}"><span class="plus">+</span><span class="ph">写点什么……</span><span class="send"></span></div>
+    ${hide?'':bar(kind,'chat')}<div class="safe"></div><div class="home"></div></div>`
+}
+function home(kind){
+  const t=TOP[kind]
+  return `<div class="phone">${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <span class="cap">主页</span>
+    <div class="card" style="bottom:${t+116}px"><div class="k">Diary · 日记</div><div class="t">奶糖趴上窗台的那个晚上</div></div>
+    <div class="card" style="bottom:${t+12}px"><div class="k">Care · 照顾</div><div class="t">国庆回重庆，别睡过头</div></div>
+    ${bar(kind,'home')}<div class="safe"></div><div class="home"></div></div>`
+}
+
+const FLOAT=['B','E','E2']
+function memory(kind){
+  const cards=[['9.29 · 奶糖趴上窗台','GPT 画出来一只一模一样的奶糖，半眯的绿眼睛……'],['9.28 · 家的底色','杏雾当默认，另外带樱粉、雾蓝、夜……'],['9.27 · 假期最后一天','睡到下午三点，鱼籽鱼泡不嫩……'],['9.22 · 维他柠檬茶','每顿饭两瓶冰的低糖版……'],['9.12 · 滚动窗口','「未来」窗口瘦身继续……'],['9.07 · 第一次叫你起床','bark 响的时候你还在睡……']]
+  return `<div class="phone">${state.bg==='photo'?'<div class="photo"></div><div class="photo-veil"></div>':''}
+    <span class="cap">记忆库 · 记忆格</span>
+    <div class="grid">${cards.map(([t,d])=>`<div class="g"><b>${t}</b><span>${d}</span></div>`).join('')}</div>
+    ${state.fade&&FLOAT.includes(kind)?'<div class="fade"></div>':''}
+    ${bar(kind,'mem')}<div class="safe"></div><div class="home"></div></div>`
+}
+const META={
+  F0:['F · 满宽 · 无字','同 F，去掉小字，托着图标的小胶囊大一号，底栏再矮一点。可以直接点着切。'],
+  F:['F · 满宽 · 英文（新）','还是左右顶满，Home 条那截只留 18（原来 34），整体矮一截。小字换宽字距英文衬线：HOME / MEMORY / CHAT / DESK / SETTINGS。当前页用一颗淡色小胶囊托着图标。聊天不再抬起：图标常驻淡强调色，下面垫一层更淡的底，跟别的格子区分开就够了。点一下图标会缩一下再弹回来，可以在这张上直接点着试。'],
+  N:['现状','满宽，图标 + 字，聊天是突出来的大圆。下面垫满 34pt 安全区，所以字和 Home 条之间空一大截。'],
+  A:['A · 收紧','样子不变，只把下面那截空砍掉一半（安全区只留 20pt，Home 条和字刚好不打架），中间圆小一号、少突一点。改动最小，整体矮约 16pt。'],
+  B:['B · 悬浮胶囊','底栏变成一颗浮在 Home 条上方的玻璃胶囊，两边留缝，背景从四周透出来。当前页用强调色淡底圈住；聊天是胶囊里的实心圆，不再突出去。跟 iOS 26 自带 App 的底栏是一个思路。'],
+  E2:['E · 收窄的胶囊（推荐）','比输入栏两边各多缩一截（默认 28，输入栏是 12），高 50（输入栏 52）。输入栏是满宽的主角，底栏在下面短一点、矮一点，形状是一家但分得出主次。上面「胶囊两边」可以切 20 / 28 / 36 / 44 看宽窄。'],
+  D:['D · 融进去（参考 1）','没有底板，只在最下面铺一层很淡的渐隐，图标细线、当前页强调色。小字用宽字距的英文衬线（也可以不要字）。最轻，背景图一路透到屏幕底。'],
+  E:['E · 满宽胶囊（参考 2）','浮起来的玻璃胶囊，两边和底下都留缝，当前页一颗强调色淡底，聊天不再突出。离 Home 条有距离但不空，那截空当成了「胶囊浮着」的一部分。'],
+  C:['C · 窗台','满宽，上沿做成一道有厚度的窗台边（亮线 + 暗线 + 往上一点阴影），去掉文字只留图标，当前页下面一个小点；聊天是圆角方块。最矮，也最贴「一扇窗」：窗台在最下面，东西摆在上面。'],
+}
+function render(){
+  document.body.dataset.theme=state.theme;document.body.dataset.bg=state.bg
+  document.body.classList.toggle('show-safe',state.safe)
+  document.body.classList.toggle('nolabel',state.label==='none')
+  document.body.style.setProperty('--pill-inset',(state.flip?12:state.inset)+'px')
+  document.getElementById('ctrl').innerHTML=
+    THEMES.map(([k,n])=>`<button class="chip ${state.theme===k?'on':''}" data-t="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    BGS.map(([k,n])=>`<button class="chip ${state.bg===k?'on':''}" data-b="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    [['en','英文小字'],['zh','中文小字'],['none','不要字']].map(([k,n])=>`<button class="chip ${state.label===k?'on':''}" data-l="${k}">${n}</button>`).join('')+'<span class="sep"></span>'+
+    [20,28,36,44].map(n=>`<button class="chip ${state.inset===n?'on':''}" data-i="${n}">胶囊两边 ${n}</button>`).join('')+'<span class="sep"></span>'+
+    `<button class="chip ${state.flip?'on':''}" data-f="1">反过来：底栏宽、输入栏窄</button>`+'<span class="sep"></span>'+
+    `<button class="chip ${state.hideInChat?'on':''}" data-h="1">对话里收起底栏</button>`+
+    `<button class="chip ${state.fade?'on':''}" data-d="1">胶囊下面渐隐</button>`+
+    `<button class="chip ${state.safe?'on':''}" data-s="1">显示安全区</button>`
+  document.getElementById('rail').innerHTML=['F','F0','N','E2','E','D','A','B','C'].map(k=>
+    `<div class="slot">${chat(k)}${memory(k)}${home(k)}<div class="meta"><b>${META[k][0]}</b><small>${META[k][1]}</small></div></div>`).join('')
+}
+document.addEventListener('click',e=>{
+  const tab=e.target.closest('.F [data-tab]')
+  if(tab){state.fActive=tab.dataset.tab;const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x;return}
+  const el=e.target.closest('button');if(!el)return
+  if(el.dataset.t)state.theme=el.dataset.t;else if(el.dataset.b)state.bg=el.dataset.b;else if(el.dataset.s)state.safe=!state.safe;else if(el.dataset.l)state.label=el.dataset.l;else if(el.dataset.h)state.hideInChat=!state.hideInChat;else if(el.dataset.i)state.inset=Number(el.dataset.i);else if(el.dataset.f)state.flip=!state.flip;else if(el.dataset.d)state.fade=!state.fade;else return
+  const x=document.getElementById('rail').scrollLeft;render();document.getElementById('rail').scrollLeft=x
+})
+render()
+</script>
+</body>
+</html>
