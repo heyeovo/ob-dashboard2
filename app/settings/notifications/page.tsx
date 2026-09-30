@@ -112,7 +112,7 @@ export default function NotificationSettingsPage() {
     }
   }
 
-  if (loading) return <div className="p-6 text-sm text-[var(--color-text-tertiary)]">正在读取通知设置…</div>
+  if (loading) return <div className="min-h-screen p-6 text-sm text-[var(--color-text-tertiary)]">正在读取通知设置…</div>
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-8 text-[var(--color-text-primary)] sm:px-6 md:pb-8">

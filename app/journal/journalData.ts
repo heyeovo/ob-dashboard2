@@ -13,21 +13,31 @@ export type JournalEntry = {
 export type Author = '言之' | '小羊' | '共同'
 
 export function journalDate(entry: JournalEntry) {
-  const parts = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(entry.event_time || entry.created))
-  const value = (key: string) => parts.find(part => part.type === key)?.value || ''
-  return `${value('year')}-${value('month')}-${value('day')}`
+  return toDateTimeLocal(entry.event_time || entry.created).slice(0, 10)
 }
 
 export function sortJournals(entries: JournalEntry[]) {
   return [...entries].sort((a, b) => {
-    const time = new Date(b.event_time || b.created).getTime() - new Date(a.event_time || a.created).getTime()
+    const time = journalTimestamp(b.event_time || b.created) - journalTimestamp(a.event_time || a.created)
     return time || a.id.localeCompare(b.id)
   })
 }
 
+function journalTimestamp(value: string) {
+  const text = value.trim().replace(' ', 'T')
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T00:00:00+08:00`).getTime()
+  return new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) ? text : `${text}+08:00`).getTime()
+}
+
 export function toDateTimeLocal(value: string) {
-  const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
-  return match ? `${match[1]}T${match[2]}` : ''
+  const text = String(value || '').trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text}T00:00`
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  if (!match) return ''
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(text)) return `${match[1]}T${match[2]}`
+  const date = new Date(text.replace(' ', 'T'))
+  if (Number.isNaN(date.getTime())) return ''
+  return new Date(date.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16)
 }
 
 export function toBeijingIso(value: string) {

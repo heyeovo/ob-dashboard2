@@ -7,6 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
+| `HANDOFF-4c-1-polish.md` | 🔨 待 CC 验收 | `fix/4c-1-polish` 六项修正；CC 在 Linux 补跑 Windows 符号链接环境失败的测试，并做 iPhone 走查；不动 main |
 | `HANDOFF-auto-tag-runtime.md` | 📦 已完成归档 | 已提交：Dashboard `8d29fdc`、Haven `4efd135` / `6cc656b` |
 | `HANDOFF-cc-VPS迁移.md` | 📦 已完成归档 | 核心迁移、B2 每日备份已完成；§21 列的附加项（额外加密副本、备份失败通知等）未排期 |
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |

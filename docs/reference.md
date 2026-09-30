@@ -34,7 +34,7 @@ production 必须配置以下六项：
 | `app/settings/` | 设置聚合页按常用、记忆与引擎、数据三组提供 10 个入口；外观行即时显示当前主题与背景状态，底部退出登录需确认。子页保留各自配置功能 |
 | `app/settings/appearance/` | 外观设置：杏雾/樱粉/雾蓝/夜四主题、背景（含背景浓度、照片强调色跟随主题 / 图片）、玻璃强度、标题字体、字号、雨痕；「聊天显示」两个本机开关语义不变 |
 | `app/impressions/` | 日回顾：默认周条，可展开月历，过去空白日可补写 |
-| `app/journal/` | 日记本按月阅读；`[id]` 单篇整页阅读、原地编辑、前后篇与删除 |
+| `app/journal/` | 日记本按月阅读；月份名只取钉选「YYYY年关系时间线」桶的正文；列表与 `[id]` 阅读页共用允许丢失的模块缓存，先显示缓存再后台刷新，返回列表恢复搜索与滚动位置；单篇原地编辑、前后篇与删除 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
 | `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`bucket/[id]/comments/[commentId]` 代理单条年轮修改/删除；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff；`cc-chat` 的前台请求取消会穿透进程内队列与 Pro 文件锁等待，跨进程锁记录宿主机和 PID，同机持有进程死亡时立即回收；滚动模式的原文从每窗口／lane 的只追加原生存档按天筛选，日回顾、实时钉选桶和日记仍放入背景 Context；`cc-rolling-recovery` 仅在原生存档、持久 revision 与原生 transcript 均不可用且用户精确确认窗口时，把全量 Haven 正文初始化为新存档，再物化当前 raw 日期的 seed，以旧 session ID + state version CAS 切换当前活跃 lane；`cc-context-audit` 只读显示存档及按天筛选结果、当前持久 transcript、请求前保存的 system prompt 与去密后的模型表面诊断，不生成 revision 或修改指针；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback（含 `agent_followup`），认证失败时暂停该窗口自动唤醒并返回一小时 `Retry-After`，Pro 额度耗尽时同样返回一小时退避但不保存额度提示为 wake 消息；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，并通过 `days=1` 按 profile/session 查询不含正文的月历日期与轮数，读写滚动上下文、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；读取 `context_days` 时同时取得 Haven 按日汇总的正文、工具、附件、召回、thinking、时间戳、消息框架、agent wake token 预估及未知附件数；严格轮次提交会同步 `recalled_bucket_ids`、`created_bucket_ids` 和 `breath_bucket_ids` 给 Haven 隔离账本；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
