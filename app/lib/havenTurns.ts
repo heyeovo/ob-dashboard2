@@ -109,6 +109,7 @@ export type HavenConversationSession = {
   context_turn_watermark: number
   prompt_module_overrides: Record<string, boolean>
   mode: 'chat' | 'work'
+  recall_mode: '' | 'on' | 'off'
   daily_review_enabled: boolean
   daily_review_snapshot: Array<{ review_date: string; content: string; updated_at?: string }>
   daily_review_snapshot_initialized: boolean
@@ -923,6 +924,7 @@ export async function patchConversationSessionState(input: {
   ccOverrides?: HavenConversationSession['cc_overrides']
   promptModuleOverrides?: Record<string, boolean>
   mode?: 'chat' | 'work'
+  recallMode?: '' | 'on' | 'off'
   dailyReviewEnabled?: boolean
   initializeDailyReviewSnapshot?: boolean
   handoffSnapshot?: HandoffSnapshot
@@ -935,7 +937,7 @@ export async function patchConversationSessionState(input: {
     return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
   }
   if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.ccOverrides === undefined && input.promptModuleOverrides === undefined
-    && input.mode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot
+    && input.mode === undefined && input.recallMode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot
     && input.handoffSnapshot === undefined && input.frozenPersonaAppend === undefined) {
     return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
@@ -945,6 +947,7 @@ export async function patchConversationSessionState(input: {
   if (input.ccOverrides) body.cc_overrides = input.ccOverrides
   if (input.promptModuleOverrides !== undefined) body.prompt_module_overrides = input.promptModuleOverrides
   if (input.mode !== undefined) body.mode = input.mode
+  if (input.recallMode !== undefined) body.recall_mode = input.recallMode
   if (input.dailyReviewEnabled !== undefined) body.daily_review_enabled = input.dailyReviewEnabled
   if (input.initializeDailyReviewSnapshot) body.initialize_daily_review_snapshot = true
   if (input.handoffSnapshot !== undefined) body.handoff_snapshot = input.handoffSnapshot

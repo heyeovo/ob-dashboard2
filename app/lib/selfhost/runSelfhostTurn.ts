@@ -1,5 +1,6 @@
 import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/havenPersonas'
 import { recallForPrompt } from '@/app/lib/havenRecall'
+import { resolveRecallEnabled } from '@/app/lib/recallMode'
 import { estimateTextTokens, splitRecallModules } from '@/app/lib/recallDisplay'
 import {
   dailyReviewSystemBlock,
@@ -45,6 +46,7 @@ export type SelfhostRequest = {
   text: string
   attachmentIds?: string[]
   mode: 'chat' | 'work'
+  recall?: boolean
   includeDailyReview: boolean
   handoffSnapshot?: HandoffSnapshot
 }
@@ -564,7 +566,7 @@ export function createSelfhostStream(
         let mcpRuntime: SelfhostMcpRuntime | null = null
         try {
         send('start', { session_id: request.sessionId, request_id: request.requestId, at: startedAt })
-        const recall = prepared.persona.recall_on === false
+        const recall = !resolveRecallEnabled(request.recall, prepared.session?.recall_mode, request.mode)
           ? {
               ok: true, additionalContext: '', cardCount: 0, chars: 0, elapsedMs: 0,
               recalledIds: [] as string[], domains: [] as string[], error: '', httpStatus: null,

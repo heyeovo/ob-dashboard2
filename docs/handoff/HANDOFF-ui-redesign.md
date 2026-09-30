@@ -529,5 +529,6 @@ CARE · 照顾                              ›
   - 2026-09-29 `feat/stage3b-memory` 按「3b 布局」1–9 实现：D 时间线、两列记忆格、薄玻璃搜索与筛选、往日同日、年度章节、年轮、统一 `bucketDate`、最新/最重要排序；分类筛选行及旧权重/升降序/列表切换移除，后端算法、详情抽屉和新增入口不变。build 通过；记忆定向测试 8 项通过；全量 Vitest 382 通过、1 跳过、2 项因 Windows symlink `EPERM` 失败。`text-[Npx]` 为 0。下一步由用户在 iPhone 主屏幕 PWA 按「3b 验收」核对四主题 × 渐变/照片、8.29 往日记忆、9 月「日常」和章节句、年轮、日期、默认排序；随后 CC 验收并合并，禁止直接推 main。
   - 2026-09-29 CC 验收：合并 main 后 build 通过、Vitest 61 文件 / 385 项全过；修卡片在触屏上粘住的 hover 上浮、去掉与全站重复的按下缩放（`8640440`），合并 main（`9788058`）并部署。待用户 iPhone 走查。
 - [ ] 阶段 4 前置：提示词页 + 注入记忆按窗口。2026-09-29 布局已定（预览 `docs/design/stage4/prompt-page-preview.html`），排在 3b 之后交 GPT；Haven `feat/window-recall` 先合。
+  - 2026-09-30 功能分支实现：Haven `feat/window-recall`（`9936dd2`）已推，独立 `recall_mode`、兼容迁移和空模块保存；dashboard `feat/prompt-page` 实现 A–D 并推同名分支。Haven 状态契约 48 项通过；dashboard build 通过，定向 Vitest 22 项通过，全量 385 项通过、1 跳过、2 项因本机 Windows symlink `EPERM` 未通过。`text-[Npx]` 和旧弹窗引用均为 0。下一步：先合并部署 Haven，再合并 dashboard；按本节手机验收逐项走查持久化、提示词一致性与 CHAT/WORK 召回，正式环境未验收前不勾选。
 - [ ] 阶段 4
 - [ ] 阶段 5

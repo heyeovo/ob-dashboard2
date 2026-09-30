@@ -6,7 +6,6 @@ import { requestedCcSessionId, useCcChat } from './useCcChat'
 import { useIsRemote } from './useIsRemote'
 import { usePersonas } from './usePersonas'
 import type { CcMessage } from './types'
-import type { CcPersona } from './persona'
 import type { HistoricalConversation } from './historicalChats'
 import { getCcChatMetrics } from './CcChatMetrics'
 import { rememberCcReturnSession } from './ccNavMemory'
@@ -25,9 +24,8 @@ export default function CcChatPage() {
   const people = usePersonas()
   const chat = useCcChat(people.activeId, isRemote)
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
-  // 协作者：左上角开列表，右上角开设置。settingsFor 为 null 就是没开设置。
+  // 协作者列表从左上角打开；提示词有独立页面。
   const [personaRailOpen, setPersonaRailOpen] = useState(false)
-  const [settingsFor, setSettingsFor] = useState<CcPersona | null>(null)
   const [recallDetail, setRecallDetail] = useState<CcMessage | null>(null)
   const [winSetOpen, setWinSetOpen] = useState(false)
   const [historyDateOpen, setHistoryDateOpen] = useState(false)
@@ -84,19 +82,6 @@ export default function CcChatPage() {
       window.removeEventListener('cc:show-list', showList)
     }
   }, [])
-
-  // 主页抽屉的「言」卡片用 /cc?prompt=1 打开提示词页；协作者加载完再开，开完把参数去掉
-  useEffect(() => {
-    if (people.loading) return
-    if (new URLSearchParams(window.location.search).get('prompt') !== '1') return
-    const timer = window.setTimeout(() => {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('prompt')
-      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
-      setSettingsFor(people.active)
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [people.loading, people.active])
 
   // 底栏点「聊天」回来时回到哪：在对话里就记这个对话，在列表或历史窗口就记空（回列表）
   useEffect(() => {
@@ -216,8 +201,8 @@ export default function CcChatPage() {
 
   const scope: CcChatScope = {
     chat, people, xhs, metrics, mobileView, setMobileView, mobilePageRef,
-    mobileComposerRef, personaRailOpen, setPersonaRailOpen, settingsFor,
-    setSettingsFor, recallDetail, setRecallDetail, winSetOpen, setWinSetOpen,
+    mobileComposerRef, personaRailOpen, setPersonaRailOpen,
+    recallDetail, setRecallDetail, winSetOpen, setWinSetOpen,
     historyDateOpen, setHistoryDateOpen, historyDate, setHistoryDate,
     handoffOpen, setHandoffOpen, searchOpen, setSearchOpen, searchSessionId,
     setSearchSessionId, searchQuery, setSearchQuery, activeSearchMessageId,
