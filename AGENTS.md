@@ -57,6 +57,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 - 弹窗统一 `DetailPanel`（`mode="drawer"` 右侧滑入，`mode="modal"` 居中）；自己写的全屏浮层包 `BodyPortal` 挂到 body，否则会被底部 Tab 压住（见 `DESIGN.md`「层级」）
 - 卡片统一 `Card`（variant: interactive / outline / ghost / empty）
 - 手机子页面返回入口统一 `SubpageBackButton`（小圆形半透明玻璃、居中 SVG 箭头与不小于 44px 的点击范围），不要各页另画箭头；正文大标题随页面滚动，主页面顶栏保持固定
+- 页面自写的加载 / 空状态早返回也必须撑满 `min-h-screen`；日记编辑与新增共用 `JournalDateField`，按北京时间显示并唤起系统日期时间选择。
 - 记忆详情用共享 `BucketDetailDrawer`（年轮可逐条编辑 / 确认后删除）
 - 导航：桌面 `SideRail`，手机 `BottomTabBar` 底部 5 Tab（主页 / 记忆库 / 聊天 / 工作台 / 设置），全站 `MobileShell` 包裹；记忆库顶栏用共享 `MemoryViewSwitch` 薄玻璃药丸切换时间线 / 记忆格；手机点聊天 Tab 回 `/cc` 对话列表，session deep link 直接进聊天；设置聚合页按常用、记忆与引擎、数据分组，外观在 `/settings/appearance`
 - 全站外观由 `AppearanceProvider` 即时预览并保存到 Haven，`RainLayer` 在效果开启时挂载；背景图和配置均以 Haven 为事实源，`localStorage` 仅镜像缓存。固定导航外框可用玻璃模糊，长列表卡片和聊天气泡不逐项模糊

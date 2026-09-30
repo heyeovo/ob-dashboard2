@@ -90,8 +90,8 @@ export default function CollaboratorPage({ id }: { id: string }) {
     setOrderOverride(ids)
   }
 
-  if (people.loading && !isNew) return <div className="p-6 text-sm text-[var(--color-text-tertiary)]">读取协作者…</div>
-  if (!person) return <div className="p-6"><SubpageBackButton label="返回聊天" href="/cc" /><p className="mt-6 text-sm">找不到这个协作者。</p></div>
+  if (people.loading && !isNew) return <div className="min-h-screen p-6 text-sm text-[var(--color-text-tertiary)]">读取协作者…</div>
+  if (!person) return <div className="min-h-screen p-6"><SubpageBackButton label="返回聊天" href="/cc" /><p className="mt-6 text-sm">找不到这个协作者。</p></div>
 
   return <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28 pt-3 text-[var(--color-text-primary)]">
     <SubpageBackButton label="返回" href={isNew ? '/cc' : '/'} />

@@ -14,6 +14,7 @@ export default function PromptEditor({ id, moduleId }: { id: string; moduleId?: 
   const isModule = moduleId !== undefined
   const [draft, setDraft] = useState<null | { name: string; content: string; enabled: boolean }>(null)
   const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
   const initial = { name: existing?.name || '未命名模块', content: isModule ? existing?.content || '' : person?.basePrompt || '', enabled: existing?.enabledByDefault ?? true }
   const current = draft || initial
   const dirty = draft !== null && (draft.name !== initial.name || draft.content !== initial.content || draft.enabled !== initial.enabled)
@@ -40,14 +41,15 @@ export default function PromptEditor({ id, moduleId }: { id: string; moduleId?: 
     const result = await people.savePersona(next)
     if (!result.ok) { setError(result.error || '保存失败'); return }
     setDraft(null)
-    router.replace(parentHref)
+    setError('')
+    setSaved(true)
   }
 
-  if (people.loading) return <div className="p-6 text-sm text-[var(--color-text-tertiary)]">读取提示词…</div>
-  if (!person || (isModule && !existing)) return <div className="p-6"><SubpageBackButton label="返回" href={parentHref} /><p className="mt-6 text-sm">找不到这段提示词。</p></div>
+  if (people.loading) return <div className="min-h-screen p-6 text-sm text-[var(--color-text-tertiary)]">读取提示词…</div>
+  if (!person || (isModule && !existing)) return <div className="min-h-screen p-6"><SubpageBackButton label="返回" href={parentHref} /><p className="mt-6 text-sm">找不到这段提示词。</p></div>
 
-  return <main className="mx-auto flex min-h-[100dvh] max-w-2xl flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+5rem)] pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] text-[var(--color-text-primary)]">
-    <div className="flex items-center justify-between"><SubpageBackButton label="返回提示词页" onClick={back} /><button type="button" disabled={!dirty || people.saving} onClick={() => void save()} className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-note font-semibold text-[var(--color-on-primary)] disabled:bg-[var(--color-surface-tertiary)] disabled:text-[var(--color-text-disabled)]">保存</button></div>
+  return <main className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 pb-28 pt-3 text-[var(--color-text-primary)]">
+    <div className="flex items-center justify-between"><SubpageBackButton label="返回提示词页" onClick={back} /><button type="button" disabled={!dirty || people.saving} onClick={() => void save()} className="rounded-full bg-[var(--color-primary)] px-4 py-2 text-note font-semibold text-[var(--color-on-primary)] disabled:bg-[var(--color-surface-tertiary)] disabled:text-[var(--color-text-disabled)]">{people.saving ? '保存中…' : saved && !dirty ? '已保存' : '保存'}</button></div>
     {isModule ? <input aria-label="模块名" value={current.name} onChange={event => setDraft({ ...current, name: event.target.value })} className="mt-4 w-full bg-transparent font-[family-name:var(--font-display)] text-xl font-semibold tracking-[0.06em] outline-none" /> : <h1 className="mt-4 font-[family-name:var(--font-display)] text-xl font-semibold tracking-[0.06em]">基础提示词</h1>}
     <p className="mb-3 mt-1 text-meta text-[var(--color-text-tertiary)]">{promptSize(current.content)}</p>
     <textarea aria-label={isModule ? '模块内容' : '基础提示词内容'} value={current.content} onChange={event => setDraft({ ...current, content: event.target.value })} className="min-h-[50dvh] w-full flex-1 resize-none rounded-[var(--radius-2xl)] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-4 font-mono text-base leading-relaxed outline-none focus:border-[var(--color-primary)]" spellCheck={false} />

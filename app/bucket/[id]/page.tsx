@@ -36,10 +36,10 @@ export default function BucketPage() {
   }, [id])
 
   if (loading) return (
-    <div className="flex items-center justify-center h-screen text-[var(--color-text-tertiary)]">加载中...</div>
+    <div className="flex items-center justify-center min-h-screen text-[var(--color-text-tertiary)]">加载中...</div>
   )
   if (!bucket) return (
-    <div className="flex items-center justify-center h-screen text-[var(--color-text-tertiary)]">找不到</div>
+    <div className="flex items-center justify-center min-h-screen text-[var(--color-text-tertiary)]">找不到</div>
   )
 
   return (
