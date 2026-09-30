@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import type { ReactNode } from 'react'
 import { useRef, useState, useCallback, useEffect } from 'react'
 
@@ -110,7 +111,7 @@ function DrawerPanel({
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
+    <BodyPortal><div className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-[var(--color-text-primary)]/20 backdrop-blur-sm" onClick={dismiss} />
 
@@ -135,6 +136,7 @@ function DrawerPanel({
         onClick={e => e.stopPropagation()}
         style={{
           maxHeight: '88vh',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           transform: dismissing
             ? 'translateY(100%)'
             : dragging
@@ -181,7 +183,7 @@ function DrawerPanel({
         @keyframes dpSlideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }
         @keyframes dpSheetUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
       `}</style>
-    </div>
+    </div></BodyPortal>
   )
 }
 
@@ -192,7 +194,7 @@ function ModalPanel({
   onClose: () => void; width: string; className: string; loading: boolean; children: ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
+    <BodyPortal><div className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-[var(--color-text-primary)]/20 backdrop-blur-sm" onClick={onClose} />
 
@@ -214,6 +216,6 @@ function ModalPanel({
         @keyframes dpFadeIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes dpPop { from { opacity: 0; transform: scale(0.96) translateY(-10px) } to { opacity: 1; transform: scale(1) translateY(0) } }
       `}</style>
-    </div>
+    </div></BodyPortal>
   )
 }

@@ -53,7 +53,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 - 动 UI 前完整读 `DESIGN.md`。优先复用现有组件；颜色、边框、背景、圆角、阴影和动效必须用现有设计 Token，禁止硬编码或自行拼装重复组件。缺语义 Token 时先更新 `globals.css` 和 `DESIGN.md` 再用
 - 字号只用 `DESIGN.md` 的命名档位类，不再写 `text-[Npx]`；标题、正文、小字各由独立系数缩放
 - 移动端优先：新功能和样式调整先保证手机端体验
-- 弹窗统一 `DetailPanel`（`mode="drawer"` 右侧滑入，`mode="modal"` 居中）
+- 弹窗统一 `DetailPanel`（`mode="drawer"` 右侧滑入，`mode="modal"` 居中）；自己写的全屏浮层包 `BodyPortal` 挂到 body，否则会被底部 Tab 压住（见 `DESIGN.md`「层级」）
 - 卡片统一 `Card`（variant: interactive / outline / ghost / empty）
 - 手机子页面返回入口统一 `SubpageBackButton`（小圆形半透明玻璃、居中 SVG 箭头与不小于 44px 的点击范围），不要各页另画箭头；正文大标题随页面滚动，主页面顶栏保持固定
 - 记忆详情用共享 `BucketDetailDrawer`（年轮可逐条编辑 / 确认后删除）

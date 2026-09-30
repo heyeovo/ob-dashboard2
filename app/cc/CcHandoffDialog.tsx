@@ -1,5 +1,6 @@
 'use client'
 
+import BodyPortal from '@/app/components/BodyPortal'
 import { useEffect, useMemo, useState } from 'react'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
@@ -284,7 +285,7 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   if (fromSessionId) sections.push({ id: 'chat', title: '旧窗口聊天正文', hint: `最近 ${turnCandidates.length} 轮可逐项选择`, items: turnCandidates, selected: selectedTurns, open: openSections.has('chat'), loading, onOpen: () => toggleOpen('chat'), onToggle: id => toggleSet(setSelectedTurns, id), onAll: () => replaceVisible(setSelectedTurns, turnCandidates, true), onNone: () => replaceVisible(setSelectedTurns, turnCandidates, false), control: <LimitControl value={turnLimit} unit="轮" onChange={setTurnLimit} /> })
 
   return (
-    <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
       <div className="cc-modal relative flex max-h-[90vh] w-full max-w-lg flex-col" role="dialog" aria-label="新对话">
         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-3.5">
@@ -317,6 +318,6 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
           <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-xs font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   )
 }

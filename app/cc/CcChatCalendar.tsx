@@ -23,6 +23,7 @@ export default function CcChatCalendar({ open, sessionId, onClose, onPick }: Pro
   const [loaded, setLoaded] = useState<{ sessionId: string; days: Day[] } | null>(null)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState('')
+  const [jumping, setJumping] = useState(false)
   // 每次打开都回到当月、清掉上次的选中和报错（渲染期对比上一次的 open，不在 effect 里同步 setState）
   const [wasOpen, setWasOpen] = useState(open)
   if (open !== wasOpen) {
@@ -31,6 +32,7 @@ export default function CcChatCalendar({ open, sessionId, onClose, onPick }: Pro
       setMonth(new Date())
       setSelected('')
       setError('')
+      setJumping(false)
     }
   }
   // 进入窗口时先在后台取一次；之后每次打开再静默刷新一次
@@ -80,7 +82,7 @@ export default function CcChatCalendar({ open, sessionId, onClose, onPick }: Pro
             const active = available.has(date)
             return <button key={date} type="button" disabled={!active}
               title={active ? `${days.find(item => item.day === date)?.turn_count || 0} 轮` : '这天没有消息'}
-              onClick={() => { setSelected(date); void onPick(date).then(found => { if (found) onClose(); else setError('这一天没有聊天记录') }) }}
+              onClick={() => { setSelected(date); setError('') }}
               className={`mx-auto flex size-10 flex-col items-center justify-center rounded-full text-sm ${active ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'text-[var(--color-text-disabled)]'} ${date === selected ? '!bg-[var(--color-primary)] !text-[var(--color-on-primary)]' : ''} ${date === today ? 'ring-1 ring-[var(--color-primary)]' : ''}`}>
               {index + 1}{active ? <span className="mt-0.5 size-1 rounded-full bg-current" /> : null}
             </button>
@@ -88,6 +90,21 @@ export default function CcChatCalendar({ open, sessionId, onClose, onPick }: Pro
         </div>
         {loading ? <p className="mt-3 text-center text-meta text-[var(--color-text-tertiary)]">正在读取日期…</p> : null}
         {error ? <p className="mt-3 text-center text-meta text-[var(--color-danger)]">{error}</p> : null}
+        <button
+          type="button"
+          disabled={!selected || jumping}
+          onClick={() => {
+            setJumping(true)
+            void onPick(selected).then(found => {
+              setJumping(false)
+              if (found) onClose()
+              else setError('这一天没有聊天记录')
+            })
+          }}
+          className="mt-4 w-full rounded-full bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--color-on-primary)] disabled:opacity-40"
+        >
+          {jumping ? '读取中…' : selected ? `跳到 ${Number(selected.slice(5, 7))} 月 ${Number(selected.slice(8, 10))} 日` : '选一天'}
+        </button>
       </div>
     </DetailPanel>
   )

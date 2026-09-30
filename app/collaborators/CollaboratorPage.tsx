@@ -108,12 +108,12 @@ export default function CollaboratorPage({ id }: { id: string }) {
   if (people.loading && !isNew) return <div className="p-6 text-sm text-[var(--color-text-tertiary)]">读取协作者…</div>
   if (!person) return <div className="p-6"><SubpageBackButton label="返回聊天" href="/cc" /><p className="mt-6 text-sm">找不到这个协作者。</p></div>
 
-  return <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] text-[var(--color-text-primary)]">
+  return <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28 pt-3 text-[var(--color-text-primary)]">
     <SubpageBackButton label="返回" href={isNew ? '/cc' : '/'} />
     <header className="flex flex-col items-center pb-3 pt-2 text-center">
       <span className="flex size-[76px] items-center justify-center rounded-full font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--color-on-primary)] shadow-[var(--glass-shadow)]" style={{ background: person.tint }}>{person.initial || person.name.slice(0, 1)}</span>
       <h1 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-semibold tracking-[0.1em] text-[var(--color-text-heading)]">{person.name}</h1>
-      <p className="mt-1 max-w-64 text-xs leading-relaxed text-[var(--color-text-tertiary)]">{person.purpose}</p>
+      <p className="mt-1 line-clamp-2 max-w-64 text-xs leading-relaxed text-[var(--color-text-tertiary)]">{person.purpose}</p>
     </header>
     <Section title="Identity · 身份" />
     <div className="prompt-group">
@@ -133,8 +133,8 @@ export default function CollaboratorPage({ id }: { id: string }) {
       <Section title="Modules · 提示词模块" action={<button type="button" disabled={people.saving} onClick={() => void addModule()} className="text-xs text-[var(--color-primary)] disabled:opacity-50">＋ 新增</button>} />
       <div className="prompt-group">
         {ordered.length === 0 && <p className="px-4 py-4 text-note text-[var(--color-text-tertiary)]">暂无模块</p>}
-        {ordered.map(module => <div key={module.id} data-module-id={module.id} className={`prompt-row flex items-center gap-3 px-4 py-2.5 transition-transform motion-reduce:transition-none ${dragId === module.id ? 'scale-[1.02] shadow-[var(--glass-shadow)]' : ''}`}>
-          <button type="button" aria-label={`拖动排序 ${module.name}`} className="cursor-grab touch-none text-sm tracking-[-0.15em] text-[var(--color-text-disabled)] active:cursor-grabbing" onPointerDown={event => { dragRef.current = { id: module.id, moved: false }; setDragId(module.id); event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => moveDrag(event.clientX, event.clientY)} onPointerUp={() => void finishDrag()} onPointerCancel={() => { dragRef.current = null; setDragId(null); setOrderOverride(null) }}>⋮⋮</button>
+        {ordered.map(module => <div key={module.id} data-module-id={module.id} className={`prompt-row flex select-none items-center gap-3 px-4 py-2.5 [-webkit-touch-callout:none] transition-transform motion-reduce:transition-none ${dragId === module.id ? 'scale-[1.02] shadow-[var(--glass-shadow)]' : ''}`}>
+          <button type="button" aria-label={`拖动排序 ${module.name}`} className="-my-2 -ml-2 cursor-grab touch-none select-none px-2 py-3 text-sm tracking-[-0.15em] text-[var(--color-text-disabled)] [-webkit-touch-callout:none] active:cursor-grabbing" onContextMenu={event => event.preventDefault()} onPointerDown={event => { event.preventDefault(); dragRef.current = { id: module.id, moved: false }; setDragId(module.id); event.currentTarget.setPointerCapture(event.pointerId) }} onPointerMove={event => moveDrag(event.clientX, event.clientY)} onPointerUp={() => void finishDrag()} onPointerCancel={() => { dragRef.current = null; setDragId(null); setOrderOverride(null) }}>⋮⋮</button>
           <button type="button" onClick={() => router.push(`/collaborators/${encodeURIComponent(id)}/modules/${encodeURIComponent(module.id)}`)} className="min-w-0 flex-1 text-left">
             <span className="block truncate font-[family-name:var(--font-display)] text-note font-semibold">{module.name}</span><span className="block text-2xs text-[var(--color-text-tertiary)]">{promptSize(module.content)}</span>
           </button>
@@ -154,7 +154,7 @@ export default function CollaboratorPage({ id }: { id: string }) {
     {hint && <p role="alert" className="mt-3 text-center text-xs text-[var(--color-danger)]">{hint}</p>}
     <DetailPanel open={field !== null} onClose={() => setField(null)} mode="modal">
       <h2 className="mb-4 font-[family-name:var(--font-display)] text-lg font-semibold">编辑{FIELDS.find(item => item.key === field)?.label}</h2>
-      {field === 'purpose' ? <textarea value={fieldValue} onChange={event => setFieldValue(event.target.value)} rows={4} className="cc-input w-full" /> : <input value={fieldValue} onChange={event => setFieldValue(event.target.value)} maxLength={field === 'initial' ? 2 : undefined} className="cc-input w-full" />}
+      {field === 'purpose' ? <textarea value={fieldValue} onChange={event => setFieldValue(event.target.value)} className="cc-input h-[50dvh] w-full resize-none leading-relaxed" /> : <input value={fieldValue} onChange={event => setFieldValue(event.target.value)} maxLength={field === 'initial' ? 2 : undefined} className="cc-input w-full" />}
       {field === 'initial' && <div className="mt-4 flex flex-wrap gap-2">{TINT_PRESETS.map(option => <button key={option.id} type="button" onClick={() => setTint(option.value)} aria-label={option.label} aria-pressed={tint === option.value} className={`size-8 rounded-full ${tint === option.value ? 'ring-2 ring-[var(--color-primary)] ring-offset-2' : ''}`} style={{ background: option.value }} />)}</div>}
       <button type="button" onClick={() => void saveField()} disabled={people.saving} className="mt-5 w-full rounded-full bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--color-on-primary)] disabled:opacity-50">保存</button>
     </DetailPanel>

@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import { useEffect, useRef, useState } from 'react'
 import CcMarkdown, { highlightSearchText } from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
@@ -600,7 +601,7 @@ export default function CcMessageRow({
         </div>
       </div>
       {forwardedMessage && forwardOpen ? (
-        <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
+        <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
           <button type="button" aria-label="关闭转发消息" onClick={() => setForwardOpen(false)} className="absolute inset-0" />
           <div role="dialog" aria-modal="true" aria-label={`转发消息：${forwardedMessage.title}`} className="cc-modal cc-tool-sheet relative flex max-h-[var(--chat-sheet-height)] w-full max-w-2xl flex-col">
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
@@ -625,7 +626,7 @@ export default function CcMessageRow({
               </div>
             </div>
           </div>
-        </div>
+        </div></BodyPortal>
       ) : null}
       </>
     )

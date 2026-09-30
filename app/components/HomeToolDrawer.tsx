@@ -1,5 +1,6 @@
 'use client'
 
+import BodyPortal from '@/app/components/BodyPortal'
 import Link from 'next/link'
 import { useEffect } from 'react'
 
@@ -19,7 +20,7 @@ export default function HomeToolDrawer({ open, onClose, persona }: { open: boole
   }, [open, onClose])
 
   if (!open) return null
-  return <div className="fixed inset-0 z-50">
+  return <BodyPortal><div className="fixed inset-0 z-50">
     <button type="button" aria-label="关闭家的其他房间" onClick={onClose} className="absolute inset-0 bg-[var(--color-overlay)]/20" />
     <aside role="dialog" aria-modal="true" aria-label="家里的其他房间" className="home-nav-drawer float-surface absolute inset-y-0 left-0 w-[74vw] max-w-[360px] overflow-y-auto px-5 pt-[calc(env(safe-area-inset-top,0px)+2rem)] shadow-2xl">
       <button type="button" onClick={onClose} aria-label="关闭" className="absolute right-4 top-[calc(env(safe-area-inset-top,0px)+1.25rem)] flex h-11 w-11 items-center justify-center text-xl text-[var(--color-text-tertiary)]">×</button>
@@ -36,5 +37,5 @@ export default function HomeToolDrawer({ open, onClose, persona }: { open: boole
       </Link>
       <nav>{rooms.map(room => <Link key={room.href} href={room.href} onClick={onClose} className="flex min-h-12 items-center justify-between border-t border-[var(--color-border-subtle)] text-sm text-[var(--color-text-primary)]"><span>{room.label}</span><span className="text-[var(--color-text-tertiary)]">›</span></Link>)}</nav>
     </aside>
-  </div>
+  </div></BodyPortal>
 }

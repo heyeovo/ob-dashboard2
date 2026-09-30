@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import { useEffect } from 'react'
 import type { CcToolEvent } from './types'
 
@@ -63,7 +64,7 @@ export default function CcToolDialog({
           : '已完成'
 
   return (
-    <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
+    <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
       <div className="cc-modal cc-tool-sheet relative flex max-h-[86vh] w-full max-w-2xl flex-col">
         <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--color-overlay)]/10 sm:hidden" />
@@ -115,6 +116,6 @@ export default function CcToolDialog({
           )}
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   )
 }

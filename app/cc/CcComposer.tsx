@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, DragEvent, KeyboardEvent } from 'react'
 import { isSupportedDocument, parseDocument } from '@/app/lib/attachments/documentParser'
@@ -333,7 +334,7 @@ export default function CcComposer({
       <input ref={documentRef} type="file" accept={DOCUMENT_ACCEPT} multiple className="hidden" onChange={event => void addFiles([...(event.target.files || [])])} />
 
       {menuOpen ? (
-        <div className="fixed inset-0 z-50 bg-[var(--color-overlay)]/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
+        <BodyPortal><div className="fixed inset-0 z-50 bg-[var(--color-overlay)]/45" role="presentation" onPointerDown={() => setMenuOpen(false)}>
           <div role="dialog" aria-modal="true" aria-label="添加内容" className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-xl rounded-t-[var(--chat-sheet-radius)] float-surface px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-2 shadow-2xl" onPointerDown={event => event.stopPropagation()}>
             <div className="mx-auto mb-5 h-1.5 w-14 rounded-full bg-[var(--color-overlay)]/15" />
             {menuView === 'main' ? (
@@ -391,7 +392,7 @@ export default function CcComposer({
               </div>
             )}
           </div>
-        </div>
+        </div></BodyPortal>
       ) : null}
 
       <div className="flex items-end gap-2">

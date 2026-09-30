@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { RecallMode } from '@/app/lib/recallMode'
@@ -214,7 +215,7 @@ export default function CcWindowSettings({
   }
 
   return (
-    <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
       <div
         className="cc-modal relative flex h-[86vh] w-full max-w-sm flex-col"
@@ -723,6 +724,6 @@ export default function CcWindowSettings({
           )}
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   )
 }

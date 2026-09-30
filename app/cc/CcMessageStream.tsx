@@ -114,6 +114,30 @@ function CcScrollJumps({
     }
   }, [children, firstMessageId, lastMessageId, lastMessageVersion, pendingCount, sessionId, update])
 
+  // 月历跳到某一天：先松开「跟到底」，否则那天的消息一渲染、内容长高，就被拽回底部。
+  // 行和 Markdown 渲染完之前锚点可能还不在或还在动，等几帧再对一次。
+  useEffect(() => {
+    const onJump = (event: Event) => {
+      const day = (event as CustomEvent<string>).detail
+      const node = scrollRef.current
+      if (!node || !day) return
+      stickRef.current = false
+      let tries = 0
+      const align = () => {
+        const target = document.getElementById(`chat-day-${day}`)
+        if (target && node.contains(target)) {
+          stickRef.current = false
+          node.scrollTop += target.getBoundingClientRect().top - node.getBoundingClientRect().top
+          update()
+        }
+        if (++tries < 6) window.setTimeout(align, 80)
+      }
+      requestAnimationFrame(align)
+    }
+    window.addEventListener('cc-jump-to-day', onJump)
+    return () => window.removeEventListener('cc-jump-to-day', onJump)
+  }, [update])
+
   // 回复写完后思考收起、操作行出现、代码块渲染都会让内容再长高，但不算「消息变了」，
   // 所以另外盯着高度：原本就在底部时跟到底
   useEffect(() => {

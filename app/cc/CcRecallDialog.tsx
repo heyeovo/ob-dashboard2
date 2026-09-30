@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import { useEffect } from 'react'
 import type { CcMessage, CcRecallModule } from './types'
 import { estimateTextTokens } from '@/app/lib/recallDisplay'
@@ -50,7 +51,7 @@ export default function CcRecallDialog({
       ]
 
   return (
-    <div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
+    <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
       <div className="cc-modal relative flex max-h-[82vh] w-full max-w-xl flex-col">
         <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] px-5 py-3.5">
@@ -119,6 +120,6 @@ export default function CcRecallDialog({
           </p>
         </div>
       </div>
-    </div>
+    </div></BodyPortal>
   )
 }

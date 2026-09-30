@@ -304,12 +304,12 @@ function HomeClient() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8">
         <MemoryFilters search={search} onSearchChange={onSearchChange} statusCounts={statusCounts} quickFilter={quickFilter} setQuickFilter={setQuickFilter} datePreset={datePreset} setDatePreset={setDatePreset} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
 
-        {activeTab === 'timeline' && onThisDay && <button type="button" onClick={() => openBucket(onThisDay.bucket.id)} className="memory-ago w-full flex gap-3 p-3 text-left mb-5">
-          <span className="flex-none w-10 h-10 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)] grid place-items-center italic text-sm" style={{ fontFamily: 'var(--font-display)' }}>{Number(onThisDay.date.slice(5, 7))}.{Number(onThisDay.date.slice(8, 10))}</span>
+        {activeTab === 'timeline' && onThisDay && <button type="button" onClick={() => openBucket(onThisDay.bucket.id)} className="memory-ago w-full flex items-center gap-4 px-4 py-4 text-left mb-6">
+          <span className="flex-none w-12 h-12 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)] grid place-items-center italic text-sm" style={{ fontFamily: 'var(--font-display)' }}>{Number(onThisDay.date.slice(5, 7))}.{Number(onThisDay.date.slice(8, 10))}</span>
           <span className="min-w-0">
             <span className="block text-meta tracking-wide text-[var(--color-text-tertiary)]">{onThisDay.label}</span>
-            <span className="block font-semibold text-sm mt-0.5" style={{ fontFamily: 'var(--font-display)' }}>{onThisDay.bucket.name}</span>
-            <span className="text-xs text-[var(--color-text-secondary)] line-clamp-2 mt-0.5">{onThisDay.bucket.content_preview}</span>
+            <span className="block font-semibold text-md mt-1" style={{ fontFamily: 'var(--font-display)' }}>{onThisDay.bucket.name}</span>
+            <span className="text-xs leading-relaxed text-[var(--color-text-secondary)] line-clamp-2 mt-1.5">{onThisDay.bucket.content_preview}</span>
           </span>
         </button>}
 

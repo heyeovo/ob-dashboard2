@@ -1,4 +1,5 @@
 'use client'
+import BodyPortal from '@/app/components/BodyPortal'
 import { useRouter } from 'next/navigation'
 import CcPersonaRail from './CcPersonaRail'
 import CcRecallDialog from './CcRecallDialog'
@@ -107,7 +108,7 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
         onClose={() => setHistoryDateOpen(false)}
         onPick={async day => {
           const found = await chat.loadHistoryDay(day)
-          if (found) window.setTimeout(() => document.getElementById(`chat-day-${day}`)?.scrollIntoView({ block: 'start' }), 50)
+          if (found) window.dispatchEvent(new CustomEvent('cc-jump-to-day', { detail: day }))
           return found
         }} />
 
@@ -133,7 +134,7 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
 
       {/* 转发目标选择 */}
       {pendingForward ? (
-        <div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+        <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
           <button
             type="button"
             aria-label="取消转发"
@@ -188,7 +189,7 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
               已选 {pendingForward.lines.length} 条消息
             </div>
           </div>
-        </div>
+        </div></BodyPortal>
       ) : null}
     </>
   )

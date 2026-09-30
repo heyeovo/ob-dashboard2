@@ -297,6 +297,8 @@ BottomTabBar 在底部显示 5 个 Tab：
 
 浮层永远盖过底部 Tab，不按 Tab 高度留底边，所以以后改 Tab 高度不用回头调浮层。给某层容器加 z-index 会创建新的层叠上下文，里面的浮层再高也出不来——2026-09-28 就因为内容外壳加了 `z-[1]`，所有弹窗都被压在 Tab 下面。
 
+全屏浮层（`fixed inset-0` 的遮罩 / sheet / 抽屉 / 模态框）一律包一层 `BodyPortal`（`app/components/BodyPortal.tsx`）挂到 `body` 下：留在页面树里时，祖先只要带 transform、opacity 动画、`backdrop-filter` 或 `content-visibility` 就会把它关进去。`DetailPanel` 已内置。
+
 ## 弹窗规范
 
 所有弹窗（桶详情、新增记忆/日记、合并预览、日记查看、Prompt 测试）统一使用 **DetailPanel**。
