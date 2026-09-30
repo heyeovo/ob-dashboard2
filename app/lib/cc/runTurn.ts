@@ -1270,7 +1270,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         recordTurnCost(sessionId, Number(msg.total_cost_usd || 0))
         turnUsage = usageFromResult(msg.usage, msg.duration_ms, msg.total_cost_usd)
         const resultModel = String(live.contextSnapshot?.model || initInfo?.model || sdkModelForProvider(live.model, live.boot.credKind))
-        const reportedWindow = Number(msg.modelUsage?.[resultModel]?.contextWindow)
+        // modelUsage 的键可能带日期或 [1m] 这类后缀，对不上就取本轮用量最大的那个模型
+        const usageEntries = Object.entries(msg.modelUsage || {}) as [string, { contextWindow?: number; inputTokens?: number }][]
+        const usageEntry = msg.modelUsage?.[resultModel]
+          ?? usageEntries.sort((a, b) => (Number(b[1]?.inputTokens) || 0) - (Number(a[1]?.inputTokens) || 0))[0]?.[1]
+        const reportedWindow = Number(usageEntry?.contextWindow)
         const contextWindow = Number.isFinite(reportedWindow) && reportedWindow > 0
           ? reportedWindow
           : contextLimitFor(resultModel)
