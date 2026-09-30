@@ -40,6 +40,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 - 一个窗口一个问题；换窗前按「待办去哪」把未完成事项落盘
 - 读文件先 Grep 定位，再按行读需要的区域；不通读大文档
 - Pro 额度按 token 计，git diff / build 输出过长时截断
+- Windows 上跑测试时，建符号链接的用例（目录越界防护等）会因 EPERM 失败：属环境限制，不改系统设置、不修改或跳过测试，在报告里列出用例名，交 CC 在 Linux 验证
 
 ## Git 与部署
 
