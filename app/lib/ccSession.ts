@@ -207,6 +207,16 @@ const proUsageBySession: Map<string, CcProUsageSnapshot> =
   (globalThis as unknown as Record<string, Map<string, CcProUsageSnapshot>>)[PRO_USAGE_KEY] ||
   ((globalThis as unknown as Record<string, Map<string, CcProUsageSnapshot>>)[PRO_USAGE_KEY] = new Map())
 
+/** 进程内最近一次成功读取的 Pro 额度（额度按账号算，跨会话取最新）；不发请求。 */
+export function peekLatestProUsage(): CcProUsageSnapshot | null {
+  let latest: CcProUsageSnapshot | null = null
+  for (const snapshot of proUsageBySession.values()) {
+    if (!snapshot.available || !snapshot.updatedAt) continue
+    if (!latest || snapshot.updatedAt > latest.updatedAt) latest = snapshot
+  }
+  return latest
+}
+
 export async function getProUsage(sessionId: string): Promise<CcProUsageSnapshot> {
   const live = registry.get(sessionId)
   const cached = proUsageBySession.get(sessionId)
