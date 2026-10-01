@@ -1,12 +1,9 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import DetailPanel from './DetailPanel'
-import { formatBeijingDateTime } from '@/app/utils/format'
 
-// ==================== 类型定义 ====================
-// 注意：列表接口 /api/buckets 和单桶接口 /api/bucket/{id} 返回结构不同
-// - 列表接口：source, wish, todo, todo_done, type, valence, arousal 在顶层
-// - 单桶接口：这些字段在 metadata 里（metadata_view 也在 metadata 里）
+// List and detail endpoints place source/wish in different locations.
 interface BucketComment {
   id?: string
   created?: string
@@ -47,32 +44,6 @@ interface BucketDetail {
   }
 }
 
-interface MomentItem {
-  moment_id: string
-  bucket_id: string
-  section: string
-  ordinal?: number
-  text?: string
-}
-
-interface MomentEdge {
-  source: string
-  target: string
-  relation_type: string
-  confidence?: number
-  reason?: string
-}
-
-interface CrossBucketEdge {
-  direction: 'incoming' | 'outgoing'
-  related_bucket_id: string
-  related_bucket_name: string
-  relation_type: string
-  confidence?: number
-  reason?: string
-}
-
-// ==================== Props ====================
 interface Props {
   selected: BucketDetail | null
   detailLoading: boolean
@@ -91,65 +62,81 @@ interface Props {
   onTouch: (id: string) => Promise<void>
   onArchive: (id: string) => Promise<void>
   onActivate: (id: string) => Promise<void>
-  onConvertToJournal?: (id: string, args: { author: string; locked: boolean; unlock_hint: string }) => Promise<void>
 }
 
-export default function BucketDetailDrawer({
-  selected,
-  detailLoading,
-  editing,
-  editContent,
-  saving,
-  operating,
-  copied,
-  onClose,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onTraceOp,
-  onCopyId,
-  onImportanceChange,
-  onTouch,
-  onArchive,
-  onActivate,
-  onConvertToJournal,
-}: Props) {
-  // 内部缓存 importance 输入值
-  const [localImp, setLocalImp] = useState<number | null>(null)
-  // 设为日记的小表单
-  const [showJournalForm, setShowJournalForm] = useState(false)
-  const [journalAuthor, setJournalAuthor] = useState<'言之' | '小羊' | '共同'>('共同')
-  const [journalLocked, setJournalLocked] = useState(false)
-  const [journalUnlockHint, setJournalUnlockHint] = useState('')
-  const [convertingToJournal, setConvertingToJournal] = useState(false)
-  const [editingEventTime, setEditingEventTime] = useState(false); const [eventTimeVal, setEventTimeVal] = useState('')
-  const eventTimeRef = useRef('') // ref to avoid stale closure in onBlur
-  const [contentCopied, setContentCopied] = useState(false)
 
-  // Similar buckets & merge preview
-  const [similarBuckets, setSimilarBuckets] = useState<any[]>([])
+interface SimilarBucket { id: string; name?: string; similarity?: number }
+type IconName = 'copy' | 'edit' | 'delete' | 'close' | 'chevron' | 'pin' | 'digest' | 'resolve' | 'archive' | 'wish' | 'noise' | 'touch' | 'activate'
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, ReactNode> = {
+    copy: <><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M5 15V5a2 2 0 012-2h10" /></>,
+    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></>,
+    delete: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />,
+    close: <path d="M6 6l12 12M18 6L6 18" />,
+    chevron: <path d="M9 6l6 6-6 6" />,
+    pin: <path d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8" />,
+    digest: <><path d="M4 9h13v5a6 6 0 01-6 6h-1a6 6 0 01-6-6zM17 10h1.5a2.5 2.5 0 010 5H17M8 3c0 1.5 1 1.5 1 3M12 3c0 1.5 1 1.5 1 3" /></>,
+    resolve: <><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.7 2.7L16 10" /></>,
+    archive: <><rect x="3" y="4" width="18" height="5" rx="1.5" /><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4" /></>,
+    wish: <path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" />,
+    noise: <path d="M3 12h2l2-5 3 10 3-12 3 9 2-2h3" />,
+    touch: <><circle cx="12" cy="12" r="2.5" /><circle cx="12" cy="12" r="6" opacity=".55" /><circle cx="12" cy="12" r="9.5" opacity=".25" /></>,
+    activate: <path d="M13 2L4 14h7l-1 8 9-12h-7z" />,
+  }
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
+}
+
+// Intl uses an explicit zone: the browser and deployment host may be outside Beijing.
+function beijingTime(value: string, event = false) {
+  if (!value) return '未设置'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未设置'
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', month: event ? 'numeric' : '2-digit', day: event ? 'numeric' : '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(event ? { weekday: 'short' as const } : {}),
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value || ''
+  return event
+    ? part('month') + '月' + part('day') + '日 ' + part('weekday').replace('星期', '周') + ' ' + part('hour') + ':' + part('minute')
+    : part('month') + '/' + part('day') + ' ' + part('hour') + ':' + part('minute')
+}
+
+export default function BucketDetailDrawer(props: Props) {
+  return (
+    <DetailPanel open={!!(props.selected || props.detailLoading)} onClose={props.onClose} mode="drawer" loading={props.detailLoading} className="bucket-drawer-scroll">
+      {props.selected && <BucketContent key={props.selected.id} {...props} selected={props.selected} />}
+    </DetailPanel>
+  )
+}
+
+function BucketContent({ selected, editing, editContent, saving, operating, copied, onClose, onStartEdit, onCancelEdit, onSaveEdit, onTraceOp, onCopyId, onImportanceChange, onTouch, onArchive, onActivate }: Omit<Props, 'selected'> & { selected: BucketDetail }) {
+  const [editingImp, setEditingImp] = useState(false)
+  const [localImp, setLocalImp] = useState('')
+  const [editingEventTime, setEditingEventTime] = useState(false)
+  const [eventTimeVal, setEventTimeVal] = useState('')
+  const [contentCopied, setContentCopied] = useState(false)
+  const [copyError, setCopyError] = useState('')
+  const [idCopied, setIdCopied] = useState(false)
+  const [similarOpen, setSimilarOpen] = useState(false)
+  const [similarBuckets, setSimilarBuckets] = useState<SimilarBucket[]>([])
   const [similarLoading, setSimilarLoading] = useState(false)
-  const [mergeTarget, setMergeTarget] = useState<any>(null)
-  const [mergePreview, setMergePreview] = useState<any>(null)
-  const [mergePreviewLoading, setMergePreviewLoading] = useState(false)
-  const [mergeCommitting, setMergeCommitting] = useState(false)
+  const [similarLoaded, setSimilarLoaded] = useState(false)
+  const [similarError, setSimilarError] = useState('')
   const [embEnabled, setEmbEnabled] = useState(true)
-  const [momentData, setMomentData] = useState<{
-    moments: MomentItem[]
-    edges: MomentEdge[]
-    cross_bucket_edges: CrossBucketEdge[]
-  } | null>(null)
-  const [momentsLoading, setMomentsLoading] = useState(false)
-  const [momentsError, setMomentsError] = useState('')
   const [commentState, setCommentState] = useState<{ bucketId: string; comments: BucketComment[] } | null>(null)
   const [editingCommentId, setEditingCommentId] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
   const [commentOperatingId, setCommentOperatingId] = useState('')
   const [commentError, setCommentError] = useState('')
+  const [armedDelete, setArmedDelete] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const deleteDeadline = useRef(0)
+  const deleteTarget = useRef('')
+  const busy = operating || deleting
 
-  const comments = commentState && commentState.bucketId === selected?.id
-    ? commentState.comments
-    : selected?.metadata.comments || []
+  const comments = commentState && commentState.bucketId === selected.id
+    ? commentState.comments : selected.metadata.comments || []
 
   const mutateComment = async (commentId: string, method: 'PATCH' | 'DELETE', content?: string) => {
     if (!selected) return
@@ -191,632 +178,194 @@ export default function BucketDetailDrawer({
     }
   }
 
-  const fetchSimilar = async (id: string) => {
-    setSimilarLoading(true)
-    try {
-      const res = await fetch(`/api/bucket/${id}/similar?n=5`)
-      const data = await res.json()
-      if (!data.error && data.items) {
-        setSimilarBuckets(data.items)
-        setEmbEnabled(data.embedding_enabled !== false)
-      } else if (!data.error && Array.isArray(data)) {
-        setSimilarBuckets(data) // backward compat
-        setEmbEnabled(true)
-      }
-    } catch { }
-    setSimilarLoading(false)
-  }
 
-  const fetchMoments = async (id: string) => {
-    setMomentsLoading(true)
-    setMomentsError('')
-    try {
-      const res = await fetch(`/api/moments?bucket_id=${encodeURIComponent(id)}&limit=200`)
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || '读取失败')
-      setMomentData({
-        moments: Array.isArray(data.moments) ? data.moments : [],
-        edges: Array.isArray(data.edges) ? data.edges : [],
-        cross_bucket_edges: Array.isArray(data.cross_bucket_edges) ? data.cross_bucket_edges : [],
-      })
-    } catch (error) {
-      setMomentData(null)
-      setMomentsError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setMomentsLoading(false)
-    }
-  }
-
-  // Fetch similar buckets when selected changes
-  const prevSelectedId = useRef<string | null>(null)
   useEffect(() => {
-    if (selected && selected.id !== prevSelectedId.current) {
-      prevSelectedId.current = selected.id
-      setSimilarBuckets([])
-      setMergeTarget(null)
-      setMergePreview(null)
-      setMomentData(null)
-      fetchSimilar(selected.id)
-      fetchMoments(selected.id)
-    }
-  }, [selected?.id])
+    if (!armedDelete) return
+    const timer = setTimeout(() => { setArmedDelete(''); deleteTarget.current = ''; deleteDeadline.current = 0 }, 3000)
+    return () => clearTimeout(timer)
+  }, [armedDelete])
+  useEffect(() => {
+    if (!contentCopied) return
+    const timer = setTimeout(() => setContentCopied(false), 1200)
+    return () => clearTimeout(timer)
+  }, [contentCopied])
+  useEffect(() => {
+    if (!copied) return
+    setIdCopied(true)
+    const timer = setTimeout(() => setIdCopied(false), 1200)
+    return () => clearTimeout(timer)
+  }, [copied])
 
-  const doMergePreview = async (target: any) => {
-    if (!selected) return
-    setMergeTarget(target)
-    setMergePreviewLoading(true)
-    try {
-      const res = await fetch(`/api/bucket/${selected.id}/merge-preview?into=${target.id}`, { method: 'POST' })
-      const data = await res.json()
-      setMergePreview(data)
-    } catch { }
-    setMergePreviewLoading(false)
-  }
-
-  const doMergeCommit = async () => {
-    if (!selected || !mergeTarget || !mergePreview) return
-    setMergeCommitting(true)
-    try {
-      const res = await fetch(`/api/bucket/${selected.id}/merge-commit?into=${mergeTarget.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merged_content: mergePreview.merged_content }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setMergePreview(null)
-        setMergeTarget(null)
-        setSimilarBuckets(prev => prev.filter(b => b.id !== mergeTarget.id))
-        onClose()
+  // Only an expanded section fetches. Abort on close/bucket change to discard stale results.
+  useEffect(() => {
+    if (!similarOpen || similarLoaded) return
+    const controller = new AbortController()
+    setSimilarLoading(true)
+    setSimilarError('')
+    const load = async () => {
+      try {
+        const response = await fetch('/api/bucket/' + encodeURIComponent(selected.id) + '/similar?n=5', { signal: controller.signal })
+        const data = await response.json()
+        if (!response.ok || data.error) throw new Error(data.error || '查找失败')
+        if (controller.signal.aborted) return
+        setSimilarBuckets(Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [])
+        setEmbEnabled(data.embedding_enabled !== false)
+        setSimilarLoaded(true)
+      } catch (error) {
+        if (!controller.signal.aborted) setSimilarError(error instanceof Error ? error.message : String(error))
+      } finally {
+        if (!controller.signal.aborted) setSimilarLoading(false)
       }
-    } catch { }
-    setMergeCommitting(false)
-  }
+    }
+    void load()
+    return () => controller.abort()
+  }, [similarOpen, similarLoaded, selected.id])
 
-  // 兼容单桶/列表两组返回结构的 helper — 单桶接口字段在 metadata 里
-  const s = selected as BucketDetail | null
-  const sWish = (s as any)?.wish ?? s?.metadata?.wish ?? false
-  const sSource = s?.metadata?.source || (s as any)?.source || ''
+  const confirmDelete = (target: string, action: () => void) => {
+    if (deleteTarget.current === target && Date.now() < deleteDeadline.current) {
+      deleteTarget.current = ''; deleteDeadline.current = 0; setArmedDelete(''); action()
+    } else {
+      deleteTarget.current = target; deleteDeadline.current = Date.now() + 3000; setArmedDelete(target)
+    }
+  }
+  const erase = async () => {
+    setDeleting(true); setDeleteError('')
+    try { await onTraceOp(selected.id, { delete: true }); onClose() }
+    catch (error) { setDeleteError(error instanceof Error ? error.message : String(error)) }
+    finally { setDeleting(false) }
+  }
+  const saveImportance = () => {
+    const value = Number(localImp)
+    if (!Number.isInteger(value) || value < 1 || value > 10) return
+    setEditingImp(false)
+    if (value !== selected.metadata.importance) {
+      if (onImportanceChange) onImportanceChange(selected.id, value)
+      else void onTraceOp(selected.id, { importance: value })
+    }
+  }
+  const sWish = selected.wish ?? selected.metadata.wish ?? false
+  const sSource = selected.metadata.source || selected.source || ''
+  const sourceLabel = ({ ai: 'AI 写入', AI: 'AI 写入', manual: '手动写入', user: '手动写入', dashboard: '手动写入', import: '导入', imported: '导入', system: '系统写入' } as Record<string, string>)[sSource] || sSource
+  const isNoise = Boolean(selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1))
+  const actions: { label: string; status?: string; icon: IconName; active?: boolean; run: () => void }[] = [
+    { label: '钉选', status: '已钉选', icon: 'pin', active: selected.metadata.pinned, run: () => { void onTraceOp(selected.id, { pinned: selected.metadata.pinned ? 0 : 1 }) } },
+    { label: '消化', status: '已消化', icon: 'digest', active: selected.metadata.digested, run: () => { void onTraceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 }) } },
+    { label: '解决', status: '已解决', icon: 'resolve', active: selected.metadata.resolved, run: () => { void onTraceOp(selected.id, { resolved: selected.metadata.resolved ? 0 : 1 }) } },
+    { label: '归档', status: '已归档', icon: 'archive', active: selected.metadata.type === 'archived', run: () => { void onArchive(selected.id) } },
+    { label: '悬念', status: '悬念中', icon: 'wish', active: sWish, run: () => { void onTraceOp(selected.id, { wish: sWish ? 0 : 1 }) } },
+    { label: '噪声', status: '噪声', icon: 'noise', active: isNoise, run: () => { void onTraceOp(selected.id, isNoise ? { resolved: false } : { resolved: true, importance: 1 }) } },
+    { label: '轻触', icon: 'touch', run: () => { void onTouch(selected.id) } },
+    { label: '激活', icon: 'activate', run: () => { void onActivate(selected.id) } },
+  ]
+  const eventTime = selected.metadata.event_time || selected.metadata.created || ''
 
   return (
-    <>
-    <DetailPanel open={!!(selected || detailLoading)} onClose={onClose} mode="drawer" loading={detailLoading}>
-      {selected ? (
-          <div className="p-6 sm:p-8 overflow-y-auto h-full no-scrollbar">
-            {/* 头部 */}
-            <div className="flex items-start justify-between mb-6 pb-4 border-b border-[var(--color-border-light)]">
-              <div className="pr-4">
-                <div className="flex items-center gap-2 mb-1">
-                  {selected.metadata.pinned && <span className="text-[var(--color-primary)] text-lg">★</span>}
-                  <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text-heading)]">{selected.metadata.name}</h2>
-                </div>
-                <div className="text-xs mt-2 space-y-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[var(--color-text-tertiary)]">·</span> <span className="text-[var(--color-primary)] font-medium">事件: </span>
-                    {editingEventTime ? (
-                      <input
-                        type="date"
-                        className="text-xs px-1 py-0 border border-[var(--color-primary)] rounded bg-[var(--color-surface)] outline-none text-[var(--color-primary)]"
-                        value={eventTimeVal.slice(0, 10)}
-                        onChange={e => {
-                          const v = e.target.value + 'T00:00:00'
-                          setEventTimeVal(v)
-                          eventTimeRef.current = v
-                        }}
-                        onBlur={() => {
-                          setEditingEventTime(false)
-                          const v = eventTimeRef.current || eventTimeVal
-                          if (v && v !== (selected.metadata.event_time || selected.metadata.created)) {
-                            onTraceOp(selected.id, { event_time: v })
-                          }
-                        }}
-                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                        autoFocus
-                      />
-                    ) : (
-                      <span
-                        className="cursor-pointer hover:text-[var(--color-primary-hover)] hover:underline underline-offset-2 decoration-dotted text-[var(--color-primary)] font-medium"
-                        onClick={() => {
-                          const v = selected.metadata.event_time || selected.metadata.created || ''
-                          setEventTimeVal(v)
-                          eventTimeRef.current = v
-                          setEditingEventTime(true)
-                        }}
-                        title="点击修改事件时间"
-                      >
-                        {formatBeijingDateTime(selected.metadata.event_time || selected.metadata.created || '') || '未设置'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 text-[var(--color-text-tertiary)]">
-                    <span>· 创建: {formatBeijingDateTime(selected.metadata.created)}</span>
-                    <span>· 修改: {formatBeijingDateTime(selected.metadata.last_active)}</span>
-                    {sSource ? <span>· 来源: {sSource}</span> : null}
-                  </div>
-                </div>
-              </div>
-              <button onClick={onClose} className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] p-1.5 bg-[var(--color-surface-secondary)] rounded-full md:inline-flex hidden">✕</button>
-            </div>
+    <div className="bucket-drawer">
+      <div className="bucket-drawer-inner">
+        <div className="bucket-drawer-desktop-top hidden md:flex">
+          <span className="bucket-drawer-grab" />
+          <button type="button" className="bucket-icon-button" onClick={onClose} aria-label="关闭"><Icon name="close" /></button>
+        </div>
+        <h2 className="bucket-drawer-title text-2xl">{selected.metadata.name}</h2>
+        <div className="bucket-drawer-when">
+          {editingEventTime ? (
+            <input type="date" aria-label="事件时间" className="bucket-field text-base" value={eventTimeVal.slice(0, 10)}
+              onChange={e => setEventTimeVal(e.target.value + 'T00:00:00')}
+              onBlur={e => {
+                const date = e.currentTarget.value
+                setEditingEventTime(false)
+                if (date && date !== eventTime.slice(0, 10)) void onTraceOp(selected.id, { event_time: date + 'T00:00:00' })
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} autoFocus />
+          ) : (
+            <button type="button" className="bucket-drawer-date text-note" disabled={busy} title="点击修改事件时间"
+              onClick={() => { setEventTimeVal(eventTime); setEditingEventTime(true) }}>{beijingTime(eventTime, true)}</button>
+          )}
+          <button type="button" className="bucket-id-chip text-meta" data-copied={idCopied} onClick={onCopyId} aria-label={idCopied ? 'ID 已复制' : '复制 ID'}>
+            <span>{selected.id}</span><Icon name="copy" />
+          </button>
+          {actions.filter(action => action.active).map(action => <span key={action.label} className="bucket-state text-meta">{action.status}</span>)}
+        </div>
+        <div className="bucket-vitals text-meta">
+          {editingImp ? (
+            <label className="bucket-imp">IMP <input type="number" min={1} max={10} step={1} value={localImp} aria-label="重要度（1–10）" className="bucket-field text-base" autoFocus disabled={busy}
+              onChange={e => setLocalImp(e.target.value)} onBlur={saveImportance} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingImp(false) }} /></label>
+          ) : (
+            <button type="button" className="bucket-imp" aria-label={'重要度 ' + selected.metadata.importance + '，点击编辑'} disabled={busy}
+              onClick={() => { setLocalImp(String(selected.metadata.importance)); setEditingImp(true) }}>IMP <span className="bucket-imp-dots" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <i key={index} data-filled={index < selected.metadata.importance} />)}</span></button>
+          )}
+          <span>V <b>{selected.metadata.valence?.toFixed(2).replace(/^0\./, '.') ?? '—'}</b></span>
+          <span>A <b>{selected.metadata.arousal?.toFixed(2).replace(/^0\./, '.') ?? '—'}</b></span>
+          <span>权重 <b>{selected.score?.toFixed(2) ?? '—'}</b></span>
+          <span>激活 <b>{selected.metadata.activation_count ?? '—'}</b></span>
+          <span>{{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}</span>
+        </div>
 
-            {/* 信息胶囊 */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">IMP</div>
-                <div className="h-5 flex items-center justify-center">
-                  <input
-                    type="number" min="0" max="10"
-                    className="w-full text-sm font-bold text-[var(--color-primary)] outline-none text-center bg-transparent p-0 m-0 h-full border-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    defaultValue={selected.metadata.importance ?? ''}
-                    disabled={operating}
-                    onBlur={(e) => {
-                      const val = parseInt(e.target.value)
-                      if (isNaN(val) || val === selected.metadata.importance) return
-                      if (onImportanceChange) onImportanceChange(selected.id, val)
-                    }}
-                  />
-                </div>
-              </div>
-                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">权重</div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.score?.toFixed(2) ?? '—'}</div>
-                </div>
-                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">激活</div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.activation_count ?? '—'}</div>
-                </div>
-                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">效价 V</div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.valence?.toFixed(2) ?? '—'}</div>
-                </div>
-                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">唤醒 A</div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selected.metadata.arousal?.toFixed(2) ?? '—'}</div>
-                </div>
-                <div className="bg-[var(--color-surface)]/60 border border-[var(--color-border)] shadow-sm rounded-lg px-2 py-2 text-center">
-                  <div className="text-2xs text-[var(--color-text-tertiary)] mb-0.5">类型</div>
-                  <div className="text-sm font-semibold text-[var(--color-text-primary)]">
-                    {{ dynamic: '动态', permanent: '永久', feel: 'feel', archived: '已归档' }[selected.metadata.type] ?? selected.metadata.type ?? '—'}
-                  </div>
-                </div>
-              </div>
-
-            {/* 标签 */}
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {(selected.metadata.domain ?? []).map(d => (
-                <span key={d} className="text-xs bg-[var(--color-surface-tertiary)] px-2.5 py-1 rounded-md text-[var(--color-text-secondary)]">{d}</span>
-              ))}
-              {(selected.metadata.tags ?? []).map(t => (
-                <span key={t} className="text-xs border border-[var(--color-border)] px-2.5 py-1 rounded-md text-[var(--color-text-secondary)]">{t}</span>
-              ))}
-            </div>
-
-            {/* 操作按钮组 */}
-            <div className="grid grid-cols-3 gap-2 mb-6">
-              <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { pinned: selected.metadata.pinned ? 0 : 1 })}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.pinned ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-                }`}>
-                {selected.metadata.pinned ? '已钉选' : '钉 选'}
-              </button>
-              <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { digested: selected.metadata.digested ? 0 : 1 })}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.digested ? 'bg-[var(--color-digested-bg)] text-[var(--color-digested)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-                }`}>
-                {selected.metadata.digested ? '已消化' : '消 化'}
-              </button>
-              <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { resolved: selected.metadata.resolved ? 0 : 1 })}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.resolved
-                    ? 'bg-[var(--color-resolved-bg)] text-[var(--color-resolved)]'
-                    : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-                }`}>
-                {selected.metadata.resolved ? '已解决' : '解 决'}
-              </button>
-              <button disabled={operating}
-                onClick={() => onArchive(selected.id)}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  selected.metadata.type === 'archived' ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-tertiary)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-                }`}>
-                {selected.metadata.type === 'archived' ? '已归档' : '归 档'}
-              </button>
-              <button disabled={operating}
-                onClick={() => onTouch(selected.id)}
-                className="text-xs py-2 rounded-lg font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50">
-                轻 触
-              </button>
-              <button disabled={operating}
-                onClick={() => onActivate(selected.id)}
-                className="text-xs py-2 rounded-lg font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50">
-                激 活
-              </button>
-              <button disabled={operating}
-                onClick={() => onTraceOp(selected.id, { wish: sWish ? 0 : 1 })}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  sWish ? 'bg-[var(--color-wish-bg)] text-[var(--color-wish)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-                }`}>
-                {sWish ? '已悬念' : '标悬念'}
-              </button>
-              {/* Noise toggle: marks as resolved+imp=1 (excluded from searches) */}
-              <button disabled={operating}
-                onClick={() => {
-                  const isNoise = selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1)
-                  if (isNoise) {
-                    onTraceOp(selected.id, { resolved: false })
-                  } else {
-                    onTraceOp(selected.id, { resolved: true, importance: 1 })
-                  }
-                }}
-                className={`text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  (selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1))
-                    ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-tertiary)] line-through'
-                    : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
-                }`}>
-                {(selected.noise || (selected.metadata.resolved && selected.metadata.importance === 1)) ? '已噪声' : '标噪声'}
-              </button>
-            </div>
-
-                        {/* 内容区 */}
-            {!editing ? (
-              <div className="bg-[var(--color-surface-elevated)] border border-[var(--color-border-light)] rounded-xl overflow-hidden mb-4">
-                <div className="flex justify-between items-center px-5 pt-3 pb-2 border-b border-[var(--color-border-light)]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">内容</span>
-                    <span className="text-2xs text-[var(--color-primary-caption)] font-mono">
-                      {selected.content.length} 字 · ~{Math.ceil(selected.content.length * 1.3)} tokens
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selected.content)
-                        setContentCopied(true)
-                        setTimeout(() => setContentCopied(false), 1500)
-                      }}
-                      className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-                    >{contentCopied ? '已复制' : '复制'}</button>
-                    <button onClick={() => onStartEdit(selected.content)} className="text-xs text-[var(--color-primary)] font-medium hover:text-[var(--color-primary-hover)]">编辑</button>
-                  </div>
-                </div>
-                <div className="p-5 text-sm leading-loose whitespace-pre-wrap break-words">
-                  {selected.content}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-[var(--color-surface-elevated)] border border-[var(--color-primary)] rounded-xl p-4 mb-4">
-                <textarea
-                  className="w-full bg-transparent text-sm leading-relaxed resize-none outline-none"
-                  rows={14}
-                  value={editContent}
-                  onChange={e => onStartEdit(e.target.value)}
-                />
-                <div className="flex justify-between items-center mt-3">
-                  <span className="text-2xs text-[var(--color-primary-caption)] font-mono">
-                    {editContent.length} 字 · ~{Math.ceil(editContent.length * 1.3)} tokens
-                  </span>
-                  <div className="flex gap-2">
-                    <button onClick={onCancelEdit} className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">取消</button>
-                    <button onClick={onSaveEdit} disabled={saving}
-                      className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-1.5 rounded-lg disabled:opacity-50">{saving ? '保存中' : '保存更改'}</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 设为日记 */}
-            {onConvertToJournal && (
-              <div className="mb-4">
-                {showJournalForm ? (
-                  <div className="bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-xl p-4">
-                    <div className="text-xs text-[var(--color-text-disabled)] mb-3">
-                      转为日记后会移出常规记忆库，只能在日记页编辑，不可逆。
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      {(['言之', '小羊', '共同'] as const).map(a => (
-                        <button key={a} onClick={() => setJournalAuthor(a)}
-                          className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                            journalAuthor === a ? 'bg-[var(--color-pinned-bg)] text-[var(--color-primary)]' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)]'
-                          }`}>
-                          {a}
-                        </button>
-                      ))}
-                      <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] cursor-pointer ml-2">
-                        <input type="checkbox" checked={journalLocked} onChange={e => setJournalLocked(e.target.checked)} className="accent-[var(--color-primary)]" />
-                        上锁
-                      </label>
-                    </div>
-                    {journalLocked && (
-                      <input
-                        value={journalUnlockHint}
-                        onChange={e => setJournalUnlockHint(e.target.value)}
-                        placeholder="解锁提示（日期到点自动解锁，其他文本保持锁定）"
-                        className="w-full text-xs border border-[var(--color-border)] rounded-lg px-3 py-2 mb-3 outline-none focus:border-[var(--color-primary)]"
-                      />
-                    )}
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setShowJournalForm(false)} className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">取消</button>
-                      <button
-                        disabled={convertingToJournal}
-                        onClick={async () => {
-                          if (!confirm('确定把这个桶转为日记？转换后不可恢复为常规记忆。')) return
-                          setConvertingToJournal(true)
-                          await onConvertToJournal(selected.id, { author: journalAuthor, locked: journalLocked, unlock_hint: journalUnlockHint })
-                          setConvertingToJournal(false)
-                          setShowJournalForm(false)
-                          onClose()
-                        }}
-                        className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-4 py-1.5 rounded-lg disabled:opacity-50 hover:bg-[var(--color-primary-hover)]"
-                      >
-                        {convertingToJournal ? '转换中…' : '确认转为日记'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button onClick={() => setShowJournalForm(true)} className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] underline">
-                    设为日记
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Moments, relations, and rings */}
-            <div className="mb-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 space-y-5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">Moments 与关联</span>
-                <button onClick={() => fetchMoments(selected.id)} disabled={momentsLoading}
-                  className="text-xs text-[var(--color-primary)] disabled:opacity-50">
-                  {momentsLoading ? '读取中…' : '刷新'}
-                </button>
-              </div>
-              {momentsError ? <div className="text-xs text-[var(--color-danger)]">{momentsError}</div> : null}
-              {!momentsLoading && momentData?.moments.length === 0 ? (
-                <div className="text-xs text-[var(--color-text-disabled)]">没有派生 moment</div>
-              ) : (
-                <div className="space-y-2">
-                  {(momentData?.moments || []).map(moment => (
-                    <div key={moment.moment_id} className="rounded-lg border border-[var(--color-border-light)] px-3 py-2">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-meta font-medium text-[var(--color-primary)]">{moment.section || 'moment'}</span>
-                        <span className="text-2xs text-[var(--color-text-disabled)] font-mono truncate">{moment.moment_id}</span>
-                      </div>
-                      <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap break-words">{moment.text}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div>
-                <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">桶内关联</div>
-                {(momentData?.edges || []).length === 0 ? (
-                  <div className="text-xs text-[var(--color-text-disabled)]">没有桶内关联</div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(momentData?.edges || []).map((edge, index) => (
-                      <div key={`${edge.source}-${edge.target}-${edge.relation_type}-${index}`} className="text-xs text-[var(--color-text-secondary)] break-all">
-                        <span className="font-mono">{edge.source}</span>
-                        <span className="mx-1 text-[var(--color-primary)]">— {edge.relation_type} →</span>
-                        <span className="font-mono">{edge.target}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">跨桶关联</div>
-                {(momentData?.cross_bucket_edges || []).length === 0 ? (
-                  <div className="text-xs text-[var(--color-text-disabled)]">没有跨桶关联</div>
-                ) : (
-                  <div className="space-y-2">
-                    {(momentData?.cross_bucket_edges || []).map((edge, index) => (
-                      <div key={`${edge.related_bucket_id}-${edge.relation_type}-${index}`} className="flex items-center gap-2 text-xs">
-                        <span className="text-[var(--color-text-tertiary)]">{edge.direction === 'outgoing' ? '指向' : '来自'}</span>
-                        <a href={`/memory?bucket=${encodeURIComponent(edge.related_bucket_id)}`}
-                          className="min-w-0 flex-1 text-[var(--color-primary)] hover:underline truncate">
-                          {edge.related_bucket_name || edge.related_bucket_id}
-                        </a>
-                        <span className="text-[var(--color-text-disabled)]">{edge.relation_type}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="text-xs font-medium text-[var(--color-text-disabled)] mb-2">年轮</div>
-                {comments.length === 0 ? (
-                  <div className="text-xs text-[var(--color-text-disabled)]">还没有年轮</div>
-                ) : (
-                  <div className="space-y-2">
-                    {comments.map((comment, index) => (
-                      <div key={comment.id || index} className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
-                        <div className="flex items-start justify-between gap-3 mb-1">
-                          <div className="flex flex-wrap gap-x-2 text-2xs text-[var(--color-text-disabled)]">
-                            <span>{comment.created ? formatBeijingDateTime(comment.created) : '时间未知'}</span>
-                            <span>{comment.author || '作者未知'}</span>
-                            <span>{comment.kind || 'comment'}</span>
-                          </div>
-                          {comment.id ? (
-                            <div className="flex shrink-0 gap-2 text-2xs">
-                              <button
-                                type="button"
-                                disabled={Boolean(commentOperatingId)}
-                                className="text-[var(--color-primary)] disabled:opacity-40"
-                                onClick={() => { setEditingCommentId(comment.id || ''); setCommentDraft(comment.content || ''); setCommentError('') }}
-                              >编辑</button>
-                              <button
-                                type="button"
-                                disabled={Boolean(commentOperatingId)}
-                                className="text-[var(--color-danger)] disabled:opacity-40"
-                                onClick={() => {
-                                  if (comment.id && window.confirm('确认删除这条年轮？删除后无法恢复。')) void mutateComment(comment.id, 'DELETE')
-                                }}
-                              >{commentOperatingId === comment.id ? '处理中…' : '删除'}</button>
-                            </div>
-                          ) : null}
-                        </div>
-                        {editingCommentId === comment.id ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={commentDraft}
-                              onChange={event => setCommentDraft(event.target.value)}
-                              className="min-h-20 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-primary)]"
-                              autoFocus
-                            />
-                            <div className="flex justify-end gap-2">
-                              <button type="button" className="text-2xs text-[var(--color-text-tertiary)]" onClick={() => { setEditingCommentId(''); setCommentDraft('') }}>取消</button>
-                              <button
-                                type="button"
-                                disabled={!commentDraft.trim() || Boolean(commentOperatingId)}
-                                className="rounded bg-[var(--color-primary)] px-2 py-1 text-2xs text-[var(--color-on-primary)] disabled:opacity-40"
-                                onClick={() => { if (comment.id) void mutateComment(comment.id, 'PATCH', commentDraft.trim()) }}
-                              >{commentOperatingId === comment.id ? '保存中…' : '保存'}</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap">{comment.content}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {commentError ? <div className="mt-2 text-xs text-[var(--color-danger)]">{commentError}</div> : null}
-              </div>
-            </div>
-
-            {/* Similar Buckets / 相似记忆 */}
-            <div className="mb-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-[var(--color-text-disabled)] uppercase tracking-wider">相似记忆</span>
-                <button
-                  onClick={() => fetchSimilar(selected!.id)}
-                  disabled={similarLoading}
-                  className="text-xs text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium disabled:opacity-50"
-                >
-                  {similarLoading ? '查找中...' : '重新查找'}
-                </button>
-              </div>
-              {similarLoading ? (
-                <div className="text-xs text-[var(--color-text-disabled)]">查找相似记忆中…</div>
-              ) : similarBuckets.length === 0 ? (
-                <div className="text-xs text-[var(--color-text-disabled)]">
-                  {embEnabled
-                    ? '未找到语义相似的记忆'
-                    : '嵌入引擎未启用（需配置 embedding 模型）'}
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {similarBuckets.map((b: any) => (
-                    <div key={b.id} className="flex items-center gap-2 text-sm">
-                      <span className="text-xs text-[var(--color-primary)] font-mono">{b.similarity?.toFixed(2)}</span>
-                      <span className="flex-1 truncate text-[var(--color-text-primary)]">{b.name || b.id}</span>
-                      <button
-                        onClick={() => doMergePreview(b)}
-                        disabled={operating || mergePreviewLoading}
-                        className="text-xs text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium disabled:opacity-50"
-                      >
-                        合并预览
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 抹除和索引 */}
-            <div className="flex justify-between items-center">
-              <button onClick={() => { if (confirm('确定抹除此记忆？将移入回收站。')) { onTraceOp(selected.id, { delete: true }).then(onClose) } }}
-                className="text-sm text-[var(--color-danger)] font-medium hover:text-[var(--color-danger)]">抹除</button>
-              <div onClick={onCopyId} className="inline-flex items-center gap-2 text-xs cursor-pointer hover:bg-[var(--color-border-light)] px-3 py-1.5 rounded-full">
-                <span className="text-[var(--color-text-disabled)]">索引: {selected.id}</span>
-                <span className={`${copied ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-disabled)]'}`}>{copied ? '已复制' : '复制'}</span>
-              </div>
-            </div>
+        <section className="bucket-paper" aria-label="记忆正文">
+          <div className="bucket-paper-head text-meta">
+            <span>{(editing ? editContent : selected.content).length} 字 · ~{Math.ceil((editing ? editContent : selected.content).length * 1.3)} tokens</span>
+            {!editing && <div className="flex">
+              <button type="button" className="bucket-icon-button" data-copied={contentCopied} aria-label={contentCopied ? '正文已复制' : '复制正文'} onClick={async () => {
+                try { await navigator.clipboard.writeText(selected.content); setContentCopied(true); setCopyError('') }
+                catch { setCopyError('复制失败，请重试') }
+              }}><Icon name="copy" /></button>
+              <button type="button" className="bucket-icon-button" aria-label="编辑正文" disabled={busy} onClick={() => onStartEdit(selected.content)}><Icon name="edit" /></button>
+            </div>}
           </div>
-        ) : null}
-    </DetailPanel>
+          {editing ? <div className="bucket-paper-body">
+            <textarea aria-label="记忆正文" className="bucket-content-editor text-base" rows={14} value={editContent} onChange={e => onStartEdit(e.target.value)} />
+            <div className="flex justify-end items-center gap-3 mt-3 text-sm">
+              <button type="button" onClick={onCancelEdit} disabled={saving}>取消</button>
+              <button type="button" className="bucket-save" onClick={onSaveEdit} disabled={saving}>{saving ? '保存中' : '保存更改'}</button>
+            </div>
+          </div> : <div className="bucket-paper-body text-md">{selected.content}</div>}
+          {copyError && <p role="alert" className="text-xs text-[var(--color-danger)] px-5 pb-2">{copyError}</p>}
+          {(selected.metadata.domain?.length > 0 || selected.metadata.tags?.length > 0) && <div className="bucket-tags text-xs">
+            {(selected.metadata.domain || []).map(domain => <span key={domain} className="bucket-domain">{domain}</span>)}
+            {(selected.metadata.tags || []).map(tag => <span key={tag}>#{tag}</span>)}
+          </div>}
+        </section>
 
-    {/* Merge Preview Modal */}
-    <DetailPanel open={!!(mergePreview && mergeTarget)} onClose={() => { setMergePreview(null); setMergeTarget(null) }} mode="modal" width="max-w-[960px]">
-      {mergePreviewLoading ? (
-        <div className="text-center py-16 text-[var(--color-text-disabled)]">生成合并预览中...</div>
-      ) : mergePreview?.error ? (
-        <div className="text-[var(--color-danger-strong)] text-sm">{mergePreview.error}</div>
-      ) : mergePreview ? (
-        <>
-          {/* Header */}
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-2 text-base">
-                  <span className="text-[var(--color-text-disabled)] line-through">{mergePreview.a?.name || selected?.id}</span>
-                  <span className="text-[var(--color-text-divider)]">{'->'}</span>
-                  <span className="text-[var(--color-text-primary)] font-semibold">{mergePreview.b?.name || mergeTarget.id}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-[var(--color-text-tertiary)]">新桶重要度 <b className="text-[var(--color-primary)]">{mergePreview.importance ?? '--'}</b></span>
-                  <button onClick={() => { setMergePreview(null); setMergeTarget(null) }}
-                    className="text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)] text-lg p-1 leading-none">x</button>
-                </div>
+        {comments.length > 0 && <section className="bucket-rings" aria-label="年轮">
+          <h3 className="text-xs">年轮</h3>
+          {comments.map((comment, index) => <div key={comment.id || index} className="bucket-ring">
+            {editingCommentId === comment.id ? <div>
+              <textarea aria-label="年轮正文" className="bucket-field text-base w-full min-h-20" value={commentDraft} onChange={e => setCommentDraft(e.target.value)} autoFocus />
+              <div className="flex justify-end gap-3 mt-2 text-xs">
+                <button type="button" disabled={Boolean(commentOperatingId)} onClick={() => { setEditingCommentId(''); setCommentDraft('') }}>取消</button>
+                <button type="button" className="bucket-save" disabled={!commentDraft.trim() || Boolean(commentOperatingId)} onClick={() => { if (comment.id) void mutateComment(comment.id, 'PATCH', commentDraft.trim()) }}>{commentOperatingId === comment.id ? '保存中…' : '保存'}</button>
               </div>
-
-              {/* Three columns */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
-                {/* Source */}
-                <div className="border border-[var(--color-border)] rounded-xl overflow-hidden">
-                  <div className="px-3 py-2 border-b border-[var(--color-border-light)] bg-[var(--color-bg)] flex items-center justify-between">
-                    <span className="text-xs font-medium text-[var(--color-text-tertiary)]">{mergePreview.a?.name || selected?.id}</span>
-                    <span className="text-xs text-[var(--color-text-disabled)]">{mergePreview.a_chars ?? 0} 字</span>
-                  </div>
-                  <div className="p-3 text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">
-                    {mergePreview.a_content}
-                  </div>
-                </div>
-                {/* Target */}
-                <div className="border border-[var(--color-border)] rounded-xl overflow-hidden">
-                  <div className="px-3 py-2 border-b border-[var(--color-border-light)] bg-[var(--color-bg)] flex items-center justify-between">
-                    <span className="text-xs font-medium text-[var(--color-text-tertiary)]">{mergePreview.b?.name || mergeTarget.id}</span>
-                    <span className="text-xs text-[var(--color-text-disabled)]">{mergePreview.b_chars ?? 0} 字</span>
-                  </div>
-                  <div className="p-3 text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">
-                    {mergePreview.b_content}
-                  </div>
-                </div>
-                {/* Merged */}
-                <div className="border border-[var(--color-primary)]/30 rounded-xl overflow-hidden bg-[var(--color-primary-muted)]">
-                  <div className="px-3 py-2 border-b border-[var(--color-border-light)] flex items-center justify-between">
-                    <span className="text-xs font-medium text-[var(--color-primary)]">合并后</span>
-                    <span className="text-xs text-[var(--color-primary)]">{mergePreview.merged_chars ?? 0} 字</span>
-                  </div>
-                  <div className="p-3 text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">
-                    {mergePreview.merged_content}
-                  </div>
-                </div>
-              </div>
-
-              {/* Cost */}
-              {mergePreview.cost?.known && (
-                <div className="text-xs text-[var(--color-text-tertiary)] mb-5 bg-[var(--color-surface-secondary)] rounded-lg px-3 py-2">
-                  预估成本: ${mergePreview.cost.usd} (约 {mergePreview.cost.cny} cny) | {mergePreview.cost.in_tokens} / {mergePreview.cost.out_tokens} tokens
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-2">
-                <button onClick={() => { setMergePreview(null); setMergeTarget(null) }}
-                  className="text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] px-4 py-2 rounded-lg border border-[var(--color-border)] transition-colors">拒绝</button>
-                <button onClick={() => doMergePreview(mergeTarget)} disabled={mergePreviewLoading}
-                  className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] px-4 py-2 rounded-lg border border-[var(--color-border)] transition-colors">
-                  {mergePreviewLoading ? '重做中...' : '重做'}
+            </div> : <p className="text-sm whitespace-pre-wrap break-words">{comment.content}</p>}
+            <div className="bucket-ring-meta text-meta">
+              <time title={[comment.author, comment.kind].filter(Boolean).join(' · ')}>{beijingTime(comment.created || '')}</time>
+              {comment.id && <>
+                <button type="button" className="bucket-icon-button" aria-label="编辑年轮" disabled={Boolean(commentOperatingId)} onClick={() => { setEditingCommentId(comment.id || ''); setCommentDraft(comment.content || ''); setCommentError('') }}><Icon name="edit" /></button>
+                <button type="button" className={armedDelete === comment.id ? 'bucket-erase text-xs' : 'bucket-icon-button'} data-armed={armedDelete === comment.id} aria-label="删除年轮" disabled={Boolean(commentOperatingId)} onClick={() => { if (comment.id) confirmDelete(comment.id, () => { void mutateComment(comment.id!, 'DELETE') }) }}>
+                  <Icon name="delete" />{armedDelete === comment.id && <span>再点一次，删除年轮</span>}
                 </button>
-                <button onClick={doMergeCommit} disabled={mergeCommitting}
-                  className="text-sm bg-[var(--color-primary)] text-[var(--color-on-primary)] px-5 py-2 rounded-lg hover:bg-[var(--color-primary-hover)] disabled:opacity-50 transition-colors">
-                  {mergeCommitting ? '合并中...' : '确认合并'}
-                </button>
-              </div>
-            </>
-          ) : null}
-    </DetailPanel>
-    </>
+              </>}
+            </div>
+          </div>)}
+          {commentError && <p role="alert" className="text-xs text-[var(--color-danger)]">{commentError}</p>}
+        </section>}
+
+        <section className="bucket-similar">
+          <button type="button" className="bucket-similar-toggle text-xs" aria-expanded={similarOpen} onClick={() => setSimilarOpen(open => !open)}><Icon name="chevron" />相似记忆</button>
+          {similarOpen && <div>
+            {similarLoading ? <p className="text-xs py-3">查找相似记忆中…</p> : similarError ? <p role="alert" className="text-xs py-3 text-[var(--color-danger)]">{similarError}</p> : similarBuckets.length === 0 ? <p className="text-xs py-3">{embEnabled ? '未找到语义相似的记忆' : '嵌入引擎未启用（需配置 embedding 模型）'}</p> : similarBuckets.map(bucket => <a key={bucket.id} className="bucket-similar-row text-sm" href={'/memory?bucket=' + encodeURIComponent(bucket.id)}><span>{bucket.name || bucket.id}</span><em className="text-meta">{bucket.similarity?.toFixed(2)}</em></a>)}
+          </div>}
+        </section>
+        <footer className="bucket-footer text-meta">
+          <span>{beijingTime(selected.metadata.created)}{sourceLabel ? ' · ' + sourceLabel : ''}</span>
+          <button type="button" className="bucket-erase text-xs" data-armed={armedDelete === 'bucket'} disabled={busy} onClick={() => confirmDelete('bucket', () => { void erase() })}><Icon name="delete" /><span>{deleting ? '处理中…' : armedDelete === 'bucket' ? '再点一次，移入回收站' : '抹除'}</span></button>
+          {deleteError && <p role="alert" className="text-xs text-[var(--color-danger)]">{deleteError}</p>}
+        </footer>
+      </div>
+      <nav className="bucket-action-bar" aria-label="记忆操作">
+        {actions.map(action => <button key={action.label} type="button" className="bucket-action text-2xs" aria-pressed={action.status ? Boolean(action.active) : undefined} disabled={busy} onClick={action.run}>
+          <span className="tab-pill"><Icon name={action.icon} /></span><span>{action.label}</span>
+        </button>)}
+      </nav>
+    </div>
   )
 }
