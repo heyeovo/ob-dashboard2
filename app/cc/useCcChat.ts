@@ -1862,8 +1862,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
       const ac = new AbortController()
       abortRef.current = ac
-
-
+      // 服务端明确回了 HTTP 错误 = 这一轮没开始，照原样报错；只有连接中途断了才算 detached。
+      let rejectedByServer = false
 
       try {
         const endpoint = turnEngine === 'selfhost' ? '/api/cc-chat-selfhost' : '/api/cc-chat'
@@ -1915,6 +1915,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           signal: ac.signal,
         })
         if (!res.ok || !res.body) {
+          rejectedByServer = true
           const detail = await res.text().catch(() => '')
           throw new Error(detail.slice(0, 200) || `HTTP ${res.status}`)
         }
@@ -1929,7 +1930,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       } catch (e) {
         if (currentSessionRef.current !== sessionId) return
         const err = e as Error
-        if (turnEngine === 'cc') {
+        if (turnEngine === 'cc' && !rejectedByServer) {
           setMessages(previous => previous.map(message => message.id === assistantId ? {
             ...message, streaming: false, deliveryState: 'detached',
             deliveryNote: '连接断了，这一轮还在继续，回到页面会自动接上',
@@ -2052,7 +2053,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     const tick = () => { void recoverTurn() }
     const visible = () => { if (document.visibilityState === 'visible') tick() }
     const initial = window.setTimeout(tick, 0)
-    const timer = window.setInterval(tick, 5_000)
+    // 定时轮询只为等 detached 轮次收尾；进入窗口、回到页面、获得焦点时照常各查一次。
+    const timer = window.setInterval(() => {
+      if (messagesRef.current.some(message => message.deliveryState === 'detached')) tick()
+    }, 5_000)
     window.addEventListener('focus', tick)
     document.addEventListener('visibilitychange', visible)
     return () => {
