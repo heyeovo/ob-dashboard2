@@ -13,6 +13,7 @@
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
+| `HANDOFF-cc-turn-survives-disconnect.md` | 🔨 进行中 | 2026-10-01 CC 写规格：断线不取消轮次、回到页面自动接上（A）。Codex 执行、CC 验收；只动 dashboard |
 | `HANDOFF-cc-daily-rolling-context.md` | 📦 已完成归档 | 按天滚动在用；文内“低优先级后续”未排期 |
 | `HANDOFF-chat-search.md` | 📦 已完成归档 | 排序优化在 OB Todo「search_chat 优化」 |
 | `HANDOFF-daily-review-input-budget.md` | 📦 已完成归档 | |
