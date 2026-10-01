@@ -19,6 +19,7 @@ export type CcProUsage = {
 export type CcToolStatus = 'running' | 'completed' | 'error' | 'denied'
 
 export type CcDeliveryState =
+  | 'detached'
   | 'generating'
   | 'saving'
   | 'saved'

@@ -1,3 +1,4 @@
+import { abortTurn } from '@/app/lib/cc/turnBroadcast'
 // cc 引擎的会话保持层（服务端专用，进程内单例）。
 //
 // 为什么要这个：每个 query() 启动都要把系统提示 + 27 个工具定义写进 Anthropic 的
@@ -376,6 +377,8 @@ function logQueryLifecycle(event: string, live: LiveSession, extra: QueryLifecyc
 }
 
 export function dropSession(sessionId: string, reason = 'unspecified') {
+  // 内部换凭据/提示词会重建 SDK iterator，并不代表用户取消轮次。
+  if (['unspecified', 'manual_delete', 'context_gc_prepare', 'rolling_recovery_prepare'].includes(reason)) abortTurn(sessionId)
   const live = registry.get(sessionId)
   if (!live) return
   // 挂着等批准的先全拒掉，不然那些 await 永远不返回，子进程也退不干净

@@ -1,4 +1,5 @@
 'use client'
+import { mergeTurnMessages } from './turnRecovery'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CcAttachment,
@@ -43,7 +44,7 @@ import {
   turnsToMessages,
   type HavenTurnRow,
 } from './ccHistory'
-import { consumeSseStream } from './ccSseConsumer'
+import { consumeSseStream, type SseHandlers } from './ccSseConsumer'
 import {
   deliveryFromError,
   effectiveEngine as resolveEffectiveEngine,
@@ -243,6 +244,14 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const historyLoadedAtRef = useRef(0)
   const historyAbortRef = useRef<AbortController | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const currentSessionRef = useRef(sessionId)
+  currentSessionRef.current = sessionId
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
+  const turnSeqRef = useRef(new Map<string, number>())
+  const waitingHavenRef = useRef(new Set<string>())
+  const recoveringRef = useRef(false)
+  const recoveryTickRef = useRef<() => void>(() => {})
   const lastRoundIdRef = useRef(0)
   const activeTurnRef = useRef<{ assistantId: string; engine: CcEngine } | null>(null)
   const incrementalRefreshRef = useRef(false)
@@ -505,7 +514,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   const refreshBackgroundTurns = useCallback(async () => {
     if (!sessionId || sending || historyLoading || document.visibilityState !== 'visible') return
-    if (lastRoundIdRef.current <= 0 || incrementalRefreshRef.current) return
+    if (incrementalRefreshRef.current) return
     incrementalRefreshRef.current = true
     try {
       const response = await fetch(
@@ -521,8 +530,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           : message
       ))
       setMessages(previous => {
-        const known = new Set(previous.map(message => message.id))
-        return [...previous, ...incoming.filter(message => !known.has(message.id))]
+        return mergeTurnMessages(previous, incoming)
       })
       lastRoundIdRef.current = turns.reduce(
         (largest, turn) => Math.max(largest, Number(turn.round_id || 0)),
@@ -698,9 +706,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         historyCacheRef.current.delete(sessionId)
       }
       abortRef.current?.abort()
+      abortRef.current = null
       historyAbortRef.current?.abort()
       historyAbortRef.current = null
       setSending(false)
+      currentSessionRef.current = nextId
       setSessionId(nextId)
       setDraft(draftsRef.current.get(nextId) || '')
       setError('')
@@ -1034,8 +1044,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const startNewSession = useCallback(() => {
     draftsRef.current.set(sessionId, draft)
     abortRef.current?.abort()
+    abortRef.current = null
     setSending(false)
-    setSessionId(newSessionId())
+    const nextId = newSessionId()
+    currentSessionRef.current = nextId
+    setSessionId(nextId)
     setMessages([])
     setHandoffTranscript('')
     setDraft('')
@@ -1195,8 +1208,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       // 先做 startNewSession 同款重置
       draftsRef.current.set(sessionId, draft)
       abortRef.current?.abort()
+      abortRef.current = null
       setSending(false)
       const nextId = newSessionId()
+      currentSessionRef.current = nextId
       setSessionId(nextId)
       setMessages([])
       setHandoffTranscript(handoffChatTranscript(payload.snapshot))
@@ -1402,7 +1417,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       }
       return
     }
-    // 不 abort：abort 会断开 SSE，服务端那边把这一轮整块丢掉。改成发「停止」请求，
+    // 停止是独立控制请求；断线时同样可以让服务端优雅收尾。
     // 服务端调 interrupt() 优雅收尾 —— 已生成的字留在界面、写进 Haven，上下文也保住。
     // SSE 连接保持开着，等服务端把 done / after 推回来，这一轮才算真正收尾。
     if (stoppingRef.current) return
@@ -1417,6 +1432,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId }),
+    }).finally(() => {
+      stoppingRef.current = false
+      recoveryTickRef.current()
     }).catch(() => undefined)
   }, [effectiveEngine, sessionId])
 
@@ -1469,11 +1487,339 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }
   }, [effectiveEngine, mode, pick, sending, sessionId, stats.busy, stats.compacting])
 
+  // POST 和 attach 使用同一套事件处理逻辑，序号与当前气泡一起保存在本地运行态。
+  const consumeTurn = useCallback(async (
+    body: ReadableStream<Uint8Array>, assistantId: string, requestId: string,
+    turnEngine: CcEngine, turnSessionId: string,
+  ) => {
+    const patch = (fn: (message: CcMessage) => CcMessage) => {
+      if (currentSessionRef.current !== turnSessionId) return
+      setMessages(previous => previous.map(message => (
+        (message.id === assistantId || (message.role === 'assistant' && message.requestId === requestId)) ? fn(message) : message
+      )))
+    }
+    const handlers: SseHandlers = {
+    onStart: payload => {
+      patch(message => ({
+        ...message,
+        requestId: String(payload.request_id || requestId),
+        engine: turnEngine,
+        deliveryState: 'generating',
+      }))
+    },
+    onContext: payload => {
+      patch(message => ({ ...message, context: normalizeTurnContext(payload) }))
+    },
+    onContextSnapshot: payload => {
+      const snapshot = payload as unknown as CcContextSnapshot
+      patch(message => ({ ...message, contextSnapshot: snapshot }))
+      setStats(current => {
+        // 服务重启后第一轮流式快照还不知道 SDK 报的上限，会先给回退表的 200k；
+        // 同一模型已经知道更大的上限时沿用，等本轮 result 带回真实值
+        const known = current.contextSnapshot
+        const next = snapshot.source === 'stream' && known?.model === snapshot.model && known.maxTokens > snapshot.maxTokens
+          ? {
+            ...snapshot,
+            maxTokens: known.maxTokens,
+            remainingTokens: Math.max(0, known.maxTokens - snapshot.totalTokens),
+            percentage: Math.min(100, snapshot.totalTokens / known.maxTokens * 100),
+          }
+          : snapshot
+        return {
+          ...current,
+          contextSnapshot: next,
+          contextTokens: next.totalTokens,
+          contextMaxTokens: next.maxTokens,
+        }
+      })
+    },
+    onCompact: payload => {
+      const compaction = payload as unknown as CcCompactionEvent
+      patch(message => ({
+        ...message,
+        process: [
+          ...closeOpenThinking(message.process),
+          { type: 'compact', id: compaction.id, compaction },
+        ],
+        displaySegments: undefined,
+        revealDisplaySegments: false,
+      }))
+      setStats(current => ({
+        ...current,
+        lastCompaction: compaction,
+        compactionCount: current.lastCompaction?.id === compaction.id
+          ? current.compactionCount
+          : current.compactionCount + 1,
+      }))
+    },
+    onCompactStatus: payload => {
+      setStats(current => ({ ...current, compacting: payload.compacting === true }))
+    },
+    onInit: payload => {
+      patch(message => ({
+        ...message,
+        engine: payload.engine === 'selfhost' ? 'selfhost' : turnEngine,
+        providerId: String(payload.provider_id || ''),
+        providerLabel: String(payload.provider_label || ''),
+        model: String(payload.model || ''),
+      }))
+    },
+    onDelta: payload => {
+      const chunk = String(payload.text || '')
+      const id = String(payload.id || `text-${Date.now()}`)
+      patch(m => {
+        const process = closeOpenThinking(m.process)
+        const last = process.at(-1)
+        const continuesTextSegment = last?.type === 'text' && last.id === id
+        let currentText = chunk
+        if (continuesTextSegment) {
+          currentText = last.text + chunk
+          process[process.length - 1] = { ...last, text: currentText }
+        } else {
+          process.push({ type: 'text', id, text: chunk })
+        }
+        const displaySegments = buildDisplaySegments(currentText).segments
+        return {
+          ...m,
+          process,
+          thinkingMs: thinkingDuration(process) || undefined,
+          text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
+          displaySegments,
+          revealDisplaySegments: true,
+        }
+      })
+    },
+    onThinking: payload => {
+      const chunk = String(payload.text || '')
+      const id = String(payload.id || `thinking-${Date.now()}`)
+      const startedAt =
+        typeof payload.startedAt === 'number' ? payload.startedAt : Date.now()
+      patch(m => {
+        const process = [...(m.process || [])]
+        const last = process.at(-1)
+        if (last?.type === 'thinking' && last.id === id) {
+          process[process.length - 1] = { ...last, text: last.text + chunk }
+        } else {
+          process.push({ type: 'thinking', id, text: chunk, startedAt })
+        }
+        return {
+          ...m,
+          thinking: (m.thinking || '') + chunk,
+          process,
+          displaySegments: undefined,
+          revealDisplaySegments: false,
+        }
+      })
+    },
+    onUsage: payload => {
+      patch(message => ({
+        ...message,
+        usage: normalizeProviderUsage(payload),
+        streaming: false,
+        deliveryState: 'saving',
+        deliveryNote: '回复已生成，正在保存到 Haven…',
+      }))
+    },
+    onRecall: payload => {
+      patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
+    },
+    onTool: payload => {
+      const tool = payload as unknown as CcToolEvent
+      patch(m => ({
+        ...m,
+        process: [
+          ...closeOpenThinking(m.process, tool.startedAt || Date.now()),
+          { type: 'tool', id: `process-${tool.id}`, tool },
+        ],
+        tools: [...(m.tools || []), tool],
+        displaySegments: undefined,
+        revealDisplaySegments: false,
+      }))
+    },
+    onToolResult: payload => {
+      const id = String(payload.id || '')
+      const result =
+        typeof payload.result === 'string' && payload.result
+          ? payload.result
+          : undefined
+      const error =
+        typeof payload.error === 'string' && payload.error
+          ? payload.error
+          : undefined
+      const status =
+        payload.status === 'error' || payload.status === 'denied'
+          ? payload.status
+          : 'completed'
+      const durationMs =
+        typeof payload.durationMs === 'number' ? payload.durationMs : undefined
+      patch(m => ({
+        ...m,
+        tools: (m.tools || []).map(tool =>
+          tool.id === id
+            ? {
+                ...tool,
+                result: result || tool.result,
+                error,
+                status,
+                durationMs,
+              }
+            : tool,
+        ),
+        process: (m.process || []).map(event =>
+          event.type === 'tool' && event.tool.id === id
+            ? {
+                ...event,
+                tool: {
+                  ...event.tool,
+                  result: result || event.tool.result,
+                  error,
+                  status,
+                  durationMs,
+                },
+              }
+            : event,
+        ),
+      }))
+    },
+    onPermission: payload => {
+      // 有东西要批准了。对话流当场弹卡片（这一轮正停在服务端等）
+      const req = payload as unknown as CcPermRequest
+      setPending(prev => (prev.some(p => p.id === req.id) ? prev : [...prev, req]))
+    },
+    onPermissionResolved: payload => {
+      // 别的设备点了 / 超时了 —— 把卡片撤掉
+      const id = String(payload.id || '')
+      setPending(prev => prev.filter(p => p.id !== id))
+      void refreshPending()
+    },
+    onDone: payload => {
+      const usage = normalizeProviderUsage(payload.usage)
+      const doneStats = payload.stats as CcSessionStats | undefined
+      const cacheSnapshot: CcCacheSnapshot | null = doneStats?.cacheRefreshedAt
+        ? {
+            refreshedAt: doneStats.cacheRefreshedAt,
+            systemTtlMs: 60 * 60 * 1000,
+            sessionTtlMs: 5 * 60 * 1000,
+            model: doneStats.model,
+          }
+        : null
+      const interrupted = payload.interrupted === true
+      const interruptedReason = payload.interrupted_reason === 'pro_limit'
+        ? 'pro_limit'
+        : interrupted
+          ? 'user_stop'
+          : undefined
+      const replayed = payload.idempotent_replay === true
+      const continuityTurns = Number(payload.continuity_turns || 0)
+      const roundId = Number(payload.round_id || 0)
+      const savedUserMessageId = String(payload.user_message_id || '')
+      const savedAssistantMessageId = String(payload.assistant_message_id || '')
+      const displaySegments = normalizeDisplaySegments(payload.display_segments)
+      const nextWake = payload.next_wake && typeof payload.next_wake === 'object'
+        ? payload.next_wake as Record<string, unknown>
+        : null
+      if (roundId > 0) lastRoundIdRef.current = Math.max(lastRoundIdRef.current, roundId)
+      patch(m => {
+        const process = closeOpenThinking(m.process)
+        return {
+          ...m,
+          id: savedAssistantMessageId || m.id,
+          renderKey: m.renderKey || m.id,
+          process,
+          streaming: false,
+          usage: usage || m.usage,
+          cacheSnapshot: cacheSnapshot || m.cacheSnapshot,
+          interrupted: interrupted || m.interrupted,
+          interruptedReason: interruptedReason || m.interruptedReason,
+          thinkingMs: thinkingDuration(process) || undefined,
+          roundId: roundId || m.roundId,
+          deliveryState: replayed ? 'replayed' : 'saved',
+          displaySegments: displaySegments?.segments || m.displaySegments,
+          revealDisplaySegments: m.revealDisplaySegments,
+          nextWake: nextWake && typeof nextWake.at === 'string' && nextWake.at
+            ? { at: nextWake.at, reason: String(nextWake.reason || '') }
+            : m.nextWake,
+          deliveryNote: interruptedReason === 'pro_limit'
+            ? m.text.trim()
+              ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
+              : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
+            : replayed
+            ? '已从 Haven 幂等重放，没有重复生成或写入。'
+            : continuityTurns > 0
+              ? `已向当前 CC 线路补入其他线路期间 ${continuityTurns} 轮对话；已保存到 Haven`
+              : '已保存到 Haven',
+        }
+      })
+      if (savedUserMessageId) {
+        setMessages(previous => previous.map(message => (
+          message.role === 'user' && message.requestId === requestId ? { ...message, id: savedUserMessageId, renderKey: message.renderKey || message.id } : message
+        )))
+      }
+      if (doneStats) setStats(doneStats)
+    },
+    onAfter: payload => {
+      // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
+      // 这个事件只更新顶部那几个数字和会话列表。
+      if (payload.stats) setStats(payload.stats as CcSessionStats)
+      if (turnEngine === 'cc' && pick.kind === 'subscription') void refreshProUsage()
+      void refreshSessions()
+    },
+    onError: payload => {
+      const delivery = deliveryFromError(payload)
+      if (delivery.keepGenerated) {
+        // 已经生成的正文、thinking 和工具过程留在原消息位置；错误原因显示在
+        // 消息自己的状态栏，不再把半截正文挪进页面顶部的红色错误框。
+        setError('')
+        patch(message => {
+          const process = closeOpenThinking(message.process)?.map(event => (
+            event.type === 'tool' && event.tool.status === 'running'
+              ? {
+                  ...event,
+                  tool: {
+                    ...event.tool,
+                    status: 'error' as const,
+                    error: event.tool.error || '本轮异常结束，工具未完成',
+                  },
+                }
+              : event
+          ))
+          return {
+            ...message,
+            process,
+            tools: message.tools?.map(tool => tool.status === 'running'
+              ? {
+                  ...tool,
+                  status: 'error' as const,
+                  error: tool.error || '本轮异常结束，工具未完成',
+                }
+              : tool),
+            streaming: false,
+            thinkingMs: thinkingDuration(process) || undefined,
+            deliveryState: delivery.state,
+            deliveryNote: delivery.note,
+          }
+        })
+      } else {
+        setError(delivery.note)
+        setMessages(prev => prev.filter(message => message.id !== assistantId))
+      }
+    },
+  }
+    const guarded = Object.fromEntries(Object.entries(handlers).map(([key, handler]) => [key, (payload: Record<string, unknown>) => {
+      if (currentSessionRef.current === turnSessionId) handler(payload)
+    }])) as SseHandlers
+    await consumeSseStream(body, guarded, turnEngine === 'cc' ? {
+      after: turnSeqRef.current.get(requestId) || 0,
+      received: seq => turnSeqRef.current.set(requestId, seq),
+    } : undefined)
+  }, [pick.kind, refreshPending, refreshProUsage, refreshSessions])
+
   const send = useCallback(
     async (rawText: string, retry?: RetryTurn, selectedAttachments: CcAttachment[] = []) => {
       const text = rawText.trim()
       const attachmentIds = retry?.attachmentIds || selectedAttachments.map(item => item.id)
-      if ((!text && attachmentIds.length === 0) || sending || !sessionId) return
+      if ((!text && attachmentIds.length === 0) || sending || !sessionId
+        || messagesRef.current.some(message => message.deliveryState === 'detached')) return
 
       const requestId = retry?.requestId || newTurnRequestId()
       const expectedLastRoundId = retry?.expectedLastRoundId ?? lastRoundIdRef.current
@@ -1482,6 +1828,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const userMsg: CcMessage = {
         id: localId(),
         role: 'user',
+        requestId,
         text,
         attachments: selectedAttachments,
         createdAt: Date.now(),
@@ -1516,9 +1863,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const ac = new AbortController()
       abortRef.current = ac
 
-      const patch = (fn: (m: CcMessage) => CcMessage) => {
-        setMessages(prev => prev.map(m => (m.id === assistantId ? fn(m) : m)))
-      }
+
 
       try {
         const endpoint = turnEngine === 'selfhost' ? '/api/cc-chat-selfhost' : '/api/cc-chat'
@@ -1580,347 +1925,142 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         // SSE 消费（读流 → 切帧 → 按事件分发）在 ccSseConsumer 里，
         // 这里只写「每个事件怎么改界面状态」。
         // 只有「流结束却没收到完成事件」才会抛错 —— 见下面 catch。
-        await consumeSseStream(res.body, {
-          onStart: payload => {
-            patch(message => ({
-              ...message,
-              requestId: String(payload.request_id || requestId),
-              engine: turnEngine,
-              deliveryState: 'generating',
-            }))
-          },
-          onContext: payload => {
-            patch(message => ({ ...message, context: normalizeTurnContext(payload) }))
-          },
-          onContextSnapshot: payload => {
-            const snapshot = payload as unknown as CcContextSnapshot
-            patch(message => ({ ...message, contextSnapshot: snapshot }))
-            setStats(current => {
-              // 服务重启后第一轮流式快照还不知道 SDK 报的上限，会先给回退表的 200k；
-              // 同一模型已经知道更大的上限时沿用，等本轮 result 带回真实值
-              const known = current.contextSnapshot
-              const next = snapshot.source === 'stream' && known?.model === snapshot.model && known.maxTokens > snapshot.maxTokens
-                ? {
-                  ...snapshot,
-                  maxTokens: known.maxTokens,
-                  remainingTokens: Math.max(0, known.maxTokens - snapshot.totalTokens),
-                  percentage: Math.min(100, snapshot.totalTokens / known.maxTokens * 100),
-                }
-                : snapshot
-              return {
-                ...current,
-                contextSnapshot: next,
-                contextTokens: next.totalTokens,
-                contextMaxTokens: next.maxTokens,
-              }
-            })
-          },
-          onCompact: payload => {
-            const compaction = payload as unknown as CcCompactionEvent
-            patch(message => ({
-              ...message,
-              process: [
-                ...closeOpenThinking(message.process),
-                { type: 'compact', id: compaction.id, compaction },
-              ],
-              displaySegments: undefined,
-              revealDisplaySegments: false,
-            }))
-            setStats(current => ({
-              ...current,
-              lastCompaction: compaction,
-              compactionCount: current.lastCompaction?.id === compaction.id
-                ? current.compactionCount
-                : current.compactionCount + 1,
-            }))
-          },
-          onCompactStatus: payload => {
-            setStats(current => ({ ...current, compacting: payload.compacting === true }))
-          },
-          onInit: payload => {
-            patch(message => ({
-              ...message,
-              engine: payload.engine === 'selfhost' ? 'selfhost' : turnEngine,
-              providerId: String(payload.provider_id || ''),
-              providerLabel: String(payload.provider_label || ''),
-              model: String(payload.model || ''),
-            }))
-          },
-          onDelta: payload => {
-            const chunk = String(payload.text || '')
-            const id = String(payload.id || `text-${Date.now()}`)
-            patch(m => {
-              const process = closeOpenThinking(m.process)
-              const last = process.at(-1)
-              const continuesTextSegment = last?.type === 'text' && last.id === id
-              let currentText = chunk
-              if (continuesTextSegment) {
-                currentText = last.text + chunk
-                process[process.length - 1] = { ...last, text: currentText }
-              } else {
-                process.push({ type: 'text', id, text: chunk })
-              }
-              const displaySegments = buildDisplaySegments(currentText).segments
-              return {
-                ...m,
-                process,
-                thinkingMs: thinkingDuration(process) || undefined,
-                text: continuesTextSegment || !m.text ? m.text + chunk : `${m.text}\n\n${chunk}`,
-                displaySegments,
-                revealDisplaySegments: true,
-              }
-            })
-          },
-          onThinking: payload => {
-            const chunk = String(payload.text || '')
-            const id = String(payload.id || `thinking-${Date.now()}`)
-            const startedAt =
-              typeof payload.startedAt === 'number' ? payload.startedAt : Date.now()
-            patch(m => {
-              const process = [...(m.process || [])]
-              const last = process.at(-1)
-              if (last?.type === 'thinking' && last.id === id) {
-                process[process.length - 1] = { ...last, text: last.text + chunk }
-              } else {
-                process.push({ type: 'thinking', id, text: chunk, startedAt })
-              }
-              return {
-                ...m,
-                thinking: (m.thinking || '') + chunk,
-                process,
-                displaySegments: undefined,
-                revealDisplaySegments: false,
-              }
-            })
-          },
-          onUsage: payload => {
-            patch(message => ({
-              ...message,
-              usage: normalizeProviderUsage(payload),
-              streaming: false,
-              deliveryState: 'saving',
-              deliveryNote: '回复已生成，正在保存到 Haven…',
-            }))
-          },
-          onRecall: payload => {
-            patch(m => ({ ...m, recall: payload as unknown as CcMessage['recall'] }))
-          },
-          onTool: payload => {
-            const tool = payload as unknown as CcToolEvent
-            patch(m => ({
-              ...m,
-              process: [
-                ...closeOpenThinking(m.process, tool.startedAt || Date.now()),
-                { type: 'tool', id: `process-${tool.id}`, tool },
-              ],
-              tools: [...(m.tools || []), tool],
-              displaySegments: undefined,
-              revealDisplaySegments: false,
-            }))
-          },
-          onToolResult: payload => {
-            const id = String(payload.id || '')
-            const result =
-              typeof payload.result === 'string' && payload.result
-                ? payload.result
-                : undefined
-            const error =
-              typeof payload.error === 'string' && payload.error
-                ? payload.error
-                : undefined
-            const status =
-              payload.status === 'error' || payload.status === 'denied'
-                ? payload.status
-                : 'completed'
-            const durationMs =
-              typeof payload.durationMs === 'number' ? payload.durationMs : undefined
-            patch(m => ({
-              ...m,
-              tools: (m.tools || []).map(tool =>
-                tool.id === id
-                  ? {
-                      ...tool,
-                      result: result || tool.result,
-                      error,
-                      status,
-                      durationMs,
-                    }
-                  : tool,
-              ),
-              process: (m.process || []).map(event =>
-                event.type === 'tool' && event.tool.id === id
-                  ? {
-                      ...event,
-                      tool: {
-                        ...event.tool,
-                        result: result || event.tool.result,
-                        error,
-                        status,
-                        durationMs,
-                      },
-                    }
-                  : event,
-              ),
-            }))
-          },
-          onPermission: payload => {
-            // 有东西要批准了。对话流当场弹卡片（这一轮正停在服务端等）
-            const req = payload as unknown as CcPermRequest
-            setPending(prev => (prev.some(p => p.id === req.id) ? prev : [...prev, req]))
-          },
-          onPermissionResolved: payload => {
-            // 别的设备点了 / 超时了 —— 把卡片撤掉
-            const id = String(payload.id || '')
-            setPending(prev => prev.filter(p => p.id !== id))
-            void refreshPending()
-          },
-          onDone: payload => {
-            const usage = normalizeProviderUsage(payload.usage)
-            const doneStats = payload.stats as CcSessionStats | undefined
-            const cacheSnapshot: CcCacheSnapshot | null = doneStats?.cacheRefreshedAt
-              ? {
-                  refreshedAt: doneStats.cacheRefreshedAt,
-                  systemTtlMs: 60 * 60 * 1000,
-                  sessionTtlMs: 5 * 60 * 1000,
-                  model: doneStats.model,
-                }
-              : null
-            const interrupted = payload.interrupted === true
-            const interruptedReason = payload.interrupted_reason === 'pro_limit'
-              ? 'pro_limit'
-              : interrupted
-                ? 'user_stop'
-                : undefined
-            const replayed = payload.idempotent_replay === true
-            const continuityTurns = Number(payload.continuity_turns || 0)
-            const roundId = Number(payload.round_id || 0)
-            const savedUserMessageId = String(payload.user_message_id || '')
-            const savedAssistantMessageId = String(payload.assistant_message_id || '')
-            const displaySegments = normalizeDisplaySegments(payload.display_segments)
-            const nextWake = payload.next_wake && typeof payload.next_wake === 'object'
-              ? payload.next_wake as Record<string, unknown>
-              : null
-            if (roundId > 0) lastRoundIdRef.current = Math.max(lastRoundIdRef.current, roundId)
-            patch(m => {
-              const process = closeOpenThinking(m.process)
-              return {
-                ...m,
-                id: savedAssistantMessageId || m.id,
-                renderKey: m.renderKey || m.id,
-                process,
-                streaming: false,
-                usage: usage || m.usage,
-                cacheSnapshot: cacheSnapshot || m.cacheSnapshot,
-                interrupted: interrupted || m.interrupted,
-                interruptedReason: interruptedReason || m.interruptedReason,
-                thinkingMs: thinkingDuration(process) || undefined,
-                roundId: roundId || m.roundId,
-                deliveryState: replayed ? 'replayed' : 'saved',
-                displaySegments: displaySegments?.segments || m.displaySegments,
-                revealDisplaySegments: m.revealDisplaySegments,
-                nextWake: nextWake && typeof nextWake.at === 'string' && nextWake.at
-                  ? { at: nextWake.at, reason: String(nextWake.reason || '') }
-                  : m.nextWake,
-                deliveryNote: interruptedReason === 'pro_limit'
-                  ? m.text.trim()
-                    ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
-                    : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
-                  : replayed
-                  ? '已从 Haven 幂等重放，没有重复生成或写入。'
-                  : continuityTurns > 0
-                    ? `已向当前 CC 线路补入其他线路期间 ${continuityTurns} 轮对话；已保存到 Haven`
-                    : '已保存到 Haven',
-              }
-            })
-            if (!retry && savedUserMessageId) {
-              setMessages(previous => previous.map(message => (
-                message.id === userMsg.id ? { ...message, id: savedUserMessageId, renderKey: message.renderKey || message.id } : message
-              )))
-            }
-            if (doneStats) setStats(doneStats)
-          },
-          onAfter: payload => {
-            // done 之后的收尾（写库 + 上下文用量）。到这儿输入框早就解锁了，
-            // 这个事件只更新顶部那几个数字和会话列表。
-            if (payload.stats) setStats(payload.stats as CcSessionStats)
-            if (turnEngine === 'cc' && turnPick.kind === 'subscription') void refreshProUsage()
-            void refreshSessions()
-          },
-          onError: payload => {
-            const delivery = deliveryFromError(payload)
-            if (delivery.keepGenerated) {
-              // 已经生成的正文、thinking 和工具过程留在原消息位置；错误原因显示在
-              // 消息自己的状态栏，不再把半截正文挪进页面顶部的红色错误框。
-              setError('')
-              patch(message => {
-                const process = closeOpenThinking(message.process)?.map(event => (
-                  event.type === 'tool' && event.tool.status === 'running'
-                    ? {
-                        ...event,
-                        tool: {
-                          ...event.tool,
-                          status: 'error' as const,
-                          error: event.tool.error || '本轮异常结束，工具未完成',
-                        },
-                      }
-                    : event
-                ))
-                return {
-                  ...message,
-                  process,
-                  tools: message.tools?.map(tool => tool.status === 'running'
-                    ? {
-                        ...tool,
-                        status: 'error' as const,
-                        error: tool.error || '本轮异常结束，工具未完成',
-                      }
-                    : tool),
-                  streaming: false,
-                  thinkingMs: thinkingDuration(process) || undefined,
-                  deliveryState: delivery.state,
-                  deliveryNote: delivery.note,
-                }
-              })
-            } else {
-              setError(delivery.note)
-              setMessages(prev => prev.filter(message => message.id !== assistantId))
-            }
-          },
-        })
+        await consumeTurn(res.body, assistantId, requestId, turnEngine, sessionId)
       } catch (e) {
+        if (currentSessionRef.current !== sessionId) return
         const err = e as Error
-        if (err.name === 'AbortError') {
+        if (turnEngine === 'cc') {
+          setMessages(previous => previous.map(message => message.id === assistantId ? {
+            ...message, streaming: false, deliveryState: 'detached',
+            deliveryNote: '连接断了，这一轮还在继续，回到页面会自动接上',
+          } : message))
+        } else if (err.name === 'AbortError') {
           setMessages(previous => previous.flatMap(message => {
             if (message.id !== assistantId) return [message]
             if (!message.text && !message.thinking) return []
-            return [{
-              ...message,
-              streaming: false,
-              interrupted: true,
-              deliveryState: 'stopped',
-              deliveryNote: '已停止生成；这段未完成回复没有保存。',
-            }]
+            return [{ ...message, streaming: false, interrupted: true, deliveryState: 'stopped',
+              deliveryNote: '已停止生成；这段未完成回复没有保存。' }]
           }))
         } else {
           setError(err.message || String(err))
-          setMessages(prev => prev.filter(message => message.id !== assistantId))
-        }
-        // 浏览器断流时服务端的 iterator 可能还在等；主动回收，避免 busy 锁残留。
-        //（consumeSseStream 只有「流结束却没收到完成事件」才抛，走到这里必然无终态）
-        if (turnEngine === 'cc') {
-          void fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, {
-            method: 'DELETE',
-          }).catch(() => undefined)
+          setMessages(previous => previous.filter(message => message.id !== assistantId))
         }
       } finally {
-        abortRef.current = null
-        activeTurnRef.current = null
-        stoppingRef.current = false
-        setSending(false)
+        // 旧会话的 finally 不能解锁刚切入窗口的新连接。
+        if (abortRef.current === ac) {
+          abortRef.current = null
+          activeTurnRef.current = null
+          stoppingRef.current = false
+          if (currentSessionRef.current === sessionId) setSending(false)
+        }
       }
     },
-    [sessionId, sending, personaId, refreshSessions, refreshPending, refreshProUsage, mode, pick, credChosen, webSettings, effectiveEngine],
+    [sessionId, sending, personaId, refreshSessions, refreshPending, refreshProUsage, mode, pick, credChosen, webSettings, effectiveEngine, consumeTurn],
   )
+
+  const recoverTurn = useCallback(async () => {
+    if (!sessionId || effectiveEngine !== 'cc' || historyLoading
+      || document.visibilityState !== 'visible' || recoveringRef.current || abortRef.current) return
+    recoveringRef.current = true
+    const turnSessionId = sessionId
+    const isCurrent = () => currentSessionRef.current === turnSessionId
+    try {
+      const response = await fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok || !payload.ok || !isCurrent() || abortRef.current) return
+      setStats(payload.stats as CcSessionStats)
+      const active = payload.active_turn as { request_id: string; user_text: string; attachment_ids: string[]; started_at: number } | null
+      if (active) {
+        const requestId = active.request_id
+        let assistant = messagesRef.current.find(message => message.role === 'assistant' && message.requestId === requestId)
+        if (!assistant) {
+          turnSeqRef.current.delete(requestId)
+          const user: CcMessage = { id: localId(), role: 'user', requestId, text: active.user_text, createdAt: active.started_at }
+          assistant = { id: localId(), role: 'assistant', requestId, text: '', createdAt: active.started_at,
+            engine: 'cc', tools: [], process: [], streaming: true, deliveryState: 'generating',
+            retryText: active.user_text, retryAttachmentIds: active.attachment_ids,
+            retryExpectedLastRoundId: lastRoundIdRef.current }
+          const placeholder = assistant
+          setMessages(previous => [...previous.filter(message => message.requestId !== requestId), user, placeholder])
+        }
+        if (waitingHavenRef.current.has(requestId)) return
+        const assistantId = assistant.id
+        const ac = new AbortController()
+        abortRef.current = ac
+        activeTurnRef.current = { assistantId, engine: 'cc' }
+        setSending(true)
+        const detach = () => {
+          if (isCurrent()) setMessages(previous => previous.map(message =>
+            message.role === 'assistant' && message.requestId === requestId && !['saved', 'replayed'].includes(message.deliveryState || '')
+              ? { ...message, streaming: false, deliveryState: 'detached', deliveryNote: '连接断了，这一轮还在继续，回到页面会自动接上' }
+              : message))
+        }
+        try {
+          const attached = await fetch(`/api/cc-chat/attach?session_id=${encodeURIComponent(sessionId)}&request_id=${encodeURIComponent(requestId)}&after_seq=${turnSeqRef.current.get(requestId) || 0}`,
+            { signal: ac.signal, cache: 'no-store' })
+          if (!isCurrent()) { ac.abort(); return }
+          if (!attached.ok || !attached.body) {
+            const failure = await attached.json().catch(() => ({}))
+            if (failure.reason === 'truncated') waitingHavenRef.current.add(requestId)
+            detach(); return
+          }
+          setMessages(previous => previous.map(message => message.id === assistantId
+            ? { ...message, streaming: true, deliveryState: 'generating', deliveryNote: undefined } : message))
+          await consumeTurn(attached.body, assistantId, requestId, 'cc', turnSessionId)
+        } catch { detach() }
+        finally {
+          if (abortRef.current === ac) {
+            abortRef.current = null
+            activeTurnRef.current = null
+            stoppingRef.current = false
+            if (isCurrent()) setSending(false)
+          }
+        }
+      } else {
+        const detached = messagesRef.current.filter(message => message.deliveryState === 'detached')
+        if (!detached.length) return
+        // 重新按 round 拉取；同 request_id 的完整轮次原位替换，不重复追加。
+        const result = await fetch(`/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&after_round_id=${lastRoundIdRef.current}&limit=100&raw=1`, { cache: 'no-store' })
+        const data = await result.json()
+        if (!result.ok || !data.ok || !Array.isArray(data.turns) || !isCurrent()) return
+        const turns = data.turns as HavenTurnRow[]
+        const incoming = turnsToMessages(turns)
+        const found = new Set(turns.map(turn => turn.request_id).filter(Boolean))
+        for (const message of detached) if (message.requestId) waitingHavenRef.current.delete(message.requestId)
+        setMessages(previous => mergeTurnMessages(previous, incoming).map(message =>
+          message.deliveryState === 'detached'
+            ? { ...message, streaming: false, deliveryState: found.has(message.requestId) ? 'saved' : 'persistence_unknown',
+                deliveryNote: found.has(message.requestId) ? '已保存到 Haven' : '这一轮没有保存下来，点重试核对或重新发送。' }
+            : message))
+        lastRoundIdRef.current = turns.reduce((value, turn) => Math.max(value, Number(turn.round_id || 0)), lastRoundIdRef.current)
+        void refreshSessions()
+      }
+    } catch { /* 网络仍不可用，保持 detached，下一次可见/轮询继续。 */ }
+    finally { recoveringRef.current = false }
+  }, [sessionId, effectiveEngine, historyLoading, consumeTurn, refreshSessions])
+
+  // 主动放开隐藏页面的本地订阅；回来立即重接，避免旧 fetch 在 iOS 上挂起。
+  useEffect(() => {
+    if (effectiveEngine !== 'cc') return
+    const hidden = () => { if (document.visibilityState === 'hidden') abortRef.current?.abort() }
+    document.addEventListener('visibilitychange', hidden)
+    return () => document.removeEventListener('visibilitychange', hidden)
+  }, [effectiveEngine])
+
+  recoveryTickRef.current = () => { void recoverTurn() }
+  useEffect(() => {
+    const tick = () => { void recoverTurn() }
+    const visible = () => { if (document.visibilityState === 'visible') tick() }
+    const initial = window.setTimeout(tick, 0)
+    const timer = window.setInterval(tick, 5_000)
+    window.addEventListener('focus', tick)
+    document.addEventListener('visibilitychange', visible)
+    return () => {
+      window.clearTimeout(initial); window.clearInterval(timer)
+      window.removeEventListener('focus', tick)
+      document.removeEventListener('visibilitychange', visible)
+    }
+  }, [recoverTurn])
 
   const retryPersistence = useCallback((message: CcMessage) => {
     if (!message.requestId || !message.retryText || message.retryExpectedLastRoundId == null || !message.engine) return
@@ -2018,7 +2158,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     loadHistoryDay,
     draft,
     setDraft,
-    sending,
+    sending: sending || messages.some(message => message.deliveryState === 'detached'),
     stats: mergedStats,
     proUsage,
     refreshProUsage,
@@ -2055,7 +2195,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     /** cc 已经在这个窗口开口 —— 模式和联网工具不能再改。 */
     modeLocked: ccSessionStarted,
     /** 生成期间不允许换线路；空闲时 Pro / API / selfhost 都可手动往返。 */
-    providerLocked: providerSelectionLocked(effectiveEngine, sending),
+    providerLocked: providerSelectionLocked(effectiveEngine, sending || messages.some(message => message.deliveryState === 'detached')),
     upstream,
     upstreamLoaded,
     pick,

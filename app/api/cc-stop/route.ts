@@ -1,3 +1,4 @@
+import { getTurnBroadcast } from '@/app/lib/cc/turnBroadcast'
 import { NextRequest } from 'next/server'
 import { markTurnInterrupted, stopSession } from '@/app/lib/ccSession'
 import { cancelAllPending } from '@/app/lib/ccChannel'
@@ -24,6 +25,12 @@ export async function POST(request: NextRequest) {
     /* 下面统一判空 */
   }
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
+
+  const turn = getTurnBroadcast(sessionId)
+  if (turn && !turn.done) {
+    await turn.stop()
+    return Response.json({ ok: true })
+  }
 
   markTurnInterrupted(sessionId)
   await stopSession(sessionId)

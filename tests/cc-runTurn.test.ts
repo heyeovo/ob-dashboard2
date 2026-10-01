@@ -1,3 +1,4 @@
+import { createTurnBroadcast, publishTurn, turnStream, finishTurn } from '@/app/lib/cc/turnBroadcast'
 // runTurn（单轮 cc 对话执行器）的集成测试（9.5 步建）。
 //
 // 思路：mock 掉 @anthropic-ai/claude-agent-sdk 的 query（不真起子进程、不花钱），
@@ -10,7 +11,7 @@
 //   3. 一轮连续两个工具
 //   4. 工具返回错误后模型仍继续
 //   5. tool_result 后自动续写，不等待下一条用户消息
-//   6. 浏览器中止后释放 busy（同一会话可立即再发）
+//   6. 显式取消后释放 busy（同一会话可立即再发）
 //   7. provider 503 后能立即发起下一轮，错误轮次不写入 Haven
 // 第 8 条（旧历史无 process 仍能正常展示）在 tests/cc-history.test.ts。
 
@@ -264,12 +265,14 @@ function driveTurn(
     text: options.text || '你好',
     persona: options.persona ?? null,
     config: options.config || makeConfig({ sessionId }),
-    signal: ac.signal,
+    signal: options.signal || ac.signal,
     // 跟真实 route 的 send 一样：调用时就序列化（模拟 SSE 编码时机）。
     // 不能存对象引用 —— 服务端后续会原地改 tool.status 等字段，
     // 已推给前端的事件不该跟着变。
-    send: (event, data) =>
-      events.push({ event, data: JSON.parse(JSON.stringify(data)) as Record<string, unknown> }),
+    send: (event, data) => {
+      events.push({ event, data: JSON.parse(JSON.stringify(data)) as Record<string, unknown> })
+      options.send?.(event, data)
+    },
     close: () => {
       handle.closed = true
     },
@@ -1207,14 +1210,37 @@ describe('runTurn：工具循环', () => {
 })
 
 describe('runTurn：中止与失败', () => {
-  it('浏览器中止：cancelled、不写库、busy 释放后可立即再发', async () => {
+  it('浏览器断线后真实 runTurn 继续并严格写入 Haven', async () => {
+    const browser = new AbortController()
+    const turn = createTurnBroadcast({ sessionId: 'ob2-disconnected-real-turn', requestId: 'request-disconnected',
+      userText: '你好', attachmentIds: [], startedAt: Date.now() }, async () => {})!
+    const response = turnStream(turn, browser.signal)
+    const handle = driveTurn([initMsg(), textDelta('完整回复'), resultMsg()], {
+      sessionId: turn.sessionId, requestId: turn.requestId, signal: turn.controller.signal,
+      send: (event, data) => {
+        publishTurn(turn, event, data)
+        if (event === 'delta') browser.abort()
+      },
+    })
+    const result = await handle.promise
+    finishTurn(turn)
+    expect(browser.signal.aborted).toBe(true)
+    expect(turn.controller.signal.aborted).toBe(false)
+    expect(result.phase).toBe('succeeded')
+    expect(turns.recordTurn).toHaveBeenCalledOnce()
+    expect(turns.recordTurn.mock.calls[0][0]).toMatchObject({ requestId: turn.requestId, userText: '你好', assistantText: '完整回复' })
+    expect(turn.events.some(event => event.event === 'done')).toBe(true)
+    await response.body!.cancel()
+  })
+
+  it('显式取消轮次：cancelled、不写库、busy 释放后可立即再发', async () => {
     const handle = driveTurn([
       initMsg(),
       textDelta('半截'),
       { _hang: true } as unknown as SDKMessage,
     ])
 
-    // 等主循环进入挂起状态，然后断开浏览器
+    // 等主循环进入挂起状态，然后显式取消轮次
     await new Promise(resolve => setTimeout(resolve, 20))
     handle.ac.abort()
 

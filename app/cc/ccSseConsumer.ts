@@ -43,6 +43,7 @@ export type SseTerminal = 'done' | 'error' | null
 export async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
   handlers: SseHandlers,
+  sequence?: { after: number; received: (seq: number) => void },
 ): Promise<SseTerminal> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -58,7 +59,12 @@ export async function consumeSseStream(
     let frameResult = takeSseFrame(buffer)
     while (frameResult.frame) {
       buffer = frameResult.rest
-      const { event, data } = frameResult.frame
+      const { event, data, seq } = frameResult.frame
+      if (sequence && seq != null && Number.isSafeInteger(seq)) {
+        if (seq <= sequence.after) { frameResult = takeSseFrame(buffer); continue }
+        sequence.after = seq
+        sequence.received(seq)
+      }
 
       if (event === 'start') handlers.onStart(data)
       else if (event === 'context') handlers.onContext(data)

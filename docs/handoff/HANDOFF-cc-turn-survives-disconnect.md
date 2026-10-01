@@ -99,3 +99,6 @@
 ## 八、状态
 
 - 2026-10-01：规格完成，待 Codex 执行。
+- 2026-10-01 Codex：在 `feat/turn-survives-disconnect` 完成实现与正式契约同步；以本地工作区改动交付，未经用户确认不 commit/push，未合并 main、未部署。新增广播/attach、共享事件消费、detached 恢复、request_id 原位替换、排队停止；数据分类和长期机制见 reference，不在此重复。
+- 验证：定向 7 文件 67 测试通过；`npm run build` 通过（授权环境可下载现有 Google Fonts）；Windows `npm test` 为 401 通过、2 失败、1 原有跳过。失败仅 `artifacts > lists newest first and ignores symlinks and other files`、`cc workspace 路径边界 > 工作模式内置 yanzhi files 目录；闲聊、未挂载和 symlink 挂载点都不加` 创建符号链接时报 EPERM，没有改动/跳过它们。
+- 下一窗口明确范围：CC 在 Linux 执行全量 vitest 和 build，再按 §六对 iPhone 6 项验收（含锁屏待批准卡片）；只修本功能验收发现的问题，不扩散到 Haven、selfhost、wake、UI 样式或部署恢复。验收前由用户决定提交/推送此 feature 分支；本窗口不合并 main。

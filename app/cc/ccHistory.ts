@@ -66,6 +66,7 @@ export function thinkingDuration(process: CcProcessEvent[] | undefined) {
 
 /** Haven 的一轮（user + assistant 一行）拆成界面上的两条消息。 */
 export type HavenTurnRow = {
+  request_id?: string
   id: number
   round_id?: number
   user_message_id?: string
@@ -488,6 +489,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
       out.push({
         id: t.user_message_id || `h${t.id}u`,
         role: 'user',
+        requestId: t.request_id || undefined,
         text: t.user_text,
         attachments,
         createdAt: at,
@@ -495,10 +497,11 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         fromHistory: true,
       })
     }
-    if (t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit') {
+    if (t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit' || (t.source === 'cc' && (extra.interrupted || t.request_id))) {
       out.push({
         id: t.assistant_message_id || `h${t.id}a`,
         role: 'assistant',
+        requestId: t.request_id || undefined,
         text: t.assistant_text,
         createdAt: at,
         chatDay: t.chat_day || undefined,

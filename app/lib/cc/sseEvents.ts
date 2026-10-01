@@ -141,7 +141,7 @@ export function encodeSse<K extends CcSseEventName>(event: K, data: CcSseEventMa
 
 /* ── 解码（前端用）── */
 
-export type CcSseFrame = { event: string; data: Record<string, unknown> }
+export type CcSseFrame = { event: string; data: Record<string, unknown>; seq?: number }
 
 /**
  * 从累积缓冲区里切出**第一条**完整帧，返回帧和剩余缓冲区。
@@ -154,13 +154,15 @@ export function takeSseFrame(buffer: string): { frame: CcSseFrame | null; rest: 
   const rawFrame = buffer.slice(0, sep)
   const rest = buffer.slice(sep + 2)
 
+  let seq: number | undefined
   let event = 'message'
   const dataLines: string[] = []
   for (const line of rawFrame.split('\n')) {
-    if (line.startsWith('event: ')) event = line.slice(7).trim()
+    if (line.startsWith('id: ')) seq = Number(line.slice(4))
+    else if (line.startsWith('event: ')) event = line.slice(7).trim()
     else if (line.startsWith('data: ')) dataLines.push(line.slice(6))
   }
-  if (dataLines.length === 0) return { frame: { event, data: {} }, rest }
+  if (dataLines.length === 0) return { frame: { event, data: {}, seq }, rest }
 
   let data: Record<string, unknown> = {}
   try {
@@ -169,5 +171,5 @@ export function takeSseFrame(buffer: string): { frame: CcSseFrame | null; rest: 
   } catch {
     /* 解不出 JSON 就按空对象处理 */
   }
-  return { frame: { event, data }, rest }
+  return { frame: { event, data, seq }, rest }
 }

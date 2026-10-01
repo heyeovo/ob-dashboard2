@@ -146,7 +146,7 @@ export type RunTurnInput = {
   /** 后台 wake 复用同一执行器，但阶段 2 不写 conversation_turns。 */
   turnKind?: 'user' | 'agent_wake'
   persistTurn?: boolean
-  /** 浏览器连接。断连时 abort，主循环立刻停下 */
+  /** 轮次自有的 signal；显式取消时 abort，浏览器断线不影响轮次 */
   signal: AbortSignal
   /** 这一轮的 SSE 推送口（route 建好传进来） */
   send: CcSend
@@ -223,7 +223,7 @@ function nextSdkMessage(
       callback()
     }
     const onAbort = () => {
-      const error = new Error('浏览器连接已经中断')
+      const error = new Error('轮次已显式取消')
       error.name = 'AbortError'
       finish(() => reject(error))
     }
@@ -456,7 +456,7 @@ async function latestModelSurfaceHashForLane(
 /* ── 主入口 ── */
 
 /**
- * 执行一轮 cc 对话，直到这轮结束（成功 / 失败 / 浏览器断连）。
+ * 执行一轮 cc 对话，直到这轮结束（成功 / 失败 / 显式取消）。
  *
  * 生命周期（9.5 状态机）：
  *   preparing → running → succeeded | failed | cancelled
@@ -1559,7 +1559,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     }
   } catch (e) {
     const err = e as Error
-    // 浏览器断连：这一轮没跑完，不写 Haven（busy 由 finally 摘）。
+    // 显式取消：这一轮没跑完，不写 Haven（busy 由 finally 摘）。
     // ⚠️ 子进程也要收掉 —— iterator 卡在 abort 前的挂起状态，留着不删的话
     // 下一次发言会永远等不到消息（实测踩过，9.5 测试覆盖）。下次发言会新建
     // 进程、靠 resume 接回上下文，跟原 route.ts 的 catch 行为一致。

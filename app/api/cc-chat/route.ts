@@ -1,3 +1,6 @@
+import { createTurnBroadcast, getTurnBroadcast, publishTurn, finishTurn, activeTurn, turnStream } from '@/app/lib/cc/turnBroadcast'
+import { markTurnInterrupted, stopSession } from '@/app/lib/ccSession'
+import { cancelAllPending } from '@/app/lib/ccChannel'
 import { NextRequest } from 'next/server'
 import { builtInWorkDirs, resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import type { CredMode } from '@/app/lib/ccEnv'
@@ -438,6 +441,16 @@ export async function POST(request: NextRequest) {
     return replayCcTurn(existing.turn, body)
   }
 
+  const running = getTurnBroadcast(sessionId)
+  if (running && !running.done) {
+    if (running.requestId !== requestId || running.userText !== text
+      || JSON.stringify(running.attachmentIds) !== JSON.stringify(attachmentIds)) {
+      return Response.json({ ok: false, error: 'turn_running' }, { status: 409 })
+    }
+    if (running.truncated) return Response.json({ ok: false, reason: 'truncated' }, { status: 409 })
+    return turnStream(running, request.signal)
+  }
+
   let inputs: Awaited<ReturnType<typeof loadTurnInputs>>
   try {
     inputs = await loadTurnInputs(body)
@@ -455,7 +468,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : '附件读取失败' }, { status: 400 })
   }
 
-  const encoder = new TextEncoder()
   const startedAt = reqAt
 
   // 慢在哪一段：每个节点打一行「距开始多少毫秒」到 dev 控制台。
@@ -470,61 +482,42 @@ export async function POST(request: NextRequest) {
   }
   stamp('配置读完（协作者 / 目录，这一步要去 Zeabur）')
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let closed = false
-      const send = (event: string, data: unknown) => {
-        if (closed) return
-        try {
-          controller.enqueue(encoder.encode(encodeSse(event as never, data as never)))
-        } catch {
-          closed = true
-        }
-      }
-      const close = () => {
-        if (closed) return
-        closed = true
-        try {
-          controller.close()
-        } catch {
-          /* 已经关了 */
-        }
-      }
-
-      await runForegroundSessionTurn(sessionId, () => runTurn({
-        sessionId,
-        requestId,
-        expectedLastRoundId,
-        personaId,
-        text,
-        attachments,
-        persona,
-        config,
-        sessionSnapshot,
-        signal: request.signal,
-        send,
-        close,
-        stamp,
-        resumeHint,
-      }), { subscription: config.cred === 'subscription', signal: request.signal })
-    },
+  const turn = createTurnBroadcast({ sessionId, requestId, userText: text, attachmentIds, startedAt }, async reason => {
+    if (!turn?.executing) { turn?.controller.abort(); return }
+    markTurnInterrupted(sessionId)
+    await stopSession(sessionId)
+    cancelAllPending(sessionId, reason === 'unattended'
+      ? '连续 30 分钟无人连接，这一轮已自动停止。'
+      : '你按了停止，这一轮到此为止，挂着的操作取消了。')
   })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  })
+  if (!turn) return Response.json({ ok: false, error: 'turn_running' }, { status: 409 })
+  const response = turnStream(turn, request.signal)
+  // 请求只订阅广播；轮次拥有自己的 signal，断开浏览器不会取消生成或保存。
+  void runForegroundSessionTurn(sessionId, () => {
+    turn.executing = true
+    return runTurn({
+      sessionId, requestId, expectedLastRoundId, personaId, text, attachments,
+      persona, config, sessionSnapshot, signal: turn.controller.signal,
+      send: (event, data) => publishTurn(turn, event, data),
+      close: () => {}, stamp, resumeHint,
+    })
+  }, { subscription: config.cred === 'subscription', signal: turn.controller.signal })
+    .catch(error => {
+      publishTurn(turn, 'error', {
+        code: turn.controller.signal.aborted ? 'cancelled' : 'turn_exception',
+        message: error instanceof Error ? error.message : String(error),
+        generated_not_saved: true,
+      })
+    })
+    .finally(() => finishTurn(turn))
+  return response
 }
 
 /** 拿会话的实时状态（费用、缓存剩余时间）。前端顶部轮询用。 */
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('session_id') || ''
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
-  return Response.json({ ok: true, stats: getSessionStats(sessionId) })
+  return Response.json({ ok: true, stats: getSessionStats(sessionId), active_turn: activeTurn(sessionId) })
 }
 
 /** 主动收掉一个会话的子进程（切走会话 / 想重新开始时用）。 */

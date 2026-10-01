@@ -63,3 +63,19 @@ describe('10.3 unified cc/selfhost SSE consumer', () => {
     expect(target.onError).toHaveBeenCalledWith({ code: 'persistence_unknown', generated_not_saved: false })
   })
 })
+
+
+it('deduplicates numbered replay and records the last consumed seq', async () => {
+  const target = handlers(), received = vi.fn()
+  const body = new ReadableStream<Uint8Array>({ start(controller) {
+    controller.enqueue(new TextEncoder().encode(
+      'id: 1\nevent: delta\ndata: {"text":"duplicate"}\n\n'
+      + 'id: 2\nevent: delta\ndata: {"text":"new"}\n\n'
+      + 'id: 2\nevent: delta\ndata: {"text":"new"}\n\n'
+      + 'id: 3\nevent: done\ndata: {}\n\n'))
+    controller.close()
+  } })
+  await consumeSseStream(body, target, { after: 1, received })
+  expect(target.onDelta).toHaveBeenCalledExactlyOnceWith({ text: 'new' })
+  expect(received.mock.calls.map(([seq]) => seq)).toEqual([2, 3])
+})
