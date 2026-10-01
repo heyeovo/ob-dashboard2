@@ -103,3 +103,4 @@
 - 验证：定向 7 文件 67 测试通过；`npm run build` 通过（授权环境可下载现有 Google Fonts）；Windows `npm test` 为 401 通过、2 失败、1 原有跳过。失败仅 `artifacts > lists newest first and ignores symlinks and other files`、`cc workspace 路径边界 > 工作模式内置 yanzhi files 目录；闲聊、未挂载和 symlink 挂载点都不加` 创建符号链接时报 EPERM，没有改动/跳过它们。
 - 下一窗口明确范围：CC 在 Linux 执行全量 vitest 和 build，再按 §六对 iPhone 6 项验收（含锁屏待批准卡片）；只修本功能验收发现的问题，不扩散到 Haven、selfhost、wake、UI 样式或部署恢复。验收前由用户决定提交/推送此 feature 分支；本窗口不合并 main。
 - 2026-10-01 CC 验收：合入 main 最新提交后 Linux 全量 406/407 通过（唯一失败为 `dashboard-auth` 时间相关用例，单独重跑与 main 上均通过，与本功能无关），build 通过。修三处（`722972f`）：服务端 HTTP 错误恢复原报错不再标 detached；5 秒轮询只在存在 detached 气泡时运行；`interrupt_timeout` 显式取消轮次，避免停止 / 无人值守停止卡住 busy 锁。已合并 main，待 §六 iPhone 实测。
+- 2026-10-01 iPhone 实测：①锁屏 20 秒后结果完整、③切窗口再切回实时接上，均通过。①发现解锁后断线提示一直挂到命令结束——长命令期间无事件可重放，attach 响应头憋住不发。修复：`turnStream` 接上时先写 `: attached` 注释并每 15 秒 `: ping` 保活；detached 提示改为灰色小圆点 + 次要文字，不再用报错红。待复测①与②（PWA 上划杀掉重开代替刷新）、④⑤⑥。

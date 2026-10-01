@@ -864,6 +864,14 @@ export default function CcMessageRow({
             {/* 保存状态图标 */}
             {message.deliveryState === 'saving' ? (
               <span title={message.deliveryNote || '保存中…'} className="cc-saving-indicator size-2 rounded-full border border-current" />
+            ) : message.deliveryState === 'detached' ? (
+              // 断线只是浏览器没在看，轮次仍在服务端跑：用保存中的小圆点 + 次要文字，不用报错红。
+              <>
+                <span title={message.deliveryNote} className="cc-saving-indicator size-2 rounded-full border border-current" />
+                {message.deliveryNote ? (
+                  <span className="text-xs text-[var(--color-text-tertiary)]">{message.deliveryNote}</span>
+                ) : null}
+              </>
             ) : message.deliveryState && !['saved', 'replayed', 'generating', 'stopped'].includes(message.deliveryState) ? (
               <>
                 <button

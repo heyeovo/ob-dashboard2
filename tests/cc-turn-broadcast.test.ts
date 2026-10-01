@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import {
   activeTurn, createTurnBroadcast, encodeTurnEvent, finishTurn, getTurnBroadcast,
-  publishTurn, subscribeTurn, turnStream, TURN_BUFFER_BYTES, TURN_RETENTION_MS, TURN_UNATTENDED_MS,
+  publishTurn, subscribeTurn, turnStream, TURN_BUFFER_BYTES, TURN_RETENTION_MS, TURN_HEARTBEAT_MS, TURN_UNATTENDED_MS,
 } from '@/app/lib/cc/turnBroadcast'
 import { GET } from '@/app/api/cc-chat/attach/route'
 import { dropSession } from '@/app/lib/ccSession'
@@ -67,11 +67,23 @@ describe('foreground turn broadcast', () => {
     const response = turnStream(turn, request.signal)
     const reader = response.body!.getReader()
     request.abort()
+    // 先读到立即推出响应的注释行，随后流关闭
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(': attached\n\n')
     expect(await reader.read()).toEqual({ done: true, value: undefined })
     expect(turn.subscribers.size).toBe(0)
     expect(turn.controller.signal.aborted).toBe(false)
     dropSession(turn.sessionId, 'manual_delete')
     expect(turn.controller.signal.aborted).toBe(true)
+  })
+
+  it('flushes immediately on attach and keeps the stream alive while no events arrive', async () => {
+    const turn = create(), request = new AbortController()
+    const reader = turnStream(turn, request.signal, 0).body!.getReader()
+    const decoder = new TextDecoder()
+    expect(decoder.decode((await reader.read()).value)).toBe(': attached\n\n')
+    await vi.advanceTimersByTimeAsync(TURN_HEARTBEAT_MS)
+    expect(decoder.decode((await reader.read()).value)).toBe(': ping\n\n')
+    request.abort()
   })
 
   it('reader cancel detaches without aborting generation', async () => {

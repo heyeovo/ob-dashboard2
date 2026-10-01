@@ -109,26 +109,40 @@ export const TURN_STREAM_HEADERS = {
   Connection: 'keep-alive', 'X-Accel-Buffering': 'no',
 }
 
+/** 长工具期间没有事件时的保活间隔；SSE 注释行前端忽略。 */
+export const TURN_HEARTBEAT_MS = 15_000
+
 export function turnStream(turn: TurnBroadcast, signal: AbortSignal, afterSeq = 0) {
   let detach = () => {}
   let closed = false
+  let heartbeat: ReturnType<typeof setInterval> | undefined
   const encoder = new TextEncoder()
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const close = () => {
         if (closed) return
         closed = true
+        if (heartbeat) clearInterval(heartbeat)
         signal.removeEventListener('abort', disconnect)
         try { controller.close() } catch { /* 已断开 */ }
       }
+      // 重新接上时若没有待重放事件（如正在跑长命令），响应头会憋到下一个事件才发出，
+      // 前端 fetch 一直挂着、断线提示也一直不消失。先写一行注释把响应推出去，再定时保活。
+      const comment = (text: string) => {
+        if (closed) return
+        try { controller.enqueue(encoder.encode(`: ${text}\n\n`)) } catch { disconnect() }
+      }
       const disconnect = () => { detach(); close() }
+      comment('attached')
+      heartbeat = setInterval(() => comment('ping'), TURN_HEARTBEAT_MS)
+      heartbeat.unref?.()
       detach = subscribeTurn(turn, {
         send: item => { if (!closed) controller.enqueue(encoder.encode(encodeTurnEvent(item))) }, close,
       }, afterSeq)
       if (signal.aborted) disconnect()
       else if (!closed) signal.addEventListener('abort', disconnect, { once: true })
     },
-    cancel() { closed = true; detach() },
+    cancel() { closed = true; if (heartbeat) clearInterval(heartbeat); detach() },
   })
   return new Response(stream, { headers: TURN_STREAM_HEADERS })
 }
