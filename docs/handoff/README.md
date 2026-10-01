@@ -13,7 +13,7 @@
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
-| `HANDOFF-cc-turn-survives-disconnect.md` | 🔎 待 CC 验收 | 2026-10-01 Codex 已在 `feat/turn-survives-disconnect` 实现；构建通过，定向 67/67；Windows 全量 401 通过 / 2 个符号链接 EPERM 失败 / 1 原有跳过；待 Linux 全量和 §六 iPhone 6 项验收。未合并 main、未上线；只动 dashboard |
+| `HANDOFF-cc-turn-survives-disconnect.md` | 🔎 待 iPhone 验收 | 2026-10-01 Codex 实现、CC 验收（Linux 全量与 build 通过，补三处修复 `722972f`）并合并 main；待 §六 iPhone 6 项实测。只动 dashboard |
 | `HANDOFF-cc-daily-rolling-context.md` | 📦 已完成归档 | 按天滚动在用；文内“低优先级后续”未排期 |
 | `HANDOFF-chat-search.md` | 📦 已完成归档 | 排序优化在 OB Todo「search_chat 优化」 |
 | `HANDOFF-daily-review-input-budget.md` | 📦 已完成归档 | |
