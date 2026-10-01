@@ -408,6 +408,25 @@ describe('runTurn：普通回复', () => {
     expect(turns.recordTurn).not.toHaveBeenCalled()
   })
 
+  it('只在工作模式的用户消息尾部追加工作状态行', async () => {
+    const workSession = 'ob2-test-work-status'
+    await driveTurn([initMsg(), textDelta('好'), resultMsg()], {
+      sessionId: workSession,
+      config: makeConfig({ sessionId: workSession, mode: 'work' }),
+    }).promise
+    const workPushed = await sdk.promptIterators.at(-1)!.next()
+    const workContent = String(workPushed.value?.message.content || '')
+    expect(workContent).toMatch(/\[北京时间 [^\]]+\]\n\[工作状态 上下文 读不到\]$/)
+
+    const chatSession = 'ob2-test-chat-status'
+    await driveTurn([initMsg(), textDelta('好'), resultMsg()], {
+      sessionId: chatSession,
+      config: makeConfig({ sessionId: chatSession }),
+    }).promise
+    const chatPushed = await sdk.promptIterators.at(-1)!.next()
+    expect(String(chatPushed.value?.message.content || '')).not.toContain('工作状态')
+  })
+
   it('recycles a stale subscription query after the OAuth credential file changes', async () => {
     const sessionId = 'ob2-test-oauth-recycle'
     await writeFile(path.join(rollingTestConfigDir, '.credentials.json'), '{"version":1}', 'utf8')

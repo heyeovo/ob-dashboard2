@@ -46,10 +46,12 @@ import {
   ensureSession,
   forgetResumePoint,
   flushPendingMcpServers,
+  getProUsage,
   getSessionStats,
   getPendingCompactions,
   noteCompaction,
   noteContextSnapshot,
+  peekLatestProUsage,
   peekSession,
   recordTurnCost,
   rememberResumePoint,
@@ -75,7 +77,7 @@ import {
 } from '@/app/lib/havenTurns'
 import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
-import { beijingRuntimeContext } from '@/app/lib/runtimeContext'
+import { beijingRuntimeContext, workStatusContext } from '@/app/lib/runtimeContext'
 import type { ResolvedAttachment } from '@/app/lib/havenAttachments'
 import {
   agentWakeMcpAudit,
@@ -818,6 +820,14 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 当前时间只放在本轮 user 消息的动态尾部：前端气泡和 Haven user_text 仍保存用户原话；
     // 下一轮它成为固定历史，不会改写旧时间，也不会让稳定的系统提示/历史缓存前缀失效。
     content += `\n\n${beijingRuntimeContext(new Date())}`
+    if (config.mode === 'work') {
+      const stats = getSessionStats(sessionId)
+      content += `\n${workStatusContext({
+        contextTokens: stats.contextTokens,
+        contextMaxTokens: stats.contextMaxTokens,
+        proUsage: config.cred === 'subscription' ? peekLatestProUsage() : undefined,
+      })}`
+    }
 
     const attachmentContent: Array<
       | { type: 'text'; text: string }
@@ -1281,6 +1291,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     await flushPendingMcpServers(sessionId)
     live.busy = false
     busyReleased = true
+    // 工作模式顺手刷新进程内额度缓存，下一轮（含无人在线的后台 wake）的工作状态行用得上。
+    if (config.mode === 'work' && config.cred === 'subscription') void getProUsage(sessionId).catch(() => undefined)
 
     // 10.3 严格完成顺序：模型生成 → Haven 原子写入 → done。
     // usage 先发，让前端在 Haven 落库期间明确显示“正在保存”。
