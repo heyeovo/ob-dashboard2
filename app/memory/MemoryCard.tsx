@@ -22,9 +22,9 @@ export function BucketCard({ b, onOpen, compact = false }: {
     <span className="memory-card-footer">
       {!compact && <span className="memory-card-tags">{tags.map((tag, index) => <span key={tag}>{index > 0 && ' · '}{tag}</span>)}</span>}
       <span className="memory-card-meta">
+        {rings > 0 && <span className="memory-rings">◎ {rings}</span>}
         {!compact && date && <span>{Number(date.slice(5, 7))}.{Number(date.slice(8, 10))}</span>}
         <ImportanceDots importance={b.importance} />
-        {rings > 0 && <span className="memory-rings">◎ {rings}</span>}
         {compact && date && <span>{Number(date.slice(5, 7))}.{Number(date.slice(8, 10))}</span>}
       </span>
     </span>
