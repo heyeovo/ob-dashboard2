@@ -13,7 +13,7 @@
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
-| `HANDOFF-bucket-drawer-redesign.md` | 🔎 待 iPhone 走查 | 2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |
+| `HANDOFF-bucket-drawer-redesign.md` | 📦 已完成归档 | 2026-10-02 iPhone 走查通过。2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |
 | `HANDOFF-deploy-drain.md` | 🔨 进行中 | 2026-10-02 CC 写规格：部署时旧容器排空，等轮次跑完再退出（B）。Coolify Stop grace period 已设 600。Codex 执行、CC 验收；只动 dashboard |
 | `HANDOFF-cc-turn-survives-disconnect.md` | 📦 已完成归档 | 2026-10-02 iPhone 实测 ①–⑤ 通过（`e2d3605`、`fea2030`）；⑥待批准卡片未遇到，下次顺带确认 |
 | `HANDOFF-cc-daily-rolling-context.md` | 📦 已完成归档 | 按天滚动在用；文内“低优先级后续”未排期 |
