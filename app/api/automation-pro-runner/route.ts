@@ -1,3 +1,4 @@
+import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { timingSafeEqual } from 'node:crypto'
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk'
 import { buildCcEnv } from '@/app/lib/ccEnv'
@@ -129,6 +130,10 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error_code: 'unauthorized', error: '未授权' }, { status: 401 })
   }
 
+  const rejected = drainRejection()
+  if (rejected) return Response.json({ ok: false, error_code: 'server_draining', error: 'server_draining', retry_after_ms: 3000, retryable: true },
+    { status: 503, headers: { 'Retry-After': '3' } })
+
   if (isAutomationRunnerBusy()) {
     return Response.json({ ok: false, error_code: 'pro_busy', error: '另一项 Pro 自动化正在运行' }, { status: 409 })
   }
@@ -150,8 +155,11 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error_code: 'invalid_model', error: '只允许固定 Claude Sonnet/Opus 模型 ID' }, { status: 400 })
   }
 
-  setAutomationRunnerBusy(true)
+  const rejectedBeforeStart = drainRejection()
+  if (rejectedBeforeStart) return rejectedBeforeStart
   const abortController = new AbortController()
+  const finishWork = trackDrainWork({ sessionId: '', requestId: 'automation', stop: () => abortController.abort() })
+  setAutomationRunnerBusy(true)
   const timeout = setTimeout(() => abortController.abort(), 330_000)
   try {
     let text = ''
@@ -217,5 +225,6 @@ export async function POST(request: Request) {
   } finally {
     clearTimeout(timeout)
     setAutomationRunnerBusy(false)
+    finishWork()
   }
 }

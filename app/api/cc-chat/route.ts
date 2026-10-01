@@ -1,3 +1,4 @@
+import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { createTurnBroadcast, getTurnBroadcast, publishTurn, finishTurn, activeTurn, turnStream } from '@/app/lib/cc/turnBroadcast'
 import { markTurnInterrupted, stopSession } from '@/app/lib/ccSession'
 import { cancelAllPending } from '@/app/lib/ccChannel'
@@ -443,6 +444,10 @@ export async function POST(request: NextRequest) {
 
   const running = getTurnBroadcast(sessionId)
   if (running && !running.done) {
+    if (running.requestId !== requestId) {
+      const rejected = drainRejection(sessionId)
+      if (rejected) return rejected
+    }
     if (running.requestId !== requestId || running.userText !== text
       || JSON.stringify(running.attachmentIds) !== JSON.stringify(attachmentIds)) {
       return Response.json({ ok: false, error: 'turn_running' }, { status: 409 })
@@ -451,66 +456,73 @@ export async function POST(request: NextRequest) {
     return turnStream(running, request.signal)
   }
 
-  let inputs: Awaited<ReturnType<typeof loadTurnInputs>>
+  const rejected = drainRejection(sessionId)
+  if (rejected) return rejected
+  const finishWork = trackDrainWork({ sessionId, requestId, startedAt: reqAt })
+  let handedOff = false
   try {
-    inputs = await loadTurnInputs(body)
-  } catch (error) {
-    return Response.json({
-      ok: false,
-      error: error instanceof Error ? error.message : '初始化窗口失败',
-    }, { status: 502 })
-  }
-  const { persona, config, sessionSnapshot, resumeHint } = inputs
-  let attachments
-  try {
-    attachments = await resolveAttachments(attachmentIds, sessionId)
-  } catch (error) {
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : '附件读取失败' }, { status: 400 })
-  }
+    let inputs: Awaited<ReturnType<typeof loadTurnInputs>>
+    try {
+      inputs = await loadTurnInputs(body)
+    } catch (error) {
+      return Response.json({
+        ok: false,
+        error: error instanceof Error ? error.message : '初始化窗口失败',
+      }, { status: 502 })
+    }
+    const { persona, config, sessionSnapshot, resumeHint } = inputs
+    let attachments
+    try {
+      attachments = await resolveAttachments(attachmentIds, sessionId)
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : '附件读取失败' }, { status: 400 })
+    }
 
-  const startedAt = reqAt
+    const startedAt = reqAt
 
-  // 慢在哪一段：每个节点打一行「距开始多少毫秒」到 dev 控制台。
-  // 前半段（发出去半天不出字）多半是召回要去 Zeabur 查，跟模型无关，靠这几行能分清。
-  let lastStampAt = startedAt
-  const stamp = (label: string) => {
-    const now = Date.now()
-    console.log(
-      `[cc-chat ${sessionId} request=${requestId}] ${label} +${now - startedAt}ms (上一步用了 ${now - lastStampAt}ms)`,
-    )
-    lastStampAt = now
-  }
-  stamp('配置读完（协作者 / 目录，这一步要去 Zeabur）')
+    // 慢在哪一段：每个节点打一行「距开始多少毫秒」到 dev 控制台。
+    // 前半段（发出去半天不出字）多半是召回要去 Zeabur 查，跟模型无关，靠这几行能分清。
+    let lastStampAt = startedAt
+    const stamp = (label: string) => {
+      const now = Date.now()
+      console.log(
+        `[cc-chat ${sessionId} request=${requestId}] ${label} +${now - startedAt}ms (上一步用了 ${now - lastStampAt}ms)`,
+      )
+      lastStampAt = now
+    }
+    stamp('配置读完（协作者 / 目录，这一步要去 Zeabur）')
 
-  const turn = createTurnBroadcast({ sessionId, requestId, userText: text, attachmentIds, startedAt }, async reason => {
-    if (!turn?.executing) { turn?.controller.abort(); return }
-    markTurnInterrupted(sessionId)
-    await stopSession(sessionId)
-    cancelAllPending(sessionId, reason === 'unattended'
-      ? '连续 30 分钟无人连接，这一轮已自动停止。'
-      : '你按了停止，这一轮到此为止，挂着的操作取消了。')
-  })
-  if (!turn) return Response.json({ ok: false, error: 'turn_running' }, { status: 409 })
-  const response = turnStream(turn, request.signal)
-  // 请求只订阅广播；轮次拥有自己的 signal，断开浏览器不会取消生成或保存。
-  void runForegroundSessionTurn(sessionId, () => {
-    turn.executing = true
-    return runTurn({
-      sessionId, requestId, expectedLastRoundId, personaId, text, attachments,
-      persona, config, sessionSnapshot, signal: turn.controller.signal,
-      send: (event, data) => publishTurn(turn, event, data),
-      close: () => {}, stamp, resumeHint,
+    const turn = createTurnBroadcast({ sessionId, requestId, userText: text, attachmentIds, startedAt }, async reason => {
+      if (!turn?.executing) { turn?.controller.abort(); return }
+      markTurnInterrupted(sessionId)
+      await stopSession(sessionId)
+      cancelAllPending(sessionId, reason === 'unattended'
+        ? '连续 30 分钟无人连接，这一轮已自动停止。'
+        : '你按了停止，这一轮到此为止，挂着的操作取消了。')
     })
-  }, { subscription: config.cred === 'subscription', signal: turn.controller.signal })
-    .catch(error => {
-      publishTurn(turn, 'error', {
-        code: turn.controller.signal.aborted ? 'cancelled' : 'turn_exception',
-        message: error instanceof Error ? error.message : String(error),
-        generated_not_saved: true,
+    if (!turn) return Response.json({ ok: false, error: 'turn_running' }, { status: 409 })
+    const response = turnStream(turn, request.signal)
+    // 请求只订阅广播；轮次拥有自己的 signal，断开浏览器不会取消生成或保存。
+    void runForegroundSessionTurn(sessionId, () => {
+      turn.executing = true
+      return runTurn({
+        sessionId, requestId, expectedLastRoundId, personaId, text, attachments,
+        persona, config, sessionSnapshot, signal: turn.controller.signal,
+        send: (event, data) => publishTurn(turn, event, data),
+        close: () => {}, stamp, resumeHint,
       })
-    })
-    .finally(() => finishTurn(turn))
-  return response
+    }, { subscription: config.cred === 'subscription', signal: turn.controller.signal })
+      .catch(error => {
+        publishTurn(turn, 'error', {
+          code: turn.controller.signal.aborted ? 'cancelled' : 'turn_exception',
+          message: error instanceof Error ? error.message : String(error),
+          generated_not_saved: true,
+        })
+      })
+      .finally(() => { finishTurn(turn); finishWork() })
+    handedOff = true
+    return response
+  } finally { if (!handedOff) finishWork() }
 }
 
 /** 拿会话的实时状态（费用、缓存剩余时间）。前端顶部轮询用。 */

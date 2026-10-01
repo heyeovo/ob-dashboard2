@@ -613,6 +613,10 @@ export function peekSession(sessionId: string): LiveSession | null {
   return registry.get(sessionId) || null
 }
 
+export function busyCcSessions() {
+  return [...registry.entries()].filter(([, live]) => live.busy || live.compacting).map(([sessionId]) => sessionId)
+}
+
 function safeToken(value: unknown): number {
   return Math.max(0, Number(value) || 0)
 }

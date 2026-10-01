@@ -1,5 +1,6 @@
 'use client'
 import { mergeTurnMessages } from './turnRecovery'
+import { fetchWithDeploymentRetry, DeploymentRetryTimeout, DEPLOY_RETRY_NOTE, detachedWaitExpired } from './deploymentRetry'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CcAttachment,
@@ -1399,6 +1400,14 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [webSettings])
 
   const stop = useCallback(() => {
+    const pendingDeploy = messagesRef.current.find(message => message.deliveryState === 'detached' && message.deploymentRetryAt !== undefined)
+    if (pendingDeploy) {
+      abortRef.current?.abort(new DOMException('deployment_retry_stopped', 'AbortError'))
+      setMessages(previous => previous.map(message => message.id === pendingDeploy.id
+        ? { ...message, streaming: false, deploymentRetryAt: undefined, deliveryState: 'persistence_unknown',
+            deliveryNote: '已取消自动重发，点重试核对或重新发送。' } : message))
+      return
+    }
     if (effectiveEngine === 'selfhost') {
       const active = activeTurnRef.current
       abortRef.current?.abort()
@@ -1819,7 +1828,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       const text = rawText.trim()
       const attachmentIds = retry?.attachmentIds || selectedAttachments.map(item => item.id)
       if ((!text && attachmentIds.length === 0) || sending || !sessionId
-        || messagesRef.current.some(message => message.deliveryState === 'detached')) return
+        || messagesRef.current.some(message => message.deliveryState === 'detached' && message.requestId !== retry?.requestId)) return
 
       const requestId = retry?.requestId || newTurnRequestId()
       const expectedLastRoundId = retry?.expectedLastRoundId ?? lastRoundIdRef.current
@@ -1833,12 +1842,14 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         attachments: selectedAttachments,
         createdAt: Date.now(),
       }
+      const retryMessage = retry ? messagesRef.current.find(message => message.id === retry.assistantId) : undefined
       const assistantId = retry?.assistantId || localId()
       const assistantMsg: CcMessage = {
         id: assistantId,
         role: 'assistant',
         text: '',
-        createdAt: Date.now(),
+        createdAt: retryMessage?.createdAt || Date.now(),
+        deploymentRetryAt: retryMessage?.deploymentRetryAt,
         streaming: true,
         tools: [],
         process: [],
@@ -1864,6 +1875,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       abortRef.current = ac
       // 服务端明确回了 HTTP 错误 = 这一轮没开始，照原样报错；只有连接中途断了才算 detached。
       let rejectedByServer = false
+      let deploymentWaiting = retryMessage?.deploymentRetryAt !== undefined
 
       try {
         const endpoint = turnEngine === 'selfhost' ? '/api/cc-chat-selfhost' : '/api/cc-chat'
@@ -1880,7 +1892,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             handoff_snapshot: handoffRef.current.snapshot,
           } : {}),
         }
-        const res = await fetch(endpoint, {
+        const res = await fetchWithDeploymentRetry(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           // persona_id 每轮都带上：服务端按它取提示词/记忆/引擎。
@@ -1913,7 +1925,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             } : {}),
           }),
           signal: ac.signal,
-        })
+        }, startedAt => {
+          deploymentWaiting = true
+          if (currentSessionRef.current === sessionId) setMessages(previous => previous.map(message => message.id === assistantId
+            ? { ...message, streaming: true, deliveryState: 'detached', deliveryNote: DEPLOY_RETRY_NOTE,
+                deploymentRetryAt: startedAt, detachedAt: startedAt } : message))
+        }, retryMessage?.deploymentRetryAt)
+        deploymentWaiting = false
+        setMessages(previous => previous.map(message => message.id === assistantId
+          ? { ...message, deliveryState: 'generating', deliveryNote: undefined, deploymentRetryAt: undefined } : message))
         if (!res.ok || !res.body) {
           rejectedByServer = true
           const detail = await res.text().catch(() => '')
@@ -1930,10 +1950,17 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       } catch (e) {
         if (currentSessionRef.current !== sessionId) return
         const err = e as Error
-        if (turnEngine === 'cc' && !rejectedByServer) {
+        if (ac.signal.aborted && ac.signal.reason?.message === 'deployment_retry_stopped') {
+          // Stop cancelled an unstarted deployment retry; retain its manual retry entry.
+        } else if (err instanceof DeploymentRetryTimeout) {
           setMessages(previous => previous.map(message => message.id === assistantId ? {
-            ...message, streaming: false, deliveryState: 'detached',
-            deliveryNote: '连接断了，这一轮还在继续，回到页面会自动接上',
+            ...message, streaming: false, deliveryState: 'persistence_unknown', deliveryNote: err.message,
+            deploymentRetryAt: undefined,
+          } : message))
+        } else if (deploymentWaiting || (turnEngine === 'cc' && !rejectedByServer)) {
+          setMessages(previous => previous.map(message => message.id === assistantId ? {
+            ...message, streaming: false, deliveryState: 'detached', detachedAt: message.detachedAt ?? Date.now(),
+            deliveryNote: deploymentWaiting ? DEPLOY_RETRY_NOTE : '连接断了，这一轮还在继续，回到页面会自动接上',
           } : message))
         } else if (err.name === 'AbortError') {
           setMessages(previous => previous.flatMap(message => {
@@ -1960,12 +1987,20 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   )
 
   const recoverTurn = useCallback(async () => {
-    if (!sessionId || effectiveEngine !== 'cc' || historyLoading
+    if (!sessionId || historyLoading
       || document.visibilityState !== 'visible' || recoveringRef.current || abortRef.current) return
     recoveringRef.current = true
     const turnSessionId = sessionId
     const isCurrent = () => currentSessionRef.current === turnSessionId
     try {
+      const pendingDeploy = messagesRef.current.find(message => message.deliveryState === 'detached' && message.deploymentRetryAt !== undefined)
+      if (pendingDeploy?.requestId && pendingDeploy.retryText && pendingDeploy.retryExpectedLastRoundId != null && pendingDeploy.engine) {
+        void send(pendingDeploy.retryText, { assistantId: pendingDeploy.id, requestId: pendingDeploy.requestId,
+          expectedLastRoundId: pendingDeploy.retryExpectedLastRoundId, engine: pendingDeploy.engine,
+          attachmentIds: pendingDeploy.retryAttachmentIds || [] })
+        return
+      }
+      if (effectiveEngine !== 'cc') return
       const response = await fetch(`/api/cc-chat?session_id=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
       const payload = await response.json()
       if (!response.ok || !payload.ok || !isCurrent() || abortRef.current) return
@@ -1993,7 +2028,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         const detach = () => {
           if (isCurrent()) setMessages(previous => previous.map(message =>
             message.role === 'assistant' && message.requestId === requestId && !['saved', 'replayed'].includes(message.deliveryState || '')
-              ? { ...message, streaming: false, deliveryState: 'detached', deliveryNote: '连接断了，这一轮还在继续，回到页面会自动接上' }
+              ? { ...message, streaming: false, deliveryState: 'detached', detachedAt: message.detachedAt ?? Date.now(), deliveryNote: '连接断了，这一轮还在继续，回到页面会自动接上' }
               : message))
         }
         try {
@@ -2006,7 +2041,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             detach(); return
           }
           setMessages(previous => previous.map(message => message.id === assistantId
-            ? { ...message, streaming: true, deliveryState: 'generating', deliveryNote: undefined } : message))
+            ? { ...message, streaming: true, deliveryState: 'generating', deliveryNote: undefined, detachedAt: undefined } : message))
           await consumeTurn(attached.body, assistantId, requestId, 'cc', turnSessionId)
         } catch { detach() }
         finally {
@@ -2030,15 +2065,18 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         for (const message of detached) if (message.requestId) waitingHavenRef.current.delete(message.requestId)
         setMessages(previous => mergeTurnMessages(previous, incoming).map(message =>
           message.deliveryState === 'detached'
-            ? { ...message, streaming: false, deliveryState: found.has(message.requestId) ? 'saved' : 'persistence_unknown',
-                deliveryNote: found.has(message.requestId) ? '已保存到 Haven' : '这一轮没有保存下来，点重试核对或重新发送。' }
+            ? found.has(message.requestId)
+              ? { ...message, streaming: false, deliveryState: 'saved', deliveryNote: '已保存到 Haven' }
+              : detachedWaitExpired(message.detachedAt ?? Date.now())
+                ? { ...message, streaming: false, deliveryState: 'persistence_unknown', deliveryNote: '这一轮没有保存下来，点重试核对或重新发送。' }
+                : { ...message, detachedAt: message.detachedAt ?? Date.now() }
             : message))
         lastRoundIdRef.current = turns.reduce((value, turn) => Math.max(value, Number(turn.round_id || 0)), lastRoundIdRef.current)
         void refreshSessions()
       }
     } catch { /* 网络仍不可用，保持 detached，下一次可见/轮询继续。 */ }
     finally { recoveringRef.current = false }
-  }, [sessionId, effectiveEngine, historyLoading, consumeTurn, refreshSessions])
+  }, [sessionId, effectiveEngine, historyLoading, consumeTurn, refreshSessions, send])
 
   // 主动放开隐藏页面的本地订阅；回来立即重接，避免旧 fetch 在 iOS 上挂起。
   useEffect(() => {

@@ -851,14 +851,16 @@ export default function CcMessageRow({
         ) : null}
 
         {/* 行内操作和时间 */}
-        {!message.streaming && message.text ? (
+        {(!message.streaming && message.text) || message.deliveryState === 'detached' || message.deliveryState === 'persistence_unknown' ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-meta text-[var(--color-text-tertiary)]">
+            {!message.streaming && message.text ? <>
             <button
               type="button"
               aria-label="复制消息" title="复制"
               className="hover:text-[var(--color-text-secondary)]"
               onClick={event => { event.stopPropagation(); copyMessage(message.text) }}><ActionIcon kind={copied ? 'copied' : 'copy'} /></button>
             {canSelect ? <button type="button" aria-label="多选消息" title="多选" onClick={event => { event.stopPropagation(); onStartSelect?.(message.id) }}><ActionIcon kind="select" /></button> : null}
+            </> : null}
             <span className="cc-time">{shortClock(message.createdAt)}</span>
 
             {/* 保存状态图标 */}

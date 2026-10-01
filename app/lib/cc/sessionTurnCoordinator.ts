@@ -1,3 +1,4 @@
+import { isDraining, previousInstanceFinishing, trackDrainWork } from '../serverDrain'
 import { randomUUID } from 'node:crypto'
 import { open, readFile, stat, unlink, utimes } from 'node:fs/promises'
 import { hostname } from 'node:os'
@@ -9,6 +10,8 @@ export type BackgroundTurnDeferredReason =
   | 'turn_running'
   | 'foreground_waiting'
   | 'session_blocked'
+  | 'server_draining'
+  | 'previous_instance_finishing'
 
 export type BackgroundTurnResult<T> =
   | { status: 'started'; value: T }
@@ -21,6 +24,7 @@ type SessionTurnQueue = {
 }
 
 export type SessionTurnOptions = {
+  requestId?: string
   /** Claude Pro OAuth is account-wide, so subscription model calls must not overlap. */
   subscription?: boolean
   /** Stop waiting for an in-memory/file lock when the browser request is gone. */
@@ -275,44 +279,54 @@ export async function tryRunBackgroundSessionTurn<T>(
   blocked: () => boolean = () => false,
   options: SessionTurnOptions = {},
 ): Promise<BackgroundTurnResult<T>> {
-  let releaseSubscription: () => void = () => {}
-  let releaseSubscriptionFile: (() => Promise<void>) | null = null
-  if (options.subscription) {
-    if (subscriptionQueue.foregroundWaiting > 0) {
-      return { status: 'deferred', reason: 'foreground_waiting' }
-    }
-    if (subscriptionQueue.active) return { status: 'deferred', reason: 'turn_running' }
-    if (subscriptionLockPath()) {
-      releaseSubscriptionFile = await acquireSubscriptionFileLock(false)
-      if (!releaseSubscriptionFile) return { status: 'deferred', reason: 'turn_running' }
-    }
-    subscriptionQueue.tail = new Promise<void>(resolve => { releaseSubscription = resolve })
-    subscriptionQueue.active = true
-  }
-  const queue = queueFor(sessionId)
+  if (isDraining()) return { status: 'deferred', reason: 'server_draining' }
+  if (previousInstanceFinishing(sessionId)) return { status: 'deferred', reason: 'previous_instance_finishing' }
+  const finishWork = trackDrainWork({ sessionId, requestId: options.requestId || 'background-wake' })
   try {
-    if (blocked()) return { status: 'deferred', reason: 'session_blocked' }
-    if (queue.foregroundWaiting > 0) return { status: 'deferred', reason: 'foreground_waiting' }
-    if (queue.active) return { status: 'deferred', reason: 'turn_running' }
-
-    let release!: () => void
-    queue.tail = new Promise<void>(resolve => { release = resolve })
-    queue.active = true
-    try {
-      return { status: 'started', value: await run() }
-    } finally {
-      queue.active = false
-      release()
-    }
-  } finally {
-    cleanup(sessionId, queue)
+    let releaseSubscription: () => void = () => {}
+    let releaseSubscriptionFile: (() => Promise<void>) | null = null
     if (options.subscription) {
-      subscriptionQueue.active = false
-      releaseSubscription()
-      await releaseSubscriptionFile?.()
+      if (subscriptionQueue.foregroundWaiting > 0) {
+        return { status: 'deferred', reason: 'foreground_waiting' }
+      }
+      if (subscriptionQueue.active) return { status: 'deferred', reason: 'turn_running' }
+      if (subscriptionLockPath()) {
+        releaseSubscriptionFile = await acquireSubscriptionFileLock(false)
+        if (!releaseSubscriptionFile) return { status: 'deferred', reason: 'turn_running' }
+      }
+      subscriptionQueue.tail = new Promise<void>(resolve => { releaseSubscription = resolve })
+      subscriptionQueue.active = true
     }
-  }
+    const queue = queueFor(sessionId)
+    try {
+      if (blocked()) return { status: 'deferred', reason: 'session_blocked' }
+      if (queue.foregroundWaiting > 0) return { status: 'deferred', reason: 'foreground_waiting' }
+      if (queue.active) return { status: 'deferred', reason: 'turn_running' }
+
+      let release!: () => void
+      queue.tail = new Promise<void>(resolve => { release = resolve })
+      queue.active = true
+      try {
+        return { status: 'started', value: await run() }
+      } finally {
+        queue.active = false
+        release()
+      }
+    } finally {
+      cleanup(sessionId, queue)
+      if (options.subscription) {
+        subscriptionQueue.active = false
+        releaseSubscription()
+        await releaseSubscriptionFile?.()
+      }
+    }
+  } finally { finishWork() }
 }
+
+export function activeCoordinatorSessions() {
+  return [...queues].filter(([, queue]) => queue.active || queue.foregroundWaiting > 0).map(([id]) => id)
+}
+export function isCoordinatorBusy() { return activeCoordinatorSessions().length > 0 || subscriptionQueue.active || subscriptionQueue.foregroundWaiting > 0 }
 
 export function resetSessionTurnCoordinatorForTests(): void {
   queues.clear()

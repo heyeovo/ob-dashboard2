@@ -1,3 +1,4 @@
+import { isDraining, previousInstanceFinishing, trackDrainWork } from './serverDrain'
 import { applyContextGc, scanContextGc } from './contextGc'
 import { activateContextGcFork, prepareSessionForContextGc } from './ccSession'
 import { getConversationSession, listSessions, patchConversationContextGc } from './havenTurns'
@@ -45,6 +46,7 @@ async function preGcAutomationsBusy(): Promise<boolean> {
 }
 
 async function runDueContextGc(): Promise<void> {
+  if (isDraining()) return
   const clock = hongKongClock()
   // 05:30 后留半小时重试：日回顾/周轨迹仍在跑、窗口忙碌或工具待批都会等下一分钟。
   if (clock.hour !== 5 || clock.minute < 30) return
@@ -57,6 +59,8 @@ async function runDueContextGc(): Promise<void> {
     const listed = await listSessions({ limit: 500, source: 'cc' })
     if (!listed.ok) return
     for (const summary of listed.sessions) {
+      if (isDraining()) return
+      if (previousInstanceFinishing(summary.session_id)) continue
       const loaded = await getConversationSession(summary.session_id)
       if (!loaded.ok || !loaded.session || loaded.session.context_gc?.auto_enabled !== true) continue
       let session = loaded.session
@@ -75,6 +79,9 @@ async function runDueContextGc(): Promise<void> {
           attempts.add(attemptKey)
           continue
         }
+        if (isDraining()) return
+        if (previousInstanceFinishing(summary.session_id)) continue
+        const finishWork = trackDrainWork({ sessionId: summary.session_id, requestId: 'auto-context-gc' })
         try {
           const scan = await scanContextGc(ccSessionId, session.context_gc?.protected_keys || [])
           const selectedIds = scan.candidates.filter(item => !item.protected).map(item => item.id)
@@ -103,7 +110,7 @@ async function runDueContextGc(): Promise<void> {
           attempts.add(attemptKey)
         } catch (error) {
           console.error('[context-gc] auto run skipped', summary.session_id, laneId, error)
-        }
+        } finally { finishWork() }
       }
     }
   } finally {
@@ -113,7 +120,7 @@ async function runDueContextGc(): Promise<void> {
 
 export function startContextGcScheduler(): void {
   const state = globalThis as SchedulerGlobal
-  if (state[TIMER_KEY]) return
+  if (isDraining() || state[TIMER_KEY]) return
   const tick = () => { void runDueContextGc().catch(error => console.error('[context-gc] scheduler failed', error)) }
   state[TIMER_KEY] = setInterval(tick, 60_000)
   if (typeof state[TIMER_KEY] === 'object' && 'unref' in state[TIMER_KEY]!) state[TIMER_KEY]!.unref()
@@ -121,3 +128,10 @@ export function startContextGcScheduler(): void {
 }
 
 export const contextGcSchedulerTest = { hongKongClock, preGcAutomationsBusy }
+
+export function stopContextGcScheduler() {
+  const state = globalThis as SchedulerGlobal
+  if (state[TIMER_KEY]) clearInterval(state[TIMER_KEY])
+  state[TIMER_KEY] = undefined
+}
+export function isContextGcRunning() { return Boolean((globalThis as SchedulerGlobal)[RUN_KEY]) }

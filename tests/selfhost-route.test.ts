@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const selfhost = vi.hoisted(() => ({
@@ -15,6 +15,9 @@ vi.mock('@/app/lib/selfhost/runSelfhostTurn', () => ({
 }))
 
 import { POST } from '@/app/api/cc-chat-selfhost/route'
+import { configureServerDrain, resetServerDrainForTests, startDrain } from '@/app/lib/serverDrain'
+
+afterEach(() => resetServerDrainForTests())
 
 function request(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/cc-chat-selfhost', {
@@ -25,6 +28,13 @@ function request(body: unknown): NextRequest {
 }
 
 describe('/api/cc-chat-selfhost', () => {
+  it('rejects new requests while draining before selfhost preflight runs', async () => {
+    configureServerDrain({ exit: vi.fn() }); startDrain('SIGTERM')
+    const response = await POST(request({ session_id: 'drain-selfhost', request_id: 'r', expected_last_round_id: 0, persona_id: 'ombre', text: 'hi' }))
+    expect(response.status).toBe(503)
+    expect((await response.json()).error).toBe('server_draining')
+    expect(selfhost.prepare).not.toHaveBeenCalled()
+  })
   beforeEach(() => {
     selfhost.prepare.mockReset()
     selfhost.createStream.mockReset()
@@ -75,7 +85,7 @@ describe('/api/cc-chat-selfhost', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/event-stream')
     expect(await response.text()).toContain('idempotent_replay')
-    expect(selfhost.createStream).toHaveBeenCalledWith(prepared, expect.any(AbortSignal))
+    expect(selfhost.createStream).toHaveBeenCalledWith(prepared, expect.any(AbortSignal), undefined, expect.any(Function))
   })
 })
 

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { runBackgroundWake, type BackgroundWakeCause } from '@/app/lib/cc/backgroundWakeTurn'
+import { isDraining, previousInstanceFinishing } from '@/app/lib/serverDrain'
 
 export const runtime = 'nodejs'
 export const maxDuration = 360
@@ -45,6 +46,9 @@ export async function POST(request: Request) {
   ) {
     return Response.json({ status: 'failed', error: 'invalid_input' }, { status: 400 })
   }
+
+  if (isDraining()) return Response.json({ status: 'deferred', reason: 'server_draining' })
+  if (previousInstanceFinishing(sessionId)) return Response.json({ status: 'deferred', reason: 'previous_instance_finishing' })
 
   const result = await runBackgroundWake({
     sessionId,

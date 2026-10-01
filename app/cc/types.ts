@@ -201,6 +201,8 @@ export type CcMessage = {
   roundId?: number
   deliveryState?: CcDeliveryState
   deliveryNote?: string
+  detachedAt?: number
+  deploymentRetryAt?: number
   /** 保存结果未知时，用同一个 request_id 原位核对/重放。 */
   retryText?: string
   retryExpectedLastRoundId?: number
