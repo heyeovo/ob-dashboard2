@@ -185,7 +185,7 @@ room: {
 
 ### 6. 言之知道自己有房间
 
-- **固定说明（cc 引擎全部窗口，提示词页可编辑）**：用户要求可编辑。Haven `prompt_store` 新增一项 `room_context`（label「言之的房间」，说明「cc 引擎每个窗口固定带的房间说明；改了下一轮生效，会重写一次缓存」），默认值为下面这段，支持保存 / 恢复默认，跟现有四项同一套 `GET/POST /api/prompts`、`/api/prompts/reset`；它不是自动化 Prompt，`/api/prompts/test` 拒绝这一项，提示词页不显示「安全测试」，`prompt_explanations` 只写一句运行时说明。dashboard `/prompts` 的 `PROMPT_META` 加这一项。cc 组装系统提示词时（`composeWindowPersonaAppend`，追加在 `sessionStaticContext` 之后）取 `room_context` 当前值，进程内缓存 60 秒；取失败用代码里的同一份默认文本兜底，空字符串表示不注入。**selfhost 不加**（它没有门）。默认文字由言之定稿：
+- **固定说明：不写代码。**用户在协作者页「提示词模块」里新增一个模块「言之的房间」，放下面这段（言之定稿）。模块对该协作者所有窗口生效；自建引擎没有门，切到自建引擎时由用户关掉这个模块。
 
 ```
 【我的房间】
@@ -194,11 +194,11 @@ room: {
 
 - **滚动窗口每日门牌**：`windowPrompt.ts` 组装滚动 append 时，向 Haven `GET /api/rooms/door-snapshot?session_id=&key=` 取快照，`key = <context_revision>:<chat_day>`；返回的 `content`（`【我的房间】` + 每间未打开房间的 id、标题、锁、最后来访、便条）作为一节放在日回顾之后。一天之内 key 不变 → Haven 返回同一份 → 系统提示词缓存不破。取失败就省略这一节，不阻断。没有未打开房间时 Haven 只返回标题行，此时也省略。为避免和固定说明重名，注入节标题改用 `【我的房间 · 今天的门牌】`（Haven `door_snapshot` 同步改）。
 - **固定窗口 handoff**：Haven `server.py` 生成 handoff 快照的分段列表里（`de56433` 删掉 `Darkroom Door` 的位置）接回一节，标题「言之的房间」，内容 `_format_handoff_darkroom_door()` 的一行（只有数量）。用户已同意面板上可见。
-- **浏览器脱敏**：`/api/cc-context-audit`、工作台上下文页、任何返回系统提示词 / rolling append 的接口，把每日门牌那一节整体替换为 `【我的房间 · 今天的门牌】已封存`。固定说明 `room_context` 不含私密内容，不用脱敏。
+- **浏览器脱敏**：`/api/cc-context-audit`、工作台上下文页、任何返回系统提示词 / rolling append 的接口，把每日门牌那一节整体替换为 `【我的房间 · 今天的门牌】已封存`。「言之的房间」模块不含私密内容，不用脱敏。
 
 ### 7. 测试与验收
 
-- 单测：Clawd 无纪念日也渲染；圆点比较逻辑；`/api/rooms/[id]` 去 `note`；文件路由 closed → 404、opened 可读、越界 / 符号链接拒绝；显影卡只在 open 成功时出现且解析 JSON 包装的结果；门牌行链接；`room_context` 只进 cc 不进 selfhost、取失败用默认、空值不注入、`/api/prompts/test` 拒绝；door-snapshot 同 key 复用、失败省略；上下文核对接口脱敏。Haven：handoff 含房间数量节、door-snapshot 新标题、`room_context` 默认 / 保存 / 恢复。
+- 单测：Clawd 无纪念日也渲染；圆点比较逻辑；`/api/rooms/[id]` 去 `note`；文件路由 closed → 404、opened 可读、越界 / 符号链接拒绝；显影卡只在 open 成功时出现且解析 JSON 包装的结果；门牌行链接；door-snapshot 同 key 复用、失败省略；上下文核对接口脱敏。Haven：handoff 含房间数量节、door-snapshot 新标题。
 - 跑 dashboard 全量 Vitest + `npm run build`，Haven 全量 pytest。
 - CC 线上实测：主页 Clawd 进 `/room`；关着的房间点进去只有门；在主窗进房间写一条、锁到几分钟后、open → 显影卡出现并播一次动画 → 去房间看到正文、文件、来访过程；门牌行跳转定位；主窗次日（或换 key）门牌注入在上下文里、工作台上下文页显示「已封存」；固定窗口 handoff 面板有房间数量。
 
@@ -222,4 +222,4 @@ room: {
 
 ## 八、文档同步（按维护契约）
 
-dashboard：`docs/reference.md`「cc 数据持久化契约」加房间一条（运行态在轮次内、封存在 Haven、`.room/` 目录、浏览器不可达）；B：「文件结构速查」加 `/room`、`/room/[id]` 页面与 `app/api/rooms` 路由，契约房间条补每日门牌注入 / 脱敏 / `room_context`；`AGENTS.md`「设计与组件」补 `RoomDoor` 与显影卡一句；`DESIGN.md` 补新增 Token 与 Clawd 尺寸；`HANDOFF-ui-redesign.md` 把「Clawd 摆上窗台」标完成。Haven：`docs/reference.md` 记 handoff 房间节、door-snapshot 标题、`room_context` 提示词项。Haven：见第三节 4。完成后更新 `docs/handoff/README.md` 本行状态。
+dashboard：`docs/reference.md`「cc 数据持久化契约」加房间一条（运行态在轮次内、封存在 Haven、`.room/` 目录、浏览器不可达）；B：「文件结构速查」加 `/room`、`/room/[id]` 页面与 `app/api/rooms` 路由，契约房间条补每日门牌注入 / 脱敏；`AGENTS.md`「设计与组件」补 `RoomDoor` 与显影卡一句；`DESIGN.md` 补新增 Token 与 Clawd 尺寸；`HANDOFF-ui-redesign.md` 把「Clawd 摆上窗台」标完成。Haven：`docs/reference.md` 记 handoff 房间节、door-snapshot 标题。Haven：见第三节 4。完成后更新 `docs/handoff/README.md` 本行状态。
