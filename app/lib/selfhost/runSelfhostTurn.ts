@@ -2,6 +2,7 @@ import { buildPersonaAppend, getPersona, type HavenPersona } from '@/app/lib/hav
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import { resolveRecallEnabled } from '@/app/lib/recallMode'
 import { estimateTextTokens, splitRecallModules } from '@/app/lib/recallDisplay'
+import { trackDrainWork } from '../serverDrain'
 import {
   dailyReviewSystemBlock,
   getConversationSession,
@@ -523,8 +524,15 @@ export function createSelfhostStream(
   prepared: PreparedSelfhostTurn | ReplaySelfhostTurn,
   requestSignal?: AbortSignal,
   dependencies: SelfhostRuntimeDependencies = DEFAULT_RUNTIME_DEPENDENCIES,
+  onFinished: () => void = () => {},
 ): ReadableStream<Uint8Array> {
   const turnAbort = new AbortController()
+  const drainAbort = new AbortController()
+  let drainStopping = false
+  const finishWork = prepared.kind === 'ready' ? trackDrainWork({
+    sessionId: prepared.request.sessionId, requestId: prepared.request.requestId,
+    stop: () => { drainStopping = true; drainAbort.abort() },
+  }) : () => {}
   let cancelled = false
   const cancelTurn = () => {
     cancelled = true
@@ -543,6 +551,7 @@ export function createSelfhostStream(
       void (async () => {
         if (prepared.kind === 'replay') {
           try { sendReplay(controller, prepared) } finally {
+            onFinished()
             requestSignal?.removeEventListener('abort', onRequestAbort)
             if (!cancelled) controller.close()
           }
@@ -559,6 +568,7 @@ export function createSelfhostStream(
           }
         }
         const signal = turnAbort.signal
+        const generationSignal = AbortSignal.any([signal, drainAbort.signal])
         const startedAt = Date.now()
         const request = prepared.request
         let generated = false
@@ -685,102 +695,117 @@ export function createSelfhostStream(
         let toolCallCount = 0
         let iteration = 0
         let toolsForRequest = anthropicTools
+        let partialText = ''
+        let partialThinking = ''
 
-        while (true) {
-          iteration += 1
-          const upstreamStartedAt = Date.now()
-          let streamedTextThisIteration = false
-          const upstream = await dependencies.streamUpstream({
-            baseUrl: prepared.provider.baseUrl,
-            token: prepared.provider.authToken,
-            model: prepared.settings.model,
-            system,
-            messages,
-            tools: toolsForRequest,
-            maxTokens: replyReserve,
-            signal,
-            onText: text => {
-              hasOutput = true
-              if (!streamedTextThisIteration && assistantText) {
-                send('delta', { text: '\n\n', id: `text-${iteration}` })
+        try {
+          while (true) {
+            if (drainStopping) break
+            iteration += 1
+            const upstreamStartedAt = Date.now()
+            let streamedTextThisIteration = false
+            const upstream = await dependencies.streamUpstream({
+              baseUrl: prepared.provider.baseUrl,
+              token: prepared.provider.authToken,
+              model: prepared.settings.model,
+              system,
+              messages,
+              tools: toolsForRequest,
+              maxTokens: replyReserve,
+              signal: generationSignal,
+              onText: text => {
+                partialText += text
+                hasOutput = true
+                if (!streamedTextThisIteration && assistantText) {
+                  send('delta', { text: '\n\n', id: `text-${iteration}` })
+                }
+                streamedTextThisIteration = true
+                send('delta', { text, id: `text-${iteration}` })
+              },
+              onThinking: (text, thinkingStartedAt) => {
+                partialThinking += text
+                hasOutput = true
+                send('thinking', { text, id: `thinking-${iteration}`, startedAt: thinkingStartedAt })
+              },
+            })
+            upstreamDurationMs += Math.max(0, Date.now() - upstreamStartedAt)
+            addUsage(totalUsage, upstream.usage)
+            if (upstream.assistantText) {
+              assistantText += assistantText ? `\n\n${upstream.assistantText}` : upstream.assistantText
+            }
+            thinkingText += upstream.thinkingText
+            partialText = ''; partialThinking = ''
+            stopReason = upstream.stopReason
+            upstreamUrl = upstream.url
+            appendProcess(process, upstream.process, iteration)
+
+            if (upstream.toolUses.length === 0) break
+            if (toolsForRequest.length === 0) {
+              const limitText = '工具调用已达到本轮上限，无法继续执行。'
+              assistantText += assistantText ? `\n\n${limitText}` : limitText
+              process.push({ type: 'text', text: limitText, id: `tool-limit-${iteration}` })
+              send('delta', { text: limitText, id: `text-${iteration + 1}` })
+              break
+            }
+
+            const toolResults: AnthropicToolResultBlock[] = []
+            for (const toolUse of upstream.toolUses) {
+              const startedAt = Date.now()
+              const toolEvent: Record<string, unknown> = {
+                name: toolUse.name,
+                id: toolUse.id,
+                input: toolUse.input,
+                status: 'running',
+                startedAt,
               }
-              streamedTextThisIteration = true
-              send('delta', { text, id: `text-${iteration}` })
-            },
-            onThinking: (text, thinkingStartedAt) => {
-              hasOutput = true
-              send('thinking', { text, id: `thinking-${iteration}`, startedAt: thinkingStartedAt })
-            },
-          })
-          upstreamDurationMs += Math.max(0, Date.now() - upstreamStartedAt)
-          addUsage(totalUsage, upstream.usage)
-          if (upstream.assistantText) {
-            assistantText += assistantText ? `\n\n${upstream.assistantText}` : upstream.assistantText
-          }
-          thinkingText += upstream.thinkingText
-          stopReason = upstream.stopReason
-          upstreamUrl = upstream.url
-          appendProcess(process, upstream.process, iteration)
+              toolEvents.push(toolEvent)
+              process.push({ type: 'tool', id: `process-${toolUse.id}`, tool: toolEvent })
+              send('tool', toolEvent)
 
-          if (upstream.toolUses.length === 0) break
-          if (toolsForRequest.length === 0) {
-            const limitText = '工具调用已达到本轮上限，无法继续执行。'
-            assistantText += assistantText ? `\n\n${limitText}` : limitText
-            process.push({ type: 'text', text: limitText, id: `tool-limit-${iteration}` })
-            send('delta', { text: limitText, id: `text-${iteration + 1}` })
-            break
-          }
-
-          const toolResults: AnthropicToolResultBlock[] = []
-          for (const toolUse of upstream.toolUses) {
-            const startedAt = Date.now()
-            const toolEvent: Record<string, unknown> = {
-              name: toolUse.name,
-              id: toolUse.id,
-              input: toolUse.input,
-              status: 'running',
-              startedAt,
+              const overLimit = toolCallCount >= MAX_SELFHOST_TOOL_CALLS
+              const result = overLimit
+                ? { text: '工具调用已达到本轮上限', isError: true as const }
+                : await mcpRuntime.callTool({ name: toolUse.name, input: toolUse.input }, generationSignal)
+              if (!overLimit) toolCallCount += 1
+              const durationMs = Math.max(0, Date.now() - startedAt)
+              toolEvent.status = result.isError ? 'error' : 'completed'
+              toolEvent.durationMs = durationMs
+              if ('persistedResult' in result && result.persistedResult) toolEvent.result = result.persistedResult
+              if (result.isError) toolEvent.error = result.text
+              send('tool_result', {
+                id: toolUse.id,
+                result: !result.isError && 'persistedResult' in result ? result.persistedResult : undefined,
+                error: result.isError ? result.text : undefined,
+                status: toolEvent.status,
+                durationMs,
+              })
+              for (const bucketId of createdBucketIdsFromToolResult(toolUse.name, result)) {
+                createdBucketIds.add(bucketId)
+              }
+              for (const bucketId of breathBucketIdsFromToolResult(toolUse.name, result)) {
+                breathBucketIds.add(bucketId)
+              }
+              toolResults.push({
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                content: result.text,
+                is_error: result.isError || undefined,
+              })
             }
-            toolEvents.push(toolEvent)
-            process.push({ type: 'tool', id: `process-${toolUse.id}`, tool: toolEvent })
-            send('tool', toolEvent)
 
-            const overLimit = toolCallCount >= MAX_SELFHOST_TOOL_CALLS
-            const result = overLimit
-              ? { text: '工具调用已达到本轮上限', isError: true as const }
-              : await mcpRuntime.callTool({ name: toolUse.name, input: toolUse.input }, signal)
-            if (!overLimit) toolCallCount += 1
-            const durationMs = Math.max(0, Date.now() - startedAt)
-            toolEvent.status = result.isError ? 'error' : 'completed'
-            toolEvent.durationMs = durationMs
-            if ('persistedResult' in result && result.persistedResult) toolEvent.result = result.persistedResult
-            if (result.isError) toolEvent.error = result.text
-            send('tool_result', {
-              id: toolUse.id,
-              result: !result.isError && 'persistedResult' in result ? result.persistedResult : undefined,
-              error: result.isError ? result.text : undefined,
-              status: toolEvent.status,
-              durationMs,
-            })
-            for (const bucketId of createdBucketIdsFromToolResult(toolUse.name, result)) {
-              createdBucketIds.add(bucketId)
-            }
-            for (const bucketId of breathBucketIdsFromToolResult(toolUse.name, result)) {
-              breathBucketIds.add(bucketId)
-            }
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolUse.id,
-              content: result.text,
-              is_error: result.isError || undefined,
-            })
+            const assistantContent: AnthropicContentBlock[] = upstream.assistantContent
+            messages.push({ role: 'assistant', content: assistantContent })
+            messages.push({ role: 'user', content: toolResults })
+            if (toolCallCount >= MAX_SELFHOST_TOOL_CALLS) toolsForRequest = []
           }
-
-          const assistantContent: AnthropicContentBlock[] = upstream.assistantContent
-          messages.push({ role: 'assistant', content: assistantContent })
-          messages.push({ role: 'user', content: toolResults })
-          if (toolCallCount >= MAX_SELFHOST_TOOL_CALLS) toolsForRequest = []
+        } catch (error) {
+          if (!drainStopping || signal.aborted) throw error
+          assistantText += assistantText && partialText ? `\n\n${partialText}` : partialText
+          thinkingText += partialThinking
+          if (partialThinking) process.push({ type: 'thinking', text: partialThinking, id: `thinking-${iteration}` })
+          if (partialText) process.push({ type: 'text', text: partialText, id: `text-${iteration}` })
         }
+        if (drainStopping) stopReason = 'interrupted'
 
         const usage = {
           ...totalUsage,
@@ -880,9 +905,12 @@ export function createSelfhostStream(
             generated_not_saved: generated || hasOutput,
           } satisfies SelfhostErrorPayload)
         } finally {
-          await mcpRuntime?.close()
-          requestSignal?.removeEventListener('abort', onRequestAbort)
-          if (!cancelled) controller.close()
+          try { await mcpRuntime?.close() } finally {
+            requestSignal?.removeEventListener('abort', onRequestAbort)
+            if (!cancelled) controller.close()
+            finishWork()
+            onFinished()
+          }
         }
       })()
     },

@@ -96,3 +96,7 @@ Coolify 侧事实（2026-10-02 用户截图确认）：
 ## 八、状态
 
 - 2026-10-02：规格完成；用户已在 Coolify 将 Stop grace period 设为 600。待 Codex 执行。
+- 2026-10-02 Codex：dashboard 实现完成，交付分支 `feat/deploy-drain`；未合并 main、未部署。已接入信号排空、跨容器运行态标记、前台/后台及 transcript 写入口门禁、前端原请求自动重发和 detached 等待；正式机制以 `docs/reference.md` 为准。
+- 本地验证：最终 `npm run build` 通过（授权网络下载项目现有 Google Fonts）；Windows 全量 vitest 427 通过、2 失败、1 原有跳过。失败仅 `artifacts > lists newest first and ignores symlinks and other files` 与 `cc workspace 路径边界 > 工作模式内置 yanzhi files 目录；闲聊、未挂载和 symlink 挂载点都不加`，均创建符号链接时报 EPERM，未改动/跳过它们。新增排空、门禁、重试及空助手气泡渲染测试通过；`npm run start -- --help` 确认生产入口，新增文件引用及 diff 检查通过。独立 `tsc --noEmit` 仍有 29 条原有测试夹具类型错误，均在本次未修改的测试文件；生产 build 自带类型检查通过。
+- 已知边界：Pro 自动化部署 503 的同次任务自动重试尚需 Haven 支持，未扩散实现；长期记录只放 `TECH_DEBT.md` 的 CC-09。
+- 下一步由 CC 在 Linux 运行全量 vitest/build，再与用户 iPhone 按 §六 4 项实测（同轮 push 后继续工作、构建期间发消息、切流自动重发、锁屏恢复），确认 Coolify 实际日志和共享卷标记。只修 drain 验收问题，不改 Haven、聊天样式、广播缓冲或 main 部署设置；合并与部署须用户另行授权。验收后将索引标归档。

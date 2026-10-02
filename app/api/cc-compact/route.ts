@@ -1,3 +1,4 @@
+import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { NextRequest } from 'next/server'
 import { compactSession } from '@/app/lib/ccSession'
 
@@ -10,6 +11,11 @@ export async function POST(request: NextRequest) {
   if (!sessionId) {
     return Response.json({ ok: false, error: '缺少 session_id' }, { status: 400 })
   }
-  const result = await compactSession(sessionId)
-  return Response.json(result, { status: result.ok ? 200 : 409 })
+  const rejected = drainRejection(sessionId)
+  if (rejected) return rejected
+  const finishWork = trackDrainWork({ sessionId, requestId: 'compact' })
+  try {
+    const result = await compactSession(sessionId)
+    return Response.json(result, { status: result.ok ? 200 : 409 })
+  } finally { finishWork() }
 }

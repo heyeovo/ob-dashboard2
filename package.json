@@ -7,7 +7,7 @@
     "dev:lan": "next dev -H 0.0.0.0",
     "dev:iphone": "node scripts/dev-iphone.mjs",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/start.mjs",
     "lint": "eslint",
     "test": "vitest run"
   },

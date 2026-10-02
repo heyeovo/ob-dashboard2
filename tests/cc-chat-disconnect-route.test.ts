@@ -32,8 +32,9 @@ import { POST, GET, DELETE } from '@/app/api/cc-chat/route'
 import { GET as attach } from '@/app/api/cc-chat/attach/route'
 import { POST as stop } from '@/app/api/cc-stop/route'
 import { getTurnBroadcast } from '@/app/lib/cc/turnBroadcast'
+import { configureServerDrain, resetServerDrainForTests, startDrain } from '@/app/lib/serverDrain'
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => { resetServerDrainForTests(); vi.clearAllMocks() })
 function request(sessionId: string, signal?: AbortSignal) {
   return new NextRequest('http://localhost/api/cc-chat', {
     method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
@@ -43,6 +44,32 @@ function request(sessionId: string, signal?: AbortSignal) {
 }
 
 describe('cc route disconnect lifecycle', () => {
+  it('rejects a new turn during drain but keeps same-request replay, attach, stats and stop available', async () => {
+    let release!: () => void
+    const pending = new Promise<void>(resolve => { release = resolve })
+    executor.run.mockImplementation(async input => {
+      input.send('start', { request_id: input.requestId })
+      await pending
+      input.send('done', { round_id: 1 })
+    })
+    const response = await POST(request('drain-existing'))
+    await vi.waitFor(() => expect(executor.run).toHaveBeenCalledOnce())
+    configureServerDrain({ exit: vi.fn() })
+    startDrain('SIGTERM')
+    const rejected = await POST(request('drain-new'))
+    expect(rejected.status).toBe(503)
+    expect(await rejected.json()).toMatchObject({ error: 'server_draining', retry_after_ms: 3000 })
+    const replay = await POST(request('drain-existing'))
+    expect(replay.status).toBe(200)
+    const attached = attach(new NextRequest('http://localhost/api/cc-chat/attach?session_id=drain-existing&request_id=r-drain-existing'))
+    expect(attached.status).toBe(200)
+    const stats = await GET(new NextRequest('http://localhost/api/cc-chat?session_id=drain-existing'))
+    expect((await stats.json()).active_turn.request_id).toBe('r-drain-existing')
+    expect((await stop(new NextRequest('http://localhost/api/cc-stop', { method: 'POST', body: JSON.stringify({ session_id: 'drain-existing' }) }))).status).toBe(200)
+    expect(executor.run).toHaveBeenCalledOnce()
+    release()
+    await Promise.all([response.text(), replay.text(), attached.text()])
+  })
   it('keeps a request-independent signal, advertises active turn, completes and replays after disconnect', async () => {
     let release!: () => void
     const pending = new Promise<void>(resolve => { release = resolve })

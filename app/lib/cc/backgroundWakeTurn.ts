@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isDraining, previousInstanceFinishing, trackDrainWork } from '@/app/lib/serverDrain'
 import { hasPending } from '@/app/lib/ccChannel'
 import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
@@ -62,6 +63,9 @@ async function recordBackgroundOutcome(
 export async function runBackgroundWake(input: BackgroundWakeInput): Promise<BackgroundWakeResult> {
   const sessionId = input.sessionId.trim()
   if (!sessionId) return { status: 'failed', error: 'sessionId 为空' }
+  if (isDraining()) return { status: 'deferred', reason: 'server_draining' }
+  if (previousInstanceFinishing(sessionId)) return { status: 'deferred', reason: 'previous_instance_finishing' }
+  const finishWork = trackDrainWork({ sessionId, requestId: input.wakeId || 'background-wake-preflight' })
   try {
     const loaded = await loadBackgroundTurnInputs(sessionId)
     const expectedLane = input.laneId?.trim() || ''
@@ -243,11 +247,11 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         }
       },
       blocked,
-      { subscription: loaded.config.cred === 'subscription' },
+      { subscription: loaded.config.cred === 'subscription', requestId: wakeId },
     )
     if (result.status === 'deferred') return result
     return result.value
   } catch (error) {
     return { status: 'failed', error: error instanceof Error ? error.message : '后台 wake 失败' }
-  }
+  } finally { finishWork() }
 }

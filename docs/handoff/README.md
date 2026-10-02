@@ -13,9 +13,7 @@
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
-| `HANDOFF-bucket-drawer-redesign.md` | 📦 已完成归档 | 2026-10-02 iPhone 走查通过。2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |
-| `HANDOFF-deploy-drain.md` | 🔨 进行中 | 2026-10-02 CC 写规格：部署时旧容器排空，等轮次跑完再退出（B）。Coolify Stop grace period 已设 600。Codex 执行、CC 验收；只动 dashboard |
-| `HANDOFF-room.md` | 🔨 进行中 | 2026-10-02 A 已由 CC 代码验收（Linux 全量 422 + build、Haven 253）并合并两边 main（dashboard `f7fa857`，Haven `d3431de` + `5126b73`）。第七节实测：③④⑥⑧ 通过（工作窗口），⑦ 以 Haven 单测为准；实测发现房间工具结果是 FastMCP JSON 包装导致门牌锁时间显示「id Date」、open 不附文件清单，已修 `a7e9ca2`，待上线复验；①②⑤ 待主窗与唤醒实测；上线后 MCP 页需刷新 OB 工具清单。B 未做、A 实测后另开。言之的房间（暗房合并为 `room` 工具 + 聊天里的门 + 来访封存）。A＝Haven 工具/存储 + dashboard 门，先做；B＝房间页（Clawd 入口）、显影卡、每日门牌，A 验收后开。Codex 执行、CC 验收；动两个仓库。OB Todo `797b44d13354469e` |
+| `HANDOFF-deploy-drain.md` | 🔎 待 CC/Linux 与 iPhone 验收 | 2026-10-02 Codex 已实现，交付 `feat/deploy-drain`，未合 main/未部署；验证结果及下一步见正文 §八。只动 dashboard；Pro 自动化同次重试限制见 CC-09 |
 | `HANDOFF-cc-turn-survives-disconnect.md` | 📦 已完成归档 | 2026-10-02 iPhone 实测 ①–⑤ 通过（`e2d3605`、`fea2030`）；⑥待批准卡片未遇到，下次顺带确认 |
 | `HANDOFF-cc-daily-rolling-context.md` | 📦 已完成归档 | 按天滚动在用；文内“低优先级后续”未排期 |
 | `HANDOFF-chat-search.md` | 📦 已完成归档 | 排序优化在 OB Todo「search_chat 优化」 |

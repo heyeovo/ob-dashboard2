@@ -1,3 +1,4 @@
+import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { NextRequest } from 'next/server'
 import {
   createSelfhostStream,
@@ -58,9 +59,17 @@ export async function POST(request: NextRequest) {
     return invalid('expected_last_round_id 必须是大于或等于 0 的整数', parsed.requestId)
   }
 
-  const prepared = await prepareSelfhostTurn(parsed, request.signal)
-  if (prepared.kind === 'error') {
-    return Response.json({ ok: false, error: prepared.error }, { status: prepared.status })
-  }
-  return sseResponse(createSelfhostStream(prepared, request.signal))
+  const rejected = drainRejection(parsed.sessionId)
+  if (rejected) return rejected
+  const finishWork = trackDrainWork({ sessionId: parsed.sessionId, requestId: parsed.requestId })
+  let handedOff = false
+  try {
+    const prepared = await prepareSelfhostTurn(parsed, request.signal)
+    if (prepared.kind === 'error') {
+      return Response.json({ ok: false, error: prepared.error }, { status: prepared.status })
+    }
+    const stream = createSelfhostStream(prepared, request.signal, undefined, finishWork)
+    handedOff = true
+    return sseResponse(stream)
+  } finally { if (!handedOff) finishWork() }
 }

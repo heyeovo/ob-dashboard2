@@ -1,3 +1,4 @@
+import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { NextRequest, NextResponse } from 'next/server'
 import { activateContextGcFork, prepareSessionForContextGc } from '@/app/lib/ccSession'
 import { applyContextGc, purgeSupersededTranscripts, scanContextGc } from '@/app/lib/contextGc'
@@ -87,12 +88,16 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let finishWork: (() => void) | undefined
   try {
     const body = await request.json() as Record<string, unknown>
     const sessionId = String(body.session_id || '').trim()
     const laneId = String(body.lane_id || '').trim()
     const mode = body.mode === 'auto' ? 'auto' : 'manual'
     if (!sessionId || !laneId) throw new Error('缺少 session_id / lane_id')
+    const rejected = drainRejection(sessionId)
+    if (rejected) return rejected
+    finishWork = trackDrainWork({ sessionId, requestId: 'context-gc' })
     const { session, ccSessionId } = await load(sessionId, laneId)
     const scan = await scanContextGc(ccSessionId, session.context_gc?.protected_keys || [])
     const allowed = new Set(scan.candidates.filter(item => !item.protected).map(item => item.id))
@@ -142,5 +147,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ...applied, context_gc: committed.session?.context_gc || {} })
   } catch (error) {
     return errorResponse(error)
-  }
+  } finally { finishWork?.() }
 }

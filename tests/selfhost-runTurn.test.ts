@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { configureServerDrain, resetServerDrainForTests, startDrain } from '@/app/lib/serverDrain'
 import {
   assembleSystem,
   assembleMessages,
@@ -76,6 +77,33 @@ function dependencies(persistResult: Record<string, unknown>): SelfhostRuntimeDe
 }
 
 describe('runSelfhostTurn stream contract', () => {
+  it('saves partial selfhost output through graceful drain stop with an un-aborted persistence signal', async () => {
+    const deps = dependencies({ ok: true, stored: true, roundId: 3 })
+    let began!: () => void
+    const started = new Promise<void>(resolve => { began = resolve })
+    deps.streamUpstream = vi.fn(async input => {
+      input.onText?.('已经生成的部分')
+      input.onThinking?.('思考片段', Date.now())
+      began()
+      await new Promise((_, reject) => input.signal?.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError')), { once: true }))
+      throw new Error('unreachable')
+    })
+    const finished = vi.fn()
+    const output = new Response(createSelfhostStream(prepared(), undefined, deps, finished)).text()
+    await started
+    vi.useFakeTimers(); vi.stubEnv('DRAIN_TIMEOUT_MS', '1000')
+    configureServerDrain({ exit: vi.fn() })
+    try {
+      startDrain('SIGTERM')
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(await output).toContain('event: done')
+      expect(deps.persist).toHaveBeenCalledWith(expect.objectContaining({
+        assistantText: '已经生成的部分', raw: expect.objectContaining({ stop_reason: 'interrupted', thinking: '思考片段' }),
+      }))
+      expect(vi.mocked(deps.persist).mock.calls[0][0].signal?.aborted).toBe(false)
+      expect(finished).toHaveBeenCalledOnce()
+    } finally { resetServerDrainForTests(); vi.useRealTimers(); vi.unstubAllEnvs() }
+  })
   it('injects a frozen daily review snapshot as stable system context', () => {
     const system = assembleSystem(prepared().persona, '召回背景', {}, [
       { review_date: '2026-08-08', content: '昨天一起处理了窗口归属，也聊了近况。' },

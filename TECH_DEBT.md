@@ -21,6 +21,7 @@
 | CC-06 | 浏览器断开后中转站仍继续生成 / 计费 | ⬜ 前提已变，待重评 | — |
 | CC-07 | selfhost 跨引擎后历史图片占 token 但模型看不见 | ⬜ | `e87e2e85c3d545e0` |
 | CC-08 | Context GC 旧 Claude transcript 的有界保留 | ⬜ | — |
+| CC-09 | Pro 自动化遇到部署 503 后缺少同次任务自动重试 | ⬜ | 待录 |
 | T-01 | `dashboard-auth` 篡改末位字符用例偶发失败 | ⬜ | — |
 | CC-P01 | UI 设置与聊天信息层级整理 | 产品候选 | `ea074ff139f64c54` |
 | CC-P03 | 群聊 / 多协作者 | 产品候选（低优先级） | `b9ee09a407be43be` |
@@ -72,6 +73,13 @@
 ---
 
 ## cc 任务卡（均未排期）
+
+#### CC-09｜Pro 自动化遇到部署 503 后缺少同次任务自动重试
+
+- Todo ID：待录。Todo 原句：让 Haven 的 Pro 自动化在 dashboard 部署排空返回 503 时自动重试同次任务（部署 drain 验收发现，详见 CC-09）。
+- 证据：Haven `automation_model_runner.py::_call_pro_runner` 把非成功响应转换为 `AutomationModelError`，没有在此处理 `Retry-After`；不同于 wake 的 deferred 会由 `agent_wake_store.py::finish_run` 30 秒后重试。
+- 影响：dashboard 排空拒绝开新模型任务，返回 `503 server_draining`、`retry_after_ms`、`Retry-After` 和 retryable，但当前 Haven 调用方会把这一执行记为失败；可人工重跑或等下一次正常调度，不保证补跑同一次。
+- 暂不处理原因：本次规格明确只改 dashboard，不动 Haven。未来处理时必须在 Haven 加持久重试与幂等测试，避免重复执行日回顾/周轨迹。
 
 > cc 前端 v1 主体已于 2026-08-09 收口。以后用户选中一张卡后，一次只处理这一张。
 >

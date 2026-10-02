@@ -27,6 +27,7 @@ RUN npm run build
 FROM base AS runner
 
 ENV NODE_ENV=production \
+    NEXT_MANUAL_SIG_HANDLE=true \
     HOSTNAME=0.0.0.0 \
     PORT=3000 \
     HOME=/home/cc \
@@ -50,4 +51,4 @@ USER cc
 EXPOSE 3000
 
 ENTRYPOINT ["tini", "--"]
-CMD ["npm", "run", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

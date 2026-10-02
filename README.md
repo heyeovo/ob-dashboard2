@@ -46,3 +46,5 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 ## Deployment
 
 Production runs on the VPS through Coolify. Pushing `main` triggers an automatic deployment; after each push, confirm that the latest deployment uses the expected commit and passes its healthcheck. Use `Actions → Redeploy` only when the automatic deployment does not start or fails.
+
+The production process handles SIGTERM/SIGINT and drains ongoing chat and background work before exiting. The container runs Next directly under tini; `npm run start` sets the same manual signal handling before importing Next. Coolify Stop grace period must cover the drain deadline plus graceful-stop time; see `docs/reference.md` for the environment variable and runtime coordination contract. Feature branches are reviewed and verified before any merge to `main`.

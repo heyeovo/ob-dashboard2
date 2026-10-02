@@ -4,6 +4,7 @@ const wake = vi.hoisted(() => ({ run: vi.fn() }))
 vi.mock('@/app/lib/cc/backgroundWakeTurn', () => ({ runBackgroundWake: wake.run }))
 
 import { POST } from '@/app/api/cc-agent-wake-runner/route'
+import { configureServerDrain, resetServerDrainForTests, startDrain } from '@/app/lib/serverDrain'
 
 const validBody = {
   wake_id: `wake_${'a'.repeat(32)}`,
@@ -31,9 +32,16 @@ beforeEach(() => {
   wake.run.mockResolvedValue({ status: 'completed', laneId: 'subscription', turnId: 18 })
 })
 
-afterEach(() => { delete process.env.OMBRE_AGENT_WAKE_RUNNER_TOKEN })
+afterEach(() => { resetServerDrainForTests(); delete process.env.OMBRE_AGENT_WAKE_RUNNER_TOKEN })
 
 describe('Haven agent wake callback route', () => {
+  it('returns the existing deferred response during drain so Haven retries the schedule', async () => {
+    configureServerDrain({ exit: vi.fn() }); startDrain('SIGTERM')
+    const response = await POST(request(validBody))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'deferred', reason: 'server_draining' })
+    expect(wake.run).not.toHaveBeenCalled()
+  })
   it('rejects an invalid bearer token', async () => {
     const response = await POST(request(validBody, 'wrong'))
     expect(response.status).toBe(401)

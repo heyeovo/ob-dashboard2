@@ -47,6 +47,8 @@ export function getTurnBroadcast(sessionId: string, requestId?: string) {
   return turn && (!requestId || turn.requestId === requestId) ? turn : undefined
 }
 
+export function unfinishedTurns() { return [...turns.values()].filter(turn => !turn.done) }
+
 export function activeTurn(sessionId: string) {
   const turn = turns.get(sessionId)
   return turn && !turn.done ? {

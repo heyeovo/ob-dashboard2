@@ -1,3 +1,4 @@
+import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { NextRequest } from 'next/server'
 import { resolveDirs } from '@/app/lib/ccDirs'
 import { ccLaneId } from '@/app/lib/cc/ccOptions'
@@ -38,6 +39,9 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, error: '请确认当前窗口 ID 后再重建' }, { status: 400 })
   }
 
+  const rejected = drainRejection(sessionId)
+  if (rejected) return rejected
+  const finishWork = trackDrainWork({ sessionId, requestId: 'rolling-recovery' })
   return runForegroundSessionTurn(sessionId, async () => {
     const [loaded, turnsResult, personaResult] = await Promise.all([
       getConversationSession(sessionId, { includeContextDays: true }),
@@ -120,5 +124,5 @@ export async function POST(request: NextRequest) {
       turn_count: rollingTurns.length,
       entry_count: seed.entries.length,
     })
-  })
+  }).finally(finishWork)
 }
