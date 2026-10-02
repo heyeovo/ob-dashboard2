@@ -99,7 +99,13 @@ export type CcToolEvent = {
  * 助手正文前的真实过程顺序。
  * 一轮可以是：thinking → tool → thinking → tool；不要再把两类内容拆开后重排。
  */
+export type CcRoomEvent = {
+  type: 'room'; id: string; roomId: string; roomTitle: string; enteredAt: number
+  leftAt?: number; durationMs?: number; lockUntil?: string; sealed?: boolean
+}
+
 export type CcProcessEvent =
+  | CcRoomEvent
   | {
       type: 'thinking'
       id: string

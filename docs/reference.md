@@ -28,7 +28,7 @@ production 必须配置以下六项：
 | `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接和钉选桶、日记、最近普通桶、feel、随机高重要度桶长期层；滚动日期分列正文、工具、附件视觉/文件正文、召回、有效 thinking、时间戳、消息框架和 agent wake 的 token 预估，较早 raw 日期的留档 thinking 显示为已剥离，手动设为“不带”的日期默认折叠且不改变任何日期模式；损坏的滚动窗口可经二次确认舍弃旧原生细节并用当前 raw 日期的 Haven 正文重建 transcript，不复制窗口或页面历史；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
 | `app/collaborators/` | 协作者提示词独立页：`[id]` 身份和模块，`[id]/base` 基础提示词，`[id]/modules/[moduleId]` 模块编辑，`new` 新建；目录权限在工作台维护，经 `/api/cc-personas` 存 Haven。 |
 | `app/workbench/` | 工作台首页按作品、文件、引擎分组；`files/[root]/[[...path]]` 浏览和预览文件，`dirs` 编辑当前协作者的读写目录，`context` 展示只读上下文审计，`session` 展示当前工作窗口状态。 |
-| `app/api/files/` | 服务端文件浏览 API：`yanzhi` 映射 `YANZHI_FILES_ROOT`、`dashboard` 映射 `/workspace/dashboard`、`haven` 映射 `/workspace/haven`、`notes` 只映射 `/home/cc/.claude/projects/*/memory` 中非空目录。真实路径必须留在根内，隐藏以点开头的段、`node_modules`、`.pem`、`.key`、含 `credential` / `secret` 的名字；只有 yanzhi 可上传和删单个文件。 |
+| `app/api/files/` | 服务端文件浏览 API：`yanzhi` 映射 `YANZHI_FILES_ROOT`、`dashboard` 映射 `/workspace/dashboard`、`haven` 映射 `/workspace/haven`、`notes` 只映射 `/home/cc/.claude/projects/*/memory` 中非空目录。真实路径必须留在根内，隐藏以点开头的段、房间持久数据目录 `darkroom`、`node_modules`、`.pem`、`.key`、含 `credential` / `secret` 的名字；只有 yanzhi 可上传和删单个文件。 |
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
 | `app/recall-lens/` | 召回透镜（按 session 查看 necessity、统一 relevance、utility 三档、最终生效单卡结果、完整审核候选、保留资格但未获单卡位的候选、检索来源/检索分/无 freshness 排序分，以及 explicit/contextual 语义查询故障降级证据） |
 | `app/settings/` | 设置聚合页按常用、记忆与引擎、数据三组提供 10 个入口；外观行即时显示当前主题与背景状态，底部退出登录需确认。子页保留各自配置功能 |
@@ -41,12 +41,14 @@ production 必须配置以下六项：
 | `app/api/appearance/` | 服务端代理 Haven 外观配置与单张背景图；GET 首屏读取失败回默认值，POST 保存白名单 normalize 后的配置，图片 GET/POST/DELETE 经 Dashboard 登录保护且不暴露 Haven Bearer |
 | `app/api/care/` | 代理 Haven reminders/todos，Todo 的 DELETE 保留鉴权 Cookie 与上游状态码 |
 | `app/api/cc-turns/` | 窗口状态 PATCH 可单独写入 `recall_mode` 三态到 Haven，GET 按 session 返回该值供本窗设置刷新恢复。 |
-| `app/api/cc-context-audit/` | 只读读取活跃 lane 的原生存档：entry 数、首末 chat_day、每日轮数、本 revision 重建时的每日处理与 thinking／召回／attachment 清理数量、按当前配置重建预览；保留逐日预算、持久 transcript 的工具／召回／正文恢复统计、长期层已保存／生效 ID、当前工具和 MCP 模型表面、最近请求的 hash 与 iterator 状态。不与 Haven 逐轮或逐条正文匹配，不生成 seed、不改变设置或会话指针。 |
+| `app/api/cc-context-audit/` | 只读读取活跃 lane 的原生存档：entry 数、首末 chat_day、每日轮数、本 revision 重建时的每日处理与 thinking／召回／attachment 清理数量、按当前配置重建预览；保留逐日预算、持久 transcript 的工具／召回／正文恢复统计、长期层已保存／生效 ID、当前工具和 MCP 模型表面、最近请求的 hash 与 iterator 状态。房间原生过程在浏览器投影中封存；不与 Haven 逐轮或逐条正文匹配，不生成 seed、不改变设置或会话指针。 |
 | `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 每轮按 Haven 最新配置拼装基础提示词、“关于我”和可热更新提示词模块；召回背景使用规则由提示词模块维护，动态正文不重复说明 |
 | `globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
 
 ## cc 数据持久化契约
+
+- 房间（A）：`processCollector` 的 room 状态只活在单轮；在房间里的 thinking、文字、工具与结果不进 SSE、可见正文或可见 raw。进门收走同条 assistant 消息紧邻的 thinking，出门 / open / 结束（含异常）只留 `type: room` 门牌。来访先以 Bearer 写 Haven `/api/rooms/visits`，失败不阻断轮次保存且门牌记 `sealed: false`；只进房间无正文也存轮次，wake 的门牌进入 raw.process。Haven 是封存事实源；原生 transcript 保留完整上下文，浏览器上下文核对投影封存房间内容。文件留在 `YANZHI_FILES_ROOT/.room/<room_id>/`，浏览器文件 API 不可达；open 后服务端附文件清单。在房间中需人工批准的操作自动拒绝，Write/Edit 和经校验的 mkdir/touch、单引号 echo/printf 或引号 heredoc Bash 仅对 .room 内路径自动允许（拒绝越界和符号链接），files/command 不发也不进工作台。自建引擎过滤 room；A 不建房间页、不注入每日门牌。
 
 > 通用硬规矩（Haven 持久化、localStorage、密钥掩码）见 `AGENTS.md`。以下是各机制的具体契约。
 

@@ -26,12 +26,14 @@ export async function resolveExistingInside(root: string, relative: string): Pro
   const parts = safeSegments(relative)
   if (!parts) return null
   const target = await realpath(path.join(root, ...parts)).catch(() => null)
-  return target && isInside(root, target) ? target : null
+  // Check resolved segments too: an innocently named link must not expose .room or darkroom.
+  const resolvedParts = target ? safeSegments(path.relative(root, target).split(path.sep).join('/')) : null
+  return target && isInside(root, target) && resolvedParts ? target : null
 }
 
 export function isBlockedSegment(name: string): boolean {
   const lower = name.toLowerCase()
-  return !name || name === '..' || name.startsWith('.') || lower === 'node_modules'
+  return !name || name === '..' || name.startsWith('.') || lower === 'node_modules' || lower === 'darkroom'
     || /\.(pem|key)$/i.test(name) || /credential|secret/i.test(name)
 }
 

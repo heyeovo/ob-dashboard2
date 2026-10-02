@@ -1589,6 +1589,26 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         }
       })
     },
+    onRoomEnter: payload => {
+      const retractIds = Array.isArray(payload.retractIds) ? payload.retractIds.map(String) : []
+      patch(m => {
+        const process = (m.process || []).filter(event => !retractIds.includes(event.id))
+        return { ...m, thinking: process.filter(event => event.type === 'thinking').map(event => event.text).join(''),
+          thinkingMs: thinkingDuration(process) || undefined,
+          process: [...closeOpenThinking(process), { type: 'room', id: String(payload.id), roomId: '', roomTitle: '', enteredAt: Number(payload.enteredAt) }],
+          displaySegments: undefined, revealDisplaySegments: false }
+      })
+    },
+    onRoomLeave: payload => {
+      const door = payload as unknown as Extract<import('./types').CcProcessEvent, { type: 'room' }>
+      patch(m => {
+        const process = [...(m.process || [])]
+        const index = process.findIndex(event => event.id === door.id)
+        if (index >= 0) process[index] = door
+        else process.push(door)
+        return { ...m, process }
+      })
+    },
     onThinking: payload => {
       const chunk = String(payload.text || '')
       const id = String(payload.id || `thinking-${Date.now()}`)

@@ -61,7 +61,8 @@ import {
 import { slimToolInputForStorage } from '@/app/lib/artifactMeta'
 import { buildCcOptions, cacheRelevantFingerprint, isWebTool, MAX_CC_TOOL_CALLS_PER_TURN, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
 import { writeSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
-import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess } from '@/app/lib/cc/processCollector'
+import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess, enterRoom, leaveRoom } from '@/app/lib/cc/processCollector'
+import { isRoomTool, roomFileList, sealRoomVisits } from './room'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import { estimateTextTokens, splitRecallModules } from '@/app/lib/recallDisplay'
@@ -479,7 +480,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     persona,
     config,
     signal,
-    send,
+    send: sendToClient,
     close,
     stamp,
   } = input
@@ -494,12 +495,24 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
   // 这一轮的收集口。hook / canUseTool 都经 processCollector 的桶拿，不捕获局部变量。
   const bucket = newTurnBucket()
+  const send: CcSend = (event, data) => {
+    if (bucket.room.active && ['thinking', 'delta', 'tool', 'tool_result', 'files', 'command', 'recall', 'context'].includes(event)) return
+    if ((bucket.room.active || bucket.room.visits.length) && event === 'error') data = { ...(data as Record<string, unknown>), message: '这一轮发生错误；房间过程已封存。', errors: undefined, request_id: requestId }
+    sendToClient(event, data)
+  }
+  const exitRoom = () => {
+    const event = leaveRoom(bucket, sessionId, requestId, turnKind === 'agent_wake' ? 'agent_wake' : 'chat')
+    if (event) send('room_leave', event)
+  }
   const createdBucketIds = new Set<string>()
   const breathBucketIds = new Set<string>()
   setTurnBucket(sessionId, bucket)
   // 这一轮的 SSE 口挂到 channel 上，hook / canUseTool 都经它推事件
   attachSend(sessionId, send)
 
+  let persistenceAttempted = false
+  let assistantText = ''
+  let thinkingText = ''
   let live: ReturnType<typeof ensureSession> | null = null
   let preCompactions: CcCompactionEvent[] = []
   /** 锁是不是已经在正常路径上摘过了（收尾前就摘，让人能马上发下一句） */
@@ -895,8 +908,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
 
     // 一个 query() 跨多轮，所以这里读到 result 就停 —— 那是「这一轮」的边界。
     // iterator 留着不关，下一句继续从它读。
-    let assistantText = ''
-    let thinkingText = ''
+    let pendingThinkingId: string | undefined
     /** 用户点了「停止」：这一轮按中断收尾，保留已生成的字，写库打标记 */
     let interrupted = false
     let interruptedReason: 'user_stop' | 'pro_limit' | '' = ''
@@ -989,6 +1001,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           usage?: unknown
         }
         if (ev.type === 'message_start') {
+          pendingThinkingId = undefined
           currentRequestUsage = streamContextUsage(ev.message?.usage, null)
         } else if (ev.type === 'message_delta') {
           currentRequestUsage = streamContextUsage(ev.usage, currentRequestUsage)
@@ -1009,6 +1022,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
         if (ev.type === 'content_block_delta' && ev.delta) {
           if (ev.delta.type === 'text_delta' && ev.delta.text) {
+            pendingThinkingId = undefined
+            if (bucket.room.active) { closeThinkingProcess(bucket, Date.now()); appendTextProcess(bucket, ev.delta.text); continue }
             if (!assistantText) stamp?.('模型吐出第一个字')
             closeThinkingProcess(bucket, Date.now())
             const startsTextSegment = bucket.processEvents.at(-1)?.type !== 'text'
@@ -1016,9 +1031,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             const segment = appendTextProcess(bucket, ev.delta.text)
             send('delta', { text: ev.delta.text, ...segment })
           } else if (ev.delta.type === 'thinking_delta' && ev.delta.thinking) {
+            if (bucket.room.active) { appendThinkingProcess(bucket, ev.delta.thinking); continue }
             if (!thinkingText) stamp?.('模型开始思考')
             thinkingText += ev.delta.thinking
             const segment = appendThinkingProcess(bucket, ev.delta.thinking)
+            pendingThinkingId = segment.id
             send('thinking', { text: ev.delta.thinking, ...segment })
           }
         }
@@ -1054,17 +1071,28 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
         for (const block of msg.message.content) {
           if (block.type === 'tool_use') {
+            const roomTool = isRoomTool(block.name, config.sdkMcpServers)
+            const roomInput = block.input as Record<string, unknown>
+            if (roomTool && roomInput.action === 'open') exitRoom()
+            else if (roomTool && !bucket.room.active) {
+              const { retractedText, ...event } = enterRoom(bucket, roomInput, pendingThinkingId)
+              if (retractedText) thinkingText = thinkingText.slice(0, Math.max(0, thinkingText.length - retractedText.length))
+              send('room_enter', event)
+            }
+            pendingThinkingId = undefined
             const startedAt = Date.now()
             closeThinkingProcess(bucket, startedAt)
             const toolEvent = {
               name: block.name,
               id: block.id,
-              input: slimToolInputForStorage(block.name, block.input),
+              input: bucket.room.active ? block.input : slimToolInputForStorage(block.name, block.input),
               status: 'running',
               startedAt,
             }
-            bucket.toolEvents.push(toolEvent)
-            bucket.processEvents.push({
+            const tools = bucket.room.active ? bucket.room.toolEvents : bucket.toolEvents
+            const events = bucket.room.active ? bucket.room.process : bucket.processEvents
+            tools.push(toolEvent)
+            events.push({
               type: 'tool',
               id: `process-${block.id}`,
               tool: toolEvent,
@@ -1072,6 +1100,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             send('tool', toolEvent)
           }
         }
+        pendingThinkingId = undefined
         continue
       }
 
@@ -1084,15 +1113,38 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           const block = rawBlock as unknown as Record<string, unknown>
           if (block.type !== 'tool_result') continue
           const toolUseId = String(block.tool_use_id || '')
-          const tool = bucket.toolEvents.find(item => String(item.id || '') === toolUseId)
+          const privateTool = bucket.room.toolEvents.find(item => String(item.id || '') === toolUseId)
+            || bucket.room.visits.flatMap(visit => visit.process).map(event => event.tool as Record<string, unknown> | undefined)
+              .find(item => item && String(item.id || '') === toolUseId)
+          const tool = privateTool || bucket.toolEvents.find(item => String(item.id || '') === toolUseId)
           const toolName = String(tool?.name || '')
           if (!tool) continue
           const endedAt = Date.now()
           const durationMs = Math.max(0, endedAt - Number(tool.startedAt || endedAt))
           const isError = block.is_error === true
-          const rawResult = isWebTool(toolName)
+          let rawResult = isWebTool(toolName)
             ? storedWebResult(msg.tool_use_result ?? block.content, toolName, config.webSettings)
             : storedMcpResult(msg.tool_use_result ?? block.content)
+          const roomTool = isRoomTool(toolName, config.sdkMcpServers)
+          const action = String((tool.input as Record<string, unknown>)?.action || '')
+          if (privateTool) {
+            tool.status = isError ? 'error' : 'completed'
+            tool.durationMs = durationMs
+            tool.result = rawResult
+            if (roomTool && !isError && bucket.room.toolEvents.includes(privateTool)) {
+              const rid = /\[(room_[a-zA-Z0-9]+)\]/.exec(rawResult)?.[1]
+              if (rid) bucket.room.roomId = rid
+              const lock = /锁至 ([^\n ·]+)/.exec(rawResult)?.[1]
+              if (lock) bucket.room.lockUntil = lock
+              if (rawResult.includes('锁已清除')) bucket.room.lockUntil = ''
+              if (action === 'enter') bucket.room.roomTitle = /\[room_[a-zA-Z0-9]+\] ([^\n·]+)/.exec(rawResult)?.[1]?.trim() || bucket.room.roomTitle
+            }
+            if (roomTool && action === 'leave' && bucket.room.toolEvents.includes(privateTool)) exitRoom()
+            continue
+          }
+          if (roomTool && action === 'open' && rawResult.startsWith('房间已打开') && !rawResult.includes('房间文件：')) {
+            rawResult += await roomFileList(/\[(room_[a-zA-Z0-9]+)\]/.exec(rawResult)?.[1] || '')
+          }
           for (const bucketId of createdBucketIdsFromToolResult(toolName, rawResult, isError)) {
             createdBucketIds.add(bucketId)
           }
@@ -1100,7 +1152,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             breathBucketIds.add(bucketId)
           }
           const keepResult =
-            ((isMcpTool(toolName) && shouldSaveMcpResult(toolName)) ||
+            ((isMcpTool(toolName) && (shouldSaveMcpResult(toolName) || roomTool)) ||
               isWebTool(toolName)) &&
             rawResult
 
@@ -1132,9 +1184,9 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           duration_ms: msg.duration_ms,
           total_cost_usd: msg.total_cost_usd,
           usage: msg.usage,
-          errors: 'errors' in msg ? msg.errors : undefined,
+          errors: (bucket.room.active || bucket.room.visits.length) ? undefined : 'errors' in msg ? msg.errors : undefined,
           terminal_reason: msg.terminal_reason,
-          result: successMsg.result,
+          result: (bucket.room.active || bucket.room.visits.length) ? assistantText : successMsg.result,
           api_error_status: successMsg.api_error_status,
         }
         const resultErrors = 'errors' in msg && Array.isArray(msg.errors)
@@ -1224,7 +1276,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         }
         // result 里的 result 字段是这一轮的完整文本，用它兜底。
         // 只有 success 才有这个字段（error subtype 只有 errors 数组）。
-        if (!assistantText.trim() && msg.subtype === 'success') {
+        if (!assistantText.trim() && !bucket.room.active && !bucket.room.visits.length && msg.subtype === 'success') {
           assistantText = msg.result
         }
         live.totalCostUsd += Number(msg.total_cost_usd || 0)
@@ -1289,6 +1341,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 管理页若在生成期间保存了 MCP，这里先热更新，再放下一句话进来。
     // 没有 pending 时是同步空操作，不影响正常回复。
     await flushPendingMcpServers(sessionId)
+    exitRoom()
+    await sealRoomVisits(bucket)
     live.busy = false
     busyReleased = true
     // 工作模式顺手刷新进程内额度缓存，下一轮（含无人在线的后台 wake）的工作状态行用得上。
@@ -1327,10 +1381,11 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // sessionId 跟 hook 用的是同一个值（同一个变量），不会分组串。
     let storeInfo: Record<string, unknown>
     let personaInfo: Record<string, unknown> = { ok: false, updated: false, skipped: 'conversation_not_stored' }
-    if (assistantText.trim() || interruptedReason === 'pro_limit') {
+    if (assistantText.trim() || bucket.room.visits.length || interruptedReason === 'pro_limit') {
       const recalledMemoryIds = Array.isArray(bucket.recallInfo?.recalled_ids)
         ? bucket.recallInfo.recalled_ids.map(String)
         : []
+      persistenceAttempted = true
       const rec = await withTimeout(recordTurnStrict({
         sessionId,
         requestId,
@@ -1594,6 +1649,19 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       nativeTurnUuid: nativeTurnUuid || undefined, persistenceOutcome: 'indeterminate',
     }
   } finally {
+    exitRoom()
+    await sealRoomVisits(bucket)
+    if (persistTurn && !persistenceAttempted && bucket.room.visits.length) {
+      try {
+        await withTimeout(recordTurnStrict({ sessionId, requestId, expectedLastRoundId, personaId,
+          userText: text, assistantText, model: config.model, client: 'ob2-chat/' + personaId,
+          route: '/api/cc-chat', source: 'cc', turnKind, laneId: config.laneId,
+          raw: { engine: 'cc', persona_id: personaId, request_id: requestId, interrupted: true,
+            thinking: thinkingText || undefined, process: bucket.processEvents,
+            tools: bucket.toolEvents, display_segments: buildDisplaySegments(assistantText) },
+        }), STORE_TIMEOUT_MS, null)
+      } catch { console.error('[room] 异常轮次门牌保存失败', requestId) }
+    }
     if (!wakeStateEnded) endAgentWakeTurn(sessionId)
     // 正常路径上面已经摘过了（为了让人能立刻发下一句）。
     // 这里兜出错的情况；已经摘过就别再动 —— 那可能是下一轮占的锁。
