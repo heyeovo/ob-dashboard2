@@ -21,6 +21,8 @@ export const SSE_EVENTS = {
   init: 'init',
   delta: 'delta',
   thinking: 'thinking',
+  roomEnter: 'room_enter',
+  roomLeave: 'room_leave',
   recall: 'recall',
   context: 'context',
   contextSnapshot: 'context_snapshot',
@@ -112,6 +114,8 @@ export type CcSseEventMap = {
   [SSE_EVENTS.init]: CcSseInit
   [SSE_EVENTS.delta]: CcSseDelta
   [SSE_EVENTS.thinking]: CcSseThinking
+  [SSE_EVENTS.roomEnter]: { id: string; enteredAt: number; retractIds: string[] }
+  [SSE_EVENTS.roomLeave]: import('@/app/cc/types').CcRoomEvent
   [SSE_EVENTS.recall]: CcSseRecall
   [SSE_EVENTS.context]: Record<string, unknown>
   [SSE_EVENTS.contextSnapshot]: CcContextSnapshot

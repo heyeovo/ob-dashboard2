@@ -278,6 +278,8 @@ function driveTurn(
     },
     stamp: () => undefined,
     resumeHint: options.resumeHint,
+    turnKind: options.turnKind,
+    persistTurn: options.persistTurn,
   })
   return handle
 }
@@ -1412,5 +1414,82 @@ describe('runTurn：中止与失败', () => {
       generated_not_saved: true,
       actual_last_round_id: 1,
     })
+  })
+})
+
+
+describe('runTurn：房间封存', () => {
+  const roomTool = 'mcp__renamed_ob__room'
+  function roomConfig() { return makeConfig({ sdkMcpServers: { renamed_ob: { type: 'http', url: 'http://localhost/mcp' } } }) }
+  function enter(id = 'enter-1', room = 'room_abcdef123456') {
+    return [toolUse(id, roomTool, { action: 'enter', title: '礼物' }), toolResult(id, '进门 [' + room + '] 礼物 · 锁至 2099-01-01T00:00:00+08:00')]
+  }
+  it('收走同条消息紧邻 thinking，封存各类事件，只把门牌和出门后的正文写库', async () => {
+    const handle = driveTurn([initMsg(), thinkingDelta('门前私密思考'), ...enter(),
+      thinkingDelta('房间内思考'), textDelta('房间内正文'),
+      toolUse('private-read', 'Read', { file_path: 'secret.txt' }), toolResult('private-read', '房间工具结果'),
+      toolUse('leave-1', roomTool, { action: 'leave', note: '下次接着写' }), toolResult('leave-1', '出门 [room_abcdef123456] 礼物 · 锁已清除'),
+      textDelta('我回来了'), resultMsg()], { config: roomConfig() })
+    await handle.promise
+    const roomEnter = handle.events.find(e => e.event === 'room_enter')!
+    expect(roomEnter.data.retractIds).toHaveLength(1)
+    const record = turns.recordTurn.mock.calls[0][0]
+    expect(record.assistantText).toBe('我回来了')
+    expect(record.raw.thinking).toBeUndefined()
+    expect(record.raw.process.map((e: { type: string }) => e.type)).toEqual(['room', 'text'])
+    expect(record.raw.tools).toEqual([])
+    expect(JSON.stringify(record)).not.toMatch(/房间内|secret.txt|下次接着写|房间工具结果|门前私密思考/)
+    const afterEntry = handle.events.slice(handle.events.indexOf(roomEnter))
+    expect(JSON.stringify(afterEntry)).not.toMatch(/房间内|secret.txt|下次接着写|房间工具结果/)
+    expect(afterEntry.filter(e => e.event === 'tool')).toHaveLength(0)
+    expect(handle.events.find(e => e.event === 'room_leave')?.data.lockUntil).toBeUndefined()
+  })
+  it('open 先出门；一轮多次进出分别留门牌', async () => {
+    const handle = driveTurn([initMsg(), ...enter(), textDelta('一号私密'),
+      toolUse('open-1', roomTool, { action: 'open', room_id: 'room_abcdef123456' }), toolResult('open-1', '房间已打开 [room_abcdef123456] 礼物\n公开正文'),
+      ...enter('enter-2', 'room_abcdef654321'), textDelta('二号私密'), resultMsg()], { config: roomConfig() })
+    await handle.promise
+    const names = eventNames(handle)
+    expect(names.filter(n => n === 'room_enter')).toHaveLength(2)
+    expect(names.filter(n => n === 'room_leave')).toHaveLength(2)
+    expect(names.indexOf('room_leave')).toBeLessThan(names.indexOf('tool'))
+    const record = turns.recordTurn.mock.calls[0][0]
+    expect(record.assistantText).toBe('')
+    expect(record.raw.process.map((e: { type: string }) => e.type)).toEqual(['room', 'tool', 'room'])
+    expect(record.raw.tools[0].result).toContain('房间文件：')
+    expect(JSON.stringify(record)).not.toMatch(/一号私密|二号私密/)
+  })
+  it('只有进门也保存门牌；不从 SDK result 补回私密正文', async () => {
+    const result = { ...resultMsg(), result: 'SDK重复的私密正文' } as SDKMessage
+    const handle = driveTurn([initMsg(), ...enter(), textDelta('私密正文'), result], { config: roomConfig() })
+    await handle.promise
+    expect(turns.recordTurn).toHaveBeenCalledTimes(1)
+    const record = turns.recordTurn.mock.calls[0][0]
+    expect(record.assistantText).toBe('')
+    expect(record.raw.process[0]).toMatchObject({ type: 'room', roomId: 'room_abcdef123456', sealed: false })
+    expect(JSON.stringify(handle.events)).not.toContain('SDK重复')
+  })
+  it('换到另一条 assistant 消息后，不收走上条 thinking', async () => {
+    const handle = driveTurn([initMsg(), thinkingDelta('可见思考'),
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '可见思考' }] } } as SDKMessage,
+      ...enter(), resultMsg()], { config: roomConfig() })
+    await handle.promise
+    expect(handle.events.find(e => e.event === 'room_enter')?.data.retractIds).toEqual([])
+    expect(turns.recordTurn.mock.calls[0][0].raw.thinking).toBe('可见思考')
+  })
+  it('模型报错仍自动出门、保存来访与门牌，错误文本不外泄', async () => {
+    const handle = driveTurn([initMsg(), textDelta('门外已说'), ...enter(), textDelta('房间私密'), resultMsg('error_during_execution', true, ['错误包含房间私密'])], { config: roomConfig() })
+    await handle.promise
+    expect(eventNames(handle)).toContain('room_leave')
+    expect(turns.recordTurn.mock.calls[0][0].raw.process.at(-1).type).toBe('room')
+    expect(turns.recordTurn.mock.calls[0][0].assistantText).toBe('门外已说')
+    expect(JSON.stringify(handle.events)).not.toContain('房间私密')
+  })
+  it('后台 wake 回空正文也把门牌交给后台持久化', async () => {
+    const handle = driveTurn([initMsg(), ...enter(), textDelta('私密 wake'), resultMsg()], { config: roomConfig(), turnKind: 'agent_wake', persistTurn: false })
+    const result = await handle.promise
+    expect(result.assistantText).toBe('')
+    expect(result.process?.[0]).toMatchObject({ type: 'room', roomId: 'room_abcdef123456' })
+    expect(turns.recordTurn).not.toHaveBeenCalled()
   })
 })

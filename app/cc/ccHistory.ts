@@ -307,6 +307,14 @@ export function parseTurnRaw(rawJson: string | undefined): {
         tool: toolsById.get(parsed.id) || parsed,
       }]
     }
+    if (item.type === 'room' && typeof item.enteredAt === 'number') {
+      return [{ type: 'room', id: String(item.id || 'room-' + index), roomId: String(item.roomId || ''),
+        roomTitle: String(item.roomTitle || ''), enteredAt: item.enteredAt,
+        leftAt: typeof item.leftAt === 'number' ? item.leftAt : undefined,
+        durationMs: typeof item.durationMs === 'number' ? item.durationMs : undefined,
+        lockUntil: typeof item.lockUntil === 'string' ? item.lockUntil : undefined,
+        sealed: typeof item.sealed === 'boolean' ? item.sealed : undefined }]
+    }
     if (item.type === 'compact') {
       const compaction = normalizeCompaction(item.compaction)
       return compaction ? [{ type: 'compact', id: String(item.id || compaction.id), compaction }] : []
@@ -497,7 +505,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         fromHistory: true,
       })
     }
-    if (t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit' || (t.source === 'cc' && (extra.interrupted || t.request_id))) {
+    if (extra.process.some(event => event.type === 'room') || t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit' || (t.source === 'cc' && (extra.interrupted || t.request_id))) {
       out.push({
         id: t.assistant_message_id || `h${t.id}a`,
         role: 'assistant',

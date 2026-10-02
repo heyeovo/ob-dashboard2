@@ -15,7 +15,7 @@
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
 | `HANDOFF-bucket-drawer-redesign.md` | 📦 已完成归档 | 2026-10-02 iPhone 走查通过。2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |
 | `HANDOFF-deploy-drain.md` | 🔨 进行中 | 2026-10-02 CC 写规格：部署时旧容器排空，等轮次跑完再退出（B）。Coolify Stop grace period 已设 600。Codex 执行、CC 验收；只动 dashboard |
-| `HANDOFF-room.md` | 🔨 进行中 | 2026-10-02 CC 写规格：言之的房间（暗房合并为 `room` 工具 + 聊天里的门 + 来访封存）。A＝Haven 工具/存储 + dashboard 门，先做；B＝房间页（Clawd 入口）、显影卡、每日门牌，A 验收后开。Codex 执行、CC 验收；动两个仓库。OB Todo `797b44d13354469e` |
+| `HANDOFF-room.md` | 🔨 进行中 | 2026-10-02 A 已实现，待 CC 在 VPS 按第七节验收；B 未做、A 验收后另开。言之的房间（暗房合并为 `room` 工具 + 聊天里的门 + 来访封存）。A＝Haven 工具/存储 + dashboard 门，先做；B＝房间页（Clawd 入口）、显影卡、每日门牌，A 验收后开。Codex 执行、CC 验收；动两个仓库。OB Todo `797b44d13354469e` |
 | `HANDOFF-cc-turn-survives-disconnect.md` | 📦 已完成归档 | 2026-10-02 iPhone 实测 ①–⑤ 通过（`e2d3605`、`fea2030`）；⑥待批准卡片未遇到，下次顺带确认 |
 | `HANDOFF-cc-daily-rolling-context.md` | 📦 已完成归档 | 按天滚动在用；文内“低优先级后续”未排期 |
 | `HANDOFF-chat-search.md` | 📦 已完成归档 | 排序优化在 OB Todo「search_chat 优化」 |

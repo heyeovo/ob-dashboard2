@@ -1,3 +1,4 @@
+import { getTurnBucket } from './cc/processCollector'
 // 当轮通道 + 待批准队列 + 工作台状态（服务端专用，进程内单例）。
 import type { PermissionResult, PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 //
@@ -172,6 +173,7 @@ export function detachSend(sessionId: string, send: CcSend) {
 
 /** 往当前那一轮的流里推。没人在听就静默丢掉（状态另有 GET 接口能拉）。 */
 export function emit(sessionId: string, event: string, data: unknown) {
+  if (getTurnBucket(sessionId)?.room.active && ['tool', 'tool_result', 'files', 'command', 'recall', 'context', 'permission'].includes(event)) return
   const ch = channels.get(sessionId)
   ch?.send?.(event, data)
 }
@@ -303,6 +305,7 @@ export function recordFileChange(
   sessionId: string,
   change: { path: string; tool: string; added: number; removed: number },
 ) {
+  if (getTurnBucket(sessionId)?.room.active) return
   const ch = getChannel(sessionId)
   const hit = ch.files.find(f => f.path === change.path)
   if (hit) {
@@ -321,6 +324,7 @@ export function recordCommand(
   sessionId: string,
   run: { id: string; command: string; output: string; failed: boolean },
 ) {
+  if (getTurnBucket(sessionId)?.room.active) return
   const ch = getChannel(sessionId)
   const truncated = run.output.length > CMD_OUTPUT_LIMIT
   ch.commands.unshift({

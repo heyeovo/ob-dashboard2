@@ -20,6 +20,8 @@ export type SseHandlers = {
   onInit: (data: SseEventPayload) => void
   onDelta: (data: SseEventPayload) => void
   onThinking: (data: SseEventPayload) => void
+  onRoomEnter?: (data: SseEventPayload) => void
+  onRoomLeave?: (data: SseEventPayload) => void
   onUsage: (data: SseEventPayload) => void
   onRecall: (data: SseEventPayload) => void
   onTool: (data: SseEventPayload) => void
@@ -74,6 +76,8 @@ export async function consumeSseStream(
       else if (event === 'init') handlers.onInit(data)
       else if (event === 'delta') handlers.onDelta(data)
       else if (event === 'thinking') handlers.onThinking(data)
+      else if (event === 'room_enter') handlers.onRoomEnter?.(data)
+      else if (event === 'room_leave') handlers.onRoomLeave?.(data)
       else if (event === 'usage') handlers.onUsage(data)
       else if (event === 'recall') handlers.onRecall(data)
       else if (event === 'tool') handlers.onTool(data)

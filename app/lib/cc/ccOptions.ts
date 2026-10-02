@@ -1,3 +1,4 @@
+import { isPrivateRoomWrite, isRoomTool, roomFileList } from './room'
 // claude code SDK 的 Options 组装（9.5 从 route.ts 的 POST 闭包原样抽出）。
 //
 // 为什么单独一层：buildOptions 只在会话**第一轮**跑一次（ccSession 里已有会话
@@ -391,6 +392,10 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
       }
     }
 
+    if (getTurnBucket(sessionId)?.room.active) {
+      if (await isPrivateRoomWrite(toolName, input as Record<string, unknown>, cwd)) return { behavior: 'allow' }
+      return { behavior: 'deny', message: '在房间里，需要小羊批准的操作出门再做' }
+    }
     if (getCcTurnExecutionMode(sessionId) === 'background') {
       return {
         behavior: 'deny',
@@ -720,6 +725,9 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
                 }
               }
             }
+            if (getTurnBucket(sessionId)?.room.active && await isPrivateRoomWrite(name, (toolInput || {}) as Record<string, unknown>, cwd)) {
+              return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'allow' as const } }
+            }
             if (WRITE_TOOLS.includes(name)) {
               const writeDirs = writeDirsBySession.get(sessionId) || []
               if (!pathTarget || !(await isWritablePath(pathTarget, writeDirs, cwd))) {
@@ -808,6 +816,13 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
             const ti = (toolInput || {}) as Record<string, unknown>
             const name = String(toolName || '')
 
+            if (isRoomTool(name, config.sdkMcpServers) && ti.action === 'open') {
+              const result = toolResponseText(toolResponse)
+              if (result.startsWith('房间已打开')) {
+                const roomId = /\[(room_[a-zA-Z0-9]+)\]/.exec(result)?.[1] || ''
+                return { hookSpecificOutput: { hookEventName: 'PostToolUse' as const, updatedToolOutput: result + await roomFileList(roomId) } }
+              }
+            }
             if (WRITE_TOOLS.includes(name)) {
               const path = String(ti.file_path || ti.notebook_path || '')
               // 行数只是给人看个量级，不追求跟 git diff 一致

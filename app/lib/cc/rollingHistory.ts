@@ -1,3 +1,4 @@
+import { publicRoomTranscript } from './roomAudit'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises'
@@ -618,7 +619,7 @@ export async function inspectRollingHistoryTranscript(
   if (!seed) return null
   const entries = await seed.sessionStore.load({ projectKey: 'context-audit', sessionId: seed.resumeFrom })
   if (!entries) return null
-  const messages = entries.flatMap((entry, index) => {
+  const messages = publicRoomTranscript(entries).flatMap((entry, index) => {
     const record = entry as unknown as Record<string, unknown>
     const message = record.message && typeof record.message === 'object'
       ? record.message as Record<string, unknown>

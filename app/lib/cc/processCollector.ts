@@ -10,6 +10,19 @@
 // 前端历史读回后按原顺序展示。
 
 import { emit } from '@/app/lib/ccChannel'
+import { randomUUID } from 'node:crypto'
+
+export type RoomVisit = {
+  id: string; room_id: string; session_id: string; request_id: string
+  turn_kind: 'chat' | 'agent_wake'; entered_at: string; left_at: string
+  duration_ms: number; process: Array<Record<string, unknown>>
+}
+
+export function newRoomState() {
+  return { active: false, id: '', roomId: '', roomTitle: '', enteredAt: 0, lockUntil: '',
+    process: [] as Array<Record<string, unknown>>, toolEvents: [] as Array<Record<string, unknown>>,
+    visits: [] as RoomVisit[] }
+}
 
 /** 这一轮的收集口。hook 和 canUseTool 都从桶里拿，不捕获局部变量。 */
 export type TurnBucket = {
@@ -19,6 +32,7 @@ export type TurnBucket = {
   webSearchCount: number
   webFetchCount: number
   toolCallCount: number
+  room: ReturnType<typeof newRoomState>
 }
 
 export function newTurnBucket(): TurnBucket {
@@ -29,6 +43,7 @@ export function newTurnBucket(): TurnBucket {
     webSearchCount: 0,
     webFetchCount: 0,
     toolCallCount: 0,
+    room: newRoomState(),
   }
 }
 
@@ -56,6 +71,11 @@ export function clearTurnBucket(sessionId: string) {
 /** 工具记录加一条，同时推给前端。hook 里必须用这个，不能碰局部变量。 */
 export function pushToolEvent(sessionId: string, item: Record<string, unknown>) {
   const bucket = turnBuckets.get(sessionId)
+  if (bucket?.room.active) {
+    bucket.room.toolEvents.push(item)
+    bucket.room.process.push({ type: 'tool', id: `process-${String(item.id || Date.now())}`, tool: item })
+    return
+  }
   if (bucket) {
     closeThinkingProcess(bucket, Date.now())
     bucket.toolEvents.push(item)
@@ -69,7 +89,7 @@ export function pushToolEvent(sessionId: string, item: Record<string, unknown>) 
 }
 
 export function closeThinkingProcess(bucket: TurnBucket, endedAt: number) {
-  const last = bucket.processEvents.at(-1)
+  const last = (bucket.room.active ? bucket.room.process : bucket.processEvents).at(-1)
   if (!last || last.type !== 'thinking' || typeof last.durationMs === 'number') return
   last.durationMs = Math.max(0, endedAt - Number(last.startedAt || endedAt))
 }
@@ -78,7 +98,8 @@ export function appendThinkingProcess(
   bucket: TurnBucket,
   text: string,
 ): { id: string; startedAt: number } {
-  const last = bucket.processEvents.at(-1)
+  const events = bucket.room.active ? bucket.room.process : bucket.processEvents
+  const last = events.at(-1)
   if (last?.type === 'thinking' && typeof last.durationMs !== 'number') {
     last.text = String(last.text || '') + text
     return {
@@ -94,12 +115,13 @@ export function appendThinkingProcess(
     text,
     startedAt,
   }
-  bucket.processEvents.push(item)
+  events.push(item)
   return { id: item.id, startedAt }
 }
 
 export function appendTextProcess(bucket: TurnBucket, text: string): { id: string } {
-  const last = bucket.processEvents.at(-1)
+  const events = bucket.room.active ? bucket.room.process : bucket.processEvents
+  const last = events.at(-1)
   if (last?.type === 'text') {
     last.text = String(last.text || '') + text
     return { id: String(last.id) }
@@ -110,6 +132,44 @@ export function appendTextProcess(bucket: TurnBucket, text: string): { id: strin
     id: `text-${Date.now()}-${bucket.processEvents.length}`,
     text,
   }
-  bucket.processEvents.push(item)
+  events.push(item)
   return { id: item.id }
+}
+
+export function enterRoom(bucket: TurnBucket, input: Record<string, unknown>, adjacentThinkingId?: string) {
+  const room = bucket.room
+  room.active = true
+  room.id = `visit-${randomUUID()}`
+  room.enteredAt = Date.now()
+  room.roomId = String(input.room_id || '')
+  room.roomTitle = String(input.title || '')
+  room.lockUntil = ''
+  room.process = []
+  room.toolEvents = []
+  const last = bucket.processEvents.at(-1)
+  const retractIds: string[] = []
+  let retractedText = ''
+  if (last?.type === 'thinking' && last.id === adjacentThinkingId) {
+    bucket.processEvents.pop()
+    room.process.push(last)
+    retractIds.push(String(last.id))
+    retractedText = String(last.text || '')
+  }
+  return { id: room.id, enteredAt: room.enteredAt, retractIds, retractedText }
+}
+
+export function leaveRoom(bucket: TurnBucket, sessionId: string, requestId: string, turnKind: 'chat' | 'agent_wake') {
+  const room = bucket.room
+  if (!room.active) return null
+  closeThinkingProcess(bucket, Date.now())
+  room.active = false
+  const leftAt = Date.now()
+  const event = { type: 'room' as const, id: room.id, roomId: room.roomId, roomTitle: room.roomTitle,
+    enteredAt: room.enteredAt, leftAt, durationMs: Math.max(0, leftAt - room.enteredAt),
+    lockUntil: room.lockUntil || undefined }
+  bucket.processEvents.push(event)
+  room.visits.push({ id: room.id, room_id: room.roomId, session_id: sessionId, request_id: requestId,
+    turn_kind: turnKind, entered_at: new Date(room.enteredAt).toISOString(), left_at: new Date(leftAt).toISOString(),
+    duration_ms: event.durationMs, process: room.process })
+  return event
 }

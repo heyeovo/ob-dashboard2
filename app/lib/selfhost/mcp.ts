@@ -112,6 +112,7 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal): Promise<Se
       do {
         const result = await client.listTools(cursor ? { cursor } : undefined, { timeout, signal })
         for (const tool of result.tools) {
+          if (tool.name === 'room') continue
           const name = publicToolName(server, tool.name)
           if (!isSelfhostMcpToolAllowed(server, name)) continue
           tools.push({
