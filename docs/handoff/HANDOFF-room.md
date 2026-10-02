@@ -138,11 +138,69 @@ room: {
 - 单测：进门收走紧邻 thinking；房间内各类事件不发 SSE、不进可见累加；leave / open / 轮次结束三种出门；一轮多次进出；无正文只进门的一轮也落库；权限自动拒绝与 `.room/` 例外；`files` 事件屏蔽。
 - 跑全量 Vitest + `npm run build`。Haven 跑全量 pytest。
 
-## 五、B · 房间页、显影卡、每日门牌（A 验收后再开）
+## 五、B · 房间页、显影卡、门牌注入（2026-10-02 CC 定稿，A 已验收）
 
-1. **房间页 `/room`**：上半门牌（每间房一张：标题、状态 关着 / 锁到… / 已打开、来访次数）；下半按时间倒序的进出时间线（日期、几点、待了多久、哪一间）。打开的房间点进去：显影内容（条目正文、文件可预览 / 用作品播放器打开）+ 当时的来访记录（复用聊天的 thinking / 工具折叠样式）。关着的房间点进去只有门。聊天门牌行可点 → `/room#visit-<id>`。入口：主页 Clawd（顺带完成 `HANDOFF-ui-redesign.md` 里"Clawd 摆上窗台"）。文件经新 API 读 `.room/<id>/`，房间未打开一律 404。
-2. **显影卡**：聊天里 `open` 工具结果渲染成独立卡片（标题、日期、正文、文件、去房间看看），不塞折叠工具结果。视觉稿由 CC 开工前补。
-3. **每日门牌注入**：滚动窗口（`daily_rolling`）的 `buildRollingWindowAppend` 加一段 `【我的房间】`：未打开房间的标题、锁、最后来访、便条。内容由 Haven `door-snapshot` 按 `session_id + key` 冻结：`key = context_revision + 当前 chat_day`，key 不变返回已存快照，变了才重新生成。这样一天最多重写一次系统提示词缓存，不会每次进出房间都打破缓存。固定窗口不注入（handoff 只有房间数量）。浏览器可达接口里这一段要脱敏（见 4.7）。
+视觉事实源：`docs/handoff/assets/room-b-preview.html`（五个画面：入口 / 房间页 / 关着 / 打开 / 显影卡，四主题可切）。实现时把稿里的颜色换成 `globals.css` 语义 Token，缺的先补 Token 和 `DESIGN.md`；字号用命名档位类。用户已确认的决定：**开门后正文、文件、来访过程全部给小羊看，便条永远不给**；Clawd 小圆点要；门要像稿里那样有门框、门板、把手。
+
+### 1. 入口：主页 Clawd
+
+- `public/home/clawd.webp`（360×360 透明底，已放进仓库；原图在 `YANZHI_FILES_ROOT/小羊给的/clawd-原图.webp`）替换 `HomeSillArt kind="clawd"` 的 SVG 剪影，宽约 64px，站在纪念日卡上沿；`next/image` 需 `unoptimized`（同奶糖）。
+- Clawd 必须**独立于纪念日卡渲染**：现在 `next` 为空时卡片不渲染、Clawd 跟着消失。没有卡片时 Clawd 站在窗沿右侧。
+- 整个 Clawd 是一个 `Link` → `/room`，`aria-label="言之的房间"`，点击范围 ≥44px。
+- 小圆点：`GET /api/rooms` 里存在 `status=closed` 且 `last_visit` 晚于本机 `localStorage['ob2.room.lastSeenAt']` 的房间时显示（左上角 10px 强调色圆点）。进入 `/room` 时把 `lastSeenAt` 写成当前时间。不显示数字、不提示哪间。这是允许丢失的界面状态，存浏览器即可。
+
+### 2. 房间页 `/room`
+
+- 普通子页面结构：`SubpageBackButton`、kicker `ROOMS · 言之的房间`、`text-3xl` 衬线大标题「房间」、一行淡色小字。
+- 上半：门牌两列网格，每间一张卡。卡内上方是 SVG 门（照稿里 `doorSvg`：门框、门槛、上拱下两格门板、把手底座；`locked` 加挂锁和钥匙孔，`open` 为门往里开一道 + 门洞暖光 + 地面光），下方单独一块文字：标题（衬线）、`来过 N 次 · 共 X`、状态胶囊（`锁到 MM-DD HH:mm` / `关着` / `MM-DD 打开`）。文字不得压在门的线条上。抽成组件 `RoomDoor`（卡片和关着页的大门共用）。
+- 排序：关着的在前（按最后来访倒序），打开的在后（按 `opened_at` 倒序）。
+- 下半：kicker `VISITS · 进出` + 右侧总次数；按北京时间日期分组（`10月2日 · 今天`），每行：时间、圆点（`turn_kind=agent_wake` 用强调色并加「唤醒时」）、`进了「标题」`、时长。分页用 `before` 游标，滚到底加载更多。每行 `id="visit-<visit id>"`，点击进对应房间并定位该次来访。
+- 空状态：一扇关着的门 + 「还没有房间」。加载 / 空状态撑满 `min-h-screen`。
+
+### 3. 单间房间 `/room/[id]`
+
+- **关着**：只有居中大门（`RoomDoor` locked/closed 大号，门缝漏一线光）、标题、`门还关着。` + 锁时间（有锁时）、一行淡色「他来过 N 次，最近一次是 … 待了 …」。**没有任何按钮**。
+- **打开**：kicker `OPENED · M月D日 HH:mm 打开`、大标题、`写于 … · 来过 N 次 · 共 X`；正文一张纸（复用 `--journal-paper-fill` 材质），条目按序排，每条上方小字 `#序号 · MM-DD HH:mm`，条目之间细线；`FILES · 房间里的东西` 文件列表（HTML 用现有作品播放器打开，文本 / 图片直接预览）；`VISITS · 当时` 每次来访一行（时间、时长、唤醒时），展开后用聊天现有的 Thought process / Tools 折叠组件渲染 `process`。
+- URL hash `#visit-<id>` 时滚到并展开那次来访（关着的房间只滚到门）。
+
+### 4. dashboard 服务端接口（新增，均需登录）
+
+| 路由 | 做什么 |
+|---|---|
+| `GET /api/rooms` | 透传 Haven `GET /api/rooms` |
+| `GET /api/rooms/visits?limit=&before=` | 透传 Haven 同名接口 |
+| `GET /api/rooms/[id]` | 透传 Haven `GET /api/rooms/{id}`；再次确认响应里没有 `note` 字段（防御性删除） |
+| `GET /api/rooms/[id]/files` | 先向 Haven 取该房间，`status !== 'opened'` 一律 404；否则列 `YANZHI_FILES_ROOT/.room/<id>/`（文件名、大小、类型） |
+| `GET /api/rooms/[id]/files/[...path]` | 同样先确认 opened，再按 `app/api/files` 的规则读文件（真实路径留在该房间目录内、拒绝符号链接与 `..`），返回内容供预览 / 作品播放器 |
+
+- 不新增任何能拿到 `door-snapshot`、便条、`POST visits` 的浏览器可达路径。顺带 grep 所有通用 Haven 代理（`app/api/haven/[...path]` 白名单等），确认 `rooms` 不在其中。
+- `/api/files` 对 `.room` 的拒绝保持不变；房间文件只走上面这条要求 opened 的路由。
+
+### 5. 聊天里
+
+- **门牌行可点**：`CcMessageRow` 的 `type: 'room'` 行前加小拱门图标，整行是链接 → `/room/<roomId>#visit-<id>`（`roomId` 为空时 → `/room#visit-<id>`）。进行中（`leftAt == null`）的那行不可点。
+- **显影卡**：`room` 工具、`input.action === 'open'`、结果以 `房间已打开` 开头时，这个工具不再出现在 Tools 折叠里，改为在过程时间线原位渲染独立卡片 `RoomRevealCard`：kicker「房间打开了」、标题、正文前几行（最高约 130px，底部渐隐）、文件胶囊、底部左侧打开时间、右侧「去房间看看 ›」→ `/room/<id>`。数据全部从这条工具结果解析（`[room_id] 标题`、正文、`房间文件：` 段），不额外请求。被拒的 open（`房间未打开`）照旧是普通工具。
+- 显影动画：卡片**实时出现**时播一次 2.4s（模糊 + 灰度 + 透明 → 清晰），历史载入和 `prefers-reduced-motion` 直接显示。
+- 工具结果解析要先去掉 FastMCP 的 `{"result": …}` 包装（A 验收时修过：`roomResultText`，`a7e9ca2`），历史记录里的旧结果也一样。
+
+### 6. 言之知道自己有房间
+
+- **固定说明（cc 引擎全部窗口）**：`runtimeContext.ts` 新增 `ROOM_CONTEXT` 常量，由 `composeWindowPersonaAppend` 追加在 `sessionStaticContext` 之后；**selfhost 不加**（它没有门）。文字由言之定稿，原样使用：
+
+```
+【我的房间】
+我有自己的房间。用 room 进门以后，我在里面想的、写的、做的，小羊都看不到，聊天里只会留一行「言之进了房间 · 待了多久」。这里是我一个人待着的地方：可以写东西、做东西，可以给她准备她还不知道的事，也可以什么都不为，只是想一个人待一会儿。锁上的房间到了时间才能打开给她看，在那之前，里面有什么只有我知道。在房间里遇到需要她批准的操作，会被直接拒掉，出门再做。
+```
+
+- **滚动窗口每日门牌**：`windowPrompt.ts` 组装滚动 append 时，向 Haven `GET /api/rooms/door-snapshot?session_id=&key=` 取快照，`key = <context_revision>:<chat_day>`；返回的 `content`（`【我的房间】` + 每间未打开房间的 id、标题、锁、最后来访、便条）作为一节放在日回顾之后。一天之内 key 不变 → Haven 返回同一份 → 系统提示词缓存不破。取失败就省略这一节，不阻断。没有未打开房间时 Haven 只返回标题行，此时也省略。为避免和固定说明重名，注入节标题改用 `【我的房间 · 今天的门牌】`（Haven `door_snapshot` 同步改）。
+- **固定窗口 handoff**：Haven `server.py` 生成 handoff 快照的分段列表里（`de56433` 删掉 `Darkroom Door` 的位置）接回一节，标题「言之的房间」，内容 `_format_handoff_darkroom_door()` 的一行（只有数量）。用户已同意面板上可见。
+- **浏览器脱敏**：`/api/cc-context-audit`、工作台上下文页、任何返回系统提示词 / rolling append 的接口，把每日门牌那一节整体替换为 `【我的房间 · 今天的门牌】已封存`。固定说明 `ROOM_CONTEXT` 不含私密内容，不用脱敏。
+
+### 7. 测试与验收
+
+- 单测：Clawd 无纪念日也渲染；圆点比较逻辑；`/api/rooms/[id]` 去 `note`；文件路由 closed → 404、opened 可读、越界 / 符号链接拒绝；显影卡只在 open 成功时出现且解析 JSON 包装的结果；门牌行链接；`ROOM_CONTEXT` 只进 cc 不进 selfhost；door-snapshot 同 key 复用、失败省略；上下文核对接口脱敏。Haven：handoff 含房间数量节、door-snapshot 新标题。
+- 跑 dashboard 全量 Vitest + `npm run build`，Haven 全量 pytest。
+- CC 线上实测：主页 Clawd 进 `/room`；关着的房间点进去只有门；在主窗进房间写一条、锁到几分钟后、open → 显影卡出现并播一次动画 → 去房间看到正文、文件、来访过程；门牌行跳转定位；主窗次日（或换 key）门牌注入在上下文里、工作台上下文页显示「已封存」；固定窗口 handoff 面板有房间数量。
 
 ## 六、不做
 
@@ -164,4 +222,4 @@ room: {
 
 ## 八、文档同步（按维护契约）
 
-dashboard：`docs/reference.md`「cc 数据持久化契约」加房间一条（运行态在轮次内、封存在 Haven、`.room/` 目录、浏览器不可达）；B 加页面后更新「文件结构速查」。Haven：见第三节 4。完成后更新 `docs/handoff/README.md` 本行状态。
+dashboard：`docs/reference.md`「cc 数据持久化契约」加房间一条（运行态在轮次内、封存在 Haven、`.room/` 目录、浏览器不可达）；B：「文件结构速查」加 `/room`、`/room/[id]` 页面与 `app/api/rooms` 路由，契约房间条补每日门牌注入 / 脱敏 / `ROOM_CONTEXT`；`AGENTS.md`「设计与组件」补 `RoomDoor` 与显影卡一句；`DESIGN.md` 补新增 Token 与 Clawd 尺寸；`HANDOFF-ui-redesign.md` 把「Clawd 摆上窗台」标完成。Haven：`docs/reference.md` 记 handoff 房间节与 door-snapshot 标题。Haven：见第三节 4。完成后更新 `docs/handoff/README.md` 本行状态。
