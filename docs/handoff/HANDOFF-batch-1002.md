@@ -2,6 +2,8 @@
 
 ## 当前状态
 
+- 2026-10-03 桶正文编辑两项已分别提交、推送到 `fix/batch-1002`：字号和尺寸保持 `9f4096f`，键盘可见区域适配 `c79962e`。开工时分支为 `b02e14c`；没有合并或改动 main，iPhone 实机仍待验收。
+
 - 仓库：`ob-dashboard2`。这一批跨窗口修复，最后由 Claude / CC 统一验收、合并并上线。
 - 目标统一分支：`fix/batch-1002`，已从实时 `origin/main`（`7ffba8b`）建立。
 - 第一项 bug 原分支已推 `d1f1f5f`，现已 cherry-pick 到统一分支为 `153ecd8`；统一分支已推送，修复未合并、未上线。
@@ -92,3 +94,16 @@
 3. noop 验收：带工具 / 房间的 noop 新轮次保存后，raw.process 无 marker text 和空白 text，工具 / 房间仍在；旧记录刷新后无重复 marker 气泡；“这次没有发消息 · 理由”仍显示；普通轮次正常正文与 noop 判定保持原样。
 4. 提供按 commit 列出的最终报告。取得适用的合并 / 推送授权后合并 main、推送并核对自动部署目标提交与健康状态；仅推修复分支不算上线。
 5. 完成验收、上线后在 handoff 索引标记归档。
+
+## 2026-10-03：桶正文编辑（两项已分别提交并推送）
+
+用户已确认：仅桶正文，保留阅读视觉字号及文字起点；短正文贴合原高度，长正文限高并内部滚动，键盘出现后适配可见空间。其他抽屉、年轮编辑、保存接口和持久化不改。用户已单独回复“推”，授权本两项代码、测试和对应文档 commit / push；后续修改仍需适用授权。
+
+1. 字号与尺寸：新增 `app/components/BucketContentEditor.tsx`，内部输入字号至少 16 CSS px，渲染缩放回现有阅读字号，同时补偿文字宽度、高度；不变更外观字号设置。取消固定 14 行，短正文自然高度，长正文限高内部滚动；保留正文卡片顶部图标行高度。`BucketDetailDrawer.tsx`、`globals.css` 接入；`DetailPanel.tsx` 的可选 `preserveHeight` 保持进入编辑前的手机抽屉高度。commit：`9f4096f` — `fix: keep bucket content editing visually stable`。
+2. 键盘适配：`DetailPanel.tsx` 的可选 `keyboardAware` 只由桶正文编辑开启，按 `visualViewport` 高度和 offsetTop 调整手机覆盖层 / 抽屉边界，退出恢复，桌面和默认选项不变。编辑框按可见空间调整高度。commit：`c79962e` — `fix: fit bucket editing drawer to keyboard viewport`。
+
+维护契约：共享组件约定同步 `AGENTS.md`；正文编辑尺寸与抽屉 opt-in 行为同步 `DESIGN.md`；进度只记本 handoff 与索引。没有本次 OB Todo ID，交 CC 验收时按实际对应条目勾掉。
+
+验证：`tests/bucket-content-editor.test.ts` 6 项（视觉字号 / 宽度换算、短正文、长正文、外观缩放、键盘限高与视口偏移），`tests/bucket-drawer-viewport.test.ts` 3 项（真实 drawer 的 layout / resize 回调，覆盖高度保持、键盘视口边界、默认抽屉、退出与桌面恢复）；分别通过。修改组件及定向测试 TypeScript 无诊断；新组件 / 两个测试 ESLint 通过。现有 `BucketDetailDrawer.tsx` 的 2 个 lint 错误、`DetailPanel.tsx` 的 2 个错误 / 1 个警告均与修改前一致，本次未新增；不扩散修复旧诊断。完整 build / 全量测试仍按批次留最终统一执行。
+
+本地浏览器预览因登录页阻挡未完成，未修改登录配置、未操作真实桶。临时预览页面已删除，预览服务已停止。iPhone 实机验收尚未执行：检查短 / 长正文点击编辑前后字形、换行、文字起点；长正文内部滚动；键盘出现后可通过抽屉滚动访问顶部关闭和保存 / 取消；退出编辑及其他抽屉原样。不能用定向测试代替实机验收或宣称已上线。
