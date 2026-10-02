@@ -45,6 +45,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 ## Git 与部署
 
 - CC 可直接 commit + push `main`；commit message 由 AI 拟
+- Codex 不 push `main`、不合并：一件事一个分支（`fix/…` / `feat/…`），提交并 push 分支后停下，由 CC 验收合并。收尾报告写明：分支名、改动范围、按 `MAINTENANCE_CONTRACT.md` 同步了哪些文档、build / 测试结果、对应 OB Todo（完成的写 ID，新增的写一句话原句）
 - push `main` 后 Coolify 自动部署；确认最新 deployment 对应目标 commit 且健康，未触发或失败时再手动 Redeploy
 - 生产收到 SIGTERM/SIGINT 后旧容器排空，等进行中轮次及 Haven 写入结束后再退出（上限约 10 分钟）；Coolify Stop grace period 当前为 600 秒，必须大于 `DRAIN_TIMEOUT_MS` 并额外留出 20 秒停止收尾及退出余量，变量定义见 `docs/reference.md`。feature 分支 push 不等于已上线。
 - 每次任务收尾主动告知是否需要上线
