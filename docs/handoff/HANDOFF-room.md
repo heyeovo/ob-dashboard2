@@ -4,7 +4,7 @@
 > 分两段：**A**（本文件第三、四节，先做）＝ Haven `room` 工具与存储 + dashboard 聊天里的门；**B**（第五节）＝ 房间页、显影卡、每日门牌。A 验收通过后再开 B，B 的视觉稿开工前由 CC 补。
 > 开工先读两边 `AGENTS.md`、`MAINTENANCE_CONTRACT.md`；dashboard 读 `docs/reference.md`「cc 数据持久化契约」，Haven 读 `docs/reference.md`。
 
-> 实施状态（2026-10-02）：A 代码与文档已完成，两边均在 `feat/room-a`，用户已确认提交到功能分支，待 CC 按第七节在 VPS 验收。B 未做，须 A 验收通过后另开；不加房间页、显影卡或每日注入。Haven 全量 253 passed + 4 subtests；dashboard build 通过，最终全量 Vitest 418 passed / 3 failed / 1 skipped（两项 Windows symlink EPERM，一项未改动的 token 篡改测试偶发失败，定向复跑通过）；room + runTurn + auth 定向 56 passed。正式契约看两边 docs/reference.md；房间过程只在浏览器投影中封存，原生 transcript 保留。
+> 实施状态（2026-10-02）：A 代码与文档已完成，两边均在 `feat/room-a`，用户已确认提交到功能分支，待 CC 按第七节在 VPS 验收。CC 代码验收（同日）：Linux 全量 Vitest 422 passed、build 通过，Haven 253 passed；补 `5126b73`（未设过锁时不再返回“锁已清除”）；两边已合并 main。B 未做，须 A 验收通过后另开；不加房间页、显影卡或每日注入。Haven 全量 253 passed + 4 subtests；dashboard build 通过，最终全量 Vitest 418 passed / 3 failed / 1 skipped（两项 Windows symlink EPERM，一项未改动的 token 篡改测试偶发失败，定向复跑通过）；room + runTurn + auth 定向 56 passed。正式契约看两边 docs/reference.md；房间过程只在浏览器投影中封存，原生 transcript 保留。
 
 ## 一、要什么（用户定案）
 
