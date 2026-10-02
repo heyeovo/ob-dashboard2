@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server'
+import { getBuckets } from '@/app/lib/api'
+import { selectRollingPinnedSnapshot } from '@/app/lib/cc/windowPrompt'
 import {
   listSessions,
   listAllTurns,
@@ -151,10 +153,20 @@ export async function PATCH(request: NextRequest) {
       { status: result.ok ? 200 : 502 },
     )
   } else if (hasRollingContext) {
+    const rollingContext = body!.rolling_context!
+    // Only an explicit context save refreshes the frozen pinned content.
+    let pinnedSnapshot: import('@/app/lib/havenTurns').RollingContextConfig['pinned_snapshot']
+    try {
+      pinnedSnapshot = rollingContext.strategy === 'daily_rolling'
+        ? selectRollingPinnedSnapshot(await getBuckets(true), rollingContext.selected_pinned_ids)
+        : undefined
+    } catch {
+      return Response.json({ ok: false, error: '读取钉选记忆失败，未保存上下文，请重试' }, { status: 502 })
+    }
     const result = await patchConversationRollingContext({
       sessionId,
       personaId: String(body?.persona_id || ''),
-      rollingContext: body?.rolling_context as import('@/app/lib/havenTurns').RollingContextConfig,
+      rollingContext: { ...rollingContext, pinned_snapshot: pinnedSnapshot },
       expectedStateVersion: body?.expected_state_version,
     })
     if (!result.ok) {

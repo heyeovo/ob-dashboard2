@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = sessionResult.session
     const [rolling, latestResult, mcpConfig] = await Promise.all([
-      loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { logDiagnostics: false }),
+      loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { logDiagnostics: false, persistPinnedSnapshot: false }),
       listTurns(sessionId, { limit: 50, includeRaw: true }),
       loadMcpConfig(),
     ])

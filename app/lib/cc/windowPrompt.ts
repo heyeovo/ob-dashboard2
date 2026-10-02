@@ -1,6 +1,7 @@
 import {
   dailyReviewSystemBlock,
   listAllTurns,
+  initializeRollingPinnedSnapshot,
   type ConversationContextDay,
   type HavenConversationSession,
   type HavenTurn,
@@ -13,7 +14,7 @@ import { archiveChatDay } from './rollingArchive'
 
 type FixedWindowSource = Pick<
   HavenConversationSession,
-  'handoff_snapshot' | 'daily_review_enabled' | 'daily_review_snapshot' | 'rolling_context' | 'context_revision'
+  'handoff_snapshot' | 'daily_review_enabled' | 'daily_review_snapshot' | 'rolling_context' | 'context_revision' | 'persona_id'
 >
 
 type PinnedBucket = { id: string; title: string; content: string }
@@ -51,6 +52,16 @@ function normalizePinnedBuckets(payload: unknown): PinnedBucket[] {
       content,
     }]
   })
+}
+
+export function selectRollingPinnedSnapshot(
+  payload: unknown,
+  selectedIds: string[] | null | undefined,
+): PinnedBucket[] {
+  const buckets = normalizePinnedBuckets(payload)
+  if (selectedIds == null) return buckets
+  const ids = new Set(selectedIds)
+  return buckets.filter(bucket => ids.has(bucket.id))
 }
 
 function normalizeMemoryBuckets(payload: unknown): MemoryBucket[] {
@@ -133,6 +144,7 @@ export function buildRollingWindowAppend(
   const sections: string[] = []
 
   for (const bucket of pinnedBuckets) {
+    // Preserve the existing heading so backfilling a snapshot does not change the prompt.
     sections.push(`【实时钉选记忆｜${bucket.title}｜${bucket.id}】\n${bucket.content}`)
   }
   for (const journal of journals) {
@@ -186,7 +198,7 @@ export async function loadRollingWindowAppend(
   sessionId: string,
   session: FixedWindowSource,
   days: ConversationContextDay[],
-  options: { upToTurnId?: number; logDiagnostics?: boolean } = {},
+  options: { upToTurnId?: number; logDiagnostics?: boolean; persistPinnedSnapshot?: boolean } = {},
 ): Promise<{
   content: string
   history: HavenTurn[]
@@ -232,12 +244,19 @@ export async function loadRollingWindowAppend(
       turnChatDays: [...new Set(turnResult.turns.map(t => t.chat_day))],
     })
   }
-  let pinnedBuckets = normalizePinnedBuckets(bucketPayload)
-  if (selectedPinnedIds != null) {
-    const idSet = new Set(selectedPinnedIds)
-    pinnedBuckets = pinnedBuckets.filter(bucket => idSet.has(bucket.id))
-  }
-  const memoryBuckets = normalizeMemoryBuckets(bucketPayload).filter(isEligibleRollingBucket)
+  const pinnedBuckets = session.rolling_context.pinned_snapshot
+    ?? (options.persistPinnedSnapshot === false
+      ? selectRollingPinnedSnapshot(bucketPayload, selectedPinnedIds)
+      : await initializeRollingPinnedSnapshot({
+        sessionId,
+        personaId: session.persona_id,
+        contextRevision: session.context_revision || 0,
+        snapshot: selectRollingPinnedSnapshot(bucketPayload, selectedPinnedIds),
+      }))
+  // Unpinning/deleting a frozen bucket must not move it into another live memory layer.
+  const frozenPinnedIds = new Set(pinnedBuckets.map(bucket => bucket.id))
+  const memoryBuckets = normalizeMemoryBuckets(bucketPayload)
+    .filter(bucket => isEligibleRollingBucket(bucket) && !frozenPinnedIds.has(bucket.id))
   const selectBuckets = (ids: string[] | null | undefined, predicate: (bucket: MemoryBucket) => boolean) => {
     if (!ids?.length) return []
     const idSet = new Set(ids)
