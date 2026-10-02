@@ -317,6 +317,54 @@ html {
   --theme-grain-blend: multiply;
 }
 
+:root[data-theme="pearl"], .theme-preview[data-preview-theme="pearl"] {
+  --theme-base: #EDEAF0;
+  --theme-mesh: radial-gradient(55% 45% at 90% 8%,#DCD4E8 0%,transparent 70%), radial-gradient(60% 45% at 0% 40%,#F6F2EE 0%,transparent 70%), radial-gradient(60% 50% at 60% 100%,#D8E0EA 0%,transparent 70%), linear-gradient(170deg,#F2EFF3,#E6E6EE);
+  --theme-accent: #857AA3;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #35323D;
+  --theme-tint: 252 251 254;
+  --theme-edge: rgba(255,255,255,.75);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
+:root[data-theme="canopy"], .theme-preview[data-preview-theme="canopy"] {
+  --theme-base: #EDEFE5;
+  --theme-mesh: radial-gradient(55% 45% at 5% 5%,#D3DDC4 0%,transparent 70%), radial-gradient(55% 40% at 100% 30%,#F5EED6 0%,transparent 70%), radial-gradient(65% 50% at 40% 100%,#D8E6DC 0%,transparent 70%), linear-gradient(180deg,#F2F3EA,#E7ECE2);
+  --theme-accent: #6F8B63;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #323A30;
+  --theme-tint: 251 252 247;
+  --theme-edge: rgba(255,255,255,.72);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
+:root[data-theme="rain"], .theme-preview[data-preview-theme="rain"] {
+  --theme-base: #E3E6E9;
+  --theme-mesh: radial-gradient(60% 45% at 80% 0%,#C8D1D9 0%,transparent 70%), radial-gradient(55% 45% at 0% 50%,#ECE8E3 0%,transparent 70%), radial-gradient(60% 50% at 70% 100%,#D4D2D9 0%,transparent 70%), linear-gradient(180deg,#E8EBEE,#DCE0E4);
+  --theme-accent: #6E7F90;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #2E3439;
+  --theme-tint: 246 248 250;
+  --theme-edge: rgba(255,255,255,.65);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
+:root[data-theme="silver"], .theme-preview[data-preview-theme="silver"] {
+  --theme-base: #ECEEF0;
+  --theme-mesh: radial-gradient(60% 45% at 90% 8%,#CDD2D8 0%,transparent 70%), radial-gradient(55% 45% at 0% 45%,#FBFCFD 0%,transparent 70%), radial-gradient(65% 50% at 55% 100%,#D4D9DF 0%,transparent 70%), linear-gradient(180deg,#F5F7F9,#E2E6EA);
+  --theme-accent: #545C65;
+  --theme-on-accent: #FFFFFF;
+  --theme-ink: #2C3035;
+  --theme-tint: 250 251 252;
+  --theme-edge: rgba(255,255,255,.72);
+  --theme-grain: .07;
+  --theme-grain-blend: multiply;
+}
+
 :root[data-theme="dusk"], .theme-preview[data-preview-theme="dusk"] {
   color-scheme: dark;
   --theme-base: #1E1C23;

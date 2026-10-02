@@ -1,6 +1,6 @@
 export type Appearance = {
   version: 1
-  theme: 'apricot' | 'sakura' | 'mist' | 'dusk'
+  theme: 'apricot' | 'sakura' | 'mist' | 'dusk' | 'pearl' | 'canopy' | 'rain' | 'silver'
   background: {
     kind: 'gradient' | 'upload' | 'none'
     assetId?: string
@@ -63,6 +63,7 @@ export function normalizeAppearance(value: unknown): Appearance {
   return {
     version: 1,
     theme: input.theme === 'sakura' || input.theme === 'mist' || input.theme === 'dusk'
+      || input.theme === 'pearl' || input.theme === 'canopy' || input.theme === 'rain' || input.theme === 'silver'
       ? input.theme : 'apricot',
     background: {
       kind,
