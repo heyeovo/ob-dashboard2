@@ -1,5 +1,8 @@
 'use client'
 import BodyPortal from '@/app/components/BodyPortal'
+import Link from 'next/link'
+import RoomRevealCard from '@/app/components/RoomRevealCard'
+import { parseRoomReveal, roomVisitHref } from '@/app/lib/roomTypes'
 import { useEffect, useRef, useState } from 'react'
 import CcMarkdown, { highlightSearchText } from './CcMarkdown'
 import CcToolDialog from './CcToolDialog'
@@ -662,10 +665,11 @@ export default function CcMessageRow({
   const lastProcessEvent = process.at(-1)
   const trailingText = lastProcessEvent?.type === 'text' ? lastProcessEvent : null
   const visibleProcess = trailingText ? process.slice(0, -1) : process
-  type ProcessGroup = Exclude<CcProcessEvent, { type: 'tool' }> | { type: 'tools'; id: string; tools: CcToolEvent[] }
+  type ProcessGroup = Exclude<CcProcessEvent, { type: 'tool' }> | { type: 'tools'; id: string; tools: CcToolEvent[] } | { type: 'reveal'; id: string; tool: CcToolEvent }
   const processGroups: ProcessGroup[] = []
   for (const event of visibleProcess) {
     if (event.type !== 'tool') { processGroups.push(event); continue }
+    if (parseRoomReveal(event.tool)) { processGroups.push({ type: 'reveal', id: event.id, tool: event.tool }); continue }
     const previous = processGroups.at(-1)
     if (previous?.type === 'tools') previous.tools.push(event.tool)
     else processGroups.push({ type: 'tools', id: event.id, tools: [event.tool] })
@@ -770,11 +774,13 @@ export default function CcMessageRow({
               if (event.type === 'room') {
                 const duration = (event.durationMs || 0) < 60_000 ? '不到 1 分钟' : Math.floor((event.durationMs || 0) / 60_000) + ' 分钟'
                 const lock = event.lockUntil && !Number.isNaN(Date.parse(event.lockUntil)) ? new Date(event.lockUntil).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).slice(5, 16) : ''
-                return <div key={event.id} className="cc-think-toggle">
+                const content = <><span className="room-door-mark" aria-hidden="true" />
                   {event.leftAt == null ? '言之在房间里…' : '言之进了房间 · 待了 ' + duration}
                   {lock ? ' · 锁到 ' + lock : ''}
-                </div>
+                </>
+                return event.leftAt == null ? <div key={event.id} className="cc-think-toggle">{content}</div> : <Link key={event.id} className="cc-think-toggle" href={roomVisitHref(event.roomId, event.id)}>{content}<span className="cc-fold-caret" aria-hidden="true" /></Link>
               }
+              if (event.type === 'reveal') return <RoomRevealCard key={event.id} tool={event.tool} live={!message.fromHistory} />
               if (event.type === 'compact') {
                 return <CompactionDivider key={event.id} compaction={event.compaction} />
               }

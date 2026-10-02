@@ -8,6 +8,8 @@ import {
 import { handoffSnapshotContent } from '@/app/lib/cc/handoffSnapshot'
 import { sessionStaticContext } from '@/app/lib/runtimeContext'
 import { getBuckets, getJournals } from '@/app/lib/api'
+import { loadRoomDoors } from '@/app/lib/roomServer'
+import { archiveChatDay } from './rollingArchive'
 
 type FixedWindowSource = Pick<
   HavenConversationSession,
@@ -123,6 +125,7 @@ export function buildRollingWindowAppend(
   recentBuckets: PinnedBucket[] = [],
   feelBuckets: PinnedBucket[] = [],
   randomHighImportanceBuckets: PinnedBucket[] = [],
+  roomDoors = '',
 ): string {
   if (session.rolling_context?.strategy !== 'daily_rolling') return ''
   const modes = session.rolling_context.day_modes || {}
@@ -154,6 +157,7 @@ export function buildRollingWindowAppend(
       sections.push(`【${day.day} 日回顾】\n${day.review.content.trim()}`)
     }
   }
+  if (roomDoors) sections.push(roomDoors)
   if (sections.length === 0) return ''
   return [
     `<rolling_window_context revision="${session.context_revision || 0}">`,
@@ -255,6 +259,8 @@ export async function loadRollingWindowAppend(
   const effectiveTurns = options.upToTurnId == null
     ? turnResult.turns
     : turnResult.turns.filter(turn => turn.id <= options.upToTurnId!)
+  const roomDoors = await loadRoomDoors(sessionId, session.context_revision || 0,
+    archiveChatDay(new Date().toISOString(), session.rolling_context))
   return {
     content: buildRollingWindowAppend(
       session,
@@ -265,6 +271,7 @@ export async function loadRollingWindowAppend(
       recentBuckets,
       feelBuckets,
       randomHighImportanceBuckets,
+      roomDoors,
     ),
     history: buildRollingWindowHistory(session, effectiveTurns, days),
     pinnedBucketIds: pinnedBuckets.map(item => item.id),

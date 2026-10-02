@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import HomeToolDrawer from './components/HomeToolDrawer'
 import HomeSillArt from './components/HomeSillArt'
+import HomeRoomEntrance from './components/HomeRoomEntrance'
 import WeekCalendar from './components/WeekCalendar'
 import { daysTogether, upcomingAnniversaries } from './lib/anniversaries'
 import { bucketDate, bucketName, isLegacyDailyImpression, type DatedBucket } from './lib/dailyBucketDate'
@@ -113,12 +114,15 @@ export default function HomePage() {
           <span className="home-quote-space" aria-hidden="true" />
         </div></div>
         <HomeSillArt kind="cat" />
+        <div className={`home-room-sill${next ? ' with-anniversary' : ''}`}>
         {next && <div className="home-anniversary" aria-label="下一个纪念日">
-          <HomeSillArt kind="clawd" /><span className="home-kicker">NEXT · 纪念日</span>
+          <span className="home-kicker">NEXT · 纪念日</span>
           <div className="home-anniversary-name">{next.name}</div>
           <div className="home-anniversary-count"><b>{next.daysAway === 0 ? '今天' : next.daysAway}</b>{next.daysAway > 0 && <span>天后 · {Number(next.date.slice(5, 7))}月{Number(next.date.slice(8, 10))}日</span>}</div>
           <div className="home-anniversary-rest">{anniversaries.slice(1, 4).map(item => <span key={item.date}>{item.name} · {shortDate(item.date)}</span>)}</div>
         </div>}
+        <HomeRoomEntrance onCard={Boolean(next)} />
+        </div>
       </section>
       <div className="home-desk">
         <Link href="/journal" className="home-desk-block home-diary"><span className="home-diary-spine" aria-hidden="true" /><span><span className="home-kicker">DIARY · 日记本</span><strong>{journal ? journal.locked ? '上锁的一篇' : journal.name : '还没有日记'}</strong><small>{journal ? `${shortDate((journal.event_time || journal.created).slice(0, 10))} · ${journal.author}` : '去日记本 ›'}</small></span></Link>

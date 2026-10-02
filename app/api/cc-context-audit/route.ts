@@ -8,6 +8,7 @@ import { getConversationSession, listTurns, type HavenTurn } from '@/app/lib/hav
 import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/lib/havenPersonas'
 import { claudeToolAudit, mcpToolsContentHash, systemPromptContentHash } from '@/app/lib/cc/ccOptions'
 import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
+import { redactRoomDoorsDeep } from '@/app/lib/roomPrivacy'
 import { configuredMcpModelSurface, disabledMcpTools, loadMcpConfig } from '@/app/lib/ccMcp'
 import { builtInMcpModelSurfaces, builtInMcpServerNames } from '@/app/lib/cc/builtInMcp'
 import { agentWakeMcpAudit } from '@/app/lib/cc/agentWakeTool'
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest) {
     const storedLatestAppend = storedSystemPrompt?.dashboardAppend || ''
     const latestAppend = storedLatestAppend || (latestSystemHash === currentSystemHash ? currentDashboardAppend : '')
 
-    return Response.json({
+    return Response.json(redactRoomDoorsDeep({
       ok: true,
       session_id: sessionId,
       title: session.title || sessionId,
@@ -273,7 +274,7 @@ export async function GET(request: NextRequest) {
       },
       stats,
       at: Date.now(),
-    })
+    }))
   } catch (error) {
     return Response.json(
       { ok: false, error: (error as Error).message || '上下文审计读取失败' },

@@ -169,12 +169,16 @@
 | `--chat-session-group-fill`, `--chat-session-group-radius`, `--chat-main-glow`, `--chat-session-dot*` | 对话列表 A：78% tint 的细线分组、18px 圆角、主窗右上角强调色光晕与窗口模式圆点 |
 | `--chat-attachment-width`, `--chat-sheet-height`, `--chat-sheet-radius` | 聊天附件最大宽度和聊天浮层尺寸；输入区的安全区域内边距保留与系统 inset 的计算 |
 | `--home-frame-fill`, `--home-anniversary-fill`, `--home-window-inset` | 阶段 3a 主页窗框实底、纪念日浮卡、窗洞内阴影；上传照片只画在窗洞里 |
-| `--home-cat-width`, `--home-clawd-glasses`, `--radius-window` | 窗沿奶糖插画宽度（`min(36vw, 140px)`，图 `public/home/naitang.png` 原木板上沿在 72% 高处，压在窗下沿）、Clawd 占位剪影墨镜色、窗洞 30px 圆角 |
+| `--home-cat-width`, `--home-clawd-glasses`, `--radius-window` | 窗沿奶糖插画宽度（`min(36vw, 140px)`，图 `public/home/naitang.png` 原木板上沿在 72% 高处，压在窗下沿）、Clawd 旧占位剪影墨镜色（现入口已用真图）、窗洞 30px 圆角 |
 | `--memory-card-fill`, `--memory-search-fill`, `--memory-ago-fill`, `--memory-filter-fill` | 阶段 3b 记忆卡片、搜索框、往日记忆条和筛选胶囊的主题材质；列表卡片不做逐卡模糊 |
 | `--memory-card-shadow`, `--memory-switch-shadow` | 记忆卡片顶部高光与轻阴影、两格切换器选中阴影 |
 | `--bucket-paper-fill`, `--bucket-paper-shadow` | 桶抽屉正文卡片 92% tint，顶部内高光、细描边及柔和外投影；四个主题和照片背景共用 |
 | `--memory-card-gap`, `--memory-grid-min-height` | 记忆卡片 9px 间距与记忆格固定起始高度（两列等高） |
 | `--journal-paper-fill`, `--journal-sheep-dot`, `--journal-joint-dot` | 阶段 4c-1 日记正文纸张 84% tint、小羊的主题蓝灰圆点，以及共同作者由两色各占半边的小圆点 |
+| `--room-card-fill`, `--room-reveal-fill`, `--room-card-shadow` | 房间门牌 80% tint、显影卡 90% tint 与现有顶部高光 / 卡片阴影；正文复用 journal-paper-fill |
+| `--room-door-fill`, `--room-door-inset`, `--room-door-light` | 门板 96% tint、门框浅墨与随主题强调色的门洞 / 地面光 |
+| `--room-reveal-wash`, `--room-reveal-fade` | 显影卡顶部强调色渐变、正文底部渐隐 |
+| `--room-clawd-width`, `--room-clawd-shadow` | 主页 Clawd 真图 64px 与主题墨色投影；独立入口，没有纪念日时站在窗沿右侧 |
 | `--todo-check-size`, `--journal-editor-min-height`, `--journal-dialog-max-height`, `--journal-new-body-min-height` | 阶段 4c-1 待办圆圈 21px；日记编辑正文至少半屏、创建表单正文至少 35vh 且抽屉最高 75vh |
 | `--effect-rain-intensity` | 透明玻璃水珠的数量与可见度；低强度水珠较少且较淡，高强度叠加更多水珠；默认关闭，页面不可见暂停，减少动态效果时静止 |
 | `--color-success*`, `--color-danger*`, `--color-pending*`, `--color-resolved*` | 状态色及背景、边框；页面按状态语义引用 |
