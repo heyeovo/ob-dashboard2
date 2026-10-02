@@ -67,7 +67,7 @@ describe('cc workspace 路径边界', () => {
     await expect(isPathWithinRoots(path.join(similar, 'x.txt'), [root], root)).resolves.toBe(false)
   })
 
-  it.skipIf(process.platform === 'win32')('拒绝文件 symlink 逃出根目录', async () => {
+  it('拒绝文件 symlink 逃出根目录', async () => {
     const root = await realpath(dashboard)
     const outsideFile = path.join(outside, 'secret.txt')
     const fileLink = path.join(dashboard, 'file-link.txt')

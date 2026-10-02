@@ -24,15 +24,15 @@ export const DEFAULT_AGENT_WAKE_INSTRUCTIONS =
   `用 set_agent_wake 安排或取消下一次醒来：\n` +
   `- schedule：到时间就醒，不管她有没有回。适合"明早叫她起床"。\n` +
   `- followup：到时间检查，她回了就自动取消，没回才醒。适合说了话想追一下。间隔可以更短（最低 3 分钟）。\n` +
-  `- cancel：取消所有已安排的 wake 和 followup。\n` +
+  `- cancel：带 alarm_id 只取消那一个，不带取消全部闹钟（含 followup）；list 查看当前闹钟。\n` +
   `如果同一轮既要安排下一次醒来又要给她留言，先调用 set_agent_wake，等工具返回后再发送最终正文；不要在已经发出的正文后仅调用工具结束这一轮。\n` +
   `后台不能等人工批准——如果需要她操作，写一条简短消息告诉她。`
 
 export const DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION =
   `安排或取消下一次主动醒来。当前这次醒来如果没有想说的,不用调这个工具——` +
-  `直接回复 ${NOOP_MARKER} 加上简短原因即可。同一轮里最后一次调用生效。` +
+  `直接回复 ${NOOP_MARKER} 加上简短原因即可。schedule 是加一个闹钟，最多同时 5 个，可以多次调用；cancel 带 alarm_id 只取消那一个，不带取消全部（含 followup）；list 看现在挂着哪些。` +
   `如果还有想对她说的话,先调用这个工具,等返回后再发送最终正文。` +
-  `action: schedule（定时醒来）、followup（她没回才醒,间隔更短）、cancel（取消全部）。`
+  `action: schedule（定时醒来）、followup（她没回才醒,间隔更短）、cancel（取消闹钟）、list（查看当前闹钟）。`
 
 export type AgentWakePromptConfig = {
   instructions: string

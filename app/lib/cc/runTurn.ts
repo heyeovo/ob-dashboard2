@@ -193,7 +193,7 @@ export type RunTurnResult = {
   thinking?: string
   process?: Array<Record<string, unknown>>
   usage?: TurnUsage | null
-  wakeDecision?: AgentWakeDecision | null
+  wakeOps?: AgentWakeDecision[]
   cacheRefreshAt?: number
   modelActivityAt?: number
   /** 只写入消息 raw_json 的缓存排障黑匣子，不进入模型 Context。 */
@@ -579,6 +579,8 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       wakeState.schedule?.agent_wake_min_minutes || 10,
       wakeState.schedule?.agent_wake_enabled === true,
       wakeState.schedule?.followup_min_minutes || 3,
+      wakeState.schedule?.alarms || [],
+      turnKind === 'agent_wake' ? wakeState.schedule?.followup_at || '' : '',
     )
 
     const currentLive = peekSession(sessionId)
@@ -1353,7 +1355,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // usage 先发，让前端在 Haven 落库期间明确显示“正在保存”。
     if (turnUsage) send('usage', turnUsage)
 
-    const wakeDecision = endAgentWakeTurn(sessionId)
+    const wakeOps = endAgentWakeTurn(sessionId)
     wakeStateEnded = true
     const displaySegments = buildDisplaySegments(assistantText)
 
@@ -1366,7 +1368,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
         thinking: thinkingText,
         process: [...bucket.processEvents],
         usage: turnUsage,
-        wakeDecision,
+        wakeOps,
         cacheRefreshAt: confirmedCacheRefreshAt || undefined,
         modelActivityAt: modelRequestStartedAt || undefined,
         cacheDiagnostic: currentCacheDiagnostic(),
@@ -1491,7 +1493,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
           cache_refresh_at: confirmedCacheRefreshAt ? new Date(confirmedCacheRefreshAt).toISOString() : '',
           sample_silence: !interrupted,
           silence_policy_version: 'conversation-silence-v1',
-          wake_decision: wakeDecision,
+          wake_ops: wakeOps,
         },
       }), STORE_TIMEOUT_MS, null)
       storeInfo = rec
@@ -1595,9 +1597,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       idempotent_replay: storeInfo.idempotent_replay === true,
       continuity_turns: missingRouteTurns.length,
       display_segments: displaySegments,
-      next_wake: (wakeDecision?.action === 'schedule' || wakeDecision?.action === 'followup')
-        ? { at: (wakeDecision as { at: string; reason: string }).at, reason: (wakeDecision as { at: string; reason: string }).reason, followup: wakeDecision.action === 'followup' }
-        : undefined,
+      wake_ops: wakeOps,
     })
 
     send('after', {
@@ -1615,7 +1615,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
       thinking: thinkingText,
       process: [...bucket.processEvents],
       usage: turnUsage,
-      wakeDecision,
+      wakeOps,
       cacheRefreshAt: confirmedCacheRefreshAt || undefined,
       modelActivityAt: modelRequestStartedAt || undefined,
       cacheDiagnostic: currentCacheDiagnostic(),

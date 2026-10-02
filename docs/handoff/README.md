@@ -11,7 +11,7 @@
 | `HANDOFF-auto-tag-runtime.md` | 📦 已完成归档 | 已提交：Dashboard `8d29fdc`、Haven `4efd135` / `6cc656b` |
 | `HANDOFF-cc-VPS迁移.md` | 📦 已完成归档 | 核心迁移、B2 每日备份已完成；§21 列的附加项（额外加密副本、备份失败通知等）未排期 |
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
-| `HANDOFF-agent-wake-multi.md` | 🔨 进行中 | 2026-10-02 CC 写规格：每窗口最多 5 个闹钟，`next_agent_wake_at` 改为最早一条的镜像，ops 随轮次落库。待 Codex 在两边 `feat/wake-multi` 执行、CC 验收。OB Todo `362f0f178d764364` |
+| `HANDOFF-agent-wake-multi.md` | 🔍 待 CC 验收 | 2026-10-02 Codex 已在两边 `feat/wake-multi` 实现多闹钟、事务操作和镜像，正式契约已同步；仅推分支，未合并 main。测试及兼容说明见 handoff「实施交接」。CC 按第六节实测后合并，OB Todo `362f0f178d764364` 待验收后勾掉。 |
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
 | `HANDOFF-bucket-drawer-redesign.md` | 📦 已完成归档 | 2026-10-02 iPhone 走查通过。2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |

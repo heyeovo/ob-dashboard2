@@ -1,3 +1,4 @@
+import { parseWakeOps, type WakeDisplayOp } from './wakeDisplay'
 // /cc 聊天页的历史数据转换（9.5 从 useCcChat 原样抽出，纯函数，可单独测）。
 //
 // Haven 的一轮（user + assistant 一行）→ 界面上的消息；raw_json 里的
@@ -227,6 +228,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
   preCompactions: CcCompactionEvent[]
   displaySegments: DisplaySegment[] | null
   agentWake: { cause: string; at: string; status?: string } | null
+  wakeOps: WakeDisplayOp[] | undefined
   nextWake: { at: string; reason: string } | null
 } {
   const empty = {
@@ -248,6 +250,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
     preCompactions: [] as CcCompactionEvent[],
     displaySegments: null,
     agentWake: null,
+    wakeOps: undefined,
     nextWake: null,
   }
   if (!rawJson) return empty
@@ -368,6 +371,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
           status: String(rawWake.status || '').trim() || undefined,
         }
       : null,
+    wakeOps: parseWakeOps(raw.wake_ops),
     nextWake: rawNextWake && typeof rawNextWake.at === 'string' && rawNextWake.at
       ? { at: rawNextWake.at, reason: String(rawNextWake.reason || '') }
       : null,
@@ -547,10 +551,12 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
             : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
           : undefined,
         displaySegments: extra.displaySegments || buildDisplaySegments(t.assistant_text).segments,
+        wakeOps: extra.wakeOps,
         nextWake: extra.nextWake || undefined,
       })
-    } else if (wakeEvent && extra.nextWake) {
-      wakeEvent.nextWake = extra.nextWake
+    } else if (wakeEvent) {
+      wakeEvent.nextWake = extra.nextWake || undefined
+      wakeEvent.wakeOps = extra.wakeOps
     }
   }
   return out

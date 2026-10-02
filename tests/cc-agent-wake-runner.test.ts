@@ -35,6 +35,12 @@ beforeEach(() => {
 afterEach(() => { resetServerDrainForTests(); delete process.env.OMBRE_AGENT_WAKE_RUNNER_TOKEN })
 
 describe('Haven agent wake callback route', () => {
+  it('preserves combined Unicode reasons and forwards pending alarms', async () => {
+    const reason = Array(5).fill('🙂'.repeat(50)).join('；')
+    const alarms = [{ alarm_id: 'w_123abc', at: '2026-10-03T00:30:00Z', reason: '起床' }]
+    await POST(request({ ...validBody, cause: 'agent_schedule', reason, pending_alarms: alarms }))
+    expect(wake.run).toHaveBeenCalledWith(expect.objectContaining({ reason, pendingAlarms: alarms }))
+  })
   it('returns the existing deferred response during drain so Haven retries the schedule', async () => {
     configureServerDrain({ exit: vi.fn() }); startDrain('SIGTERM')
     const response = await POST(request(validBody))

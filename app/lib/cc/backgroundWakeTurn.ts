@@ -5,7 +5,7 @@ import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
 import { beginAgentWakeRun, getTurnByRequestId, patchAgentWakeSchedule, recordTurnStrict } from '@/app/lib/havenTurns'
-import { parseAgentWakeNoop } from '@/app/lib/cc/agentWakeTool'
+import { parseAgentWakeNoop, formatAgentWakeTime } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import { recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 import {
@@ -21,6 +21,7 @@ export type BackgroundWakeInput = {
   at: string
   cause: BackgroundWakeCause
   reason?: string
+  pendingAlarms?: { alarm_id: string; at: string; reason: string }[]
   laneId?: string
   scheduleVersion?: number
   leaseOwner?: string
@@ -35,12 +36,19 @@ export type BackgroundWakeResult =
   | { status: 'in_progress'; reason: string }
   | { status: 'failed'; error: string; failureKind?: 'authentication' | 'pro_limit'; retryAfterSeconds?: number }
 
-function wakePrompt(input: BackgroundWakeInput): string {
+export function wakePrompt(input: BackgroundWakeInput): string {
   const attributes = [
     `cause=${JSON.stringify(input.cause)}`,
     input.reason ? `reason=${JSON.stringify(input.reason)}` : '',
   ].filter(Boolean)
-  return `<agent_wake ${attributes.join(' ')}/>`
+  const pending = input.pendingAlarms?.length
+    ? `\n还挂着的闹钟：${input.pendingAlarms.map(alarm => {
+        const time = formatAgentWakeTime(alarm.at)
+        const wakeDay = formatAgentWakeTime(input.at).slice(0, 5)
+        return `${alarm.alarm_id} ${time.startsWith(wakeDay) ? time.slice(-5) : time} ${alarm.reason}`
+      }).join('；')}`
+    : ''
+  return `<agent_wake ${attributes.join(' ')}/>${pending}`
 }
 
 async function recordBackgroundOutcome(
@@ -226,7 +234,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
               reason: input.reason || '',
               status: noop?.status || '',
             },
-            wake_decision: turnResult.wakeDecision || undefined,
+            wake_ops: turnResult.wakeOps || undefined,
           },
           signal: input.signal,
         })

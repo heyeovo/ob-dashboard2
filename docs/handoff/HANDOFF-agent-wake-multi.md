@@ -86,3 +86,20 @@ followup（她没回才醒）是另一格，语义不变，**不在本次范围*
 ## 七、文档同步
 
 dashboard `docs/reference.md`「cc 数据持久化契约」唤醒条：多闹钟、镜像、ops 随轮次落库。Haven `docs/reference.md`：`agent_wake_store` 行与 cc 持久化节加闹钟表；REST 不新增路由，`/gateway/api/conversation/agent-wake` 返回加 `alarms`。完成后更新 `docs/handoff/README.md` 本行。
+
+## 实施交接（2026-10-02 Codex）
+
+两仓库均从当时最新 main 创建 `feat/wake-multi`；功能和第六节单测已实现，两端正式契约及 Haven README 已同步。只提交并推功能分支，不合并 main、不部署；状态为待 CC 验收。完成验收后再勾 OB Todo `362f0f178d764364` 并归档索引。
+
+验证：dashboard `npm run build` 通过；全量 Vitest 最终 463 passed / 5 failed / 0 skipped。四个失败为 Windows symlink EPERM：
+
+- `tests/artifacts.test.ts` → `lists newest first and ignores symlinks and other files`
+- `tests/cc-dirs.test.ts` → `拒绝文件 symlink 逃出根目录`
+- `tests/cc-dirs.test.ts` → `工作模式内置 yanzhi files 目录；闲聊、未挂载和 symlink 挂载点都不加`
+- `tests/room-b.test.ts` → `rejects symbolic links in the room file path`
+
+遵照不跳过要求，移除了 cc-dirs 文件逃逸用例原有的 Windows skipIf。第五个失败是既有 `tests/dashboard-proxy.test.ts` → `accepts a valid session and rejects forged, expired, and retired plaintext cookies` 的末位篡改偶发问题（已有技术债 T-01）；此前一次全量及单独复测通过，最终全量再次失败。未改登录逻辑，需 CC 在 Linux 全量检查结果中核对。Haven 全量 pytest：267 passed，4 subtests passed。
+
+实施时补充的兼容决定：`pending_alarms` 也持久为 run 快照，恢复时沿用；升级前未完成的旧 run 在首次新增列迁移中补齐已响 ID、原因和剩余闹钟快照；无持久 run 的旧 caller 仍仅消耗与 wake_at 相等的闹钟。对应回归测试已覆盖，claim/lease/CAS/调度算法未改。
+
+下一步仅由 CC 执行第六节线上多闹钟及旧窗口迁移实测、Linux 全量测试，然后验收合并两分支。边界继续为最多 5 条、followup 单条、设置只显示最近一条及数量；不扩大到逐条设置管理或时间策略修改。
