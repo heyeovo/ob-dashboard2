@@ -5,7 +5,7 @@ import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
 import { beginAgentWakeRun, getTurnByRequestId, patchAgentWakeSchedule, recordTurnStrict } from '@/app/lib/havenTurns'
-import { parseAgentWakeNoop, formatAgentWakeTime } from '@/app/lib/cc/agentWakeTool'
+import { AGENT_WAKE_NOOP_MARKER, parseAgentWakeNoop, formatAgentWakeTime } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import { recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 import {
@@ -183,6 +183,11 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         }
         const noop = parseAgentWakeNoop(turnResult.assistantText || '')
         const assistantText = noop ? '' : turnResult.assistantText || ''
+        const process = noop
+          ? turnResult.process?.filter(event => event.type !== 'text'
+            || typeof event.text !== 'string'
+            || (event.text.trim() !== '' && !event.text.includes(AGENT_WAKE_NOOP_MARKER)))
+          : turnResult.process
         const session = current.sessionSnapshot.session
         if (!session) {
           await recordBackgroundOutcome(turnResult, wakeId, 'indeterminate', 'haven_session_missing')
@@ -214,7 +219,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
             usage: turnResult.usage || undefined,
             cache_diagnostic: turnResult.cacheDiagnostic || undefined,
             thinking: turnResult.thinking || undefined,
-            process: turnResult.process?.length ? turnResult.process : undefined,
+            process: process?.length ? process : undefined,
             display_segments: assistantText
               ? turnResult.displaySegments || buildDisplaySegments(assistantText)
               : buildDisplaySegments(''),
@@ -249,7 +254,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         }
         return {
           status: 'completed',
-          turn: { ...turnResult, assistantText, displaySegments: buildDisplaySegments(assistantText) },
+          turn: { ...turnResult, assistantText, process, displaySegments: buildDisplaySegments(assistantText) },
           laneId: current.laneId,
           turnId: persisted.turnId,
         }

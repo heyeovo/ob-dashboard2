@@ -188,13 +188,22 @@ describe('Dashboard background wake runner', () => {
     }))
   })
 
-  it('persists a no-op wake without creating visible assistant text', async () => {
+  it('persists a no-op wake without marker text while retaining tool and room events', async () => {
+    const keptProcess = [
+      { type: 'thinking', id: 'thinking-1', text: '她现在应该在忙，先不打扰。' },
+      { type: 'tool', id: 'tool-1', tool: { id: 't1', name: 'room', input: { action: 'enter' }, status: 'done' } },
+      { type: 'room', id: 'visit-1', roomId: 'room_abc', roomTitle: '', enteredAt: 1000, leftAt: 2000 },
+    ]
     runner.run.mockResolvedValueOnce({
       ok: true,
       phase: 'succeeded',
       assistantText: '[agent_wake_noop] 路过了，不打扰',
       thinking: '她现在应该在忙，先不打扰。',
-      process: [{ type: 'thinking', id: 'thinking-1', text: '她现在应该在忙，先不打扰。' }],
+      process: [
+        ...keptProcess,
+        { type: 'text', id: 'noop-1', text: '\n[agent_wake_noop] 路过了，不打扰' },
+        { type: 'text', id: 'blank-1', text: ' \n\t' },
+      ],
       modelActivityAt: Date.parse('2026-08-31T12:55:01Z'),
       cacheDiagnostic: {
         version: 1,
@@ -218,12 +227,12 @@ describe('Dashboard background wake runner', () => {
     const result = await runBackgroundWake({
       sessionId: 'window-1', wakeId: 'wake-noop', at: '2026-08-31T12:55:00Z', cause: 'cache_keepalive',
     })
-    expect(result).toMatchObject({ status: 'completed', turn: { assistantText: '' } })
+    expect(result).toMatchObject({ status: 'completed', turn: { assistantText: '', process: keptProcess } })
     expect(haven.record).toHaveBeenCalledWith(expect.objectContaining({
       assistantText: '',
       raw: expect.objectContaining({
         thinking: '她现在应该在忙，先不打扰。',
-        process: expect.arrayContaining([expect.objectContaining({ type: 'thinking' })]),
+        process: keptProcess,
         cache_diagnostic: expect.objectContaining({
           dashboard_instance_id: 'dashboard-test',
           iterator: 'cold_resumed',
