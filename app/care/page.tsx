@@ -340,8 +340,10 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
     return result
   }, [items])
 
-  const visible = groups[domain]
-  const completedVisible = completed.filter(item => item.domain === domain)
+  const newestFirst = (a: TodoItem, b: TodoItem) =>
+    (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
+  const visible = [...groups[domain]].sort(newestFirst)
+  const completedVisible = completed.filter(item => item.domain === domain).sort(newestFirst)
   const domains: TodoDomain[] = groups.unclassified.length || completed.some(item => item.domain === 'unclassified') ? ['tech', 'emotional', 'unclassified'] : ['tech', 'emotional']
 
   async function expandCompleted() {
