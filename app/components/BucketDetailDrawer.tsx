@@ -104,7 +104,7 @@ function beijingTime(value: string, event = false) {
 
 export default function BucketDetailDrawer(props: Props) {
   return (
-    <DetailPanel open={!!(props.selected || props.detailLoading)} onClose={props.onClose} mode="drawer" loading={props.detailLoading} className="bucket-drawer-scroll" preserveHeight={props.editing}>
+    <DetailPanel open={!!(props.selected || props.detailLoading)} onClose={props.onClose} mode="drawer" loading={props.detailLoading} className="bucket-drawer-scroll" preserveHeight={props.editing} keyboardAware={props.editing}>
       {props.selected && <BucketContent key={props.selected.id} {...props} selected={props.selected} />}
     </DetailPanel>
   )

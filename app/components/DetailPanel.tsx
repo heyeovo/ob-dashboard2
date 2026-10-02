@@ -24,13 +24,14 @@ interface DetailPanelProps {
   loading?: boolean
   className?: string
   preserveHeight?: boolean
+  keyboardAware?: boolean
   children: ReactNode
 }
 
 const DRAG_THRESHOLD = 100 // px of downward drag to close
 
 export default function DetailPanel({
-  open, onClose, mode = 'drawer', width, loading = false, className = '', preserveHeight = false, children,
+  open, onClose, mode = 'drawer', width, loading = false, className = '', preserveHeight = false, keyboardAware = false, children,
 }: DetailPanelProps) {
   if (!open) return null
 
@@ -40,7 +41,7 @@ export default function DetailPanel({
   return (
     <>
     {isDrawer ? (
-      <DrawerPanel onClose={onClose} width={w} className={className} loading={loading} preserveHeight={preserveHeight}>
+      <DrawerPanel onClose={onClose} width={w} className={className} loading={loading} preserveHeight={preserveHeight} keyboardAware={keyboardAware}>
         {children}
       </DrawerPanel>
     ) : (
@@ -54,14 +55,48 @@ export default function DetailPanel({
 
 // ─── Drawer: desktop right panel / mobile bottom sheet ───
 function DrawerPanel({
-  onClose, width, className, loading, preserveHeight, children,
+  onClose, width, className, loading, preserveHeight, keyboardAware, children,
 }: {
   onClose: () => void; width: string; className: string; loading: boolean; children: ReactNode
-  preserveHeight: boolean
+  preserveHeight: boolean; keyboardAware: boolean
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const readingHeightRef = useRef(0)
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current
+    const sheet = sheetRef.current
+    if (!overlay || !sheet) return
+    const reset = () => {
+      overlay.style.top = ''
+      overlay.style.height = ''
+      overlay.style.bottom = ''
+      sheet.style.maxHeight = '88vh'
+    }
+    if (!keyboardAware) { reset(); return }
+    const updateViewport = () => {
+      if (window.matchMedia('(min-width: 768px)').matches) {
+        reset()
+        return
+      }
+      const top = window.visualViewport?.offsetTop ?? 0
+      const height = window.visualViewport?.height ?? window.innerHeight
+      overlay.style.top = `${top}px`
+      overlay.style.height = `${height}px`
+      overlay.style.bottom = 'auto'
+      sheet.style.maxHeight = `${height * .88}px`
+    }
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+    window.visualViewport?.addEventListener('resize', updateViewport)
+    window.visualViewport?.addEventListener('scroll', updateViewport)
+    return () => {
+      window.removeEventListener('resize', updateViewport)
+      window.visualViewport?.removeEventListener('resize', updateViewport)
+      window.visualViewport?.removeEventListener('scroll', updateViewport)
+    }
+  }, [keyboardAware])
   useLayoutEffect(() => {
     const sheet = sheetRef.current
     if (!sheet) return
@@ -125,7 +160,7 @@ function DrawerPanel({
   }, [])
 
   return (
-    <BodyPortal><div className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
+    <BodyPortal><div ref={overlayRef} className="fixed inset-0 z-50" style={{ animation: 'dpFadeIn 0.18s ease-out' }}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-[var(--color-text-primary)]/20 backdrop-blur-sm" onClick={dismiss} />
 
