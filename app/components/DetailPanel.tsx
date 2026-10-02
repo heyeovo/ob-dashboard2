@@ -1,7 +1,7 @@
 'use client'
 import BodyPortal from '@/app/components/BodyPortal'
 import type { ReactNode } from 'react'
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback, useEffect, useLayoutEffect } from 'react'
 
 /**
  * Unified detail panel — shared shell for drawers and modals.
@@ -23,13 +23,14 @@ interface DetailPanelProps {
   width?: string          // e.g. "max-w-2xl", "max-w-4xl" — defaults by mode
   loading?: boolean
   className?: string
+  preserveHeight?: boolean
   children: ReactNode
 }
 
 const DRAG_THRESHOLD = 100 // px of downward drag to close
 
 export default function DetailPanel({
-  open, onClose, mode = 'drawer', width, loading = false, className = '', children,
+  open, onClose, mode = 'drawer', width, loading = false, className = '', preserveHeight = false, children,
 }: DetailPanelProps) {
   if (!open) return null
 
@@ -39,7 +40,7 @@ export default function DetailPanel({
   return (
     <>
     {isDrawer ? (
-      <DrawerPanel onClose={onClose} width={w} className={className} loading={loading}>
+      <DrawerPanel onClose={onClose} width={w} className={className} loading={loading} preserveHeight={preserveHeight}>
         {children}
       </DrawerPanel>
     ) : (
@@ -53,11 +54,24 @@ export default function DetailPanel({
 
 // ─── Drawer: desktop right panel / mobile bottom sheet ───
 function DrawerPanel({
-  onClose, width, className, loading, children,
+  onClose, width, className, loading, preserveHeight, children,
 }: {
   onClose: () => void; width: string; className: string; loading: boolean; children: ReactNode
+  preserveHeight: boolean
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const readingHeightRef = useRef(0)
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current
+    if (!sheet) return
+    if (preserveHeight) {
+      if (readingHeightRef.current) sheet.style.height = `${readingHeightRef.current}px`
+    } else {
+      sheet.style.height = ''
+      readingHeightRef.current = sheet.getBoundingClientRect().height
+    }
+  }, [preserveHeight, children])
   const [dragY, setDragY] = useState(0)
   const [dragging, setDragging] = useState(false)
   const [dismissing, setDismissing] = useState(false)
@@ -131,6 +145,7 @@ function DrawerPanel({
 
       {/* Mobile: bottom sheet */}
       <div
+        ref={sheetRef}
         className={`md:hidden absolute left-0 right-0 bottom-0 float-surface rounded-t-2xl shadow-2xl flex flex-col
           transition-transform duration-300 ease-out`}
         onClick={e => e.stopPropagation()}
