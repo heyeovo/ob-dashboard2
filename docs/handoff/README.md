@@ -7,7 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
-| `HANDOFF-batch-1002.md` | 🔨 进行中 | 2026-10-02 小 bug 批次；统一分支 `fix/batch-1002` 已推，noop 修复 `153ecd8`、Todo 倒序 `68b2e0f`、控件居中 `5abae80`；补充短 ID / 复制已改、用户已确认提交推送。定向检查通过，全部修完交 Claude 统一验收、合并上线。 |
+| `HANDOFF-batch-1002.md` | 🔨 进行中 | `fix/batch-1002` 已推；新增日期跳转 `03b9106`、时间线桶状态 `66d6c0a`、房间列表顶部 `8cbaa79`，既有 noop / Todo 修复见正文。定向验证通过，记忆格不加状态；全部修完交 Claude 统一验收、合并上线。 |
 | `HANDOFF-4c-1-polish.md` | 🔎 待 iPhone 走查 | 两轮均由 CC 验收（Linux 全量测试含符号链接用例、build）并于 2026-10-01 合并 main（`f0cc3bd`、`6b262c6`）：提示词页、全高加载态、日记日期与缓存、日回顾共享周条与补写入口、待办手机全屏编辑 |
 | `HANDOFF-auto-tag-runtime.md` | 📦 已完成归档 | 已提交：Dashboard `8d29fdc`、Haven `4efd135` / `6cc656b` |
 | `HANDOFF-cc-VPS迁移.md` | 📦 已完成归档 | 核心迁移、B2 每日备份已完成；§21 列的附加项（额外加密副本、备份失败通知等）未排期 |

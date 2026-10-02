@@ -6,7 +6,8 @@
 - 目标统一分支：`fix/batch-1002`，已从实时 `origin/main`（`7ffba8b`）建立。
 - 第一项 bug 原分支已推 `d1f1f5f`，现已 cherry-pick 到统一分支为 `153ecd8`；统一分支已推送，修复未合并、未上线。
 - 本窗口 Todo 创建时间倒序（`68b2e0f`）与条目控件居中（`5abae80`）已分别提交并推送；后续窗口只处理当次指定范围。
-- 用户补充 Todo 短 ID 与复制入口，已改、已验证，并单独回复“推”授权本项代码与交接文档提交、推送；提交名为 `feat: show copyable short todo IDs`。
+- 用户补充 Todo 短 ID 与复制入口已提交、推送：`ae95084` — `feat: show copyable short todo IDs`。
+- 随后补充三项已分别提交并推送：日期跳转 `03b9106`、时间线桶卡片状态 `66d6c0a`、房间列表顶部间距 `8cbaa79`；定向验证通过，记忆格不加状态，房间详情页不动。
 - 用户已确认本窗口代码与 handoff / 索引的提交、推送；交接文档单独提交。工作区另有用户的未跟踪 `.claude/`，不得顺带提交。
 
 ## 批次工作约定
@@ -71,6 +72,18 @@
 - 验证：页面 ESLint、`git diff --check` 通过；运行页面实际 ID 按钮与复制函数，核对普通 / 桶短 ID、完整 ID 写入剪贴板、失败提示、现有 Token、两个列表入口均通过。未做浏览器 / iPhone 实机验收；完整 build 和测试仍留批次结束。
 - 维护契约：未命中正式文档同步项，仅更新批次 handoff 与索引；本节与代码一同提交。commit：`feat: show copyable short todo IDs`。
 - 人工验收：普通及桶待办均显示正确短 ID；点击后粘贴得到完整待办 ID，条目不展开、不切换完成状态；已完成列表同样检查。
+
+### 补充：日期跳转 / 时间线状态 / 房间顶部（三项已分别提交并推送）
+
+用户已确认修改清单，明确排除记忆格状态标签，并单独回复“推”授权本三项及对应文档提交、推送；后续修改仍需适用的提交授权。
+
+1. 日期跳转：`app/cc/CcMessageStream.tsx` 保存目标日期请求，在消息挂载的 layout commit 定位，替代只等待约 480ms 的事件重试；目标尚未挂载时不执行自动滚到底部，切换会话丢弃旧请求。不改历史读取 API、聊天日划分或持久化。新增 `tests/cc-scroll-jumps.test.ts` 覆盖延迟历史挂载、重复选择、切换会话、普通历史 prepend，4 项通过。commit：`03b9106` — `fix: retain calendar jump until history renders`。
+2. 时间线桶卡片状态：仅 `app/memory/MemoryCard.tsx` 的非 compact 卡片，标题右侧复用 `.bucket-state` + `text-meta`；按抽屉操作状态显示已钉选、已消化、已解决、已归档、悬念中、噪声，多个状态允许换行。记忆格 compact 分支输出与修改前完全一致；不改抽屉或状态操作。直接静态渲染核对全部状态、无状态时不显示空框、记忆格 HTML 不变，均通过。同步正式约定：`AGENTS.md` 与 `DESIGN.md`。commit：`66d6c0a` — `fix: restore status chips on timeline bucket cards`。
+3. 房间列表顶部：`app/room/page.tsx` 加列表专用 `.room-list-page`，`app/globals.css` 仅该类的顶部间距为 20px；全站 body 已处理顶部安全区，列表页不再重复叠加。房间详情 `.room-page` 原样保留。同步 `DESIGN.md`。commit：`8cbaa79` — `fix: remove duplicate top inset on room list`。
+
+共同验证：上述页面 / 组件与新测试文件的定向 ESLint、`git diff --check` 通过；未执行全量测试或 build。浏览器与 iPhone 实机验收尚未执行。
+
+人工验收：日期弹窗选择较早日期并跳转，落在该聊天日的第一条消息，重复选择仍生效，普通向上加载历史保持位置；时间线单行 / 长标题及多状态卡片小框在标题右侧，抽屉操作后状态刷新，记忆格无新标签；iPhone 房间列表顶部与待办 / 日记子页面一致，返回按钮可点，房间详情布局不变。
 
 全部 bug 修完后，由 Claude / CC：
 
