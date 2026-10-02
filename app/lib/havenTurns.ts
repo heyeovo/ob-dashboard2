@@ -211,6 +211,7 @@ export type AgentWakeSchedule = {
   last_model_activity_at: string
   last_cache_refresh_at: string
   last_heartbeat_at: string
+  alarms?: { alarm_id: string; at: string; reason: string }[]
   next_agent_wake_at: string
   wake_reason: string
   conversation_silence_check_at: string

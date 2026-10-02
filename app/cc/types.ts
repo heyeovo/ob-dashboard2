@@ -1,3 +1,4 @@
+import type { WakeDisplayOp } from './wakeDisplay'
 // /cc 聊天页的前端类型。故意跟 Haven 的 HavenTurn 分开：
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
 
@@ -202,6 +203,7 @@ export type CcMessage = {
    */
   renderKey?: string
   wakeEvent?: { cause: string; at: string; status?: string }
+  wakeOps?: WakeDisplayOp[]
   nextWake?: { at: string; reason: string }
   requestId?: string
   roundId?: number

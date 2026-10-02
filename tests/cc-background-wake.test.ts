@@ -18,7 +18,18 @@ vi.mock('@/app/lib/havenTurns', () => ({
   patchAgentWakeSchedule: haven.patch,
 }))
 
-import { runBackgroundWake } from '@/app/lib/cc/backgroundWakeTurn'
+import { runBackgroundWake, wakePrompt } from '@/app/lib/cc/backgroundWakeTurn'
+
+describe('multi-alarm wake prompt', () => {
+  it('includes only pending alarms when present and preserves tag attributes', () => {
+    const input = { sessionId: 'window-1', at: '2026-10-02T12:00:00Z', cause: 'agent_schedule' as const, reason: '药；饭' }
+    expect(wakePrompt(input)).toBe('<agent_wake cause="agent_schedule" reason="药；饭"/>')
+    expect(wakePrompt({ ...input, pendingAlarms: [
+      { alarm_id: 'w_000001', at: '2026-10-02T13:00:00Z', reason: '吃药' },
+      { alarm_id: 'w_000002', at: '2026-10-03T00:30:00Z', reason: '起床' },
+    ] })).toBe('<agent_wake cause="agent_schedule" reason="药；饭"/>\n还挂着的闹钟：w_000001 21:00 吃药；w_000002 10-03 08:30 起床')
+  })
+})
 import { resetSessionTurnCoordinatorForTests, runForegroundSessionTurn } from '@/app/lib/cc/sessionTurnCoordinator'
 
 beforeEach(() => {
@@ -202,7 +213,7 @@ describe('Dashboard background wake runner', () => {
         tool_names: ['WebSearch', 'WebFetch'],
         mcp_server_names: ['agent-wake'],
       },
-      wakeDecision: { action: 'schedule', at: '2026-08-31T13:25:00Z', reason: '稍后再看' },
+      wakeOps: [{ action: 'schedule', alarm_id: 'w_123abc', at: '2026-08-31T13:25:00Z', reason: '稍后再看' }],
     })
     const result = await runBackgroundWake({
       sessionId: 'window-1', wakeId: 'wake-noop', at: '2026-08-31T12:55:00Z', cause: 'cache_keepalive',
@@ -223,7 +234,7 @@ describe('Dashboard background wake runner', () => {
       agentWakeUpdate: expect.objectContaining({
         wake_cause: 'cache_keepalive',
         agent_wake: expect.objectContaining({ status: '路过了，不打扰' }),
-        wake_decision: expect.objectContaining({ action: 'schedule' }),
+        wake_ops: [expect.objectContaining({ action: 'schedule' })],
       }),
     }))
   })

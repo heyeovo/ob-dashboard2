@@ -1,4 +1,6 @@
 'use client'
+
+import { parseWakeOps } from './wakeDisplay'
 import { mergeTurnMessages } from './turnRecovery'
 import { fetchWithDeploymentRetry, DeploymentRetryTimeout, DEPLOY_RETRY_NOTE, detachedWaitExpired } from './deploymentRetry'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -1765,6 +1767,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           deliveryState: replayed ? 'replayed' : 'saved',
           displaySegments: displaySegments?.segments || m.displaySegments,
           revealDisplaySegments: m.revealDisplaySegments,
+          wakeOps: parseWakeOps(payload.wake_ops) || m.wakeOps,
           nextWake: nextWake && typeof nextWake.at === 'string' && nextWake.at
             ? { at: nextWake.at, reason: String(nextWake.reason || '') }
             : m.nextWake,

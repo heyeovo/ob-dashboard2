@@ -147,7 +147,7 @@
 
 #### T-01｜`dashboard-auth` 篡改末位字符用例偶发失败
 
-- **现象：**`tests/dashboard-auth.test.ts`「compares login input and verifies only authentic, unexpired sessions」约三成概率失败。token 随机生成，用例把最后一个字符换成 `x`/`y` 再断言验签失败；base64url 末位含不参与解码的填充位，换掉后可能解出同样的字节，验签仍通过。2026-10-01 Linux 全量连续复现，单跑与 main 上同样偶发，与当时改动无关。
+- **现象：**`tests/dashboard-auth.test.ts`「compares login input and verifies only authentic, unexpired sessions」约三成概率失败。2026-10-02 多闹钟验证也观察到 `tests/dashboard-proxy.test.ts`「accepts a valid session and rejects forged, expired, and retired plaintext cookies」同类偶发失败（最终全量失败，单独复测通过）。token 随机生成，用例把最后一个字符换成 `x`/`y` 再断言验签失败；base64url 末位含不参与解码的填充位，换掉后可能解出同样的字节，验签仍通过。2026-10-01 Linux 全量连续复现，单跑与 main 上同样偶发，与当时改动无关。
 - **修法：**改为篡改签名中段字符（或解码后翻转一个字节再编码），不动鉴权实现。
 - **验收：**该用例连续跑 20 次全部通过。
 

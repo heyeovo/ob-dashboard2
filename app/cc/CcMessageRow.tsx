@@ -1,4 +1,6 @@
 'use client'
+
+import { wakeDisplayLines } from './wakeDisplay'
 import BodyPortal from '@/app/components/BodyPortal'
 import Link from 'next/link'
 import RoomRevealCard from '@/app/components/RoomRevealCard'
@@ -347,11 +349,7 @@ export default function CcMessageRow({
           {message.wakeEvent.status ? (
             <div className="text-[var(--color-text-secondary)]">这次没有发消息 · {message.wakeEvent.status}</div>
           ) : null}
-          {message.nextWake ? (
-            <div>
-              ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
-            </div>
-          ) : null}
+          {wakeDisplayLines(message).map((line, index) => <div key={index}>{line}</div>)}
         </div>
         {message.thinking ? (
           <div className="mt-2 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-meta">
@@ -840,11 +838,7 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
-        {message.nextWake ? (
-          <div className="mt-1 text-2xs text-[var(--color-text-tertiary)]">
-            ↳ 下次唤醒 {shortClock(message.nextWake.at)}{message.nextWake.reason ? ` · ${message.nextWake.reason}` : ''}
-          </div>
-        ) : null}
+        {wakeDisplayLines(message).map((line, index) => <div key={index} className="mt-1 text-2xs text-[var(--color-text-tertiary)]">{line}</div>)}
 
         {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
         {message.interrupted && !message.streaming ? (

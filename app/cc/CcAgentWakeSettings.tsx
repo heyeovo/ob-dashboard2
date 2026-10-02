@@ -149,10 +149,10 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] p-3">
         <div className="font-medium text-[var(--color-text-heading)]">Claude 安排的下一次 wake</div>
         <div className="mt-1 text-[var(--color-text-tertiary)]">
-          {schedule.next_agent_wake_at ? `${fmt(schedule.next_agent_wake_at)}${schedule.wake_reason ? ` · ${schedule.wake_reason}` : ''}` : '没有安排'}
+          {schedule.next_agent_wake_at ? `${fmt(schedule.next_agent_wake_at)}${schedule.wake_reason ? ` · ${schedule.wake_reason}` : ''}${(schedule.alarms?.length || 0) > 1 ? ` · 共 ${schedule.alarms!.length} 条` : ''}` : '没有安排'}
         </div>
         {schedule.next_agent_wake_at ? (
-          <button className={`${BUTTON} mt-2`} disabled={saving || busy} onClick={() => void save({}, 'cancel_next')}>取消下一次 wake</button>
+          <button className={`${BUTTON} mt-2`} disabled={saving || busy} onClick={() => void save({}, 'cancel_next')}>取消全部闹钟</button>
         ) : null}
         {schedule.followup_at ? (
           <div className="mt-2 pt-2 border-t border-[var(--color-border-light)]">

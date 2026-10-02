@@ -55,7 +55,13 @@ export async function POST(request: Request) {
     wakeId,
     at: new Date(dueAt).toISOString(),
     cause,
-    reason: String(body.reason || '').trim().slice(0, 90),
+    reason: Array.from(String(body.reason || '').trim()).slice(0, 254).join(''),
+    pendingAlarms: Array.isArray(body.pending_alarms) ? body.pending_alarms.slice(0, 5).flatMap(item => {
+      if (!item || typeof item !== 'object') return []
+      const alarm = item as Record<string, unknown>
+      if (typeof alarm.alarm_id !== 'string' || typeof alarm.at !== 'string' || !Number.isFinite(Date.parse(alarm.at))) return []
+      return [{ alarm_id: alarm.alarm_id, at: alarm.at, reason: Array.from(String(alarm.reason || '')).slice(0, 50).join('') }]
+    }) : [],
     laneId,
     scheduleVersion,
     leaseOwner,

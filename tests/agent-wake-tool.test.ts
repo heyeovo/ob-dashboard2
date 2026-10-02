@@ -5,6 +5,7 @@ import {
   agentWakeMcpModelSurface,
   parseAgentWakeNoop,
   recordAgentWakeDecision,
+  agentWakeTurnSummary,
 } from '@/app/lib/cc/agentWakeTool'
 import { builtInMcpModelSurfaces, builtInMcpServerNames } from '@/app/lib/cc/builtInMcp'
 
@@ -14,6 +15,36 @@ afterEach(() => {
 })
 
 describe('set_agent_wake turn-local decision', () => {
+  it('adds multiple alarms, lists Beijing times, rejects the sixth and cancels by id', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-02T12:00:00Z'))
+    beginAgentWakeTurn('s1', 'foreground', 10, true, 3,
+      [{ alarm_id: 'w_old123', at: '2026-10-02T12:10:00Z', reason: '原有' }])
+    for (let i = 1; i <= 4; i++) recordAgentWakeDecision('s1', { action: 'schedule', after_minutes: i * 20, reason: `新${i}` })
+    expect(() => recordAgentWakeDecision('s1', { action: 'schedule', after_minutes: 10 })).toThrow('最多同时挂 5 个闹钟，先取消一个')
+    expect(recordAgentWakeDecision('s1', { action: 'list' })).toEqual({ action: 'list' })
+    expect(agentWakeTurnSummary('s1').split('\n')).toHaveLength(5)
+    expect(agentWakeTurnSummary('s1')).toContain('w_old123 · 10-02 20:10 · 原有')
+    expect(() => recordAgentWakeDecision('s1', { action: 'cancel', alarm_id: 'absent' })).toThrow('不存在')
+    expect(recordAgentWakeDecision('s1', { action: 'cancel', alarm_id: 'w_old123' })).toMatchObject({ action: 'cancel', at: '2026-10-02T12:10:00Z' })
+    expect(agentWakeTurnSummary('s1')).not.toContain('w_old123')
+    recordAgentWakeDecision('s1', { action: 'followup', after_minutes: 3, reason: '追问1' })
+    recordAgentWakeDecision('s1', { action: 'followup', after_minutes: 4, reason: '追问2' })
+    expect(agentWakeTurnSummary('s1')).toContain('followup · 10-02 20:04 · 追问2')
+    expect(agentWakeTurnSummary('s1')).not.toContain('追问1')
+    const ops = endAgentWakeTurn('s1')
+    expect(ops).toHaveLength(7)
+    expect(ops.filter(op => op.action === 'schedule')).toHaveLength(4)
+  })
+
+  it('cancels all alarms and followup without recording list calls', () => {
+    beginAgentWakeTurn('s1', 'foreground', 10, true, 3,
+      [{ alarm_id: 'w_old123', at: '2026-10-02T12:10:00Z', reason: '原有' }], '2026-10-02T12:15:00Z')
+    recordAgentWakeDecision('s1', { action: 'cancel' })
+    recordAgentWakeDecision('s1', { action: 'list' })
+    expect(agentWakeTurnSummary('s1')).toBe('没有挂着的闹钟')
+    expect(endAgentWakeTurn('s1')).toEqual([{ action: 'cancel' }])
+  })
   it('keeps all wake guidance in the top-level tool description', () => {
     const surface = agentWakeMcpModelSurface()
     expect(surface).not.toHaveProperty('instructions')
@@ -27,13 +58,15 @@ describe('set_agent_wake turn-local decision', () => {
       .not.toContainEqual(expect.objectContaining({ name: 'ombre_agent_wake' }))
   })
 
-  it('keeps only the last valid call in one turn', () => {
+  it('keeps valid calls in order in one turn', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-31T12:00:00Z'))
     beginAgentWakeTurn('s1', 'background')
     recordAgentWakeDecision('s1', { action: 'schedule', after_minutes: 30, reason: '先看看' })
     recordAgentWakeDecision('s1', { action: 'cancel' })
-    expect(endAgentWakeTurn('s1')).toEqual({ action: 'cancel' })
+    expect(endAgentWakeTurn('s1')).toEqual([
+      expect.objectContaining({ action: 'schedule', reason: '先看看' }), { action: 'cancel' },
+    ])
   })
 
   it('enforces interval, timezone, seven-day and reason boundaries', () => {
