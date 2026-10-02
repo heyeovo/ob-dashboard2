@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { ccLaneId } from '@/app/lib/cc/ccOptions'
 import { getExactContextAnalysis } from '@/app/lib/ccSession'
 import type { CredMode } from '@/app/lib/ccEnv'
+import { redactRoomDoorsDeep } from '@/app/lib/roomPrivacy'
 
 export const runtime = 'nodejs'
 
@@ -16,5 +17,5 @@ export async function POST(request: NextRequest) {
     laneId: ccLaneId(cred, providerId),
     force: body.force === true,
   })
-  return Response.json(result, { status: result.ok ? 200 : 409 })
+  return Response.json(redactRoomDoorsDeep(result), { status: result.ok ? 200 : 409 })
 }

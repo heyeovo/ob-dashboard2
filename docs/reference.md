@@ -25,6 +25,8 @@ production 必须配置以下六项：
 | 目录/文件 | 说明 |
 |-----------|------|
 | `app/page.tsx` | 主页（时间线/记忆格） |
+| `app/room/` / `app/room/[id]/` | 言之的房间：两列门牌与按北京时间分组的来访时间线（before 分页）；关门只展示门，开门可看正文、房间文件和封存来访过程；hash 定位并展开来访。主页 Clawd 是独立入口，圆点只以本机 lastSeenAt 比较新的未打开来访。 |
+| `app/api/rooms/` | 登录保护的房间公开代理；仅 GET 门牌、来访、单间详情，递归移除 note；files 列表 / 内容先检查 opened，否则 404，再检查真实路径、所有祖先及文件不是符号链接，限制在 `.room/<id>/` 内。HTML 复用作品沙箱播放器；未提供 door-snapshot 或 POST visits 的浏览器代理。 |
 | `app/memory/` | 记忆库（时间线 / 记忆格双视图） |
 | `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接和钉选桶、日记、最近普通桶、feel、随机高重要度桶长期层；滚动日期分列正文、工具、附件视觉/文件正文、召回、有效 thinking、时间戳、消息框架和 agent wake 的 token 预估，较早 raw 日期的留档 thinking 显示为已剥离，手动设为“不带”的日期默认折叠且不改变任何日期模式；损坏的滚动窗口可经二次确认舍弃旧原生细节并用当前 raw 日期的 Haven 正文重建 transcript，不复制窗口或页面历史；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
 | `app/collaborators/` | 协作者提示词独立页：`[id]` 身份和模块，`[id]/base` 基础提示词，`[id]/modules/[moduleId]` 模块编辑，`new` 新建；目录权限在工作台维护，经 `/api/cc-personas` 存 Haven。 |
@@ -49,7 +51,7 @@ production 必须配置以下六项：
 
 ## cc 数据持久化契约
 
-- 房间（A）：`processCollector` 的 room 状态只活在单轮；在房间里的 thinking、文字、工具与结果不进 SSE、可见正文或可见 raw。进门收走同条 assistant 消息紧邻的 thinking，出门 / open / 结束（含异常）只留 `type: room` 门牌。来访先以 Bearer 写 Haven `/api/rooms/visits`，失败不阻断轮次保存且门牌记 `sealed: false`；只进房间无正文也存轮次，wake 的门牌进入 raw.process。Haven 是封存事实源；原生 transcript 保留完整上下文，浏览器上下文核对投影封存房间内容。文件留在 `YANZHI_FILES_ROOT/.room/<room_id>/`，浏览器文件 API 不可达；open 后服务端附文件清单。在房间中需人工批准的操作自动拒绝，Write/Edit 和经校验的 mkdir/touch、单引号 echo/printf 或引号 heredoc Bash 仅对 .room 内路径自动允许（拒绝越界和符号链接），files/command 不发也不进工作台。自建引擎过滤 room；A 不建房间页、不注入每日门牌。
+- 房间：`processCollector` 的 room 状态只活在单轮；在房间里的 thinking、文字、工具与结果不进 SSE、可见正文或可见 raw。进门收走同条 assistant 消息紧邻的 thinking，出门 / open / 结束（含异常）只留 `type: room` 门牌。来访先以 Bearer 写 Haven `/api/rooms/visits`，失败不阻断轮次保存且门牌记 `sealed: false`；只进房间无正文也存轮次，wake 的门牌进入 raw.process。Haven 是封存事实源；原生 transcript 保留完整上下文，浏览器上下文核对投影封存房间内容。文件留在 `YANZHI_FILES_ROOT/.room/<room_id>/`，浏览器文件 API 不可达；open 后服务端附文件清单。在房间中需人工批准的操作自动拒绝，Write/Edit 和经校验的 mkdir/touch、单引号 echo/printf 或引号 heredoc Bash 仅对 .room 内路径自动允许（拒绝越界和符号链接），files/command 不发也不进工作台。自建引擎过滤 room。滚动窗口在日回顾之后注入「【我的房间 · 今天的门牌】」；Haven 按 session_id + context_revision:chat_day 冻结（chat_day 沿用窗口时区与日界线），无未打开房间或读取失败时省略，固定窗口仅有 handoff 房间数量。浏览器上下文审计与模型上下文诊断递归把门牌整节替换成标题 + 已封存；固定说明模块由用户自己维护，不写入代码。房间页可看开门后的正文、文件和来访过程，便条永不公开。Clawd 的 lastSeenAt 只在本机 localStorage，属于允许丢失的界面偏好。
 
 > 通用硬规矩（Haven 持久化、localStorage、密钥掩码）见 `AGENTS.md`。以下是各机制的具体契约。
 

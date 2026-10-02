@@ -3,11 +3,11 @@ import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { artifactBaseName, isArtifactName } from '@/app/lib/artifactMeta'
+import ArtifactPlayer from '@/app/components/ArtifactPlayer'
 
 // 全屏查看一个作品。页面本身在 iframe 沙箱里跑（无同源），
 // 服务端响应头也带 CSP sandbox，直接打开 /api/artifacts/xxx 一样隔离。
 
-const SANDBOX = 'allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock allow-downloads'
 
 export default function ArtifactViewPage({ params }: { params: Promise<{ name: string }> }) {
   const { name: rawName } = use(params)
@@ -58,13 +58,7 @@ export default function ArtifactViewPage({ params }: { params: Promise<{ name: s
         ) : null}
       </header>
       {valid ? (
-        <iframe
-          key={name}
-          src={src}
-          title={artifactBaseName(name)}
-          sandbox={SANDBOX}
-          className="min-h-0 w-full flex-1 border-0 bg-[var(--color-surface)]"
-        />
+        <ArtifactPlayer src={src} title={artifactBaseName(name)} />
       ) : (
         <div className="m-auto text-sm text-[var(--color-text-tertiary)]">这个名字不对，找不到作品。</div>
       )}

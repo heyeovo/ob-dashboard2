@@ -57,6 +57,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 - 移动端优先：新功能和样式调整先保证手机端体验
 - 弹窗统一 `DetailPanel`（`mode="drawer"` 右侧滑入，`mode="modal"` 居中）；自己写的全屏浮层包 `BodyPortal` 挂到 body，否则会被底部 Tab 压住（见 `DESIGN.md`「层级」）
 - 卡片统一 `Card`（variant: interactive / outline / ghost / empty）
+- 房间的门牌与关门大门共用 `RoomDoor`；聊天成功 open 用 `RoomRevealCard` 原位显影（历史和减少动态效果不播），房间来访复用聊天折叠样式与 `CcToolDialog`，HTML 共用 `ArtifactPlayer` 沙箱。
 - 手机子页面返回入口统一 `SubpageBackButton`（小圆形半透明玻璃、居中 SVG 箭头与不小于 44px 的点击范围），不要各页另画箭头；正文大标题随页面滚动，主页面顶栏保持固定
 - 页面自写的加载 / 空状态早返回也必须撑满 `min-h-screen`；日记编辑与新增共用 `JournalDateField`，按北京时间显示并唤起系统日期时间选择。
 - 主页与日回顾周条共用 `WeekCalendar` 和 `home-week-*` 样式，新增选中态不另画一套星期、日期或圆点。
