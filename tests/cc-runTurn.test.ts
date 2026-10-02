@@ -1424,6 +1424,16 @@ describe('runTurn：房间封存', () => {
   function enter(id = 'enter-1', room = 'room_abcdef123456') {
     return [toolUse(id, roomTool, { action: 'enter', title: '礼物' }), toolResult(id, '进门 [' + room + '] 礼物 · 锁至 2099-01-01T00:00:00+08:00')]
   }
+  it('FastMCP 包成 JSON 的房间结果也能解析锁和标题', async () => {
+    const handle = driveTurn([initMsg(),
+      toolUse('enter-j', roomTool, { action: 'enter' }),
+      toolResult('enter-j', JSON.stringify({ result: '进门 [room_abcdef123456] 礼物 · 锁至 2099-01-01T00:00:00+08:00' })),
+      toolUse('leave-j', roomTool, { action: 'leave' }), toolResult('leave-j', JSON.stringify({ result: '出门 [room_abcdef123456] 礼物' })),
+      textDelta('好了'), resultMsg()], { config: roomConfig() })
+    await handle.promise
+    const door = handle.events.find(e => e.event === 'room_leave')!.data
+    expect(door).toMatchObject({ roomId: 'room_abcdef123456', roomTitle: '礼物', lockUntil: '2099-01-01T00:00:00+08:00' })
+  })
   it('收走同条消息紧邻 thinking，封存各类事件，只把门牌和出门后的正文写库', async () => {
     const handle = driveTurn([initMsg(), thinkingDelta('门前私密思考'), ...enter(),
       thinkingDelta('房间内思考'), textDelta('房间内正文'),

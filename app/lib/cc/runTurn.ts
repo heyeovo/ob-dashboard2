@@ -62,7 +62,7 @@ import { slimToolInputForStorage } from '@/app/lib/artifactMeta'
 import { buildCcOptions, cacheRelevantFingerprint, isWebTool, MAX_CC_TOOL_CALLS_PER_TURN, sdkModelForProvider, setTurnWebSettings, storedMcpResult, storedWebResult, type TurnConfig } from '@/app/lib/cc/ccOptions'
 import { writeSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
 import { deleteTurnBucket, newTurnBucket, setTurnBucket, appendTextProcess, appendThinkingProcess, closeThinkingProcess, enterRoom, leaveRoom } from '@/app/lib/cc/processCollector'
-import { isRoomTool, roomFileList, sealRoomVisits } from './room'
+import { isRoomTool, roomFileList, roomResultText, sealRoomVisits } from './room'
 import { TurnState, type TurnPhase } from '@/app/lib/cc/turnState'
 import { recallForPrompt } from '@/app/lib/havenRecall'
 import { estimateTextTokens, splitRecallModules } from '@/app/lib/recallDisplay'
@@ -1126,6 +1126,7 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
             ? storedWebResult(msg.tool_use_result ?? block.content, toolName, config.webSettings)
             : storedMcpResult(msg.tool_use_result ?? block.content)
           const roomTool = isRoomTool(toolName, config.sdkMcpServers)
+          if (roomTool) rawResult = roomResultText(rawResult)
           const action = String((tool.input as Record<string, unknown>)?.action || '')
           if (privateTool) {
             tool.status = isError ? 'error' : 'completed'

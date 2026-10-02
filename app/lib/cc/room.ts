@@ -9,6 +9,15 @@ export function isRoomTool(name: string, servers: Record<string, unknown>): bool
   return Object.keys(servers).some(server => name === `mcp__${server}__room`)
 }
 
+/** FastMCP 把返回值包成 {"result": "..."}；房间结果按正文解析和保存。 */
+export function roomResultText(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as { result?: unknown }
+    if (parsed && typeof parsed.result === 'string') return parsed.result
+  } catch {}
+  return raw
+}
+
 /** Only explicit native file paths are accepted. Bash gets a narrowly scoped shell grammar. */
 export async function isPrivateRoomWrite(name: string, input: Record<string, unknown>, cwd: string): Promise<boolean> {
   if (!['Write', 'Edit', 'Bash'].includes(name)) return false

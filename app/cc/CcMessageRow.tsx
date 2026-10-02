@@ -769,7 +769,7 @@ export default function CcMessageRow({
 
               if (event.type === 'room') {
                 const duration = (event.durationMs || 0) < 60_000 ? '不到 1 分钟' : Math.floor((event.durationMs || 0) / 60_000) + ' 分钟'
-                const lock = event.lockUntil ? new Date(event.lockUntil).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).slice(5, 16) : ''
+                const lock = event.lockUntil && !Number.isNaN(Date.parse(event.lockUntil)) ? new Date(event.lockUntil).toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' }).slice(5, 16) : ''
                 return <div key={event.id} className="cc-think-toggle">
                   {event.leftAt == null ? '言之在房间里…' : '言之进了房间 · 待了 ' + duration}
                   {lock ? ' · 锁到 ' + lock : ''}
