@@ -14,7 +14,7 @@
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
 | `HANDOFF-bucket-drawer-redesign.md` | 📦 已完成归档 | 2026-10-02 iPhone 走查通过。2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |
-| `HANDOFF-deploy-drain.md` | 🔎 待线上实测 | 2026-10-02 Codex 实现，CC 验收（Linux 全量 445 + build、代码逐段对规格）后合并 main（`3b2db49`）。这次部署旧容器尚无排空，从下一次 push 起生效，届时按 §六 线上 4 项实测；验证结果及下一步见正文 §八。只动 dashboard；Pro 自动化同次重试限制见 CC-09 |
+| `HANDOFF-deploy-drain.md` | 🔎 剩 1 项实测 | 2026-10-02 Codex 实现，CC 验收合并 main（`3b2db49`）。线上实测（push `55cb177`）：①同轮 push 后继续工作直到收尾 ✅（18:29:42 开始排空，轮次存完后旧容器退出、标记清空）；②构建期间另一窗口发消息 ✅（因 Pro 订阅全局锁排在 CC 轮次后，最终由旧容器回复）；④锁屏后接上 ✅。③切换期间自动重发未测到：须 CC push 后立即结束本轮、不占 Pro 锁，再由用户发消息。观感问题记 CC-10 |
 | `HANDOFF-room.md` | 🔨 进行中 | A 已上线并实测（③④⑥⑧ 通过、⑦ 以单测为准、门牌锁时间修复 `a7e9ca2`），①②⑤ 待主窗与唤醒实测。**B 规格 2026-10-02 定稿（第五节）**，视觉稿 `assets/room-b-preview.html`，待 Codex 执行、CC 验收；动两个仓库。OB Todo `797b44d13354469e` |
 | `HANDOFF-cc-turn-survives-disconnect.md` | 📦 已完成归档 | 2026-10-02 iPhone 实测 ①–⑤ 通过（`e2d3605`、`fea2030`）；⑥待批准卡片未遇到，下次顺带确认 |
 | `HANDOFF-cc-daily-rolling-context.md` | 📦 已完成归档 | 按天滚动在用；文内“低优先级后续”未排期 |
