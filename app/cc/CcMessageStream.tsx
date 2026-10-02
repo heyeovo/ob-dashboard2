@@ -7,7 +7,7 @@ import { visibleChatDay } from './format'
 import { MODE_LABEL } from '@/app/lib/ccModes'
 import type { CcChatScope } from './CcChatScope'
 
-function CcScrollJumps({
+export function CcScrollJumps({
   children,
   sessionId,
   firstMessageId,
@@ -32,6 +32,8 @@ function CcScrollJumps({
   const scrollTopRef = useRef(0)
   // 停在底部时跟着内容长高往下走；自己往上翻就不拽回来
   const stickRef = useRef(true)
+  const pendingDayRef = useRef<string | null>(null)
+  const [jumpVersion, setJumpVersion] = useState(0)
   // iOS Safari 不支持 CSS scroll anchoring：进入选择模式时每行多出勾选框、气泡变窄、
   // 上方内容整体变高，画面会被推到很前面。滚动时记下屏幕中间那条消息，布局变化后按它复位。
   const anchorRef = useRef<{ id: string; top: number } | null>(null)
@@ -84,7 +86,16 @@ function CcScrollJumps({
     const node = scrollRef.current
     if (!node) return
     const previous = previousContentRef.current
-    if (!previous || previous.sessionId !== sessionId) {
+    if (previous && previous.sessionId !== sessionId) pendingDayRef.current = null
+    const requestedDay = pendingDayRef.current
+    if (requestedDay) {
+      const target = node.querySelector<HTMLElement>(`[id="chat-day-${requestedDay}"]`)
+      if (target) {
+        node.scrollTop += target.getBoundingClientRect().top - node.getBoundingClientRect().top
+        pendingDayRef.current = null
+      }
+      stickRef.current = false
+    } else if (!previous || previous.sessionId !== sessionId) {
       node.scrollTop = node.scrollHeight
     } else if (
       previous.firstMessageId !== firstMessageId
@@ -108,31 +119,23 @@ function CcScrollJumps({
       scrollHeight: node.scrollHeight,
     }
     update()
+    if (pendingDayRef.current) stickRef.current = false
     window.addEventListener('resize', update)
     return () => {
       window.removeEventListener('resize', update)
     }
-  }, [children, firstMessageId, lastMessageId, lastMessageVersion, pendingCount, sessionId, update])
+  }, [children, firstMessageId, lastMessageId, lastMessageVersion, pendingCount, sessionId, update, jumpVersion])
 
   // 月历跳到某一天：先松开「跟到底」，否则那天的消息一渲染、内容长高，就被拽回底部。
-  // 行和 Markdown 渲染完之前锚点可能还不在或还在动，等几帧再对一次。
+  // 请求保留到目标日期真正挂载，在 layout effect 中定位，不依赖固定时长的重试。
   useEffect(() => {
     const onJump = (event: Event) => {
       const day = (event as CustomEvent<string>).detail
       const node = scrollRef.current
-      if (!node || !day) return
+      if (!node || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return
+      pendingDayRef.current = day
       stickRef.current = false
-      let tries = 0
-      const align = () => {
-        const target = document.getElementById(`chat-day-${day}`)
-        if (target && node.contains(target)) {
-          stickRef.current = false
-          node.scrollTop += target.getBoundingClientRect().top - node.getBoundingClientRect().top
-          update()
-        }
-        if (++tries < 6) window.setTimeout(align, 80)
-      }
-      requestAnimationFrame(align)
+      setJumpVersion(version => version + 1)
     }
     window.addEventListener('cc-jump-to-day', onJump)
     return () => window.removeEventListener('cc-jump-to-day', onJump)
