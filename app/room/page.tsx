@@ -54,7 +54,7 @@ export default function RoomPage() {
   const ordered = [...rooms].sort((a, b) => a.status !== b.status ? a.status === 'closed' ? -1 : 1 : (b.status === 'closed' ? b.last_visit : b.opened_at).localeCompare(a.status === 'closed' ? a.last_visit : a.opened_at))
   const groups = Map.groupBy(visits, visit => roomDate(visit.entered_at, 'day'))
   const today = roomDate(new Date().toISOString(), 'day')
-  return <main className="room-page min-h-screen">
+  return <main className="room-page room-list-page min-h-screen">
     <SubpageBackButton label="返回主页" href="/" /><div className="room-kicker text-2xs">ROOMS · 言之的房间</div><h1 className="room-title text-3xl mt-1">房间</h1><p className="text-xs room-muted mt-1">他自己的地方。门开了你才看得到里面。</p>
     {loading ? <p className="text-sm room-muted mt-8">正在看门牌…</p> : error && !rooms.length ? <p className="text-sm room-muted mt-8">{error}</p> : !rooms.length ? <div className="room-empty"><RoomDoor kind="closed" large /><p className="text-sm room-muted">还没有房间</p></div> : <>
       <div className="room-grid">{ordered.map(room => <Link key={room.id} href={`/room/${room.id}`}>

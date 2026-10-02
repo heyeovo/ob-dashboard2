@@ -2011,6 +2011,7 @@ body:has(.home-page) > .rain-layer { display: none; }
 .home-room-entrance img { width: 100%; height: auto; filter: drop-shadow(var(--room-clawd-shadow)); }
 .home-room-dot { position: absolute; left: -6px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--color-primary); box-shadow: 0 0 0 3px var(--room-reveal-fill); }
 .room-page { max-width: 640px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px calc(90px + env(safe-area-inset-bottom)); color: var(--color-text-primary); }
+.room-page.room-list-page { padding-top: 20px; }
 .room-title, .room-prose { font-family: var(--font-display); }
 .room-prose { line-height: 1.95; }
 .room-title { color: var(--color-text-heading); }
