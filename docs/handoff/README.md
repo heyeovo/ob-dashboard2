@@ -7,7 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
-| `HANDOFF-batch-1002.md` | 🔨 进行中 | 10-04 最新 main 已合入 `fix/batch-1002`；召回入口 `e72b4b4`、搜索玻璃 `0aafb1d` 已本地提交，待推送。5 项定向验证及搜索 CSS 检查通过，iPhone 待验收；此前修复见正文，全部修完交 Claude 统一测试、合并上线。 |
+| `HANDOFF-batch-1002.md` | 🔨 进行中 | 10-04 最新 main 已合入 `fix/batch-1002`；召回入口 `e72b4b4`、搜索玻璃 `0aafb1d` 已提交并推送。5 项定向验证及搜索 CSS 检查通过，iPhone 待验收；此前修复见正文，全部修完交 Claude 统一测试、合并上线。 |
 | `HANDOFF-4c-1-polish.md` | 🔎 待 iPhone 走查 | 两轮均由 CC 验收（Linux 全量测试含符号链接用例、build）并于 2026-10-01 合并 main（`f0cc3bd`、`6b262c6`）：提示词页、全高加载态、日记日期与缓存、日回顾共享周条与补写入口、待办手机全屏编辑 |
 | `HANDOFF-auto-tag-runtime.md` | 📦 已完成归档 | 已提交：Dashboard `8d29fdc`、Haven `4efd135` / `6cc656b` |
 | `HANDOFF-cc-VPS迁移.md` | 📦 已完成归档 | 核心迁移、B2 每日备份已完成；§21 列的附加项（额外加密副本、备份失败通知等）未排期 |
