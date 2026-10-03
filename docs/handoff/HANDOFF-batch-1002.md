@@ -2,6 +2,8 @@
 
 ## 当前状态
 
+- 2026-10-04 聊天两项已分别本地提交：召回入口 `e72b4b4`、搜索框玻璃 `0aafb1d`，尚未推送。已刷新远端并核对已有 bug 全部归入统一分支；将最新 `origin/main`（`038757b`）无冲突合入 `fix/batch-1002`（merge `e3bfae8`），保留批次历史，未修改或推送 main。详细验证及验收边界见末节。
+
 - 2026-10-03 桶正文编辑两项已分别提交、推送到 `fix/batch-1002`：字号和尺寸保持 `9f4096f`，键盘可见区域适配 `c79962e`。开工时分支为 `b02e14c`；没有合并或改动 main，iPhone 实机仍待验收。
 
 - 仓库：`ob-dashboard2`。这一批跨窗口修复，最后由 Claude / CC 统一验收、合并并上线。
@@ -107,3 +109,16 @@
 验证：`tests/bucket-content-editor.test.ts` 6 项（视觉字号 / 宽度换算、短正文、长正文、外观缩放、键盘限高与视口偏移），`tests/bucket-drawer-viewport.test.ts` 3 项（真实 drawer 的 layout / resize 回调，覆盖高度保持、键盘视口边界、默认抽屉、退出与桌面恢复）；分别通过。修改组件及定向测试 TypeScript 无诊断；新组件 / 两个测试 ESLint 通过。现有 `BucketDetailDrawer.tsx` 的 2 个 lint 错误、`DetailPanel.tsx` 的 2 个错误 / 1 个警告均与修改前一致，本次未新增；不扩散修复旧诊断。完整 build / 全量测试仍按批次留最终统一执行。
 
 本地浏览器预览因登录页阻挡未完成，未修改登录配置、未操作真实桶。临时预览页面已删除，预览服务已停止。iPhone 实机验收尚未执行：检查短 / 长正文点击编辑前后字形、换行、文字起点；长正文内部滚动；键盘出现后可通过抽屉滚动访问顶部关闭和保存 / 取消；退出编辑及其他抽屉原样。不能用定向测试代替实机验收或宣称已上线。
+
+## 2026-10-04：聊天召回入口 / 搜索框（两项已本地提交）
+
+用户明确要求继续在 `fix/batch-1002` 提交，每项一笔；本窗口授权归并统一分支及这两项提交，未授权 push 或合并 main。
+
+分支核对：原首项 `d1f1f5f` 已归入为 `153ecd8`，后续已记录修复全部在统一分支，不重复 cherry-pick。最新 main 的三个已有提交 `044a75f`、`3f60a9c`、`038757b` 经 `e3bfae8` 合入修复分支，无冲突、不改写历史。
+
+1. `e72b4b4` — `fix: move chat recall entry beside token count`：仅 `app/cc/CcMessageRow.tsx` 删除助手顶部召回整行，底部 Token 左侧放记忆库 Tab 同款 SVG；仅 `recall.injected` 为真显示，点击原 `onOpenRecall` 并阻止消息选择冒泡。图标 1em / currentColor，固定至少 44×44 CSS px 点击范围，读屏名称含条数；无用量或关闭 Token 显示仍保留召回入口。召回面板、用户消息、持久化不改。正式视觉约定同步 `DESIGN.md`。
+2. `0aafb1d` — `fix: use composer glass tokens for chat search`：仅 `app/cc/CcChatComposer.tsx` 搜索框背景改为 `--glass-fill`，标准及 WebKit 背景模糊引用 `--glass-blur`；圆角、边框、布局、搜索结果操作不改。同步 `DESIGN.md`，不新增或变更全局 Token。
+
+验证：实际消息组件临时渲染检查覆盖已召回 / 未召回 / 无召回数据、图标位于 Token 左侧、无用量且无正文时入口保留；与现有 `tests/wake-display.test.ts` 共 5 项通过。临时检查文件已删除，不加入提交。初次测试因沙箱临时文件 rename EPERM 未运行，获准沙箱外运行后通过。消息组件 ESLint 两处 `react-hooks/set-state-in-effect` 与 HEAD 基线相同行号、规则，无新增诊断；搜索组件 ESLint 通过。通过现有 Tailwind/PostCSS 实际生成样式，核对玻璃填充及标准 / WebKit 模糊声明；`git diff --check` 通过。完整 build / 全量测试仍留批次结束统一执行。
+
+待人工验收：手机与桌面看已召回消息顶部无空行、Token 左侧小图标大小颜色一致、点击打开原面板；未召回消息无入口，关闭 Token 显示后已召回入口仍可点。打开聊天搜索并让消息滚到框下，确认下方文字不能直接穿透，搜索、上下跳转、关闭仍正常。未做浏览器 / iPhone 实机验收，未上线。本窗口后只继续用户下一次指定范围，最终统一测试与上线仍交 Claude / CC。
