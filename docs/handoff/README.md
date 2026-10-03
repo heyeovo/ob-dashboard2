@@ -13,7 +13,7 @@
 | `HANDOFF-cc-VPS迁移.md` | 📦 已完成归档 | 核心迁移、B2 每日备份已完成；§21 列的附加项（额外加密副本、备份失败通知等）未排期 |
 | `HANDOFF-cc-agent-wake.md` | 📦 已完成归档 | 主动唤醒日常在用；唤醒时段、主动性等后续想法在 OB Todo |
 | `HANDOFF-agent-wake-multi.md` | 📦 已完成归档 | 2026-10-02 Codex 实现，CC 验收合并 main。线上多闹钟日常使用正常，2026-10-04 归档；OB Todo `362f0f17` 已勾 |
-| `HANDOFF-wake-quiet.md` | 🔍 已实现，待 CC 验收合并 | 2026-10-04 CC 写规格：唤醒三档（响 / 安静 / 不送），第一期 Bark，dashboard + Haven 两仓 `feat/wake-quiet`。Codex 已实现三档解析、历史显示与 Bark 级别映射并补测试；两仓功能分支交 CC 验收合并及线上四项验收。OB Todo `ec32abef`；第二期 Web Push 见 `1bc113bb` |
+| `HANDOFF-wake-quiet.md` | 🔎 已合并待上线 | 2026-10-04 Codex 实现，CC 验收：Linux 全量 Vitest 503 + build、Haven pytest 277 通过，逐段核对标记解析 / process 去标记 / delivery 写入与 Bark passive 后两边本地合并。dashboard 推送会改唤醒工具说明，导致各窗口全量重写一次缓存，上线时机由小羊挑；Haven 可先推（缺 delivery 按 loud）。剩第九节线上验收。OB Todo `ec32abef` |
 | `HANDOFF-cc-chat-mode-tooling.md` | 📦 已完成归档 | 闲聊 / 工作模式工具边界 |
 | `HANDOFF-cc-context-compaction.md` | 📦 已完成归档 | Context 展示与压缩 |
 | `HANDOFF-bucket-drawer-redesign.md` | 📦 已完成归档 | 2026-10-02 iPhone 走查通过。2026-10-02 CC 写规格，Codex 实现（`2b372ee`），CC 验收：Linux build + 全量 408 测试通过，逐行对过旧版行为（事件时间、噪声、权重来源一致；相似记忆可点开跳记忆库）。视觉事实源 `assets/bucket-drawer-v2.html`。`/api/moments`、merge-*、`/api/to-journal` 已无抽屉调用方，route 暂留 |
