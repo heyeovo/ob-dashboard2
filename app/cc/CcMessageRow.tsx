@@ -20,7 +20,7 @@ import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 // 一条消息。
 //
 // 用户侧：实心气泡贴右，纯文本（用户说的话不当 markdown 解析）。长按 360ms / 右键出菜单。
-// 助手侧：召回按钮行（有召回时）→ thinking / 工具过程 → 正文。
+// 助手侧：thinking / 工具过程 → 正文 → 底部操作与召回入口。
 //
 // thinking 的行为（跟 Polaris 不同，用户明确要的）：
 //   流式中自动展开跟着输出，答完**保持展开**，只能手动收起。
@@ -711,22 +711,6 @@ export default function CcMessageRow({
     >
       {selectionCheckbox}
       <div className="cc-assistant-block min-w-0 flex-1">
-        {/* 只有两个人聊，不再每条标头像和名字；这一行只剩召回按钮，没召回就不占位。以后群聊再按条件加回来 */}
-        {message.recall ? (
-          <div className="cc-namerow">
-            <button
-              type="button"
-              className="cc-recall-btn"
-              onClick={() => onOpenRecall?.(message)}
-              title="点开看这一轮各模块注入了什么"
-            >
-              {message.recall.injected
-                ? `记忆 ${message.recall.card_count} · 约 ${message.recall.estimated_tokens ?? 0} token`
-                : '未召回'}
-            </button>
-          </div>
-        ) : null}
-
         {/* Thinking、助手中间回复与工具按真实顺序展示；末尾文字作为正式回答。 */}
         {processGroups.length > 0 ? (
           <div className="cc-process">
@@ -859,7 +843,7 @@ export default function CcMessageRow({
         ) : null}
 
         {/* 行内操作和时间 */}
-        {(!message.streaming && message.text) || message.deliveryState === 'detached' || message.deliveryState === 'persistence_unknown' ? (
+        {(!message.streaming && message.text) || message.recall?.injected || message.deliveryState === 'detached' || message.deliveryState === 'persistence_unknown' ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-meta text-[var(--color-text-tertiary)]">
             {!message.streaming && message.text ? <>
             <button
@@ -949,8 +933,22 @@ export default function CcMessageRow({
               </div>
             ) : null}
 
-            {usage && showTokenInfo ? (
-              <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} />
+            {message.recall?.injected || (usage && showTokenInfo) ? (
+              <div className="ml-auto flex items-center gap-1">
+                {message.recall?.injected ? (
+                  <button
+                    type="button"
+                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center hover:text-[var(--color-text-secondary)]"
+                    aria-label={`查看本轮记忆召回（${message.recall.card_count} 条）`}
+                    onClick={event => { event.stopPropagation(); onOpenRecall?.(message) }}
+                  >
+                    <svg viewBox="0 0 20 20" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="10" cy="10" r="7" /><path d="M10 5.5v4.5l3 2" />
+                    </svg>
+                  </button>
+                ) : null}
+                {usage && showTokenInfo ? <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} /> : null}
+              </div>
             ) : null}
           </div>
         ) : null}
