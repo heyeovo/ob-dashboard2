@@ -5,7 +5,7 @@ import { peekSession } from '@/app/lib/ccSession'
 import { runTurn, type RunTurnResult } from '@/app/lib/cc/runTurn'
 import { loadBackgroundTurnInputs } from '@/app/lib/cc/turnInputs'
 import { beginAgentWakeRun, getTurnByRequestId, patchAgentWakeSchedule, recordTurnStrict } from '@/app/lib/havenTurns'
-import { AGENT_WAKE_NOOP_MARKER, parseAgentWakeNoop, formatAgentWakeTime } from '@/app/lib/cc/agentWakeTool'
+import { AGENT_WAKE_NOOP_MARKER, AGENT_WAKE_QUIET_MARKER, parseAgentWakeQuiet, parseAgentWakeNoop, formatAgentWakeTime } from '@/app/lib/cc/agentWakeTool'
 import { buildDisplaySegments } from '@/app/lib/cc/displaySegments'
 import { recordTurnOutcome } from '@/app/lib/cc/turnOutcome'
 import {
@@ -182,12 +182,18 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
           }
         }
         const noop = parseAgentWakeNoop(turnResult.assistantText || '')
-        const assistantText = noop ? '' : turnResult.assistantText || ''
+        const quiet = noop ? null : parseAgentWakeQuiet(turnResult.assistantText || '')
+        const hasQuietMarker = !noop && (turnResult.assistantText || '').trim().startsWith(AGENT_WAKE_QUIET_MARKER)
+        const assistantText = noop ? '' : hasQuietMarker ? quiet?.text || '' : turnResult.assistantText || ''
         const process = noop
           ? turnResult.process?.filter(event => event.type !== 'text'
             || typeof event.text !== 'string'
             || (event.text.trim() !== '' && !event.text.includes(AGENT_WAKE_NOOP_MARKER)))
-          : turnResult.process
+          : hasQuietMarker
+            ? turnResult.process?.map(event => event.type === 'text' && typeof event.text === 'string' && event.text.trim().startsWith(AGENT_WAKE_QUIET_MARKER)
+              ? { ...event, text: event.text.trim().slice(AGENT_WAKE_QUIET_MARKER.length).trim() }
+              : event)
+            : turnResult.process
         const session = current.sessionSnapshot.session
         if (!session) {
           await recordBackgroundOutcome(turnResult, wakeId, 'indeterminate', 'haven_session_missing')
@@ -221,7 +227,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
             thinking: turnResult.thinking || undefined,
             process: process?.length ? process : undefined,
             display_segments: assistantText
-              ? turnResult.displaySegments || buildDisplaySegments(assistantText)
+              ? hasQuietMarker ? buildDisplaySegments(assistantText) : turnResult.displaySegments || buildDisplaySegments(assistantText)
               : buildDisplaySegments(''),
           },
           agentWakeUpdate: {
@@ -238,6 +244,7 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
               at: input.at,
               reason: input.reason || '',
               status: noop?.status || '',
+              ...(!noop ? { delivery: quiet ? 'quiet' : 'loud' } : {}),
             },
             wake_ops: turnResult.wakeOps || undefined,
           },

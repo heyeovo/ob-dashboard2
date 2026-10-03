@@ -55,6 +55,29 @@ beforeEach(() => {
 })
 
 describe('Dashboard background wake runner', () => {
+  it.each(['quiet', 'loud', 'noop', 'empty'])('persists %s delivery and preserves non-marker events', async delivery => {
+    const body = '第一段。\n第二段。'
+    const text = delivery === 'quiet' ? ` \n[agent_wake_quiet] ${body}`
+      : delivery === 'noop' ? '[agent_wake_noop] [agent_wake_quiet] 不说'
+      : delivery === 'empty' ? '[agent_wake_quiet] \n' : body
+    const tool = { type: 'tool', id: 'tool', tool: { id: 't', name: 'room', input: {}, status: 'done' } }
+    const room = { type: 'room', id: 'room', roomId: 'r', enteredAt: 1, leftAt: 2 }
+    const middle = { type: 'text', id: 'middle', text: '正文中 [agent_wake_quiet] 原样保留' }
+    runner.run.mockResolvedValueOnce({ ok: true, phase: 'succeeded', assistantText: text,
+      process: [{ type: 'text', id: 'body', text }, tool, room, middle],
+      displaySegments: { version: 3, segments: [{ kind: 'text', markdown: text }] },
+    })
+    const result = await runBackgroundWake({ sessionId: 'window-1', wakeId: 'delivery-test',
+      at: '2026-10-04T12:00:00Z', cause: 'agent_schedule' })
+    const saved = haven.record.mock.calls[0][0]
+    const expected = delivery === 'noop' || delivery === 'empty' ? '' : body
+    expect(saved.assistantText).toBe(expected)
+    expect(saved.raw.display_segments.segments.map((segment: { markdown: string }) => segment.markdown).join('')).toBe(expected)
+    expect(saved.raw.process).toEqual(expect.arrayContaining([tool, room, middle]))
+    expect(saved.raw.process.find((event: { id: string }) => event.id === 'body')?.text).toBe(delivery === 'noop' ? undefined : expected)
+    expect(saved.agentWakeUpdate.agent_wake.delivery).toBe(delivery === 'noop' ? undefined : delivery === 'quiet' ? 'quiet' : 'loud')
+    expect(result).toMatchObject({ status: 'completed', turn: { assistantText: expected, process: saved.raw.process } })
+  })
   it('restores one lane and invokes the common turn without persistence or SSE', async () => {
     const result = await runBackgroundWake({
       sessionId: 'window-1', wakeId: 'wake-1', at: '2026-08-31T12:55:00Z', cause: 'cache_keepalive',

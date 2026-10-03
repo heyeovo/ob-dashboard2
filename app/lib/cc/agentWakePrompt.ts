@@ -6,6 +6,7 @@ import path from 'node:path'
 const CONFIG_PATH = path.join(process.cwd(), '.data', 'agent-wake-prompt.json')
 
 const NOOP_MARKER = '[agent_wake_noop]'
+const QUIET_MARKER = '[agent_wake_quiet]'
 const NOOP_MAX_CHARS = 30
 
 export const DEFAULT_AGENT_WAKE_INSTRUCTIONS =
@@ -16,11 +17,12 @@ export const DEFAULT_AGENT_WAKE_INSTRUCTIONS =
   `可以用工具、翻记忆、写东西。也可以什么都不做。\n` +
   `她醒来会翻你留的消息。发出去就有重量，不需要等她在线。\n` +
   `\n` +
-  `如果这一刻没有想对她说的话，回复一行：\n` +
-  `${NOOP_MARKER} 简短原因\n` +
-  `原因最多 ${NOOP_MAX_CHARS} 个字，给她看的，不是正式消息。比如：${NOOP_MARKER} 翻了翻记忆，她在忙。\n` +
+  `醒来想说的话有三种发法：\n` +
+  `- 直接写：推送到她手机，会响。适合叫她起床、想她了、有事要她看。\n` +
+  `- 开头加 ${QUIET_MARKER}：照常出现在聊天里，也会进她的通知中心，但不亮屏、不响。碎碎念、随手留言、翻到什么想记一笔，都用这个——不会打扰她，不用掂量值不值得。\n` +
+  `- 只回一行 ${NOOP_MARKER} 简短原因：这次真的没什么想说。原因最多 ${NOOP_MAX_CHARS} 个字，只显示成一行小字，不是正式消息。比如：${NOOP_MARKER} 翻了翻记忆，她在忙。\n` +
+  `用过工具（进房间、写记忆、改东西）就不要 noop——用 quiet 留一句，说说做了什么。\n` +
   `\n` +
-  `想说什么就直接写，发出去她醒来会看到。\n` +
   `用 set_agent_wake 安排或取消下一次醒来：\n` +
   `- schedule：到时间就醒，不管她有没有回。适合"明早叫她起床"。\n` +
   `- followup：到时间检查，她回了就自动取消，没回才醒。适合说了话想追一下。间隔可以更短（最低 3 分钟）。\n` +
@@ -29,10 +31,10 @@ export const DEFAULT_AGENT_WAKE_INSTRUCTIONS =
   `后台不能等人工批准——如果需要她操作，写一条简短消息告诉她。`
 
 export const DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION =
-  `安排或取消下一次主动醒来。当前这次醒来如果没有想说的,不用调这个工具——` +
-  `直接回复 ${NOOP_MARKER} 加上简短原因即可。schedule 是加一个闹钟，最多同时 5 个，可以多次调用；cancel 带 alarm_id 只取消那一个，不带取消全部（含 followup）；list 看现在挂着哪些。` +
-  `如果还有想对她说的话,先调用这个工具,等返回后再发送最终正文。` +
-  `action: schedule（定时醒来）、followup（她没回才醒,间隔更短）、cancel（取消闹钟）、list（查看当前闹钟）。`
+  `安排或取消下一次主动醒来。当前这次醒来如果没有想说的，不用调这个工具——` +
+  `直接回复 ${NOOP_MARKER} 加上简短原因即可；想留言但不想吵她，正文开头加 ${QUIET_MARKER}。schedule 是加一个闹钟，最多同时 5 个，可以多次调用；cancel 带 alarm_id 只取消那一个，不带取消全部（含 followup）；list 看现在挂着哪些。` +
+  `如果还有想对她说的话，先调用这个工具，等返回后再发送最终正文。` +
+  `action: schedule（定时醒来）、followup（她没回才醒，间隔更短）、cancel（取消闹钟）、list（查看当前闹钟）。`
 
 export type AgentWakePromptConfig = {
   instructions: string

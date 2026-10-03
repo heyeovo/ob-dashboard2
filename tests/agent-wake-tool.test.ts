@@ -1,4 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { parseAgentWakeQuiet } from '@/app/lib/cc/agentWakeTool'
+import { DEFAULT_AGENT_WAKE_INSTRUCTIONS, DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION } from '@/app/lib/cc/agentWakePrompt'
+import { readFileSync } from 'node:fs'
+
+describe('quiet wake marker and exact default prompts', () => {
+  it.each([
+    [' \n[agent_wake_quiet] 留一句 \n', { text: '留一句' }],
+    ['正文 [agent_wake_quiet] 留一句', null],
+    ['[agent_wake_quiet] \n', null],
+    ['[agent_wake_noop] [agent_wake_quiet] 留一句', null],
+  ])('parses only a leading marker: %s', (text, expected) => {
+    expect(parseAgentWakeQuiet(text)).toEqual(expected)
+  })
+  it('matches both handoff prompt blocks verbatim', () => {
+    const spec = readFileSync('docs/handoff/HANDOFF-wake-quiet.md', 'utf8')
+    const blocks = [...spec.matchAll(/```\r?\n([\s\S]*?)\r?\n```/g)].map(match => match[1].replace(/\r\n/g, '\n'))
+    expect(DEFAULT_AGENT_WAKE_INSTRUCTIONS).toBe(blocks[0])
+    expect(DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION).toBe(blocks[1])
+  })
+})
 import {
   beginAgentWakeTurn,
   endAgentWakeTurn,

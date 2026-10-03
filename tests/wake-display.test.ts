@@ -6,6 +6,31 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import CcMessageRow from '@/app/cc/CcMessageRow'
 
 describe('alarm message display', () => {
+  it.each(['quiet', 'loud', undefined])('maps and renders delivery %s with legacy marker cleanup', delivery => {
+    const raw = JSON.stringify({ agent_wake: { cause: 'agent_schedule', delivery },
+      process: [{ type: 'text', id: 'body', text: ' \n[agent_wake_quiet] 留一句' },
+        { type: 'text', id: 'middle', text: '正文中 [agent_wake_quiet] 保留' }],
+      display_segments: { version: 3, segments: [{ kind: 'text', markdown: '[agent_wake_quiet] 留一句' }] },
+    })
+    const messages = turnsToMessages([{ id: 1, user_text: '', assistant_text: '[agent_wake_quiet] 留一句',
+      created_at: '2026-10-04T12:00:00Z', turn_kind: 'agent_wake', raw_json: raw }])
+    expect(parseTurnRaw(raw).agentWake?.delivery).toBe(delivery)
+    expect(messages[0].wakeEvent?.delivery).toBe(delivery)
+    expect(messages[1].text).toBe('留一句')
+    expect(messages[1].process?.filter(event => event.type === 'text').map(event => event.text))
+      .toEqual(['留一句', '正文中 [agent_wake_quiet] 保留'])
+    expect(messages[1].displaySegments?.[0].markdown).toBe('留一句')
+    const html = renderToStaticMarkup(createElement(CcMessageRow, {
+      message: messages[0], isCurrentTurn: false, onCopy: () => {},
+    }))
+    expect(html.includes('没有提醒你')).toBe(delivery === 'quiet')
+    const ordinary = turnsToMessages([{ id: 2, user_text: '', assistant_text: '[agent_wake_quiet] 普通回复',
+      created_at: '2026-10-04T12:00:00Z', turn_kind: 'user' }])
+    expect(ordinary.at(-1)?.text).toBe('[agent_wake_quiet] 普通回复')
+    const legacy = turnsToMessages([{ id: 3, user_text: '', assistant_text: '[agent_wake_quiet] 留一句',
+      created_at: '2026-10-04T12:00:00Z', turn_kind: 'agent_wake' }])
+    expect(legacy.at(-1)?.displaySegments?.[0].markdown).toBe('留一句')
+  })
   it.each(['before', 'after'])('hides old no-op process text %s a room event while preserving ordinary turns', position => {
     const marker = { type: 'text', id: 'noop', text: ' \n[agent_wake_noop] 路过了，不打扰' }
     const room = { type: 'room', id: 'visit', roomId: 'room_abc', enteredAt: 1000, leftAt: 2000 }

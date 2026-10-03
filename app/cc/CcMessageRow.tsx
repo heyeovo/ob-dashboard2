@@ -342,7 +342,7 @@ export default function CcMessageRow({
       <div className="my-3 w-full" data-role="agent-wake-event">
         <div className="flex items-center gap-3 text-2xs text-[var(--color-text-tertiary)]" role="separator">
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
-          <span className="shrink-0">{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次</span>
+          <span className="shrink-0">{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次{message.wakeEvent.delivery === 'quiet' ? ' · 没有提醒你' : ''}</span>
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
         </div>
         <div className="mx-auto mt-1 max-w-md space-y-0.5 px-3 text-center text-2xs text-[var(--color-text-tertiary)]">

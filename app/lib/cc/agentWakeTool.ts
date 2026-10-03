@@ -7,7 +7,15 @@ export const AGENT_WAKE_SERVER_NAME = 'ombre_agent_wake'
 export const AGENT_WAKE_TOOL_NAME = 'set_agent_wake'
 export const AGENT_WAKE_SDK_TOOL_NAME = `mcp__${AGENT_WAKE_SERVER_NAME}__${AGENT_WAKE_TOOL_NAME}`
 export const AGENT_WAKE_NOOP_MARKER = '[agent_wake_noop]'
+export const AGENT_WAKE_QUIET_MARKER = '[agent_wake_quiet]'
 export const AGENT_WAKE_NOOP_STATUS_MAX_CHARS = 30
+
+export function parseAgentWakeQuiet(text: string): { text: string } | null {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith(AGENT_WAKE_QUIET_MARKER)) return null
+  const body = trimmed.slice(AGENT_WAKE_QUIET_MARKER.length).trim()
+  return body ? { text: body } : null
+}
 
 export const AGENT_WAKE_MCP_VERSION = '1.3.0'
 const AGENT_WAKE_TOOL_INPUT = {

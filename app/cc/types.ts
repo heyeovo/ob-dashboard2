@@ -202,7 +202,7 @@ export type CcMessage = {
    * 如果拿 id 当 key，整条消息会被重新挂载、逐段显现从头重播。换 id 时保留原来的值。
    */
   renderKey?: string
-  wakeEvent?: { cause: string; at: string; status?: string }
+  wakeEvent?: { cause: string; at: string; status?: string; delivery?: 'loud' | 'quiet' }
   wakeOps?: WakeDisplayOp[]
   nextWake?: { at: string; reason: string }
   requestId?: string
