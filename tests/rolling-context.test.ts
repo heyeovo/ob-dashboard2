@@ -3,14 +3,19 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { getSessionMessages, type SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
-const api = vi.hoisted(() => ({ getBuckets: vi.fn(), getJournals: vi.fn() }))
+const api = vi.hoisted(() => ({ getBuckets: vi.fn(), getJournals: vi.fn(), initializeSnapshot: vi.fn() }))
+
+vi.mock('@/app/lib/havenTurns', async importOriginal => ({
+  ...await importOriginal<typeof import('@/app/lib/havenTurns')>(),
+  initializeRollingPinnedSnapshot: api.initializeSnapshot,
+}))
 
 vi.mock('@/app/lib/api', () => ({
   getBuckets: api.getBuckets,
   getJournals: api.getJournals,
 }))
 
-import { buildRollingWindowAppend, buildRollingWindowHistory, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
+import { buildRollingWindowAppend, buildRollingWindowHistory, loadRollingWindowAppend, selectRollingPinnedSnapshot } from '@/app/lib/cc/windowPrompt'
 import {
   cloneRollingTranscriptForSession,
   inspectRollingHistoryTranscript, materializeRollingHistorySeed, materializeRollingNativeSession,
@@ -154,6 +159,7 @@ describe('daily rolling context', () => {
         selected_random_high_importance_ids: ['high-1', 'noise-1'],
       },
     } as HavenConversationSession
+    api.initializeSnapshot.mockImplementation(async ({ snapshot }) => snapshot)
     const result = await loadRollingWindowAppend('window-1', selectedSession, [], { logDiagnostics: false })
     expect(result).toMatchObject({
       pinnedBucketIds: ['pin-1'],
@@ -163,6 +169,56 @@ describe('daily rolling context', () => {
       randomHighImportanceBucketIds: ['high-1'],
     })
     expect(result.content).not.toContain('不应生效')
+  })
+
+  it('keeps pinned text, order and exclusions frozen across edits, unpins and deletions', async () => {
+    const frozen = [{ id: 'pin-1', title: '旧标题', content: '旧正文' }]
+    const frozenSession = {
+      ...session,
+      rolling_context: { ...session.rolling_context, pinned_snapshot: frozen, selected_recent_ids: ['pin-1'] },
+    } as HavenConversationSession
+    api.initializeSnapshot.mockClear()
+    api.getBuckets.mockResolvedValue([{ id: 'pin-1', name: '新标题', content: '新正文', pinned: false }])
+    const first = await loadRollingWindowAppend('window-1', frozenSession, [], { logDiagnostics: false })
+    api.getBuckets.mockResolvedValue([{ id: 'new-pin', content: '新增钉选', pinned: true }])
+    const second = await loadRollingWindowAppend('window-1', frozenSession, [], { logDiagnostics: false })
+    expect(second.content).toBe(first.content)
+    expect(second.content).toContain('旧正文')
+    expect(second.content).not.toContain('新正文')
+    expect(second.pinnedBucketIds).toEqual(['pin-1'])
+    expect(first.recentBucketIds).toEqual([])
+    expect(api.initializeSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('treats an empty snapshot as frozen, and applies new pinned text at a rebuilt revision', async () => {
+    api.getBuckets.mockResolvedValue([{ id: 'pin-1', name: '新标题', content: '新正文', pinned: true }])
+    api.initializeSnapshot.mockClear()
+    const empty = { ...session, rolling_context: { ...session.rolling_context, pinned_snapshot: [] } } as HavenConversationSession
+    expect((await loadRollingWindowAppend('window-1', empty, [], { logDiagnostics: false })).pinnedBucketIds).toEqual([])
+    expect(api.initializeSnapshot).not.toHaveBeenCalled()
+    const rebuilt = {
+      ...empty, context_revision: 8,
+      rolling_context: { ...empty.rolling_context, pinned_snapshot: selectRollingPinnedSnapshot(await api.getBuckets(), ['pin-1']) },
+    } as HavenConversationSession
+    expect((await loadRollingWindowAppend('window-1', rebuilt, [], { logDiagnostics: false })).content).toContain('新正文')
+  })
+
+  it('uses the winning persisted legacy snapshot and stops if persistence fails', async () => {
+    api.getBuckets.mockResolvedValue([{ id: 'pin-1', content: '本轮新正文', pinned: true }])
+    api.initializeSnapshot.mockResolvedValueOnce([{ id: 'pin-1', title: '标题', content: '已冻结正文' }])
+    const result = await loadRollingWindowAppend('window-1', session, [], { logDiagnostics: false })
+    expect(result.content).toContain('已冻结正文')
+    expect(result.content).not.toContain('本轮新正文')
+    api.initializeSnapshot.mockRejectedValueOnce(new Error('context_revision_conflict'))
+    await expect(loadRollingWindowAppend('window-1', session, [], { logDiagnostics: false })).rejects.toThrow('context_revision_conflict')
+  })
+
+  it('previews legacy pinned content in an audit without persisting it', async () => {
+    api.getBuckets.mockResolvedValue([{ id: 'pin-1', content: '待冻结正文', pinned: true }])
+    api.initializeSnapshot.mockClear()
+    const result = await loadRollingWindowAppend('window-1', session, [], { logDiagnostics: false, persistPinnedSnapshot: false })
+    expect(result.content).toContain('待冻结正文')
+    expect(api.initializeSnapshot).not.toHaveBeenCalled()
   })
 
 })

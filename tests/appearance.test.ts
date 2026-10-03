@@ -3,8 +3,8 @@ import { DEFAULT_APPEARANCE, appearanceHtmlStyle, normalizeAppearance, photoAcce
 import { pickAccent } from '../app/lib/photoAccent'
 
 describe('appearance theme normalization', () => {
-  it('keeps the four supported themes', () => {
-    for (const theme of ['apricot', 'sakura', 'mist', 'dusk']) {
+  it('keeps the eight supported themes', () => {
+    for (const theme of ['apricot', 'sakura', 'mist', 'dusk', 'pearl', 'canopy', 'rain', 'silver']) {
       expect(normalizeAppearance({ theme }).theme).toBe(theme)
     }
   })

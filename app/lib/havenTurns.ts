@@ -51,6 +51,8 @@ export type RollingContextConfig = {
   day_start_hour: number
   day_modes: Record<string, 'raw' | 'review' | 'omit'>
   selected_pinned_ids?: string[] | null
+  /** Frozen at context revision creation; [] is a valid empty snapshot. */
+  pinned_snapshot?: { id: string; title: string; content: string }[]
   selected_journal_ids?: string[] | null
   selected_recent_ids?: string[] | null
   selected_feel_ids?: string[] | null
@@ -719,6 +721,30 @@ export async function getConversationSession(
     error: '',
     httpStatus: res.httpStatus,
   }
+}
+
+export async function initializeRollingPinnedSnapshot(input: {
+  sessionId: string
+  personaId: string
+  contextRevision: number
+  snapshot: NonNullable<RollingContextConfig['pinned_snapshot']>
+}): Promise<NonNullable<RollingContextConfig['pinned_snapshot']>> {
+  const res = await havenFetch({
+    method: 'PATCH',
+    path: '/gateway/api/conversation/session',
+    sessionId: input.sessionId,
+    body: {
+      session_id: input.sessionId,
+      persona_id: input.personaId,
+      rolling_pinned_snapshot: input.snapshot,
+      expected_context_revision: input.contextRevision,
+    },
+  })
+  const session = res.payload.session as HavenConversationSession | undefined
+  if (!res.ok || !Array.isArray(session?.rolling_context?.pinned_snapshot)) {
+    throw new Error(res.error || '钉选快照保存失败，请先更新 Haven 后重试')
+  }
+  return session.rolling_context.pinned_snapshot
 }
 
 export async function patchConversationRollingContext(input: {

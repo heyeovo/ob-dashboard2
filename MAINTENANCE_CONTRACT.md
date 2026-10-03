@@ -60,7 +60,7 @@
    - 新增文件确认「被用」（grep 引用）；
    - 删除文件确认「无引用」（grep 引用）。
 4. **打开这份维护契约**，按第一节表命中行，同步对应文档。
-5. **归档未完成事项**：想做的功能 / 活 → OB Todo（一句话）；代码层面的债务或需要细节的技术卡 → `TECH_DEBT.md`；handoff 只作历史档案，状态更新到 `docs/handoff/README.md`。
+5. **勾掉已完成、归档未完成**：本次做完的 OB Todo 当场 `set_todo_done`（Codex 没有 OB 工具，在报告里写 ID，由 CC 验收合并时勾）；想做的功能 / 活 → OB Todo（一句话）；代码层面的债务或需要细节的技术卡 → `TECH_DEBT.md`；handoff 只作历史档案，状态更新到 `docs/handoff/README.md`。
 6. **commit + push**：CC 可直接提交并 push `main`（见 `AGENTS.md`「Git 与部署」）。
 7. **确认部署**：Dashboard push `main` 后由 Coolify 自动部署；Haven push `main` 后先跑 GitHub Actions `Tests`，通过后由 `deploy-haven` job 更新 `HAVEN_RELEASE_SHA` 并部署（见 Haven `AGENTS.md`）。确认最新 deployment 对应目标 commit 且健康，未触发或失败时才手动 Redeploy。
 
