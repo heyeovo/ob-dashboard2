@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import DetailPanel from './DetailPanel'
+import BucketContentEditor from './BucketContentEditor'
 
 // List and detail endpoints place source/wish in different locations.
 interface BucketComment {
@@ -103,7 +104,7 @@ function beijingTime(value: string, event = false) {
 
 export default function BucketDetailDrawer(props: Props) {
   return (
-    <DetailPanel open={!!(props.selected || props.detailLoading)} onClose={props.onClose} mode="drawer" loading={props.detailLoading} className="bucket-drawer-scroll">
+    <DetailPanel open={!!(props.selected || props.detailLoading)} onClose={props.onClose} mode="drawer" loading={props.detailLoading} className="bucket-drawer-scroll" preserveHeight={props.editing} keyboardAware={props.editing}>
       {props.selected && <BucketContent key={props.selected.id} {...props} selected={props.selected} />}
     </DetailPanel>
   )
@@ -304,16 +305,16 @@ function BucketContent({ selected, editing, editContent, saving, operating, copi
         <section className="bucket-paper" aria-label="记忆正文">
           <div className="bucket-paper-head text-meta">
             <span>{(editing ? editContent : selected.content).length} 字 · ~{Math.ceil((editing ? editContent : selected.content).length * 1.3)} tokens</span>
-            {!editing && <div className="flex">
-              <button type="button" className="bucket-icon-button" data-copied={contentCopied} aria-label={contentCopied ? '正文已复制' : '复制正文'} onClick={async () => {
+            <div className={`flex${editing ? ' invisible' : ''}`} aria-hidden={editing || undefined}>
+              <button type="button" disabled={editing} className="bucket-icon-button" data-copied={contentCopied} aria-label={contentCopied ? '正文已复制' : '复制正文'} onClick={async () => {
                 try { await navigator.clipboard.writeText(selected.content); setContentCopied(true); setCopyError('') }
                 catch { setCopyError('复制失败，请重试') }
               }}><Icon name="copy" /></button>
-              <button type="button" className="bucket-icon-button" aria-label="编辑正文" disabled={busy} onClick={() => onStartEdit(selected.content)}><Icon name="edit" /></button>
-            </div>}
+              <button type="button" className="bucket-icon-button" aria-label="编辑正文" disabled={busy || editing} onClick={() => onStartEdit(selected.content)}><Icon name="edit" /></button>
+            </div>
           </div>
           {editing ? <div className="bucket-paper-body">
-            <textarea aria-label="记忆正文" className="bucket-content-editor text-base" rows={14} value={editContent} onChange={e => onStartEdit(e.target.value)} />
+            <BucketContentEditor value={editContent} onChange={onStartEdit} />
             <div className="flex justify-end items-center gap-3 mt-3 text-sm">
               <button type="button" onClick={onCancelEdit} disabled={saving}>取消</button>
               <button type="button" className="bucket-save" onClick={onSaveEdit} disabled={saving}>{saving ? '保存中' : '保存更改'}</button>

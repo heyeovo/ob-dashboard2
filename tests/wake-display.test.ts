@@ -1,8 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { parseWakeOps, wakeDisplayLines } from '@/app/cc/wakeDisplay'
 import { parseTurnRaw, turnsToMessages } from '@/app/cc/ccHistory'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import CcMessageRow from '@/app/cc/CcMessageRow'
 
 describe('alarm message display', () => {
+  it.each(['before', 'after'])('hides old no-op process text %s a room event while preserving ordinary turns', position => {
+    const marker = { type: 'text', id: 'noop', text: ' \n[agent_wake_noop] 路过了，不打扰' }
+    const room = { type: 'room', id: 'visit', roomId: 'room_abc', enteredAt: 1000, leftAt: 2000 }
+    const tool = { type: 'tool', id: 'tool', tool: { id: 't1', name: 'Read', input: {}, status: 'done' } }
+    const process = position === 'before' ? [marker, tool, room] : [tool, room, marker]
+    const turn = { id: 1, user_text: '', assistant_text: '', request_id: 'wake-old',
+      created_at: '2026-10-02T12:00:00Z', source: 'cc', raw_json: JSON.stringify({ process }) }
+    const messages = turnsToMessages([{ ...turn, turn_kind: 'agent_wake' }])
+    const assistant = messages.find(message => message.role === 'assistant')!
+    expect(assistant.process?.map(event => event.type)).toEqual(['tool', 'room'])
+    const html = renderToStaticMarkup(createElement(CcMessageRow, {
+      message: assistant, isCurrentTurn: false, onCopy: () => {},
+    }))
+    expect(html).not.toContain('[agent_wake_noop]')
+    expect(html).toContain('言之进了房间')
+    expect(turnsToMessages([{ ...turn, turn_kind: 'user' }]).at(-1)?.process)
+      .toEqual(parseTurnRaw(turn.raw_json).process)
+  })
   const ops = [
     { action: 'schedule', at: '2026-10-02T13:00:00Z', reason: '吃药' },
     { action: 'schedule', at: '2026-10-02T14:00:00Z', reason: '睡觉' },

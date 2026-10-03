@@ -340,9 +340,27 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
     return result
   }, [items])
 
-  const visible = groups[domain]
-  const completedVisible = completed.filter(item => item.domain === domain)
+  const newestFirst = (a: TodoItem, b: TodoItem) =>
+    (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0)
+  const visible = [...groups[domain]].sort(newestFirst)
+  const completedVisible = completed.filter(item => item.domain === domain).sort(newestFirst)
   const domains: TodoDomain[] = groups.unclassified.length || completed.some(item => item.domain === 'unclassified') ? ['tech', 'emotional', 'unclassified'] : ['tech', 'emotional']
+
+  async function copyTodoId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id)
+      onMessage('已复制完整待办 ID。')
+    } catch {
+      onMessage('复制失败，请重试。')
+    }
+  }
+
+  function todoIdButton(item: TodoItem) {
+    const shortId = item.source === 'bucket'
+      ? `bucket:${(item.source_bucket || item.id.replace(/^bucket:/, '')).slice(0, 8)}`
+      : item.id.slice(0, 8)
+    return <button type="button" onClick={() => void copyTodoId(item.id)} aria-label={`复制完整待办 ID：${item.id}`} title={`复制 ${item.id}`} className="mt-1 block text-2xs text-[var(--color-text-secondary)]">{shortId}</button>
+  }
 
   async function expandCompleted() {
     if (!showCompleted) {
@@ -470,14 +488,14 @@ function TodoPanel({ onMessage }: { onMessage: (value: string) => void }) {
       </div>
     </TodoFormPanel>
 
-    {loading ? <Empty text="加载中…" /> : <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]">{visible.length ? visible.map(item => <article key={item.id} className="flex gap-3 border-b border-[var(--color-border-light)] p-4 last:border-b-0">
-      <button type="button" aria-label="标记完成" onClick={() => void toggle(item)} className="mt-0.5 h-[var(--todo-check-size)] w-[var(--todo-check-size)] shrink-0 rounded-full border border-[var(--color-border-hover)]" />
-      <div className="min-w-0 flex-1"><button type="button" onClick={() => setExpanded(expanded === item.id ? null : item.id)} className="w-full text-left"><p className={`whitespace-pre-wrap text-sm leading-6 ${expanded === item.id ? '' : 'line-clamp-2'}`}>{item.content}</p>{item.context && <p className={`mt-1 text-xs text-[var(--color-text-tertiary)] ${expanded === item.id ? 'whitespace-pre-wrap' : 'truncate'}`}>{item.context}</p>}</button>
+    {loading ? <Empty text="加载中…" /> : <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]">{visible.length ? visible.map(item => <article key={item.id} className="flex items-center gap-3 border-b border-[var(--color-border-light)] p-4 last:border-b-0">
+      <button type="button" aria-label="标记完成" onClick={() => void toggle(item)} className="h-[var(--todo-check-size)] w-[var(--todo-check-size)] shrink-0 rounded-full border border-[var(--color-border-hover)]" />
+      <div className="min-w-0 flex-1"><button type="button" onClick={() => setExpanded(expanded === item.id ? null : item.id)} className="w-full text-left"><p className={`whitespace-pre-wrap text-sm leading-6 ${expanded === item.id ? '' : 'line-clamp-2'}`}>{item.content}</p>{item.context && <p className={`mt-1 text-xs text-[var(--color-text-tertiary)] ${expanded === item.id ? 'whitespace-pre-wrap' : 'truncate'}`}>{item.context}</p>}</button>{todoIdButton(item)}
       {expanded === item.id && <div className="mt-3 space-y-3 text-xs text-[var(--color-text-tertiary)]"><div>{item.source === 'bucket' ? <>来自 <button type="button" onClick={() => void openBucket(item.source_bucket)} className="text-[var(--color-primary)]">《{item.source_bucket_name || item.source_bucket}》</button></> : `独立 Todo · ${todoDate(item.created_at)}`}</div><div className="flex gap-2"><button type="button" onClick={() => startEdit(item)} className="rounded-full bg-[var(--color-surface-tertiary)] px-3 py-1.5">编辑</button><button type="button" onClick={() => void remove(item)} className="rounded-full bg-[var(--color-danger-bg)] px-3 py-1.5 text-[var(--color-danger)]">删除</button></div></div>}
       </div><span className="shrink-0 text-2xs text-[var(--color-text-tertiary)]">{todoDate(item.created_at)}</span>
     </article>) : <p className="p-6 text-sm text-[var(--color-text-tertiary)]">这里还没有待办。</p>}</div>}
 
-    <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]"><button type="button" onClick={() => void expandCompleted()} className="w-full px-4 py-3 text-left text-sm text-[var(--color-text-secondary)]">已完成 · {completedCount} 件 {showCompleted ? '⌄' : '›'}</button>{showCompleted && <div>{completedVisible.map(item => <div key={item.id} className="flex gap-3 border-t border-[var(--color-border-light)] p-4"><button type="button" aria-label="重新打开" onClick={() => void toggle(item)} className="h-[var(--todo-check-size)] w-[var(--todo-check-size)] shrink-0 rounded-full bg-[var(--color-primary)] text-xs text-[var(--color-on-primary)]">✓</button><span className="flex-1 text-sm text-[var(--color-text-tertiary)] line-through">{item.content}</span><span className="text-2xs text-[var(--color-text-tertiary)]">{todoDate(item.created_at)}</span></div>)}</div>}</div>
+    <div className="overflow-hidden rounded-[var(--radius-reading-card)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]"><button type="button" onClick={() => void expandCompleted()} className="w-full px-4 py-3 text-left text-sm text-[var(--color-text-secondary)]">已完成 · {completedCount} 件 {showCompleted ? '⌄' : '›'}</button>{showCompleted && <div>{completedVisible.map(item => <div key={item.id} className="flex items-center gap-3 border-t border-[var(--color-border-light)] p-4"><button type="button" aria-label="重新打开" onClick={() => void toggle(item)} className="h-[var(--todo-check-size)] w-[var(--todo-check-size)] shrink-0 rounded-full bg-[var(--color-primary)] text-xs text-[var(--color-on-primary)]">✓</button><div className="min-w-0 flex-1"><span className="text-sm text-[var(--color-text-tertiary)] line-through">{item.content}</span>{todoIdButton(item)}</div><span className="text-2xs text-[var(--color-text-tertiary)]">{todoDate(item.created_at)}</span></div>)}</div>}</div>
 
     <BucketDetailDrawer
       selected={selectedBucket}

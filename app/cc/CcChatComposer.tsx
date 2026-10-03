@@ -30,7 +30,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
           <>
         {searchVisible ? (
           <div className="mb-2">
-            <div className="flex items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 shadow-sm">
+            <div className="flex items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--glass-fill)] px-2 py-1.5 shadow-sm backdrop-blur-[var(--glass-blur)] [-webkit-backdrop-filter:blur(var(--glass-blur))]">
               <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                 <circle cx="10.8" cy="10.8" r="6.3" />
                 <path d="m15.5 15.5 4 4" />

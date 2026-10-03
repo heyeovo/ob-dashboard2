@@ -452,6 +452,12 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   for (const t of turns) {
     const at = Date.parse(t.created_at) || Date.now()
     const extra = parseTurnRaw(t.raw_json)
+    // Old wake records may still contain control text in their process timeline.
+    // Filter only the display projection; keep tool/room events and ordinary turns.
+    if (t.turn_kind === 'agent_wake' || extra.agentWake) {
+      extra.process = extra.process.filter(event => event.type !== 'text'
+        || !event.text.trimStart().startsWith('[agent_wake_noop]'))
+    }
     for (const compaction of extra.preCompactions) {
       out.push({
         id: `h${t.id}c-${compaction.id}`,
