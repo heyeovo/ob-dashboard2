@@ -227,7 +227,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
   cacheSnapshot: CcCacheSnapshot | null
   preCompactions: CcCompactionEvent[]
   displaySegments: DisplaySegment[] | null
-  agentWake: { cause: string; at: string; status?: string } | null
+  agentWake: { cause: string; at: string; status?: string; delivery?: 'loud' | 'quiet' } | null
   wakeOps: WakeDisplayOp[] | undefined
   nextWake: { at: string; reason: string } | null
 } {
@@ -369,6 +369,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
           cause: String(rawWake.cause || 'cache_keepalive'),
           at: String(rawWake.at || ''),
           status: String(rawWake.status || '').trim() || undefined,
+          delivery: rawWake.delivery === 'quiet' || rawWake.delivery === 'loud' ? rawWake.delivery : undefined,
         }
       : null,
     wakeOps: parseWakeOps(raw.wake_ops),
@@ -452,11 +453,21 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
   for (const t of turns) {
     const at = Date.parse(t.created_at) || Date.now()
     const extra = parseTurnRaw(t.raw_json)
+    let assistantText = t.assistant_text
     // Old wake records may still contain control text in their process timeline.
     // Filter only the display projection; keep tool/room events and ordinary turns.
     if (t.turn_kind === 'agent_wake' || extra.agentWake) {
       extra.process = extra.process.filter(event => event.type !== 'text'
         || !event.text.trimStart().startsWith('[agent_wake_noop]'))
+      const stripQuiet = (text: string) => text.trim().startsWith('[agent_wake_quiet]')
+        ? text.trim().slice('[agent_wake_quiet]'.length).trim()
+        : text
+      assistantText = stripQuiet(assistantText || '')
+      extra.process = extra.process.map(event => event.type === 'text'
+        ? { ...event, text: stripQuiet(event.text) } : event)
+      extra.displaySegments = extra.displaySegments?.map(segment => ({
+        ...segment, markdown: stripQuiet(segment.markdown),
+      })) || null
     }
     for (const compaction of extra.preCompactions) {
       out.push({
@@ -520,7 +531,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         id: t.assistant_message_id || `h${t.id}a`,
         role: 'assistant',
         requestId: t.request_id || undefined,
-        text: t.assistant_text,
+        text: assistantText,
         createdAt: at,
         chatDay: t.chat_day || undefined,
         fromHistory: true,
@@ -556,7 +567,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
             ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
             : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'
           : undefined,
-        displaySegments: extra.displaySegments || buildDisplaySegments(t.assistant_text).segments,
+        displaySegments: extra.displaySegments || buildDisplaySegments(assistantText).segments,
         wakeOps: extra.wakeOps,
         nextWake: extra.nextWake || undefined,
       })
