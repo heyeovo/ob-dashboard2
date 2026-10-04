@@ -66,18 +66,6 @@ export type TurnUsage = {
   costUsd: number
 }
 
-export const EMPTY_TURN_USAGE: TurnUsage = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-  cacheWrite1hTokens: 0,
-  cacheWrite5mTokens: 0,
-  durationMs: 0,
-  tokensPerSec: 0,
-  costUsd: 0,
-}
-
 /** 最近一次真实模型请求所占的当前窗口；不是本轮累计 usage。 */
 export type CcContextSnapshot = {
   totalTokens: number

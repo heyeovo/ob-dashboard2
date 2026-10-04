@@ -178,30 +178,6 @@ export const TINT_PRESETS: { id: string; label: string; value: string }[] = [
   { id: 'ink', label: '墨', value: 'linear-gradient(150deg, #6F6A66, #454240)' },
 ]
 
-export const ENGINE_OPTIONS: {
-  id: CcEngine
-  label: string
-  hint: string
-  disabled?: boolean
-}[] = [
-  {
-    id: 'subscription',
-    label: 'Claude Code · 订阅额度',
-    hint: '用本机 claude 的登录态。还没买会员时选它会报没凭据',
-  },
-  {
-    id: 'api',
-    label: 'Claude Code · 中转站',
-    hint: '走 .env.local 里的 ANTHROPIC_BASE_URL / TOKEN。现在默认这条',
-  },
-  {
-    id: 'selfhost',
-    label: '自建引擎 · 中转站',
-    hint: '只聊天、provider 可配。第 7 步做',
-    disabled: true,
-  },
-]
-
 /** 新建协作者时的初值 */
 export function draftPersona(): CcPersona {
   const rand = Math.random().toString(36).slice(2, 8)

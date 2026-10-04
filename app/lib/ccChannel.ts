@@ -155,11 +155,6 @@ export function getChannel(sessionId: string): Channel {
   return ch
 }
 
-/** 只看有没有，不新建（GET 状态时用，别因为查一下就建一堆空壳） */
-export function peekChannel(sessionId: string): Channel | null {
-  return channels.get(sessionId) || null
-}
-
 /** 这一轮开始：把 SSE 推送口挂上。上一轮的自动作废。 */
 export function attachSend(sessionId: string, send: CcSend) {
   getChannel(sessionId).send = send

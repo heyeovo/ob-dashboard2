@@ -99,15 +99,3 @@ export async function getBucket(id: string) {
     if (!res.ok) throw new Error('Failed to fetch bucket');
     return res.json();
 }
-
-export async function searchBuckets(q: string, includeArchived: boolean = false) {
-    const cookie = await getSessionCookie();
-    const url = `${getHavenBaseUrl()}/api/search?q=${encodeURIComponent(q)}${includeArchived ? "&include_archive=true" : ""}`;
-    const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'Cookie': cookie }
-    });
-    
-    if (!res.ok) throw new Error('Failed to search');
-    return res.json();
-}

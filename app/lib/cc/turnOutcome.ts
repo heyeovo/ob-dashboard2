@@ -1,6 +1,5 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { isClaudeSessionLimitNotice } from '@/app/lib/cc/subscriptionLimit'
 
 export type DurableTurnOutcome = 'explicit_failure' | 'indeterminate'
 
@@ -42,12 +41,6 @@ export function isClaudeAuthenticationFailure(input: {
   return CLAUDE_AUTH_FAILURE.test(combined)
 }
 
-/** Old transcripts predate the durable outcome ledger. New failures never rely on wording. */
-export function isLegacyClaudeTerminalStatus(value: unknown): boolean {
-  const text = String(value || '').trim()
-  return isClaudeSessionLimitNotice(text) || isClaudeAuthenticationFailure({ text })
-}
-
 export async function recordTurnOutcome(input: {
   turnUuid: string
   requestId: string
@@ -79,34 +72,4 @@ export async function recordTurnOutcome(input: {
   } finally {
     if (pendingWrites.get(file) === write) pendingWrites.delete(file)
   }
-}
-
-export async function loadTurnOutcomes(options: { storeRoot?: string } = {}): Promise<Map<string, TurnOutcomeRecord>> {
-  let content = ''
-  try {
-    content = await readFile(/*turbopackIgnore: true*/ outcomeFile(options.storeRoot), 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map()
-    throw error
-  }
-  const outcomes = new Map<string, TurnOutcomeRecord>()
-  for (const line of content.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    try {
-      const record = JSON.parse(line) as Partial<TurnOutcomeRecord>
-      if (record.version !== 1 || typeof record.turnUuid !== 'string'
-        || (record.outcome !== 'explicit_failure' && record.outcome !== 'indeterminate')) continue
-      outcomes.set(record.turnUuid, {
-        version: 1,
-        turnUuid: record.turnUuid,
-        requestId: typeof record.requestId === 'string' ? record.requestId : '',
-        outcome: record.outcome,
-        reason: typeof record.reason === 'string' ? record.reason : '',
-        recordedAt: typeof record.recordedAt === 'string' ? record.recordedAt : '',
-      })
-    } catch {
-      // A broken line cannot authorize deletion; missing evidence remains blocking.
-    }
-  }
-  return outcomes
 }

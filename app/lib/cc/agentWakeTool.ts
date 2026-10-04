@@ -103,10 +103,6 @@ export function getCcTurnExecutionMode(sessionId: string): CcTurnExecutionMode {
   return states.get(sessionId)?.mode || 'foreground'
 }
 
-export function peekAgentWakeDecision(sessionId: string): AgentWakeDecision | null {
-  return states.get(sessionId)?.ops.at(-1) || null
-}
-
 export function isSetAgentWakeTool(toolName: string): boolean {
   return toolName === AGENT_WAKE_SDK_TOOL_NAME || toolName === AGENT_WAKE_TOOL_NAME
 }

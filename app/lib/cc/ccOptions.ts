@@ -220,10 +220,6 @@ export function setWriteDirs(sessionId: string, dirs: string[]) {
   writeDirsBySession.set(sessionId, dirs)
 }
 
-export function getWriteDirs(sessionId: string): string[] {
-  return writeDirsBySession.get(sessionId) || []
-}
-
 export function clearWriteDirs(sessionId: string) {
   writeDirsBySession.delete(sessionId)
   webSettingsBySession.delete(sessionId)

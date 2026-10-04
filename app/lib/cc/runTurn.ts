@@ -121,10 +121,6 @@ export function setRecallPrefs(
   recallPrefs.set(sessionId, prefs)
 }
 
-export function getRecallPrefs(sessionId: string) {
-  return recallPrefs.get(sessionId)
-}
-
 export function clearRecallPrefs(sessionId: string) {
   recallPrefs.delete(sessionId)
 }

@@ -55,10 +55,6 @@ function loadSync(): AgentWakePromptConfig | null {
   return cache
 }
 
-export function getAgentWakeInstructions(): string {
-  return loadSync()?.instructions || DEFAULT_AGENT_WAKE_INSTRUCTIONS
-}
-
 export function getAgentWakeToolDescription(): string {
   const config = loadSync()
   const instructions = config?.instructions || DEFAULT_AGENT_WAKE_INSTRUCTIONS
