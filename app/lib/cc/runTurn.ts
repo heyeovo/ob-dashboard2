@@ -79,6 +79,7 @@ import {
 import { isMcpTool, shouldSaveMcpResult } from '@/app/lib/ccMcp'
 import type { HavenPersona } from '@/app/lib/havenPersonas'
 import { beijingRuntimeContext, workStatusContext } from '@/app/lib/runtimeContext'
+import { xiamenWeatherContext } from '@/app/lib/weather'
 import type { ResolvedAttachment } from '@/app/lib/havenAttachments'
 import {
   agentWakeMcpAudit,
@@ -835,6 +836,10 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     // 当前时间只放在本轮 user 消息的动态尾部：前端气泡和 Haven user_text 仍保存用户原话；
     // 下一轮它成为固定历史，不会改写旧时间，也不会让稳定的系统提示/历史缓存前缀失效。
     content += `\n\n${beijingRuntimeContext(new Date())}`
+    if (turnKind === 'agent_wake') {
+      const weather = await xiamenWeatherContext()
+      if (weather) content += `\n${weather}`
+    }
     if (config.mode === 'work') {
       const stats = getSessionStats(sessionId)
       content += `\n${workStatusContext({
