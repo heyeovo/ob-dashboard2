@@ -64,9 +64,12 @@ describe('Dashboard auth primitives', () => {
     expect(session.token).not.toContain(LOGIN_SECRET)
     expect(session.token).not.toContain(SESSION_SECRET)
     expect(verifyDashboardSession(session.token, SESSION_SECRET, now)).toBe(true)
-    // token 随机：末位本来就是 x 时替换成 x 等于没篡改，所以换成一个一定不同的字符。
-    const tamperedLast = session.token.endsWith('x') ? 'y' : 'x'
-    expect(verifyDashboardSession(`${session.token.slice(0, -1)}${tamperedLast}`, SESSION_SECRET, now)).toBe(false)
+    // base64url 末位只有部分比特有效，改末位可能解出同一个签名；改签名中间的字符才一定失效。
+    const signatureStart = session.token.lastIndexOf('.') + 1
+    const middle = signatureStart + Math.floor((session.token.length - signatureStart) / 2)
+    const flipped = session.token[middle] === 'A' ? 'B' : 'A'
+    const tampered = `${session.token.slice(0, middle)}${flipped}${session.token.slice(middle + 1)}`
+    expect(verifyDashboardSession(tampered, SESSION_SECRET, now)).toBe(false)
     expect(verifyDashboardSession(session.token, `${SESSION_SECRET}-rotated`, now)).toBe(false)
     expect(verifyDashboardSession(
       session.token,
