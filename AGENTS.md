@@ -15,6 +15,18 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 | 找页面、API、环境变量 | `docs/reference.md`，先 Grep 再定点读 |
 | 处理技术债或技术卡 | `TECH_DEBT.md` 顶部索引，再按卡号定点读 |
 
+### 开工自检（CC 工作窗口）
+
+状态以源头为准，不靠上个窗口转述。读完上表后跑一次，把结果和上个窗口的收尾清单对一下，有出入以源头为准：
+
+```bash
+for r in /workspace/dashboard /workspace/haven; do cd $r && git fetch -q --prune origin && echo "== $r" && git status -sb | head -5 && git log --oneline origin/main..HEAD && git branch -r --no-merged origin/main; done
+```
+
+- 本地有没推的提交 → 问小羊推不推；远端有没合并的分支 → 是待验收的 GPT 活还是刻意保留的备选（如 `try/tabbar-74`）
+- `docs/handoff/README.md` 里 🔨 进行中 / 🔎 待验收的行
+- `list_todos(domain="tech", done=false)`：顺手核对有没有其实已经做完的，做完就勾
+
 ## 文档地图
 
 | 文档 | 职责 |
@@ -29,7 +41,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 
 ## 待办去哪
 
-想做的功能 / 活 → OB Todo（`list_todos` / `create_todo`，一句话）；代码债和需要细节的技术卡 → `TECH_DEBT.md`，卡里写对应 Todo ID；handoff 只作历史档案。细则（含没有 OB 工具时怎么办）见 `MAINTENANCE_CONTRACT.md` 铁律 4。
+想做的功能 / 活 → OB Todo（`list_todos` / `create_todo`，一句话）；代码债和需要细节的技术卡 → `TECH_DEBT.md`，卡里写对应 Todo ID；handoff 只作历史档案。**在等的事也记 Todo**：交给 GPT 的活（「验收 GPT 分支 xxx」）、等小羊实测的改动，当场记一条，验收完勾掉。细则（含没有 OB 工具时怎么办）见 `MAINTENANCE_CONTRACT.md` 铁律 4。
 
 ## 协作规范
 
