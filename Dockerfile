@@ -21,6 +21,8 @@ FROM base AS builder
 
 COPY --from=development-dependencies /app/node_modules ./node_modules
 COPY . .
+# 测试不过就让镜像构建失败，Coolify 会保留旧容器继续跑，不把坏代码换上去。
+RUN npm test
 RUN npm run build
 
 
