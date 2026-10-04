@@ -285,7 +285,7 @@ function BucketContent({ selected, editing, editContent, saving, operating, copi
           <button type="button" className="bucket-id-chip text-meta" data-copied={idCopied} onClick={onCopyId} aria-label={idCopied ? 'ID 已复制' : '复制 ID'}>
             <span>{selected.id}</span><Icon name="copy" />
           </button>
-          {actions.filter(action => action.active).map(action => <span key={action.label} className="bucket-state text-meta">{action.status}</span>)}
+          {actions.filter(action => action.active).map(action => <span key={action.label} className={`bucket-state text-meta ${action.status === '已归档' ? 'bucket-state-archived' : ''}`}>{action.status}</span>)}
         </div>
         <div className="bucket-vitals text-meta">
           {editingImp ? (

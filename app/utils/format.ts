@@ -38,3 +38,30 @@ export function getBeijingDayOfWeek(dateStr: string): string {
   const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
   return days[beijing.getDay()]
 }
+const CHAT_STAMP_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+function chatStampParts(date: Date) {
+  return Object.fromEntries(CHAT_STAMP_PARTS.formatToParts(date).map(part => [part.type, part.value]))
+}
+
+/** 聊天消息时间戳（北京时间）：今天只写 HH:mm，昨天写「昨天 HH:mm」，更早带月日，跨年带年份。 */
+export function formatChatStamp(value: string | number, now: Date = new Date()): string {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '—'
+  const at = chatStampParts(date)
+  const clock = `${at.hour}:${at.minute}`
+  const today = chatStampParts(now)
+  if (at.year === today.year && at.month === today.month && at.day === today.day) return clock
+  const yesterday = chatStampParts(new Date(now.getTime() - 24 * 60 * 60 * 1000))
+  if (at.year === yesterday.year && at.month === yesterday.month && at.day === yesterday.day) return `昨天 ${clock}`
+  const day = `${Number(at.month)}月${Number(at.day)}日 ${clock}`
+  return at.year === today.year ? day : `${at.year}年${day}`
+}

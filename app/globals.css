@@ -1995,6 +1995,8 @@ body:has(.home-page) > .rain-layer { display: none; }
 .bucket-id-chip svg { width: 13px; height: 13px; flex: none; }
 .bucket-id-chip[data-copied="true"] { color: var(--color-primary); border-color: var(--color-primary); }
 .bucket-state, .bucket-domain { border-radius: 999px; padding: 2px 9px; color: var(--color-primary); background: var(--color-primary-soft); }
+/* 归档的桶不参与浮现和召回：用中性灰和其他状态区分 */
+.bucket-state.bucket-state-archived { color: var(--color-text-tertiary); background: var(--color-surface-tertiary); }
 .bucket-vitals { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 16px; padding: 0 2px; color: var(--color-text-tertiary); }
 .bucket-vitals b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text-secondary); }
 .bucket-imp { display: inline-flex; align-items: center; gap: 6px; }

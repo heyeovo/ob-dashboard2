@@ -27,7 +27,7 @@ export function BucketCard({ b, onOpen, compact = false }: {
   return <button type="button" onClick={() => onOpen(b.id)} className={`memory-card ${compact ? 'memory-card-grid' : ''} ${(b.noise || (b.resolved && b.importance === 1)) ? 'memory-card-muted' : ''}`}>
     {compact ? <span className="memory-card-title">{b.pinned && <span className="memory-pin">★ </span>}{b.name}</span> : <span className="flex items-start justify-between gap-2">
       <span className="memory-card-title min-w-0 flex-1">{b.pinned && <span className="memory-pin">★ </span>}{b.name}</span>
-      {states.length > 0 && <span className="flex max-w-[50%] shrink-0 flex-wrap justify-end gap-1">{states.map(state => <span key={String(state)} className="bucket-state text-meta whitespace-nowrap">{state}</span>)}</span>}
+      {states.length > 0 && <span className="flex max-w-[50%] shrink-0 flex-wrap justify-end gap-1">{states.map(state => <span key={String(state)} className={`bucket-state text-meta whitespace-nowrap ${state === '已归档' ? 'bucket-state-archived' : ''}`}>{state}</span>)}</span>}
     </span>}
     <span className="memory-card-preview">{b.content_preview}</span>
     <span className="memory-card-footer">

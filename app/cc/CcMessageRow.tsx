@@ -16,6 +16,7 @@ import { modelLabel } from './upstream'
 import { parseForwardedMessage } from './forwardedMessage'
 import { buildDisplaySegments, buildStableDisplaySegments, type DisplaySegment } from '@/app/lib/cc/displaySegments'
 import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
+import { formatChatStamp } from '@/app/utils/format'
 
 // 一条消息。
 //
@@ -189,12 +190,6 @@ function AssistantSegments({
   )
 }
 
-function shortClock(value: string | number) {
-  const date = typeof value === 'number' ? new Date(value) : new Date(value)
-  if (!Number.isFinite(date.getTime())) return '—'
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-}
-
 export default function CcMessageRow({
   message,
   isCurrentTurn,
@@ -342,7 +337,7 @@ export default function CcMessageRow({
       <div className="my-3 w-full" data-role="agent-wake-event">
         <div className="flex items-center gap-3 text-2xs text-[var(--color-text-tertiary)]" role="separator">
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
-          <span className="shrink-0">{shortClock(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次{message.wakeEvent.delivery === 'quiet' ? ' · 没有提醒你' : ''}</span>
+          <span className="shrink-0">{formatChatStamp(message.wakeEvent.at || message.createdAt)} · {persona.name || '言之'}醒了一次{message.wakeEvent.delivery === 'quiet' ? ' · 没有提醒你' : ''}</span>
           <span className="h-px flex-1 bg-[var(--color-border-light)]" />
         </div>
         <div className="mx-auto mt-1 max-w-md space-y-0.5 px-3 text-center text-2xs text-[var(--color-text-tertiary)]">
@@ -597,7 +592,7 @@ export default function CcMessageRow({
           <div className="cc-row-actions cc-time mt-1 flex flex-row-reverse items-center gap-3 pr-1">
             <button type="button" aria-label="复制消息" title="复制" onClick={event => { event.stopPropagation(); copyMessage(userText) }}><ActionIcon kind={copied ? 'copied' : 'copy'} /></button>
             {canSelect ? <button type="button" aria-label="多选消息" title="多选" onClick={event => { event.stopPropagation(); onStartSelect?.(message.id) }}><ActionIcon kind="select" /></button> : null}
-            <span>{shortClock(message.createdAt)}</span>
+            <span>{formatChatStamp(message.createdAt)}</span>
           </div>
         </div>
       </div>
@@ -853,7 +848,7 @@ export default function CcMessageRow({
               onClick={event => { event.stopPropagation(); copyMessage(message.text) }}><ActionIcon kind={copied ? 'copied' : 'copy'} /></button>
             {canSelect ? <button type="button" aria-label="多选消息" title="多选" onClick={event => { event.stopPropagation(); onStartSelect?.(message.id) }}><ActionIcon kind="select" /></button> : null}
             </> : null}
-            <span className="cc-time">{shortClock(message.createdAt)}</span>
+            <span className="cc-time">{formatChatStamp(message.createdAt)}</span>
 
             {/* 保存状态图标 */}
             {message.deliveryState === 'saving' ? (
