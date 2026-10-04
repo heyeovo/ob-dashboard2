@@ -934,17 +934,19 @@ export default function CcMessageRow({
             ) : null}
 
             {message.recall?.injected || (usage && showTokenInfo) ? (
-              <div className="ml-auto flex items-center gap-1">
+              <div className="ml-auto flex items-center gap-1.5">
                 {message.recall?.injected ? (
+                  // 点击范围 44px 向左延伸，图标和条数靠右贴着 token 数
                   <button
                     type="button"
-                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center hover:text-[var(--color-text-secondary)]"
+                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-end gap-0.5 text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
                     aria-label={`查看本轮记忆召回（${message.recall.card_count} 条）`}
                     onClick={event => { event.stopPropagation(); onOpenRecall?.(message) }}
                   >
-                    <svg viewBox="0 0 20 20" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <circle cx="10" cy="10" r="7" /><path d="M10 5.5v4.5l3 2" />
                     </svg>
+                    {message.recall.card_count ? <span className="tabular-nums">{message.recall.card_count}</span> : null}
                   </button>
                 ) : null}
                 {usage && showTokenInfo ? <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} /> : null}

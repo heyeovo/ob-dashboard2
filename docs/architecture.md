@@ -46,7 +46,6 @@ Dashboard 到 Haven Brain 的后端认证仍由 `lib/api.ts` 中 `getSessionCook
 | 文件 | 说明 |
 |------|------|
 | `StatusBadge.tsx` | 桶状态标签，导出 `statusLabel()` |
-| `TagPill.tsx` | domain/tag 标签胶囊 |
 | `DataBadge.tsx` | 数字展示胶囊 |
 | `Stat.tsx` | 统计格子 |
 | `Card.tsx` | 统一卡片壳（4 variant） |

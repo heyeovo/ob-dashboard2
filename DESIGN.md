@@ -204,7 +204,7 @@
 - 消息列表和气泡的 React key 用 `renderKey || id`，不用 `id`：一轮结束存进 Haven 后，用户和助手消息的 `id` 会从临时 id 换成正式 id，`renderKey` 保留第一次渲染时的值。直接拿 `id` 当 key 会整条重新挂载，已经显现完的气泡全部消失再重播一遍（2026-09-28 修过一次）。
 - 代码、列表、表格、引用等原子 Markdown block 进入整宽气泡，结构不拆；代码块在气泡内再用 7% ink 的底色。Markdown 标题或单独一行的粗体小标题与后续块合成一泡。
 - 两侧操作行显示 HH:mm 和淡色小图标；保存成功不显示双勾。正在思考显示逐秒计时与扫光，减少动态效果时停用扫光。
-- 助手消息不显示顶部召回行；仅实际注入记忆时，在底部 Token 数左侧显示记忆库 Tab 同款图标，大小与颜色跟随 Token 文字，点击范围至少 44×44px，打开原召回面板。关闭 Token 显示或没有用量数据时，召回入口仍保留在底部。
+- 助手消息不显示顶部召回行；仅实际注入记忆时，在底部 Token 数左侧显示记忆库 Tab 同款图标和召回条数，用主题强调色（`--color-primary`）、图标略大于 Token 文字；点击范围至少 44×44px 且向左延伸，图标靠右贴近 Token 数，打开原召回面板。关闭 Token 显示或没有用量数据时，召回入口仍保留在底部。
 - 聊天内搜索框背景与输入栏共用 `--glass-fill`、`--glass-blur`，并提供 WebKit 模糊声明，避免下方消息文字直接透入搜索框；搜索布局与操作保持原样。
 - 设置 → 外观里的「聊天显示」提供两个本设备全局偏好：运行信息（引擎、Provider、模型、上下文入口）默认关闭，Token 总数与明细默认开启；错误、保存状态和持久化核对入口不受开关影响。
 
@@ -228,7 +228,6 @@
 | 组件 | 文件 | 用途 | 关键 Props |
 |------|------|------|-----------|
 | **StatusBadge** | `StatusBadge.tsx` | 桶状态标签（已解决/已消化/噪声等） | `type` (pinned/resolved/digested/noise/feel/wish), `size` (sm/xs) |
-| **TagPill** | `TagPill.tsx` | Domain / tag 标签胶囊 | `text`, `variant` (domain/tag) |
 | **DataBadge** | `DataBadge.tsx` | score / imp 等数字展示 | `label`, `value`, `size` (sm/xs) |
 | **Stat** | `Stat.tsx` | 统计格子 | `label`, `value` |
 
