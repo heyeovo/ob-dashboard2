@@ -1,6 +1,6 @@
 import 'server-only'
 
-// 后台唤醒轮次尾部的厦门天气行。只在 agent_wake 注入，闲聊每轮不加。
+// 后台唤醒轮次尾部的天气行（小羊在的城市）。行内刻意不写城市名，别加回去。只在 agent_wake 注入，闲聊每轮不加。
 // 进程内缓存只是省请求的运行态，丢了重查即可；查不到就整行不写。
 
 const XIAMEN = { latitude: 24.48, longitude: 118.09 }
@@ -49,7 +49,7 @@ export function formatXiamenWeather(data: OpenMeteoForecast): string {
     const tail = finite(rain) ? ` 降水概率 ${Math.round(rain)}%` : ''
     items.push(`今天 ${today ? `${today} ` : ''}${Math.round(min)}–${Math.round(max)}°C${tail}`)
   }
-  return `[厦门天气 ${items.join(' · ')}]`
+  return `[天气 ${items.join(' · ')}]`
 }
 
 export async function xiamenWeatherContext(now = Date.now()): Promise<string> {

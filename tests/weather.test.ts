@@ -22,13 +22,13 @@ afterEach(() => {
 describe('厦门天气行', () => {
   it('当前天气 + 今天范围和降水概率', () => {
     expect(formatXiamenWeather(SAMPLE))
-      .toBe('[厦门天气 现在 多云 31°C · 今天 雷阵雨 25–33°C 降水概率 100%]')
+      .toBe('[天气 现在 多云 31°C · 今天 雷阵雨 25–33°C 降水概率 100%]')
   })
 
   it('缺当前温度时整行不写；缺日数据只写现在', () => {
     expect(formatXiamenWeather({ daily: SAMPLE.daily })).toBe('')
     expect(formatXiamenWeather({ current: { temperature_2m: 20, weather_code: 61 } }))
-      .toBe('[厦门天气 现在 小雨 20°C]')
+      .toBe('[天气 现在 小雨 20°C]')
   })
 
   it('请求失败返回空串，成功后命中缓存不再请求', async () => {
