@@ -129,6 +129,8 @@ const INITIAL_HISTORY_LIMIT = 50
 const SESSION_PAGE_SIZE = 60
 const SESSION_HISTORY_CACHE_TTL_MS = 60_000
 const MAX_CACHED_SESSIONS = 5
+// 放在模块里而不是组件 ref：切到别的 Tab 聊天页会卸载，回来时还能先秒显示上次的消息再后台补新。
+const sessionHistoryCache = new Map<string, SessionHistorySnapshot>()
 
 function rememberSessionHistory(
   cache: Map<string, SessionHistorySnapshot>,
@@ -243,7 +245,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   // 草稿分会话保存（切走再回来还在），跟 Polaris 一样
   const draftsRef = useRef<Map<string, string>>(new Map())
-  const historyCacheRef = useRef<Map<string, SessionHistorySnapshot>>(new Map())
+  const historyCacheRef = useRef(sessionHistoryCache)
   const historyLoadedAtRef = useRef(0)
   const historyAbortRef = useRef<AbortController | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -677,11 +679,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }
   }, [sessionId])
 
-  const switchSession = useCallback(
-    async (nextId: string) => {
-      if (nextId === sessionId) return
-      // 存草稿
-      draftsRef.current.set(sessionId, draft)
+  // 当前会话写进缓存：切换会话和离开聊天页（卸载）都走这里。每次渲染后更新，拿到的总是最新状态。
+  const snapshotCurrentSessionRef = useRef<() => void>(() => undefined)
+  useEffect(() => {
+    snapshotCurrentSessionRef.current = () => {
       if (sessionId && !sending) {
         rememberSessionHistory(historyCacheRef.current, sessionId, {
           cachedAt: historyLoadedAtRef.current,
@@ -708,6 +709,19 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         // 正在生成时的消息可能只是尚未落库的半截，不能覆盖已验证快照。
         historyCacheRef.current.delete(sessionId)
       }
+    }
+  })
+  useEffect(() => {
+    const snapshot = snapshotCurrentSessionRef
+    return () => snapshot.current()
+  }, [])
+
+  const switchSession = useCallback(
+    async (nextId: string) => {
+      if (nextId === sessionId) return
+      // 存草稿
+      draftsRef.current.set(sessionId, draft)
+      snapshotCurrentSessionRef.current()
       abortRef.current?.abort()
       abortRef.current = null
       historyAbortRef.current?.abort()
@@ -965,25 +979,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         }
       }
     },
-    [
-      sessionId,
-      draft,
-      sending,
-      messages,
-      handoffTranscript,
-      historyBeforeId,
-      hasEarlierHistory,
-      historyTurnCount,
-      mode,
-      localEnginePreference,
-      pick,
-      webSettings,
-      promptModuleOverrides,
-      credChosen,
-      webDefaults,
-      sessions,
-      isRemote,
-    ],
+    [sessionId, draft, webDefaults, sessions, isRemote],
   )
 
   // URL 指定的对话：配置到齐后按点列表的方式打开，历史、本窗模型和设置才会一起恢复
