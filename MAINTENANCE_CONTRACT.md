@@ -16,7 +16,7 @@
 
 | 你改了什么 | 必须同步 | 说明 |
 |---|---|---|
-| 新增 / 删除 / 改名页面（`app/*/page.tsx`） | dashboard `docs/reference.md`「文件结构速查」 | 页面表 = 导航真相，漏了新窗口就找不到页 |
+| 新增 / 删除 / 改名页面（`app/*/page.tsx`） | dashboard `docs/reference.md`「文件结构速查」 | 页面表 = 导航真相，漏了新窗口就找不到页；`tests/reference-pages.test.ts` 会拦漏登记的页面目录 |
 | 改导航结构（`SideRail` / `BottomTabBar` / 设置聚合页） | dashboard `AGENTS.md`「设计与组件」导航条 | |
 | 新增 / 改有特殊逻辑的 API route | dashboard `docs/reference.md`「文件结构速查」`app/api` 行 | 纯透传的不写 |
 | 新增 / 改共享组件 | dashboard `AGENTS.md`「设计与组件」 | 只写统一约定，不列全部组件 |
@@ -34,7 +34,7 @@
 | 你改了什么 | 必须同步 | 说明 |
 |---|---|---|
 | 新增 / 改后端模块 | Haven `docs/reference.md`「核心模块」表 | |
-| 新增 / 改 REST 路由 | Haven `docs/reference.md`「REST API」分组 | 全量以代码为准，用 `grep -oE "@mcp\.custom_route\(\"[^\"]*\"" server.py` 实时核对 |
+| 新增 / 改 REST 路由 | Haven `docs/reference.md`「REST API」分组 | 全量以代码为准，用 `grep -oE "@mcp\.custom_route\(\"[^\"]*\"" server.py` 实时核对；Haven `tests/test_reference_routes.py` 会拦代码块里写了但不存在的路由或方法 |
 | 改环境变量 / 启动 / 部署 | `ENV_VARS.md` + `README.md`「部署」 | 环境变量只写一份在 ENV_VARS，别复制进 reference / AGENTS |
 | 改行为 / 记忆逻辑 / 影响外部接入 | `README.md`（系统级总览） | |
 | 改给 Claude / ChatGPT 用的行为指引 | `CLAUDE_PROMPT.md` + `docs/Tool Guide.md` | 改行为后同步，否则外部接入用的是旧指引 |

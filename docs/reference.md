@@ -24,7 +24,18 @@ production 必须配置以下六项：
 
 | 目录/文件 | 说明 |
 |-----------|------|
-| `app/page.tsx` | 主页（时间线/记忆格） |
+| `app/page.tsx` | 主页：Day 计数与纪念日、协作者状态、日记、本周日历、照顾 / 待办入口；时间线 / 记忆格在 `app/memory/` |
+| `app/login/` | 登录页（dashboard 密码，签发会话 Cookie） |
+| `app/care/` | 照顾备忘（reminders）与待办两个 Tab，从主页进入 |
+| `app/bucket/[id]/` | 单个记忆桶的独立详情页（深链接用；日常查看走 `BucketDetailDrawer`） |
+| `app/graph/` | 关系图谱：桶之间关联边的力导向图 |
+| `app/persona/` | Persona 中心：当前内在状态指标、运行状态与最近 persona 事件（情绪系统已停，数据可能不再更新） |
+| `app/prompts/` | 提示词页：后台任务（自动打标、记忆合并、日回顾、周轨迹）的提示词与权重配置，CC 唤醒说明 / 工具说明，从设置进入 |
+| `app/import/` | 导入历史聊天 / 记忆，显示导入进度与新建数量，从设置进入；cc 窗口导入另在 `app/cc/import/` |
+| `app/trash/` | 回收站：已删除桶的查看与恢复，从设置进入 |
+| `app/artifacts/` / `app/artifacts/[name]/` | 小作品：`yanzhi's files/artifacts` 下的页面列表与全屏查看（`ArtifactPlayer` 沙箱），从工作台进入 |
+| `app/breath-sim/` | 模拟 Breath：调评分权重（scoring-config）跑 `breath-debug` 看召回结果与命中统计，从工作台进入 |
+| `app/tools/mcp/` | 工具 · MCP：`McpManager` 管理 MCP 服务器连接，从工作台进入 |
 | `app/room/` / `app/room/[id]/` | 言之的房间：两列门牌与按北京时间分组的来访时间线（before 分页）；关门只展示门，开门可看正文、房间文件和封存来访过程；hash 定位并展开来访。主页 Clawd 是独立入口，圆点只以本机 lastSeenAt 比较新的未打开来访。 |
 | `app/api/rooms/` | 登录保护的房间公开代理；仅 GET 门牌、来访、单间详情，递归移除 note；files 列表 / 内容先检查 opened，否则 404，再检查真实路径、所有祖先及文件不是符号链接，限制在 `.room/<id>/` 内。HTML 复用作品沙箱播放器；未提供 door-snapshot 或 POST visits 的浏览器代理。 |
 | `app/memory/` | 记忆库（时间线 / 记忆格双视图） |
@@ -46,7 +57,7 @@ production 必须配置以下六项：
 | `app/api/cc-turns/` | 窗口状态 PATCH 可单独写入 `recall_mode` 三态到 Haven，GET 按 session 返回该值供本窗设置刷新恢复。 |
 | `app/api/cc-context-audit/` | 只读读取活跃 lane 的原生存档：entry 数、首末 chat_day、每日轮数、本 revision 重建时的每日处理与 thinking／召回／attachment 清理数量、按当前配置重建预览；保留逐日预算、持久 transcript 的工具／召回／正文恢复统计、长期层已保存／生效 ID、当前工具和 MCP 模型表面、最近请求的 hash 与 iterator 状态。房间原生过程在浏览器投影中封存；不与 Haven 逐轮或逐条正文匹配，不生成 seed、不改变设置或会话指针。 |
 | `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 每轮按 Haven 最新配置拼装基础提示词、“关于我”和可热更新提示词模块；召回背景使用规则由提示词模块维护，动态正文不重复说明 |
-| `globals.css` | 设计 Token 定义 |
+| `app/globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
 
 ## cc 数据持久化契约
