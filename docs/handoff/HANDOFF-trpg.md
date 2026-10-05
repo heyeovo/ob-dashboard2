@@ -20,7 +20,7 @@
 |---|---|---|
 | P0 验证 | §7 三项验证，全部通过才进 P1 | CC |
 | P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | ✅ 2026-10-05 Codex（VPS 上由 CC 直接派活）实现，CC 验收：新增 36 项 + Haven 全量 327 通过，合并 main（`c956926`）。限制：每个 profile 同时只有一局 |
-| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | 下一步（新窗口）：拆两半——① 页面先写任务单派 Codex（CC 可在 VPS 直接派活，见 CC memory `codex-worker`）；② 跑团模式 + 调度：CC 先读 cc 引擎代码，确认会话如何摘出归档 / 日回顾 / 做梦 / 召回 / search_chat，再写规格。桌边话回合和前情提要（§2）属于 P2。Codex，CC 验收 |
+| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | 拆两半——① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：任务单见 §12，2026-10-05 派 Codex，待 CC 验收；② P2b 跑团模式 + 调度：CC 先读 cc 引擎代码，确认会话如何摘出归档 / 日回顾 / 做梦 / 召回 / search_chat，再写规格。桌边话回合和前情提要（§2）属于 P2。Codex，CC 验收 |
 | P3 trpg-dm | Codex DM 容器 | CC（涉及登录凭证与部署） |
 | P4 开团 | GPT 拆模组 → 上传 → 选调查员 → 开团 | 小羊 + GPT |
 
@@ -182,7 +182,43 @@ Foundry、地图、战斗轮、孤注一掷、幸运值花费、团录写进记�
 
 **不做**：调用任何模型、dashboard 页面、Foundry、团录。
 
-## 12. 待小羊决定
+## 12. P2a 任务单（Codex · 页面 + Haven 小补）
+
+两个分支、两个工作副本：Haven `feat/trpg-p2a`、dashboard `feat/trpg-p2a`。不碰 cc 引擎（`app/lib/cc/**`、`app/api/cc-*`）、不调用任何模型、不写调度器逻辑。全程只用 §8 假模组。
+
+### Haven（先做，dashboard 依赖它的接口）
+
+1. **预设调查员列表**：`GET /trpg/api/modules/{module}/pregens` → `[{index, name, occupation, sheet}]`。只取 `pregens`，其他模组字段一律不返回；在 `trpg_store` 写成函数，REST 只调它
+2. **前情提要**：log kind 新增 `recap`。`trpg_store.write_recap(game, public, keeper)` 写两条：`public` → `visible_to=all`，`keeper` → `visible_to=dm`（任一可省略，都空则报错）；DM MCP 加工具 `write_recap(public, keeper?)`。`trpg_store.latest_recap(game, viewer)`：玩家视角只返回最新的 public，dm 返回最新的两份。前情提要不改 phase
+3. **测试**：pregens 响应里没有 `keeper_*` / scenes / clues / npcs；keeper 版前情提要在玩家 MCP 的 `get_table`、小羊 REST `table`、`latest_recap(…, 'xiaoyang'|'yanzhi')` 里都看不到；DM 能看到两份；已有测试全过
+4. **文档**：Haven `docs/reference.md` 的 trpg REST 分组加 pregens 一行、核心模块表 `trpg_store` 提一句 recap
+
+### dashboard
+
+**转发层**
+- `app/api/trpg/[...path]/route.ts`：白名单转发到 Haven 的 `/trpg/api/*`（`modules`、`modules/{id}/pregens`、`games`、`games/{id}/table|action|table-talk|settle`、`games/{id}/checks/{id}/roll`）。**不转发 `games/{id}/phase`**（只给服务端调度器用）。鉴权用 `getHavenBaseUrl()` + `getHavenGatewayToken()` 加 Bearer，不转发浏览器 Cookie；token 不出服务端。Haven 的 400 / 409 原样带给页面
+- `action`、`table-talk`、`settle`、`roll` 成功后调 `app/lib/trpg/scheduler.ts` 的 `kickTrpgTurn(gameId, trigger)`。这次它只是**空函数**，文件头写明「P2b 由 CC 实现：按 phase 叫言之 / DM 的回合」，不要自己实现
+
+**页面**（动手前完整读 `DESIGN.md`；复用现有组件和 token，耦合太深的组件复用样式类，不整段复制）
+- 入口：工作台条目列表加「跑团」，不加底部 Tab
+- `/trpg`：局列表（标题 + phase 中文）· 新建局：选模组 → 拉 pregens，分别给「小羊」「言之」选调查员（显示名字 + 职业，默认第 1、第 2 个）→ 可填局名 → 创建。Haven 现在每个 profile 只允许一局，409 时提示「已经有一局在跑了」· 上传模组：选 JSON 文件，按钮旁小字「交给 DM，别打开」，成功只显示 Haven 返回的标题和场景 / 线索 / NPC 数量，**页面不解析、不显示模组内容**
+- `/trpg/[id]`：
+  - 叙事流：按 `seq` 增量合并 `log`（`since_seq` = 已有最大 seq）。`narration` 用 `CcMarkdown` 显示成正文；`action` 标出谁的行动（小羊 / 言之 + 角色名）；`table_talk` 小一号、像聊天气泡，标「桌边」；`roll` 显示成骰子结果行；`private` 加「只有你看得到」；`recap` 显示成可折叠的「前情提要」卡片
+  - 顶部状态：`players`「轮到你们」· `yanzhi`「言之在想…」· `dm`「守秘人在写…」· `checks`「等掷骰」；当前场景标题
+  - 底部输入框：切换「行动 / 桌边话」。行动只在 `players` 可发（其他时候灰掉并说明）；桌边话随时可发。`players` 和 `yanzhi` 时显示「直接结算」（`settle` 带当前 phase）
+  - `checks`：自己名下的 pending 检定逐条列出（技能、难度、奖励 / 惩罚骰、原因）+「掷骰」按钮
+  - 角色卡抽屉（`my_character` 全量 + 同伴名字职业）、线索抽屉（`clues`，handout 标出来），都用 `DetailPanel`
+  - 刷新：页面在前台且 phase ≠ `players` 时每 3 秒拉一次增量；`players` 时 15 秒；切到后台停
+  - 返回用 `SubpageBackButton`；加载 / 空状态撑满 `min-h-screen`；手机优先
+- 数据分类：全部在 Haven，页面只存界面偏好（如输入框模式）可用 `localStorage`
+
+**测试（Vitest）**：转发白名单（`phase` 和白名单外路径 404、带 Bearer、不带 Cookie）；成功的 action / table-talk / settle / roll 会调 `kickTrpgTurn`，失败不调；日志增量合并（去重、按 seq 排序）
+
+**文档**：`docs/reference.md` 页面表加 `/trpg`、`/trpg/[id]`，`app/api` 行加 trpg 转发；本文件 §1 P2 行写「P2a 已交，待验收」
+
+**不做**：调度器、跑团模式会话、DM 容器、`trpg-dm`、SSE / 推送、模组内容展示、多局。
+
+## 13. 待小羊决定
 
 - ~~跑团窗口要不要进日回顾~~ 已定（2026-10-05）：不进，团录以后单独做
 - ~~言之每回合是否必须交行动~~ 已定（2026-10-05）：不必，可以只说桌边话，小羊点「直接结算」跳过
