@@ -16,6 +16,7 @@ const FILES: Entry[] = [
   { label: '言之的笔记', description: 'Claude Code 里的工作笔记 · 只读', href: '/workbench/files/notes', icon: 'note', root: 'notes' },
 ]
 const ENGINE: Entry[] = [
+  { label: '跑团', description: '调查员、线索与桌边话', href: '/trpg', icon: 'note' },
   { label: '工具 · MCP', description: '工具清单与 MCP 服务', href: '/tools/mcp', icon: 'plug' },
   { label: '模拟 Breath', description: 'Pipeline、即时模拟、评分旋钮', href: '/breath-sim', icon: 'wave' },
   { label: '召回透镜', description: '逐轮看召回、拒绝与降级', href: '/recall-lens', icon: 'lens' },

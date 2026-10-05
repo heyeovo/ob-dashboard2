@@ -23,7 +23,7 @@
 |---|---|---|
 | P0 验证 | §7 三项验证，全部通过才进 P1 | CC |
 | P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | ✅ 2026-10-05 Codex（VPS 上由 CC 直接派活）实现，CC 验收：新增 36 项 + Haven 全量 327 通过，合并 main（`c956926`）。限制：每个 profile 同时只有一局 |
-| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | 拆两半——① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：任务单见 §12，2026-10-05 派 Codex，待 CC 验收；② P2b 调度器 + 言之的跑团会话：规格见 §13（单独起 SDK 会话，不经聊天引擎），P2a 合并后派。桌边话回合和前情提要（§2）属于 P2。Codex，CC 验收 |
+| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | ① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：✅ 2026-10-05 Codex 实现，CC 验收（Haven 全量 330、dashboard Vitest 532 + build 通过）合并 main，待上线后 iPhone 走查；② P2b 调度器 + 言之的跑团会话：规格见 §13（单独起 SDK 会话，不经聊天引擎），待派。Codex，CC 验收 |
 | P3 trpg-dm | Codex DM 容器 | CC（涉及登录凭证与部署） |
 | P4 开团 | GPT 拆模组 → 上传 → 选调查员 → 开团 | 小羊 + GPT |
 
@@ -237,6 +237,7 @@ P2a 验收合并后再派。两个分支：Haven `feat/trpg-p2b`、dashboard `fe
 **页面转发白名单不加**这三组新接口里的 `yanzhi-view`、`yanzhi-table-talk`、`yanzhi-runtime` 的写方法；页面只能读 `settings`（PATCH 可以转发，用于改模型）和 `yanzhi-runtime` 的 GET（显示状态 / 错误）。
 
 **`app/lib/trpg/scheduler.ts`：`kickTrpgTurn(gameId, trigger)`**
+- 转发接口里改成 `void kickTrpgTurn(...)`：只触发不等待（P2a 是 `await` 空函数），否则小羊点发送要等言之整轮跑完
 - 每局一把进程内互斥锁；正在跑时再被叫，只记「还要再看一次」，当前回合结束后再循环一次（合并多次触发）。`isDraining()` 时直接返回；跑的时候 `trackDrainWork`
 - 循环：读 yanzhi-view，按顺序判断，都不满足就停
   1. 小羊有言之还没回应过的新桌边话（seq > `last_seen_seq`）→ **桌边回合**
