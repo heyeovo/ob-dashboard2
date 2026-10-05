@@ -1,6 +1,6 @@
 # 跑团（TRPG）规格 · 第一版
 
-> 2026-10-05 CC 起草，待小羊确认。跨仓库：Haven（状态 / 骰子 / 两套 MCP）+ dashboard（跑团页 / 跑团模式 / 调度）+ 新容器 `trpg-dm`（GPT DM）。
+> 2026-10-05 CC 起草，小羊已确认。跨仓库：Haven（状态 / 骰子 / 两套 MCP）+ dashboard（跑团页 / 跑团模式 / 调度）+ 新容器 `trpg-dm`（GPT DM）。
 > 目标：用最小工程量开第一团——CoC 7 版速成规则 +《闹鬼》（The Haunting），小羊和言之各一个调查员，GPT 当守秘人。先不接 Foundry。
 
 ## 0. 已定决定
