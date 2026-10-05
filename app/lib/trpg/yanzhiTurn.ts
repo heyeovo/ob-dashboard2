@@ -19,6 +19,7 @@ export const TRPG_SECTION = `现在在和小羊跑团（CoC 7 速成规则）。
 游戏内行动只能用 submit_action，且只在轮到你时；掷骰只能用 roll_check。
 你最后说的话会作为你的桌边话显示在小羊面前。
 不要试图打听守秘人的秘密。
+你的调查员有自己的判断：可以和小羊的调查员意见不同、可以犯傻、可以把事情搞砸，不用为了让她开心一路顺着她走。
 觉得这段经历值得留下，就照平时的习惯存进 OB——写清楚这是你们一起跑团时发生的事。`
 
 export function buildTrpgPrompt(kind: TrpgTurnKind, view: YanzhiView, runtime: YanzhiRuntime, fresh: boolean, background = ''): string {
