@@ -19,7 +19,7 @@
 | 阶段 | 内容 | 谁做 |
 |---|---|---|
 | P0 验证 | §7 三项验证，全部通过才进 P1 | CC |
-| P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | Codex，CC 验收 |
+| P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | ✅ 2026-10-05 Codex（VPS 上由 CC 直接派活）实现，CC 验收：新增 36 项 + Haven 全量 327 通过，合并 main（`c956926`）。限制：每个 profile 同时只有一局 |
 | P2 dashboard | 跑团页 + 跑团模式 + 调度器 | Codex，CC 验收 |
 | P3 trpg-dm | Codex DM 容器 | CC（涉及登录凭证与部署） |
 | P4 开团 | GPT 拆模组 → 上传 → 选调查员 → 开团 | 小羊 + GPT |
@@ -59,7 +59,7 @@ checks ──小羊点「掷骰」/ 言之 roll_check，全部掷完──▶ dm
   "system": "coc7",
   "public_intro": "开场时可以念给玩家的部分",
   "keeper_overview": "守秘人总览：真相、时间线",
-  "scenes":  [{ "id": "s1", "title": "...", "keeper_text": "..." }],
+  "scenes":  [{ "id": "s1", "title": "玩家可见的地点名，不剧透", "keeper_text": "..." }],
   "clues":   [{ "id": "c1", "title": "...", "text": "公开后玩家看到的原文", "handout": true }],
   "npcs":    [{ "id": "n1", "name": "...", "keeper_text": "...", "sheet": {} }],
   "pregens": [{ "name": "...", "occupation": "...", "sheet": {} }]
