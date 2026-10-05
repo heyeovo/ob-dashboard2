@@ -20,7 +20,7 @@
 |---|---|---|
 | P0 验证 | §7 三项验证，全部通过才进 P1 | CC |
 | P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | ✅ 2026-10-05 Codex（VPS 上由 CC 直接派活）实现，CC 验收：新增 36 项 + Haven 全量 327 通过，合并 main（`c956926`）。限制：每个 profile 同时只有一局 |
-| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | Codex，CC 验收 |
+| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | 下一步（新窗口）：拆两半——① 页面先写任务单派 Codex（CC 可在 VPS 直接派活，见 CC memory `codex-worker`）；② 跑团模式 + 调度：CC 先读 cc 引擎代码，确认会话如何摘出归档 / 日回顾 / 做梦 / 召回 / search_chat，再写规格。桌边话回合和前情提要（§2）属于 P2。Codex，CC 验收 |
 | P3 trpg-dm | Codex DM 容器 | CC（涉及登录凭证与部署） |
 | P4 开团 | GPT 拆模组 → 上传 → 选调查员 → 开团 | 小羊 + GPT |
 
