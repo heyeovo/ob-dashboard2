@@ -150,7 +150,30 @@ checks ──小羊点「掷骰」/ 言之 roll_check，全部掷完──▶ dm
 
 Foundry、地图、战斗轮、孤注一掷、幸运值花费、团录写进记忆、多局并行、跑团页里的语音或图片。
 
-## 11. 待小羊决定
+## 11. P1 任务单（Codex · Haven）
+
+分支 `feat/trpg-p1`，只动 Haven，不动 dashboard。全程只用 §8 假模组。
+
+**做什么**
+1. `trpg_store.py`：§3 的库和表（独立 `state/trpg.sqlite`，带 `profile_id`，初始化可重复执行）；§2 的 phase 状态机；**可见性过滤只在这里写一次**，对外按视角给函数：`view_for(game, viewer)`，viewer ∈ `xiaoyang` / `yanzhi` / `dm`
+2. `trpg_dice.py`：§4 全部规则，纯函数 + `secrets` 随机源，测试可注入随机源
+3. `trpg_mcp.py`：两个独立 FastMCP 实例（玩家 / DM），工具按 §5，挂到同一端口的 `/trpg/player/mcp`、`/trpg/dm/mcp`
+   - 各自的 Bearer token：`TRPG_PLAYER_MCP_TOKEN`、`TRPG_DM_MCP_TOKEN`；**未配置就拒绝一切请求**；两个 token 不能互用，也不能用 OB 的 token 或 ChatGPT OAuth 访问
+   - 玩家端视角固定 `yanzhi`，没有参数能改视角
+   - 挂载子应用要保证 streamable-http 的 session manager 随主应用 lifespan 启动，用真实 HTTP 请求测过，不只测函数
+4. 给 dashboard 页面用的 REST（`OMBRE_GATEWAY_TOKEN` 鉴权，视角固定 `xiaoyang`）：局列表 / 新建局（选模组、给双方建卡或选预设调查员）· 上传模组（校验 §3 导入格式，**响应只返回标题和场景 / 线索 / NPC 数量**）· 模组列表（只有标题）· 读桌面（小羊视角 + phase + 待掷检定）· 提交行动 / 桌边话 · 掷自己的检定 · 「直接结算」（players → dm）· 推进 phase（给 P2 调度器用，带期望的当前 phase 做 CAS）
+
+**测试（必须）**
+- 隔离：玩家 MCP 和小羊 REST 读不到 `keeper_*`、`gm_note`、对方的 `private`、未公开线索、DM 暗骰；上传模组的响应里没有 keeper 内容；DM token 打不开玩家端点，反之亦然；未配置 token 时 401
+- 骰子：01 / 100、目标 <50 和 ≥50 的大失败边界、三档难度、奖励 / 惩罚骰、理智扣减
+- phase：非当前回合方提交被拒；CAS 冲突；检定全部掷完才回到 dm
+- 迁移重复初始化
+
+**同步文档**：Haven `docs/reference.md` 核心模块表 + REST 分组；`ENV_VARS.md` 两个 token。完成后在本文件 §1 标 P1 状态。
+
+**不做**：调用任何模型、dashboard 页面、Foundry、团录。
+
+## 12. 待小羊决定
 
 - ~~跑团窗口要不要进日回顾~~ 已定（2026-10-05）：不进，团录以后单独做
 - ~~言之每回合是否必须交行动~~ 已定（2026-10-05）：不必，可以只说桌边话，小羊点「直接结算」跳过
