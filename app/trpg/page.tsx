@@ -71,7 +71,7 @@ export default function TrpgPage() {
   }
 
   return <main className="mx-auto min-h-screen max-w-2xl space-y-5 px-4 pb-24 pt-5 text-[var(--color-text-primary)] sm:px-6">
-    <SubpageBackButton href="/workbench" label="返回工作台" />
+    <SubpageBackButton href="/games" label="返回游戏室" />
     <h1 className="text-3xl font-[family-name:var(--font-display)]">跑团</h1>
     {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
     {loading ? <p role="status">正在摆好桌子…</p> : <>

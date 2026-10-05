@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 
 const rooms = [
+  { label: '游戏室', href: '/games' },
   { label: '关系轨迹', href: '/journey' },
   { label: '关系图谱', href: '/graph' },
 ]

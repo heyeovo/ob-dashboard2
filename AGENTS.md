@@ -77,7 +77,7 @@ for r in /workspace/dashboard /workspace/haven; do cd $r && git fetch -q --prune
 - 记忆详情用共享 `BucketDetailDrawer`：正文卡片优先、固定八格底部操作栏；抹除与年轮删除均需三秒内两次点击，年轮可逐条编辑，相似记忆展开后才请求。
 - 桶正文原位编辑用 `BucketContentEditor`：视觉字号与阅读正文一致，短正文贴合高度、长正文内部滚动；只在正文编辑时开启 `DetailPanel` 的 `preserveHeight` / `keyboardAware`，其他抽屉默认行为不变。
 - 记忆时间线的桶卡片标题右侧复用抽屉的 `bucket-state` 状态小框，显示所有已激活操作状态；记忆格不加状态小框。
-- 导航：桌面 `SideRail`，手机 `BottomTabBar` 底部 5 Tab（主页 / 记忆库 / 聊天 / 工作台 / 设置），全站 `MobileShell` 包裹；记忆库顶栏用共享 `MemoryViewSwitch` 薄玻璃药丸切换时间线 / 记忆格；手机点聊天 Tab 回 `/cc` 对话列表，session deep link 直接进聊天；工作台条目提供 `/trpg` 跑团入口；设置聚合页按常用、记忆与引擎、数据分组，外观在 `/settings/appearance`
+- 导航：桌面 `SideRail`，手机 `BottomTabBar` 底部 5 Tab（主页 / 记忆库 / 聊天 / 工作台 / 设置），全站 `MobileShell` 包裹；记忆库顶栏用共享 `MemoryViewSwitch` 薄玻璃药丸切换时间线 / 记忆格；手机点聊天 Tab 回 `/cc` 对话列表，session deep link 直接进聊天；主页抽屉「家里的其他房间」有游戏室 `/games`，跑团 `/trpg` 从这里进（以后剧情模式也放这里）；设置聚合页按常用、记忆与引擎、数据分组，外观在 `/settings/appearance`
 - 全站外观由 `AppearanceProvider` 即时预览并保存到 Haven，`RainLayer` 在效果开启时挂载；背景图和配置均以 Haven 为事实源，`localStorage` 仅镜像缓存。固定导航外框可用玻璃模糊，长列表卡片和聊天气泡不逐项模糊
 - Next.js 16 动态路由 params 是 Promise：`const { id } = await params`。这版 Next.js 有破坏性变更，写之前查 `node_modules/next/dist/docs/` 里的对应文档
 
