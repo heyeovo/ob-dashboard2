@@ -13,6 +13,9 @@
 | 拆模组 | GPT 拆，CC 任何窗口都不碰 | 言之的窗口会进归档 / 日回顾 / 做梦 / 召回，处处漏风 |
 | DM 模型 | 在 VPS 上用小羊的 ChatGPT 账号登录 Codex，走 Plus 额度 | 和 CC 引擎接 Pro 一个形状；Sign in with ChatGPT 开源应用版要申请 client ID，大概率不符合 |
 | 骰子 | 全部在 Haven 服务端掷，模型只能「要求掷骰」 | 不让任何一方编点数 |
+| 言之的人设 | 主窗口协作者配置全量 + 跑团说明（2026-10-05） | 坐在对面的要是完整的言之 |
+| 言之挂 OB | 挂（2026-10-05 改） | 言之只看得到玩家可见内容，没有可漏的秘密；一起跑团是真实经历，要能长期留存 |
+| 言之的模型 | 每局一个设置，默认 Opus 4.6，局中可改、下一回合生效 | 和主窗口同一个言之；想换时不用改代码 |
 
 ## 1. 阶段
 
@@ -20,7 +23,7 @@
 |---|---|---|
 | P0 验证 | §7 三项验证，全部通过才进 P1 | CC |
 | P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | ✅ 2026-10-05 Codex（VPS 上由 CC 直接派活）实现，CC 验收：新增 36 项 + Haven 全量 327 通过，合并 main（`c956926`）。限制：每个 profile 同时只有一局 |
-| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | 拆两半——① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：任务单见 §12，2026-10-05 派 Codex，待 CC 验收；② P2b 跑团模式 + 调度：CC 先读 cc 引擎代码，确认会话如何摘出归档 / 日回顾 / 做梦 / 召回 / search_chat，再写规格。桌边话回合和前情提要（§2）属于 P2。Codex，CC 验收 |
+| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | 拆两半——① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：任务单见 §12，2026-10-05 派 Codex，待 CC 验收；② P2b 调度器 + 言之的跑团会话：规格见 §13（单独起 SDK 会话，不经聊天引擎），P2a 合并后派。桌边话回合和前情提要（§2）属于 P2。Codex，CC 验收 |
 | P3 trpg-dm | Codex DM 容器 | CC（涉及登录凭证与部署） |
 | P4 开团 | GPT 拆模组 → 上传 → 选调查员 → 开团 | 小羊 + GPT |
 
@@ -119,10 +122,10 @@ checks ──小羊点「掷骰」/ 言之 roll_check，全部掷完──▶ dm
 
 1. **Haven 查询层**：§3 的可见性过滤；模组原文只能经 DM 端点读
 2. **MCP 层**：玩家只有 §5 那五个工具；DM token 只放在 `trpg-dm` 容器的环境变量里，不进 dashboard 容器
-3. **言之的会话**：新增「跑团模式」——
-   - 自定义 system prompt：言之是谁（简短）+ 跑团规矩 + 自己扮演的调查员是谁
-   - **只挂玩家 MCP**：不挂 Ombre Brain、`yanzhi's files`、房间、唤醒，没有 Read / Bash / Web 工具；`autoMemoryEnabled: false`
-   - 跑团窗口不进日回顾、做梦、召回、`search_chat`（P2 定具体开关；以后想把团录写成回忆另做）
+3. **言之的会话**（2026-10-05 修订，细节见 §13）——
+   - 不走聊天引擎：照 `automation-pro-runner` 单独起 SDK 会话，不写 Haven 聊天归档，因此天然不进日回顾、做梦、自动召回、`search_chat`
+   - system prompt = 主窗口协作者配置**全量** + 「现在在跑团」一节
+   - 挂**玩家 MCP + Ombre Brain**：言之只拿得到玩家可见内容，OB 里存的就是两人在桌边真实经历的事。不挂 `yanzhi's files`、房间、唤醒，没有 Read / Bash / Web；`autoMemoryEnabled: false`
    - 言之最后的回复文字 = 对小羊说的桌边话；游戏内的行动必须走 `submit_action`
 
 另外：DM 的 Codex 对话存在 `trpg-dm` 容器里，不进 Haven 聊天归档。
@@ -218,7 +221,50 @@ Foundry、地图、战斗轮、孤注一掷、幸运值花费、团录写进记�
 
 **不做**：调度器、跑团模式会话、DM 容器、`trpg-dm`、SSE / 推送、模组内容展示、多局。
 
-## 13. 待小羊决定
+## 13. P2b 规格（调度器 + 言之的跑团会话）
+
+P2a 验收合并后再派。两个分支：Haven `feat/trpg-p2b`、dashboard `feat/trpg-p2b`。**不改聊天引擎**：`runTurn`、`ccSession`、`havenTurns`、`cc-chat` 一行不动，只复用导出的函数。
+
+### Haven
+
+1. **每局设置**：`trpg_games` 加 `settings_json`（迁移可重复执行），字段 `yanzhi_model`（默认 `claude-opus-4-6`）、`persona_id`（默认空 = dashboard 取主协作者）。REST：`GET/PATCH /trpg/api/games/{game}/settings`，`yanzhi_model` 只收 `^claude-(opus|sonnet)-[a-z0-9-]+$`
+2. **言之会话运行态**：`runtime_json`，字段 `session_id`、`session_tokens`、`last_seen_seq`、`last_error`、`running_since`。REST：`GET/PUT /trpg/api/games/{game}/yanzhi-runtime`。丢了也没关系（下回合当新会话开），但存 Haven，重启后能续
+3. **给调度器的言之视角**：`GET /trpg/api/games/{game}/yanzhi-view?since_seq=` → `view_for(game,'yanzhi')` + `latest_recap(game,'yanzhi')`。`POST /trpg/api/games/{game}/yanzhi-table-talk {text}`：以言之名义写桌边话（kind `table_talk`、`visible_to=all`、author `yanzhi`），不改 phase
+4. 以上都用 `OMBRE_GATEWAY_TOKEN`。测试：yanzhi-view 不含 `keeper_*`、`gm_note`、小羊的 `private`、keeper 版前情提要、DM 暗骰；settings 模型校验；迁移重复执行
+
+### dashboard
+
+**页面转发白名单不加**这三组新接口里的 `yanzhi-view`、`yanzhi-table-talk`、`yanzhi-runtime` 的写方法；页面只能读 `settings`（PATCH 可以转发，用于改模型）和 `yanzhi-runtime` 的 GET（显示状态 / 错误）。
+
+**`app/lib/trpg/scheduler.ts`：`kickTrpgTurn(gameId, trigger)`**
+- 每局一把进程内互斥锁；正在跑时再被叫，只记「还要再看一次」，当前回合结束后再循环一次（合并多次触发）。`isDraining()` 时直接返回；跑的时候 `trackDrainWork`
+- 循环：读 yanzhi-view，按顺序判断，都不满足就停
+  1. 小羊有言之还没回应过的新桌边话（seq > `last_seen_seq`）→ **桌边回合**
+  2. phase=`yanzhi` 且这次进入 yanzhi 后还没叫过言之 → **行动回合**（言之可以不交行动，只说话；不重复叫）
+  3. phase=`checks` 且有言之名下的 pending 检定、这批检定还没叫过 → **掷骰回合**
+  4. phase=`dm` → `runDmTurn(gameId)`：P3 才实现，现在是空函数，文件头写明
+- 一个回合结束后：最后的回复文字非空就 POST `yanzhi-table-talk`；更新 `last_seen_seq`（含他自己刚写的日志）、`session_id`、`session_tokens`；失败写 `last_error`（Pro 额度 / 登录失效 / 超时分别给中文），不写进跑团日志
+
+**`app/lib/trpg/yanzhiTurn.ts`：一回合言之**
+- 照 `app/api/automation-pro-runner/route.ts` 起 `query()`，外面套 `runForegroundSubscriptionTurn`（和聊天共用一把 Pro 锁，排在聊天之后）
+- options：`model` = 局设置；`systemPrompt: { type: 'custom', prompt: personaAppend + '\n\n' + trpgSection, snapshot: false }`；`tools: []`；`mcpServers` = `{ trpg: 玩家 MCP（http，URL = getHavenBaseUrl() + '/trpg/player/mcp'，Bearer TRPG_PLAYER_MCP_TOKEN）, ombre_brain: 从 loadMcpConfig() 里只取 OB 那一个 }`；`strictMcpConfig: true`；`disallowedTools` = OB 配置里被关掉的工具；`allowedTools` = `mcp__trpg__*` + OB 开着的工具；`permissionMode: 'dontAsk'`；`settings: { autoMemoryEnabled: false }`；`settingSources: []`；thinking / effort 用主窗口同样的设置；`cwd` 固定一个专用目录（如 `os.tmpdir()/ob2-trpg`，不存在就建），让原生 transcript 落在单独的 project 下；`env: buildCcEnv('subscription', { mainModel })`；`resume` = runtime 里的 `session_id`
+- `personaAppend`：`getPersona(局设置的 persona_id ?? 主协作者)` → `buildPersonaAppend(persona)`，模块按默认开关。「主协作者」怎么定：读现有代码里新建闲聊窗口默认用哪个，照用；找不到规则就在报告里写明，不要猜
+- `trpgSection`（写在代码里，作为常量）：现在在和小羊跑团（CoC 7 速成规则），你扮演的调查员是谁（名字、职业）；游戏内行动只能用 `submit_action`，且只在轮到你时；掷骰只能用 `roll_check`；你最后说的话会作为你的桌边话显示在小羊面前；不要试图打听守秘人的秘密；觉得这段经历值得留下，就照平时的习惯存进 OB——写清楚这是你们一起跑团时发生的事
+- **每回合的 prompt**：`<trpg_turn kind="table_talk|action|roll" />` + 自 `last_seen_seq` 以来言之可见的新日志（一行一条：seq、谁、类型、原文）+ 言之名下的 pending 检定
+- **新会话**（没有 `session_id`、resume 失败，或 `session_tokens` > 80000）：prompt 前面再加：言之角色卡全文、最新前情提要（public）、已公开线索、最近 40 条可见日志。用 result 的 usage 估 `session_tokens`（input + cache_read + cache_creation 的最后一次）
+- 超时 5 分钟；中途 `isDraining()` 不打断，靠 drain 等它结束
+
+**页面（`/trpg/[id]`）**
+- 设置抽屉：言之用的模型（Opus 4.6 / Opus 5.5 / Sonnet 5，下拉），改完下一回合生效
+- 顶部状态读 `yanzhi-runtime`：`running_since` 有值显示「言之在想…」；`last_error` 有值显示一条可关闭的提示
+
+**测试**：调度判断（四种情况各一条 + 都不满足就停 + 不重复叫）；合并触发；新会话 prompt 包含角色卡 / 前情提要 / 线索，旧会话只给增量；options 里没有 `yanzhi's files`、房间、唤醒、Read / Bash / Web；页面转发拦掉 `yanzhi-view`、`yanzhi-table-talk`、`yanzhi-runtime` 的写方法。模型调用用假的 `query`，不真调
+
+**部署前（小羊）**：dashboard 容器加 `TRPG_PLAYER_MCP_TOKEN`（和 Haven 同值）；Haven 那边确认两个 token 都配了。DM 的 token 不进 dashboard
+
+**同步文档**：dashboard `docs/reference.md`「cc 数据持久化契约」加一条跑团会话（存哪、不进归档、OB 挂载）；`app/api` 行；Haven `docs/reference.md` REST 分组、`ENV_VARS.md` 不变
+
+## 14. 待小羊决定
 
 - ~~跑团窗口要不要进日回顾~~ 已定（2026-10-05）：不进，团录以后单独做
 - ~~言之每回合是否必须交行动~~ 已定（2026-10-05）：不必，可以只说桌边话，小羊点「直接结算」跳过
