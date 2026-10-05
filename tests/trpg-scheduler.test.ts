@@ -1,11 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { chooseTrpgTurn, kickTrpgTurn } from '@/app/lib/trpg/scheduler'
-import { trpgServerRequest, type YanzhiRuntime, type YanzhiView } from '@/app/lib/trpg/server'
+import { TrpgHttpError, trpgServerRequest, type YanzhiRuntime, type YanzhiView } from '@/app/lib/trpg/server'
 import { runYanzhiTurn } from '@/app/lib/trpg/yanzhiTurn'
 import { runDmTurn } from '@/app/lib/trpg/dmTurn'
 import { isDraining, trackDrainWork } from '@/app/lib/serverDrain'
 
-vi.mock('@/app/lib/trpg/server', () => ({ trpgServerRequest: vi.fn() }))
+vi.mock('@/app/lib/trpg/server', async importOriginal => ({ ...await importOriginal<typeof import('@/app/lib/trpg/server')>(), trpgServerRequest: vi.fn() }))
 vi.mock('@/app/lib/trpg/yanzhiTurn', () => ({ runYanzhiTurn: vi.fn(), trpgPublicError: () => '中文错误' }))
 vi.mock('@/app/lib/trpg/dmTurn', () => ({ runDmTurn: vi.fn() }))
 const finish = vi.fn()
@@ -86,4 +86,31 @@ it('rejects new work during drain', async () => {
   await kickTrpgTurn('drain', 'action')
   expect(trackDrainWork).not.toHaveBeenCalled()
   expect(trpgServerRequest).not.toHaveBeenCalled()
+})
+
+it.each(['players', 'yanzhi', 'checks', 'dm'] as const)('never schedules ended %s games, including unseen table talk', async phase => {
+  view = { ...view, phase, ended_at: '2026-10-05 00:00:00' }
+  expect(chooseTrpgTurn(view, runtime, {})).toBeNull()
+  await kickTrpgTurn(`ended-${phase}`, 'table-talk')
+  expect(runYanzhiTurn).not.toHaveBeenCalled()
+  expect(runDmTurn).not.toHaveBeenCalled()
+})
+it('treats a 409 after a running turn as completion without retry or error write', async () => {
+  vi.mocked(runYanzhiTurn).mockImplementationOnce(async () => {
+    kickTrpgTurn('ended-in-flight', 'table-talk')
+    view.ended_at = '2026-10-05 00:00:00'
+    vi.mocked(trpgServerRequest).mockRejectedValue(new TrpgHttpError(409))
+    return { text: 'late reply', session_id: 'sdk', session_tokens: 1 }
+  })
+  await kickTrpgTurn('ended-in-flight', 'table-talk')
+  expect(runYanzhiTurn).toHaveBeenCalledTimes(1)
+  expect(trpgServerRequest).toHaveBeenLastCalledWith('ended-in-flight', 'yanzhi-table-talk', 'POST', { text: 'late reply' })
+  expect(saved.last_error).toBeNull()
+  expect(finish).toHaveBeenCalledTimes(1)
+})
+it('does not report a 409 while reading initial state', async () => {
+  vi.mocked(trpgServerRequest).mockRejectedValueOnce(new TrpgHttpError(409))
+  await kickTrpgTurn('initial-conflict', 'action')
+  expect(trpgServerRequest).toHaveBeenCalledTimes(1)
+  expect(runYanzhiTurn).not.toHaveBeenCalled()
 })

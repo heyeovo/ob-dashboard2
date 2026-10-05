@@ -4,14 +4,14 @@ import { kickTrpgTurn, type TrpgTrigger } from '@/app/lib/trpg/scheduler'
 type Context = { params: Promise<{ path: string[] }> }
 const id = '[A-Za-z0-9_-]+'
 const reads = new RegExp(`^(modules|modules/${id}/pregens|games|games/${id}/(table|settings|yanzhi-runtime))$`)
-const writes = new RegExp(`^(modules|games|games/${id}/(action|table-talk|settle)|games/${id}/checks/${id}/roll)$`)
+const writes = new RegExp(`^(modules|games|games/${id}/(action|table-talk|settle|end)|games/${id}/checks/${id}/roll)$`)
 
 async function forward(request: Request, { params }: Context) {
   const { path } = await params
   const target = path.join('/')
   // Validate decoded segments before URL construction; phase and arbitrary paths stay private.
   if (path.some(part => !/^[A-Za-z0-9_-]+$/.test(part))
-    || !(request.method === 'GET' ? reads.test(target) : request.method === 'POST' ? writes.test(target) : request.method === 'PATCH' && new RegExp(`^games/${id}/settings$`).test(target))) {
+    || !(request.method === 'GET' ? reads.test(target) : request.method === 'POST' ? writes.test(target) : request.method === 'DELETE' ? new RegExp(`^modules/${id}$`).test(target) : request.method === 'PATCH' && new RegExp(`^games/${id}/settings$`).test(target))) {
     return Response.json({ error: 'not found' }, { status: 404 })
   }
   try {
@@ -28,7 +28,7 @@ async function forward(request: Request, { params }: Context) {
       redirect: 'error',
     })
     const body = await upstream.text()
-    if (upstream.ok && request.method === 'POST' && path[0] === 'games' && path.length > 2) {
+    if (upstream.ok && request.method === 'POST' && path[0] === 'games' && path.length > 2 && path.at(-1) !== 'end') {
       void kickTrpgTurn(path[1], path.at(-1) as TrpgTrigger)
     }
     return new Response(body, {
@@ -44,3 +44,5 @@ export const GET = forward
 export const POST = forward
 
 export const PATCH = forward
+
+export const DELETE = forward

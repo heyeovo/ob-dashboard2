@@ -9,7 +9,7 @@ export type Sheet = {
 }
 export type Check = { id: string; owner: string; status: string; type: string; skill: string | null; difficulty: string; bonus: number; penalty: number; reason: string; san_loss: string | null }
 export type Table = {
-  id: string; title: string; phase: Phase; scene: { id: string; title: string } | null; log: Log[]
+  id: string; title: string; phase: Phase; ended_at?: string | null; module_id?: string; scene: { id: string; title: string } | null; log: Log[]
   my_character: Sheet | null; companions: { owner: string; name: string; occupation: string }[]
   clues: { id: string; title: string; text: string; handout: boolean }[]; checks: Check[]
 }
@@ -30,3 +30,7 @@ export async function trpgRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export const fieldClass = 'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-base'
+
+export function endedDate(value: string): string {
+  return new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z').toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
+}

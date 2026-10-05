@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useDoubleConfirm } from '@/app/lib/useDoubleConfirm'
 import Card from '@/app/components/Card'
 import DetailPanel from '@/app/components/DetailPanel'
 import SubpageBackButton from '@/app/components/SubpageBackButton'
 import CcMarkdown from '@/app/cc/CcMarkdown'
 import type { TrpgSettings, YanzhiRuntime } from '@/app/lib/trpg/server'
-import { fieldClass, mergeLogs, phaseLabel, trpgRequest, type Log, type Table, type Sheet } from '@/app/lib/trpg/table'
+import { endedDate, fieldClass, mergeLogs, phaseLabel, trpgRequest, type Log, type Table, type Sheet } from '@/app/lib/trpg/table'
 
 const checkLabels: Record<string, string> = { san: '理智', luck: '幸运', characteristic: '属性', skill: '技能' }
 const difficultyLabels: Record<string, string> = { regular: '普通', hard: '困难', extreme: '极难' }
@@ -45,6 +46,7 @@ function LogEntry({ log, table }: { log: Log; table: Table }) {
 }
 
 export default function TrpgTable({ gameId }: { gameId: string }) {
+  const { armed, confirm } = useDoubleConfirm()
   const [table, setTable] = useState<Table | null>(null)
   const runningRuntime = useRef(false)
   const snapshot = useRef<Table | null>(null)
@@ -84,7 +86,7 @@ export default function TrpgTable({ gameId }: { gameId: string }) {
     }
     function schedule() {
       clearTimeout(timer)
-      if (!live || document.hidden) return
+      if (!live || document.hidden || snapshot.current?.ended_at) return
       timer = setTimeout(async () => { await refresh(); schedule() }, snapshot.current?.phase === 'players' && !runningRuntime.current ? 15000 : 3000)
     }
     async function visible() {
@@ -121,16 +123,16 @@ export default function TrpgTable({ gameId }: { gameId: string }) {
     <SubpageBackButton href="/trpg" label="返回跑团列表" />
     {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}<button className="cc-btn-ghost ml-2 min-h-11" onClick={() => void refreshRef.current()}>重试</button></p>}
     {loading ? <p role="status">正在摆好桌子…</p> : !table ? <Card variant="empty">暂时无法读取这局，请重试。</Card> : <>
-      <header className="space-y-2"><h1 className="text-3xl font-[family-name:var(--font-display)]">{table.title}</h1><p role="status" className="text-sm text-[var(--color-text-secondary)]">{runtime?.running_since ? '言之在想…' : phaseLabel[table.phase]}{table.scene && ` · ${table.scene.title}`}</p><div className="flex gap-2"><button className="cc-btn-ghost min-h-11" onClick={() => setPanel('character')}>角色卡</button><button className="cc-btn-ghost min-h-11" onClick={() => setPanel('clues')}>线索 · {table.clues.length}</button><button className="cc-btn-ghost min-h-11" onClick={() => setPanel('settings')}>设置</button></div></header>
-      {runtime?.last_error && dismissedError !== `${runtime.last_error}:${runtime.last_seen_seq}` && <p role="alert" className="text-sm text-[var(--color-danger)]">{runtime.last_error}<button className="cc-btn-ghost ml-2 min-h-11" onClick={() => setDismissedError(`${runtime.last_error}:${runtime.last_seen_seq}`)}>关闭</button></p>}
+      <header className="space-y-2"><h1 className="text-3xl font-[family-name:var(--font-display)]">{table.title}</h1><p role="status" className="text-sm text-[var(--color-text-secondary)]">{table.ended_at ? `这局结束了 · ${endedDate(table.ended_at)}` : runtime?.running_since ? '言之在想…' : phaseLabel[table.phase]}{table.scene && ` · ${table.scene.title}`}</p><div className="flex gap-2"><button className="cc-btn-ghost min-h-11" onClick={() => setPanel('character')}>角色卡</button><button className="cc-btn-ghost min-h-11" onClick={() => setPanel('clues')}>线索 · {table.clues.length}</button><button className="cc-btn-ghost min-h-11" onClick={() => setPanel('settings')}>设置</button></div></header>
+      {!table.ended_at && runtime?.last_error && dismissedError !== `${runtime.last_error}:${runtime.last_seen_seq}` && <p role="alert" className="text-sm text-[var(--color-danger)]">{runtime.last_error}<button className="cc-btn-ghost ml-2 min-h-11" onClick={() => setDismissedError(`${runtime.last_error}:${runtime.last_seen_seq}`)}>关闭</button></p>}
       <section aria-label="叙事流" className="space-y-5">{table.log.map(log => <LogEntry key={log.seq} log={log} table={table} />)}</section>
-      {table.phase === 'checks' && <section className="space-y-3" aria-label="待掷检定">{table.checks.filter(c => c.owner === 'xiaoyang' && c.status === 'pending').map(c => <Card key={c.id}><p>{c.skill || checkLabels[c.type] || '检定'} · {difficultyLabels[c.difficulty] || c.difficulty}</p><p className="text-sm">奖励骰 {c.bonus} · 惩罚骰 {c.penalty}{c.san_loss && ` · 理智损失 ${c.san_loss}`}</p><p className="my-2 text-sm text-[var(--color-text-secondary)]">{c.reason}</p><button className="cc-btn-primary min-h-11" disabled={busy} onClick={() => void mutate(`checks/${encodeURIComponent(c.id)}/roll`, {})}>掷骰</button></Card>)}{!table.checks.some(c => c.owner === 'xiaoyang') && <p className="text-sm text-[var(--color-text-secondary)]">等言之掷骰…</p>}</section>}
-      <form className="cc-composer sticky bottom-[calc(var(--mobile-tabbar-height)+var(--mobile-tabbar-bottom)+12px)] space-y-3 p-3 md:bottom-4" onSubmit={e => { e.preventDefault(); if (!busy && !actionBlocked && text.trim()) void mutate(mode, { text: text.trim() }) }}>
+      {!table.ended_at && table.phase === 'checks' && <section className="space-y-3" aria-label="待掷检定">{table.checks.filter(c => c.owner === 'xiaoyang' && c.status === 'pending').map(c => <Card key={c.id}><p>{c.skill || checkLabels[c.type] || '检定'} · {difficultyLabels[c.difficulty] || c.difficulty}</p><p className="text-sm">奖励骰 {c.bonus} · 惩罚骰 {c.penalty}{c.san_loss && ` · 理智损失 ${c.san_loss}`}</p><p className="my-2 text-sm text-[var(--color-text-secondary)]">{c.reason}</p><button className="cc-btn-primary min-h-11" disabled={busy} onClick={() => void mutate(`checks/${encodeURIComponent(c.id)}/roll`, {})}>掷骰</button></Card>)}{!table.checks.some(c => c.owner === 'xiaoyang') && <p className="text-sm text-[var(--color-text-secondary)]">等言之掷骰…</p>}</section>}
+      {!table.ended_at && <form className="cc-composer sticky bottom-[calc(var(--mobile-tabbar-height)+var(--mobile-tabbar-bottom)+12px)] space-y-3 p-3 md:bottom-4" onSubmit={e => { e.preventDefault(); if (!busy && !actionBlocked && text.trim()) void mutate(mode, { text: text.trim() }) }}>
         <div className="flex flex-wrap gap-2">{(['action', 'table-talk'] as const).map(m => <button key={m} type="button" aria-pressed={mode === m} className={mode === m ? 'cc-btn-primary min-h-11' : 'cc-btn-ghost min-h-11'} onClick={() => setMode(m)}>{m === 'action' ? '行动' : '桌边话'}</button>)}{['players', 'yanzhi'].includes(table.phase) && <button type="button" className="cc-btn-ghost min-h-11" disabled={busy} onClick={() => void mutate('settle', { expected_phase: table.phase })}>直接结算</button>}</div>
         {actionBlocked && <p className="text-xs text-[var(--color-text-secondary)]">现在不能提交行动，等轮到你们；桌边话随时可以说。</p>}
         <label className="sr-only" htmlFor="trpg-input">{mode === 'action' ? '调查员行动' : '桌边话'}</label><textarea id="trpg-input" className={`${fieldClass} resize-none`} rows={3} value={text} disabled={busy || actionBlocked} onChange={e => setText(e.target.value)} placeholder={mode === 'action' ? '你的调查员准备做什么？' : '对言之说点桌边话…'} /><button className="cc-btn-primary min-h-11" disabled={busy || actionBlocked || !text.trim()}>发送</button>
-      </form>
-      <DetailPanel open={panel === 'settings'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-4 p-5"><h2 className="text-xl">跑团设置</h2><label className="block space-y-2"><span className="text-sm">言之用的模型</span><select className={fieldClass} value={settings?.yanzhi_model || 'claude-opus-4-6'} disabled={busy || !settings} onChange={e => void changeModel(e.target.value)}>{settings && !['claude-opus-4-6', 'claude-opus-5-5', 'claude-sonnet-5'].includes(settings.yanzhi_model) && <option value={settings.yanzhi_model}>{settings.yanzhi_model}</option>}<option value="claude-opus-4-6">Opus 4.6</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-sonnet-5">Sonnet 5</option></select></label><p className="text-xs text-[var(--color-text-secondary)]">修改后下一回合生效。</p></div></DetailPanel>
+      </form>}
+      <DetailPanel open={panel === 'settings'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-4 p-5"><h2 className="text-xl">跑团设置</h2><label className="block space-y-2"><span className="text-sm">言之用的模型</span><select className={fieldClass} value={settings?.yanzhi_model || 'claude-opus-4-6'} disabled={busy || !settings || !!table.ended_at} onChange={e => void changeModel(e.target.value)}>{settings && !['claude-opus-4-6', 'claude-opus-5-5', 'claude-sonnet-5'].includes(settings.yanzhi_model) && <option value={settings.yanzhi_model}>{settings.yanzhi_model}</option>}<option value="claude-opus-4-6">Opus 4.6</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-sonnet-5">Sonnet 5</option></select></label><p className="text-xs text-[var(--color-text-secondary)]">{table.ended_at ? '已结束的局仅供查看。' : '修改后下一回合生效。'}</p>{!table.ended_at && <button className="bucket-erase min-h-11 text-xs" style={{ color: 'var(--color-danger)', minHeight: '2.75rem' }} data-armed={armed === gameId} disabled={busy} onClick={() => confirm(gameId, () => { void mutate('end', {}) })}>{armed === gameId ? '再点一次，结束这局' : '结束这局'}</button>}</div></DetailPanel>
       <DetailPanel open={panel === 'character'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-5 p-5 text-base"><h2 className="text-xl">角色卡</h2>{table.my_character ? <Character sheet={table.my_character} /> : <p>还没有角色卡</p>}<section><h3 className="mb-2 text-lg">同伴</h3>{table.companions.map(c => <p key={c.owner}>{c.name} · {c.occupation}</p>)}</section></div></DetailPanel>
       <DetailPanel open={panel === 'clues'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-4 p-5"><h2 className="text-xl">已公开线索</h2>{table.clues.length ? table.clues.map(c => <Card key={c.id}><h3 className="mb-2 text-lg">{c.title}{c.handout && <span className="ml-2 text-xs text-[var(--color-primary)]">Handout · 分发资料</span>}</h3><CcMarkdown text={c.text} /></Card>) : <p>还没有公开的线索</p>}</div></DetailPanel>
     </>}
