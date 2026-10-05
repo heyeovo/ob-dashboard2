@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useDoubleConfirm } from '@/app/lib/useDoubleConfirm'
+import BodyPortal from '@/app/components/BodyPortal'
 import Card from '@/app/components/Card'
 import DetailPanel from '@/app/components/DetailPanel'
 import SubpageBackButton from '@/app/components/SubpageBackButton'
@@ -48,6 +49,8 @@ function LogEntry({ log, table }: { log: Log; table: Table }) {
 export default function TrpgTable({ gameId }: { gameId: string }) {
   const { armed, confirm } = useDoubleConfirm()
   const [table, setTable] = useState<Table | null>(null)
+  const pageRef = useRef<HTMLElement>(null)
+  const composerRef = useRef<HTMLFormElement>(null)
   const runningRuntime = useRef(false)
   const snapshot = useRef<Table | null>(null)
   const [error, setError] = useState('')
@@ -99,6 +102,27 @@ export default function TrpgTable({ gameId }: { gameId: string }) {
     return () => { live = false; controller.abort(); clearTimeout(timer); document.removeEventListener('visibilitychange', visible) }
   }, [gameId])
 
+  useEffect(() => {
+    const page = pageRef.current, composer = composerRef.current
+    if (!page || !composer) return
+    const fit = () => {
+      page.style.setProperty('--cc-composer-height', `${composer.getBoundingClientRect().height}px`)
+      const viewport = window.visualViewport
+      const inset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0
+      composer.style.setProperty('--trpg-keyboard-inset', `${inset}px`)
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(composer)
+    window.visualViewport?.addEventListener('resize', fit)
+    window.visualViewport?.addEventListener('scroll', fit)
+    return () => {
+      observer.disconnect()
+      window.visualViewport?.removeEventListener('resize', fit)
+      window.visualViewport?.removeEventListener('scroll', fit)
+    }
+  }, [loading, table?.ended_at])
+
   async function mutate(path: string, body: unknown) {
     setBusy(true); setError('')
     try {
@@ -108,10 +132,10 @@ export default function TrpgTable({ gameId }: { gameId: string }) {
     } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
 
-  async function changeModel(model: string) {
+  async function changeSettings(changes: Partial<TrpgSettings>) {
     setBusy(true)
     try {
-      const response = await fetch(`/api/trpg/games/${encodeURIComponent(gameId)}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ yanzhi_model: model }) })
+      const response = await fetch(`/api/trpg/games/${encodeURIComponent(gameId)}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || '模型设置保存失败')
       setSettings(data)
@@ -119,7 +143,7 @@ export default function TrpgTable({ gameId }: { gameId: string }) {
   }
 
   const actionBlocked = mode === 'action' && table?.phase !== 'players'
-  return <main className="mx-auto min-h-screen max-w-2xl space-y-5 px-4 pb-24 pt-5 text-[var(--color-text-primary)] sm:px-6">
+  return <main ref={pageRef} className="mx-auto min-h-screen max-w-2xl space-y-5 px-4 pb-[calc(var(--cc-composer-height,180px)+var(--mobile-tabbar-height)+var(--mobile-tabbar-bottom)+24px)] pt-5 text-[var(--color-text-primary)] sm:px-6">
     <SubpageBackButton href="/trpg" label="返回跑团列表" />
     {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}<button className="cc-btn-ghost ml-2 min-h-11" onClick={() => void refreshRef.current()}>重试</button></p>}
     {loading ? <p role="status">正在摆好桌子…</p> : !table ? <Card variant="empty">暂时无法读取这局，请重试。</Card> : <>
@@ -127,12 +151,12 @@ export default function TrpgTable({ gameId }: { gameId: string }) {
       {!table.ended_at && runtime?.last_error && dismissedError !== `${runtime.last_error}:${runtime.last_seen_seq}` && <p role="alert" className="text-sm text-[var(--color-danger)]">{runtime.last_error}<button className="cc-btn-ghost ml-2 min-h-11" onClick={() => setDismissedError(`${runtime.last_error}:${runtime.last_seen_seq}`)}>关闭</button></p>}
       <section aria-label="叙事流" className="space-y-5">{table.log.map(log => <LogEntry key={log.seq} log={log} table={table} />)}</section>
       {!table.ended_at && table.phase === 'checks' && <section className="space-y-3" aria-label="待掷检定">{table.checks.filter(c => c.owner === 'xiaoyang' && c.status === 'pending').map(c => <Card key={c.id}><p>{c.skill || checkLabels[c.type] || '检定'} · {difficultyLabels[c.difficulty] || c.difficulty}</p><p className="text-sm">奖励骰 {c.bonus} · 惩罚骰 {c.penalty}{c.san_loss && ` · 理智损失 ${c.san_loss}`}</p><p className="my-2 text-sm text-[var(--color-text-secondary)]">{c.reason}</p><button className="cc-btn-primary min-h-11" disabled={busy} onClick={() => void mutate(`checks/${encodeURIComponent(c.id)}/roll`, {})}>掷骰</button></Card>)}{!table.checks.some(c => c.owner === 'xiaoyang') && <p className="text-sm text-[var(--color-text-secondary)]">等言之掷骰…</p>}</section>}
-      {!table.ended_at && <form className="cc-composer sticky bottom-[calc(var(--mobile-tabbar-height)+var(--mobile-tabbar-bottom)+12px)] space-y-3 p-3 md:bottom-4" onSubmit={e => { e.preventDefault(); if (!busy && !actionBlocked && text.trim()) void mutate(mode, { text: text.trim() }) }}>
-        <div className="flex flex-wrap gap-2">{(['action', 'table-talk'] as const).map(m => <button key={m} type="button" aria-pressed={mode === m} className={mode === m ? 'cc-btn-primary min-h-11' : 'cc-btn-ghost min-h-11'} onClick={() => setMode(m)}>{m === 'action' ? '行动' : '桌边话'}</button>)}{['players', 'yanzhi'].includes(table.phase) && <button type="button" className="cc-btn-ghost min-h-11" disabled={busy} onClick={() => void mutate('settle', { expected_phase: table.phase })}>直接结算</button>}</div>
+      {!table.ended_at && <BodyPortal><form ref={composerRef} className="cc-composer fixed inset-x-4 bottom-[max(calc(var(--mobile-tabbar-height)+var(--mobile-tabbar-bottom)),var(--trpg-keyboard-inset,0px))] z-30 mx-auto max-w-2xl space-y-2 p-3 md:left-[calc(68px+16px)] md:bottom-[max(16px,var(--trpg-keyboard-inset,0px))]" onSubmit={e => { e.preventDefault(); if (!busy && !actionBlocked && text.trim()) void mutate(mode, { text: text.trim() }) }}>
+        <div className="flex items-center gap-1">{(['action', 'table-talk'] as const).map(m => <button key={m} type="button" aria-pressed={mode === m} className={mode === m ? 'cc-btn-primary min-h-11' : 'cc-btn-ghost min-h-11'} onClick={() => setMode(m)}>{m === 'action' ? '行动' : '桌边话'}</button>)}<button className="cc-btn-primary ml-auto min-h-11" disabled={busy || actionBlocked || !text.trim()}>发送</button>{['players', 'yanzhi'].includes(table.phase) && <button type="button" className="cc-btn-ghost min-h-11" disabled={busy} onClick={() => void mutate('settle', { expected_phase: table.phase })}>直接结算</button>}</div>
         {actionBlocked && <p className="text-xs text-[var(--color-text-secondary)]">现在不能提交行动，等轮到你们；桌边话随时可以说。</p>}
-        <label className="sr-only" htmlFor="trpg-input">{mode === 'action' ? '调查员行动' : '桌边话'}</label><textarea id="trpg-input" className={`${fieldClass} resize-none`} rows={3} value={text} disabled={busy || actionBlocked} onChange={e => setText(e.target.value)} placeholder={mode === 'action' ? '你的调查员准备做什么？' : '对言之说点桌边话…'} /><button className="cc-btn-primary min-h-11" disabled={busy || actionBlocked || !text.trim()}>发送</button>
-      </form>}
-      <DetailPanel open={panel === 'settings'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-4 p-5"><h2 className="text-xl">跑团设置</h2><label className="block space-y-2"><span className="text-sm">言之用的模型</span><select className={fieldClass} value={settings?.yanzhi_model || 'claude-opus-4-6'} disabled={busy || !settings || !!table.ended_at} onChange={e => void changeModel(e.target.value)}>{settings && !['claude-opus-4-6', 'claude-opus-5-5', 'claude-sonnet-5'].includes(settings.yanzhi_model) && <option value={settings.yanzhi_model}>{settings.yanzhi_model}</option>}<option value="claude-opus-4-6">Opus 4.6</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-sonnet-5">Sonnet 5</option></select></label><p className="text-xs text-[var(--color-text-secondary)]">{table.ended_at ? '已结束的局仅供查看。' : '修改后下一回合生效。'}</p>{!table.ended_at && <button className="bucket-erase min-h-11 text-xs" style={{ color: 'var(--color-danger)', minHeight: '2.75rem' }} data-armed={armed === gameId} disabled={busy} onClick={() => confirm(gameId, () => { void mutate('end', {}) })}>{armed === gameId ? '再点一次，结束这局' : '结束这局'}</button>}</div></DetailPanel>
+        <label className="sr-only" htmlFor="trpg-input">{mode === 'action' ? '调查员行动' : '桌边话'}</label><textarea id="trpg-input" className={`${fieldClass} resize-none`} rows={1} value={text} disabled={busy || actionBlocked} onChange={e => setText(e.target.value)} placeholder={mode === 'action' ? '你的调查员准备做什么？' : '对言之说点桌边话…'} />
+      </form></BodyPortal>}
+      <DetailPanel open={panel === 'settings'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-4 p-5"><h2 className="text-xl">跑团设置</h2><label className="block space-y-2"><span className="text-sm">言之用的模型</span><select className={fieldClass} value={settings?.yanzhi_model || 'claude-opus-4-6'} disabled={busy || !settings || !!table.ended_at} onChange={e => void changeSettings({ yanzhi_model: e.target.value })}>{settings && !['claude-opus-4-6', 'claude-opus-5-5', 'claude-sonnet-5'].includes(settings.yanzhi_model) && <option value={settings.yanzhi_model}>{settings.yanzhi_model}</option>}<option value="claude-opus-4-6">Opus 4.6</option><option value="claude-opus-5-5">Opus 5.5</option><option value="claude-sonnet-5">Sonnet 5</option></select></label><section className="space-y-3"><h3 className="text-sm">言之入座时带上</h3><label className="flex min-h-11 items-center justify-between gap-3 text-sm"><span>钉选记忆</span><input type="checkbox" role="switch" className="accent-[var(--color-primary)]" checked={settings?.context_pinned ?? true} disabled={busy || !settings || !!table.ended_at} onChange={e => void changeSettings({ context_pinned: e.target.checked })} /></label>{([{ key: 'context_review_days', label: '最近几天日回顾', max: 7, fallback: 5 }, { key: 'context_main_rounds', label: '主窗最近几轮', max: 30, fallback: 10 }] as const).map(item => <label key={item.key} className="block space-y-2"><span className="text-sm">{item.label}</span><select className={fieldClass} value={settings?.[item.key] ?? item.fallback} disabled={busy || !settings || !!table.ended_at} onChange={e => void changeSettings({ [item.key]: Number(e.target.value) })}>{Array.from({ length: item.max + 1 }, (_, value) => <option key={value} value={value}>{value}</option>)}</select></label>)}<p className="text-xs text-[var(--color-text-secondary)]">只在言之开新会话时带一次；修改后言之会重新入座。</p></section><p className="text-xs text-[var(--color-text-secondary)]">{table.ended_at ? '已结束的局仅供查看。' : '修改后下一回合生效。'}</p>{!table.ended_at && <button className="bucket-erase min-h-11 text-xs" style={{ color: 'var(--color-danger)', minHeight: '2.75rem' }} data-armed={armed === gameId} disabled={busy} onClick={() => confirm(gameId, () => { void mutate('end', {}) })}>{armed === gameId ? '再点一次，结束这局' : '结束这局'}</button>}</div></DetailPanel>
       <DetailPanel open={panel === 'character'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-5 p-5 text-base"><h2 className="text-xl">角色卡</h2>{table.my_character ? <Character sheet={table.my_character} /> : <p>还没有角色卡</p>}<section><h3 className="mb-2 text-lg">同伴</h3>{table.companions.map(c => <p key={c.owner}>{c.name} · {c.occupation}</p>)}</section></div></DetailPanel>
       <DetailPanel open={panel === 'clues'} onClose={() => setPanel(null)} mode="drawer"><div className="space-y-4 p-5"><h2 className="text-xl">已公开线索</h2>{table.clues.length ? table.clues.map(c => <Card key={c.id}><h3 className="mb-2 text-lg">{c.title}{c.handout && <span className="ml-2 text-xs text-[var(--color-primary)]">Handout · 分发资料</span>}</h3><CcMarkdown text={c.text} /></Card>) : <p>还没有公开的线索</p>}</div></DetailPanel>
     </>}

@@ -3,6 +3,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { buildTrpgPrompt, runYanzhiTurn, trpgPublicError } from '@/app/lib/trpg/yanzhiTurn'
 import type { YanzhiView, YanzhiRuntime } from '@/app/lib/trpg/server'
 
+vi.mock('@/app/lib/trpg/seatContext', () => ({ loadSeatContext: vi.fn(async () => 'BACKGROUND') }))
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: vi.fn() }))
 vi.mock('@/app/lib/cc/sessionTurnCoordinator', () => ({ runForegroundSubscriptionTurn: vi.fn(async (run: () => Promise<unknown>) => run()) }))
 vi.mock('@/app/lib/cc/ccOptions', () => ({ thinkingConfigForModel: () => ({ type: 'adaptive' }) }))
@@ -85,4 +86,10 @@ it('aborts and closes a model turn after five minutes', async () => {
     await rejected
     expect(close).toHaveBeenCalled()
   } finally { vi.useRealTimers() }
+})
+
+it('injects real life context only before the fresh character card', () => {
+  const fresh = buildTrpgPrompt('action', view, runtime, true, 'BACKGROUND')
+  expect(fresh.indexOf('BACKGROUND')).toBeLessThan(fresh.indexOf('角色卡全文'))
+  expect(buildTrpgPrompt('action', view, runtime, false, 'BACKGROUND')).not.toContain('BACKGROUND')
 })
