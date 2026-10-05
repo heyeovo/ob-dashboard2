@@ -94,7 +94,7 @@ export default function TrpgPage() {
     {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
     {loading ? <p role="status">正在摆好桌子…</p> : <>
       <section className="space-y-3" aria-label="局列表">
-        {([false, true] as const).map(ended => <section key={String(ended)} className="space-y-3"><h2 className="text-xl">{ended ? '结束的局' : '进行中'}</h2>{games.filter(game => Boolean(game.ended_at) === ended).map(game => <Link className="block" key={game.id} href={`/trpg/${game.id}`}><Card variant="interactive"><h3 className="text-lg">{game.title}</h3><p className="text-sm text-[var(--color-text-secondary)]">{game.ended_at ? `这局结束了 · ${endedDate(game.ended_at)}` : phaseLabel[game.phase]}</p></Card></Link>)}</section>)}
+        {([false, true] as const).map(ended => games.some(game => Boolean(game.ended_at) === ended) && <section key={String(ended)} className="space-y-3"><h2 className="text-xl">{ended ? '结束的局' : '进行中'}</h2>{games.filter(game => Boolean(game.ended_at) === ended).map(game => <Link className="block" key={game.id} href={`/trpg/${game.id}`}><Card variant="interactive"><h3 className="text-lg">{game.title}</h3><p className="text-sm text-[var(--color-text-secondary)]">{game.ended_at ? `这局结束了 · ${endedDate(game.ended_at)}` : phaseLabel[game.phase]}</p></Card></Link>)}</section>)}
         {!games.length && <Card variant="empty">还没有局，选好调查员就能建一局。</Card>}
       </section>
       <Card><h2 className="mb-4 text-xl">新建局</h2><div className="space-y-4">
