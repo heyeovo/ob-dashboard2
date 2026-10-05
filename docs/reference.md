@@ -42,8 +42,8 @@ production 必须配置以下六项：
 | `app/cc/` | 聊天主页（cc / selfhost）；手机端默认进入对话列表，可手动指定每个协作者唯一主窗，点入窗口后聊天，历史聊天与已删除窗口分子列表；支持同一时间线按日期跳转，以及在本窗口设置中手动维护“原换窗 / 按天滚动”的原文、日回顾、不带三态拼接和钉选桶、日记、最近普通桶、feel、随机高重要度桶长期层；滚动日期分列正文、工具、附件视觉/文件正文、召回、有效 thinking、时间戳、消息框架和 agent wake 的 token 预估，较早 raw 日期的留档 thinking 显示为已剥离，手动设为“不带”的日期默认折叠且不改变任何日期模式；损坏的滚动窗口可经二次确认舍弃旧原生细节并用当前 raw 日期的 Haven 正文重建 transcript，不复制窗口或页面历史；从滚动切回固定模式会提示用“换窗继续”保留最新衔接；召回按钮显示完整注入的估算 token，详情弹窗分别标明完整注入与卡片/日期正文 token |
 | `app/collaborators/` | 协作者提示词独立页：`[id]` 身份和模块，`[id]/base` 基础提示词，`[id]/modules/[moduleId]` 模块编辑，`new` 新建；目录权限在工作台维护，经 `/api/cc-personas` 存 Haven。 |
 | `app/games/` | 游戏室（主页抽屉「家里的其他房间」进入）：跑团入口卡显示进行中的局，剧情模式占位 |
-| `app/trpg/` / `app/trpg/[id]/` | 跑团列表、模组上传与调查员选择；单局小羊视角叙事流、行动/桌边话、掷骰、角色与线索抽屉。所有团数据存 Haven，前台按 phase 3/15 秒增量轮询，后台停止。 |
-| `app/api/trpg/` | 登录保护的 Haven `/trpg/api` 白名单代理，服务端 Bearer、不转发浏览器 Cookie；禁止 phase；保留 400/409；action/table-talk/settle/roll 成功后调用空的调度占位函数（P2b 实现）。 |
+| `app/trpg/` / `app/trpg/[id]/` | 跑团列表、模组上传与调查员选择；单局小羊视角叙事流、行动/桌边话、掷骰、角色与线索抽屉、言之模型设置（下一回合生效），读取运行态显示思考与可关闭错误。所有团数据存 Haven，前台按 phase 3/15 秒增量轮询，后台停止。 |
+| `app/api/trpg/` | 登录保护的 Haven `/trpg/api` 白名单代理，服务端 Bearer、不转发浏览器 Cookie；禁止 phase、yanzhi-view、yanzhi-table-talk 与运行态写入；只开放 settings GET/PATCH、runtime GET；保留 400/409；action/table-talk/settle/roll 成功后异步触发调度，不等待模型。 |
 | `app/workbench/` | 工作台首页按作品、文件、引擎分组；`files/[root]/[[...path]]` 浏览和预览文件，`dirs` 编辑当前协作者的读写目录，`context` 展示只读上下文审计，`session` 展示当前工作窗口状态。 |
 | `app/api/files/` | 服务端文件浏览 API：`yanzhi` 映射 `YANZHI_FILES_ROOT`、`dashboard` 映射 `/workspace/dashboard`、`haven` 映射 `/workspace/haven`、`notes` 只映射 `/home/cc/.claude/projects/*/memory` 中非空目录。真实路径必须留在根内，隐藏以点开头的段、房间持久数据目录 `darkroom`、`node_modules`、`.pem`、`.key`、含 `credential` / `secret` 的名字；只有 yanzhi 可上传和删单个文件。 |
 | `app/conversation-slices/` | 聊天切片检查：按日期和 session 查看离线切片、永久消息原文、版本/状态与任务；支持批准/拒绝、原因备注、重切、单日 slice-only 生成及先估算后创建的历史任务，手机端先日期列表再钻取详情；切片不进入 Context |
@@ -64,6 +64,8 @@ production 必须配置以下六项：
 | `DESIGN.md` | 完整设计规范 |
 
 ## cc 数据持久化契约
+
+- 跑团言之会话：每局模型/persona 设置及 session_id、session_tokens、last_seen_seq、last_error、running_since 保存在 Haven `state/trpg.sqlite` 的 settings_json/runtime_json，按 profile 隔离；原生 SDK transcript 使用专用 `os.tmpdir()/ob2-trpg` project，可丢失，resume 不可用或超过 80000 token 时从 Haven 角色卡、公开前情提要、已公开线索和最近 40 条言之可见日志重开。不写聊天归档，因此不进日回顾、做梦、自动召回与 search_chat；仅挂玩家 TRPG MCP 与配置中的 Ombre Brain（不挂文件、房间、唤醒，不开放原生工具），值得保存的桌边经历由言之自行写 OB。协作者默认沿用 `usePersonas` 无设备偏好时的列表第一位，显式 persona_id 优先；thinking/effort 沿用新闲聊窗口的 Haven 默认配置。每局进程互斥合并触发、共用前台 Pro 账号锁，排空前登记到状态保存结束；错误只写运行态，DM 入口仍为 P3 空函数。部署前 dashboard 须配置与 Haven 一致的 `TRPG_PLAYER_MCP_TOKEN`，DM token 不进 dashboard。
 
 - 房间：`processCollector` 的 room 状态只活在单轮；在房间里的 thinking、文字、工具与结果不进 SSE、可见正文或可见 raw。进门收走同条 assistant 消息紧邻的 thinking，出门 / open / 结束（含异常）只留 `type: room` 门牌。来访先以 Bearer 写 Haven `/api/rooms/visits`，失败不阻断轮次保存且门牌记 `sealed: false`；只进房间无正文也存轮次，wake 的门牌进入 raw.process。Haven 是封存事实源；原生 transcript 保留完整上下文，浏览器上下文核对投影封存房间内容。文件留在 `YANZHI_FILES_ROOT/.room/<room_id>/`，浏览器文件 API 不可达；open 后服务端附文件清单。在房间中需人工批准的操作自动拒绝，Write/Edit 和经校验的 mkdir/touch、单引号 echo/printf 或引号 heredoc Bash 仅对 .room 内路径自动允许（拒绝越界和符号链接），files/command 不发也不进工作台。自建引擎过滤 room。滚动窗口在日回顾之后注入「【我的房间 · 今天的门牌】」；Haven 按 session_id + context_revision:chat_day 冻结（chat_day 沿用窗口时区与日界线），无未打开房间或读取失败时省略，固定窗口仅有 handoff 房间数量。浏览器上下文审计与模型上下文诊断递归把门牌整节替换成标题 + 已封存；固定说明模块由用户自己维护，不写入代码。房间页可看开门后的正文、文件和来访过程，便条永不公开。Clawd 的 lastSeenAt 只在本机 localStorage，属于允许丢失的界面偏好。
 

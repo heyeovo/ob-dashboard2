@@ -23,7 +23,7 @@
 |---|---|---|
 | P0 验证 | §7 三项验证，全部通过才进 P1 | CC |
 | P1 Haven | `trpg_store` + 骰子 + 两套 MCP + 页面用的 REST | ✅ 2026-10-05 Codex（VPS 上由 CC 直接派活）实现，CC 验收：新增 36 项 + Haven 全量 327 通过，合并 main（`c956926`）。限制：每个 profile 同时只有一局 |
-| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | ① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：✅ 2026-10-05 Codex 实现，CC 验收（Haven 全量 330、dashboard Vitest 532 + build 通过）合并 main，待上线后 iPhone 走查；② P2b 调度器 + 言之的跑团会话：规格见 §13（单独起 SDK 会话，不经聊天引擎），待派。Codex，CC 验收 |
+| P2 dashboard | 跑团页 + 跑团模式 + 调度器 | ① P2a 页面 + Haven 小补（预设调查员列表、前情提要）：✅ 2026-10-05 Codex 实现，CC 验收（Haven 全量 330、dashboard Vitest 532 + build 通过）合并 main，待上线后 iPhone 走查；② P2b 调度器 + 言之的跑团会话：规格见 §13（单独起 SDK 会话，不经聊天引擎），2026-10-05 Codex 已实现，待 CC 验收（两个 feat/trpg-p2b 分支；Haven 全量 333 + 10 subtests，dashboard Vitest 552 + build + 改动文件 lint 通过；未 push/部署）。Codex，CC 验收 |
 | P3 trpg-dm | Codex DM 容器 | CC（涉及登录凭证与部署） |
 | P4 开团 | GPT 拆模组 → 上传 → 选调查员 → 开团 | 小羊 + GPT |
 
