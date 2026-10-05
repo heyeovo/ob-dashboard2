@@ -114,3 +114,10 @@ it('does not report a 409 while reading initial state', async () => {
   expect(trpgServerRequest).toHaveBeenCalledTimes(1)
   expect(runYanzhiTurn).not.toHaveBeenCalled()
 })
+
+it('uses the persisted reset runtime and attaches settings to atomic result saving', async () => {
+  saved.session_id = null
+  await kickTrpgTurn('reset-context', 'table-talk')
+  expect(vi.mocked(runYanzhiTurn).mock.calls[0][2].session_id).toBeNull()
+  expect(vi.mocked(trpgServerRequest).mock.calls.some(([, endpoint, method, body]) => endpoint === 'yanzhi-runtime' && method === 'PUT' && !!(body as { expected_settings?: unknown })?.expected_settings)).toBe(true)
+})

@@ -14,6 +14,7 @@ vi.mock('react', async importOriginal => {
   } }
 })
 vi.mock('@/app/components/SubpageBackButton', () => ({ default: () => null }))
+vi.mock('@/app/components/BodyPortal', () => ({ default: ({ children }: { children: React.ReactNode }) => children }))
 vi.mock('@/app/components/DetailPanel', () => ({ default: () => null }))
 vi.mock('@/app/cc/CcMarkdown', () => ({ default: ({ text }: { text: string }) => createElement('p', null, text) }))
 beforeEach(() => {

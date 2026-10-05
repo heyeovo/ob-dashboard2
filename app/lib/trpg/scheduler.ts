@@ -49,13 +49,14 @@ export function kickTrpgTurn(gameId: string, trigger: TrpgTrigger): Promise<void
           try {
             await trpgServerRequest(gameId, 'yanzhi-runtime', 'PUT', { running_since: new Date().toISOString(), last_error: null })
             const settings = await trpgServerRequest<TrpgSettings>(gameId, 'settings')
+            runtime = await trpgServerRequest<YanzhiRuntime>(gameId, 'yanzhi-runtime')
             const result = await runYanzhiTurn(kind, view, runtime, settings)
             if (result.text) await trpgServerRequest(gameId, 'yanzhi-table-talk', 'POST', { text: result.text })
             const after = await trpgServerRequest<YanzhiView>(gameId, 'yanzhi-view')
             // Do not acknowledge Xiaoyang's messages arriving while the model was working.
             const waiting = after.log.find(log => log.seq > consumedSeq && log.author === 'xiaoyang' && log.kind === 'table_talk')
             const lastSeen = waiting ? waiting.seq - 1 : after.log.at(-1)?.seq || consumedSeq
-            runtime = await trpgServerRequest<YanzhiRuntime>(gameId, 'yanzhi-runtime', 'PUT', { session_id: result.session_id, session_tokens: result.session_tokens, last_seen_seq: lastSeen, running_since: null, last_error: null })
+            runtime = await trpgServerRequest<YanzhiRuntime>(gameId, 'yanzhi-runtime', 'PUT', { expected_settings: settings, session_id: result.session_id, session_tokens: result.session_tokens, last_seen_seq: lastSeen, running_since: null, last_error: null })
           } catch (error) {
             if (error instanceof TrpgHttpError && error.status === 409) return
             await trpgServerRequest(gameId, 'yanzhi-runtime', 'PUT', { running_since: null, last_error: trpgPublicError(error) })

@@ -1,7 +1,7 @@
 import { getHavenBaseUrl, getHavenGatewayToken, joinHavenUrl } from '../havenConfig'
 import type { Table } from './table'
 
-export type TrpgSettings = { yanzhi_model: string; persona_id: string }
+export type TrpgSettings = { yanzhi_model: string; persona_id: string; context_pinned?: boolean; context_review_days?: number; context_main_rounds?: number }
 export type YanzhiRuntime = { session_id: string | null; session_tokens: number; last_seen_seq: number; last_error: string | null; running_since: string | null }
 export type YanzhiView = Table & { latest_recap: { public?: string } }
 

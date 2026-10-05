@@ -1,3 +1,4 @@
+import { loadSeatContext } from './seatContext'
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk'
 import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -18,12 +19,13 @@ export const TRPG_SECTION = `现在在和小羊跑团（CoC 7 速成规则）。
 游戏内行动只能用 submit_action，且只在轮到你时；掷骰只能用 roll_check。
 你最后说的话会作为你的桌边话显示在小羊面前。
 不要试图打听守秘人的秘密。
+你的调查员有自己的判断：可以和小羊的调查员意见不同、可以犯傻、可以把事情搞砸，不用为了让她开心一路顺着她走。
 觉得这段经历值得留下，就照平时的习惯存进 OB——写清楚这是你们一起跑团时发生的事。`
 
-export function buildTrpgPrompt(kind: TrpgTurnKind, view: YanzhiView, runtime: YanzhiRuntime, fresh: boolean): string {
+export function buildTrpgPrompt(kind: TrpgTurnKind, view: YanzhiView, runtime: YanzhiRuntime, fresh: boolean, background = ''): string {
   const lines = view.log.filter(log => log.seq > runtime.last_seen_seq).map(log => JSON.stringify([log.seq, log.author, log.kind, log.text])).join('\n')
   const seed = fresh ? `角色卡全文：${JSON.stringify(view.my_character)}\n最新前情提要：${view.latest_recap.public || ''}\n已公开线索：${JSON.stringify(view.clues)}\n最近 40 条可见日志：${JSON.stringify(view.log.slice(-40))}\n\n` : ''
-  return `${seed}<trpg_turn kind="${kind}" />\n${lines}\n言之名下 pending 检定：${JSON.stringify(view.checks.filter(check => check.owner === 'yanzhi' && check.status === 'pending'))}`
+  return `${fresh && background ? background + '\n\n' : ''}${seed}<trpg_turn kind="${kind}" />\n${lines}\n言之名下 pending 检定：${JSON.stringify(view.checks.filter(check => check.owner === 'yanzhi' && check.status === 'pending'))}`
 }
 
 export function trpgPublicError(error: unknown): string {
@@ -64,7 +66,8 @@ export async function runYanzhiTurn(kind: TrpgTurnKind, view: YanzhiView, runtim
       cwd, env: buildCcEnv('subscription', { mainModel }), abortController,
     }
     async function execute(fresh: boolean) {
-      const stream = query({ prompt: buildTrpgPrompt(kind, view, runtime, fresh), options: { ...options, resume: fresh ? undefined : runtime.session_id || undefined } })
+      const background = fresh ? await loadSeatContext(settings, personaResult.persona!.id) : ''
+      const stream = query({ prompt: buildTrpgPrompt(kind, view, runtime, fresh, background), options: { ...options, resume: fresh ? undefined : runtime.session_id || undefined } })
       let text = '', sessionId = '', sessionTokens = 0, completed = false
       try {
         for await (const message of stream) {
