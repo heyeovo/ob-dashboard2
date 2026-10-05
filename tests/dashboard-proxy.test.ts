@@ -41,7 +41,8 @@ describe('Dashboard proxy protection', () => {
   it('accepts a valid session and rejects forged, expired, and retired plaintext cookies', () => {
     const valid = createDashboardSession(SESSION_SECRET)
     expect(proxy(request('/api/cc-chat', valid.token)).status).toBe(200)
-    expect(proxy(request('/api/cc-chat', `${valid.token.slice(0, -1)}x`)).status).toBe(401)
+    const forgedTail = valid.token.endsWith('x') ? 'y' : 'x'
+    expect(proxy(request('/api/cc-chat', `${valid.token.slice(0, -1)}${forgedTail}`)).status).toBe(401)
 
     const expired = createDashboardSession(SESSION_SECRET, Date.now() - 8 * 24 * 60 * 60 * 1000)
     expect(proxy(request('/api/haven/private', expired.token)).status).toBe(401)
