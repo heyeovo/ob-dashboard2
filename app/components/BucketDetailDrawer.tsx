@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+
+import { useDoubleConfirm } from '@/app/lib/useDoubleConfirm'
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import DetailPanel from './DetailPanel'
 import BucketContentEditor from './BucketContentEditor'
@@ -129,11 +131,9 @@ function BucketContent({ selected, editing, editContent, saving, operating, copi
   const [commentDraft, setCommentDraft] = useState('')
   const [commentOperatingId, setCommentOperatingId] = useState('')
   const [commentError, setCommentError] = useState('')
-  const [armedDelete, setArmedDelete] = useState('')
+  const { armed: armedDelete, confirm: confirmDelete } = useDoubleConfirm()
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-  const deleteDeadline = useRef(0)
-  const deleteTarget = useRef('')
   const busy = operating || deleting
 
   const comments = commentState && commentState.bucketId === selected.id
@@ -181,11 +181,6 @@ function BucketContent({ selected, editing, editContent, saving, operating, copi
 
 
   useEffect(() => {
-    if (!armedDelete) return
-    const timer = setTimeout(() => { setArmedDelete(''); deleteTarget.current = ''; deleteDeadline.current = 0 }, 3000)
-    return () => clearTimeout(timer)
-  }, [armedDelete])
-  useEffect(() => {
     if (!contentCopied) return
     const timer = setTimeout(() => setContentCopied(false), 1200)
     return () => clearTimeout(timer)
@@ -222,13 +217,6 @@ function BucketContent({ selected, editing, editContent, saving, operating, copi
     return () => controller.abort()
   }, [similarOpen, similarLoaded, selected.id])
 
-  const confirmDelete = (target: string, action: () => void) => {
-    if (deleteTarget.current === target && Date.now() < deleteDeadline.current) {
-      deleteTarget.current = ''; deleteDeadline.current = 0; setArmedDelete(''); action()
-    } else {
-      deleteTarget.current = target; deleteDeadline.current = Date.now() + 3000; setArmedDelete(target)
-    }
-  }
   const erase = async () => {
     setDeleting(true); setDeleteError('')
     try { await onTraceOp(selected.id, { delete: true }); onClose() }

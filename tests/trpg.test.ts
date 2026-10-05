@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GET, POST, PATCH } from '@/app/api/trpg/[...path]/route'
+import { GET, POST, PATCH, DELETE } from '@/app/api/trpg/[...path]/route'
 import { kickTrpgTurn } from '@/app/lib/trpg/scheduler'
 import { mergeLogs, type Log } from '@/app/lib/trpg/table'
 
@@ -90,4 +90,14 @@ it('allows settings PATCH and runtime GET but never runtime writes', async () =>
 it('returns immediately while the scheduler is running', async () => {
   vi.mocked(kickTrpgTurn).mockReturnValueOnce(new Promise(() => {}))
   expect((await POST(request('games/g/action', 'POST'), context('games/g/action'))).status).toBe(200)
+})
+
+it('forwards end and module delete without scheduling and rejects game deletion', async () => {
+  fetchMock.mockImplementation(async () => Response.json({ ok: true }))
+  expect((await POST(request('games/g/end', 'POST'), context('games/g/end'))).status).toBe(200)
+  expect((await DELETE(request('modules/m', 'DELETE'), context('modules/m'))).status).toBe(200)
+  expect((await DELETE(request('games/g', 'DELETE'), context('games/g'))).status).toBe(404)
+  expect(kickTrpgTurn).not.toHaveBeenCalled()
+  fetchMock.mockResolvedValueOnce(Response.json({ error: 'active game uses module' }, { status: 409 }))
+  expect((await DELETE(request('modules/m', 'DELETE'), context('modules/m'))).status).toBe(409)
 })

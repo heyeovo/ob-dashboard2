@@ -1,5 +1,5 @@
 import { isDraining, trackDrainWork } from '../serverDrain'
-import { trpgServerRequest, type TrpgSettings, type YanzhiRuntime, type YanzhiView } from './server'
+import { TrpgHttpError, trpgServerRequest, type TrpgSettings, type YanzhiRuntime, type YanzhiView } from './server'
 import { runYanzhiTurn, trpgPublicError, type TrpgTurnKind } from './yanzhiTurn'
 import { runDmTurn } from './dmTurn'
 
@@ -9,6 +9,7 @@ const root = globalThis as typeof globalThis & { __trpgJobs?: Map<string, Job> }
 const jobs = root.__trpgJobs ||= new Map<string, Job>()
 
 export function chooseTrpgTurn(view: YanzhiView, runtime: YanzhiRuntime, job: Pick<Job, 'actionKey' | 'checksKey' | 'calledChecks'>): TrpgTurnKind | 'dm' | null {
+  if (view.ended_at) return null
   if (view.log.some(log => log.author === 'xiaoyang' && log.kind === 'table_talk' && log.seq > runtime.last_seen_seq)) return 'table_talk'
   const actionKey = String(view.log.filter(log => log.author === 'xiaoyang' && log.kind === 'action').at(-1)?.seq || 0)
   if (view.phase === 'yanzhi' && job.actionKey !== actionKey) return 'action'
@@ -56,12 +57,14 @@ export function kickTrpgTurn(gameId: string, trigger: TrpgTrigger): Promise<void
             const lastSeen = waiting ? waiting.seq - 1 : after.log.at(-1)?.seq || consumedSeq
             runtime = await trpgServerRequest<YanzhiRuntime>(gameId, 'yanzhi-runtime', 'PUT', { session_id: result.session_id, session_tokens: result.session_tokens, last_seen_seq: lastSeen, running_since: null, last_error: null })
           } catch (error) {
+            if (error instanceof TrpgHttpError && error.status === 409) return
             await trpgServerRequest(gameId, 'yanzhi-runtime', 'PUT', { running_since: null, last_error: trpgPublicError(error) })
             return
           }
         }
       } while (current.again)
     } catch (error) {
+      if (error instanceof TrpgHttpError && error.status === 409) return
       // Fire-and-forget callers never receive unhandled rejections or secret-bearing errors.
       await trpgServerRequest(gameId, 'yanzhi-runtime', 'PUT', { running_since: null, last_error: trpgPublicError(error) }).catch(() => undefined)
     } finally { finish(); current.promise = undefined }
