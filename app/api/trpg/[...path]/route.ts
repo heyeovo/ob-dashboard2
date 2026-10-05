@@ -3,7 +3,7 @@ import { kickTrpgTurn, type TrpgTrigger } from '@/app/lib/trpg/scheduler'
 
 type Context = { params: Promise<{ path: string[] }> }
 const id = '[A-Za-z0-9_-]+'
-const reads = new RegExp(`^(modules|modules/${id}/pregens|games|games/${id}/table)$`)
+const reads = new RegExp(`^(modules|modules/${id}/pregens|games|games/${id}/(table|settings|yanzhi-runtime))$`)
 const writes = new RegExp(`^(modules|games|games/${id}/(action|table-talk|settle)|games/${id}/checks/${id}/roll)$`)
 
 async function forward(request: Request, { params }: Context) {
@@ -11,7 +11,7 @@ async function forward(request: Request, { params }: Context) {
   const target = path.join('/')
   // Validate decoded segments before URL construction; phase and arbitrary paths stay private.
   if (path.some(part => !/^[A-Za-z0-9_-]+$/.test(part))
-    || !(request.method === 'GET' ? reads : writes).test(target)) {
+    || !(request.method === 'GET' ? reads.test(target) : request.method === 'POST' ? writes.test(target) : request.method === 'PATCH' && new RegExp(`^games/${id}/settings$`).test(target))) {
     return Response.json({ error: 'not found' }, { status: 404 })
   }
   try {
@@ -23,13 +23,13 @@ async function forward(request: Request, { params }: Context) {
     const upstream = await fetch(url, {
       method: request.method,
       headers: { Authorization: `Bearer ${getHavenGatewayToken()}`, 'Content-Type': 'application/json' },
-      body: request.method === 'POST' ? await request.text() : undefined,
+      body: request.method !== 'GET' ? await request.text() : undefined,
       cache: 'no-store',
       redirect: 'error',
     })
     const body = await upstream.text()
     if (upstream.ok && request.method === 'POST' && path[0] === 'games' && path.length > 2) {
-      await kickTrpgTurn(path[1], path.at(-1) as TrpgTrigger)
+      void kickTrpgTurn(path[1], path.at(-1) as TrpgTrigger)
     }
     return new Response(body, {
       status: upstream.status,
@@ -42,3 +42,5 @@ async function forward(request: Request, { params }: Context) {
 
 export const GET = forward
 export const POST = forward
+
+export const PATCH = forward

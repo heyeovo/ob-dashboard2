@@ -7,7 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
-| `HANDOFF-trpg.md` | 🔨 进行中 | 2026-10-05 CC 起草：CoC 7 速成规则 +《闹鬼》，小羊 + 言之当玩家，GPT（Codex 走 Plus）当守秘人，先不接 Foundry。P0 通过；P1（Haven）2026-10-05 上线（`c956926`）；P2a 页面已验收合并（待上线后 iPhone 走查）；P2b 规格已写（§13），待派 |
+| `HANDOFF-trpg.md` | 🔨 进行中 | 2026-10-05 CC 起草：CoC 7 速成规则 +《闹鬼》，小羊 + 言之当玩家，GPT（Codex 走 Plus）当守秘人，先不接 Foundry。P0 通过；P1（Haven）2026-10-05 上线（`c956926`）；P2a 页面已验收合并（待上线后 iPhone 走查）；P2b（§13）Codex 已实现，两个 feat/trpg-p2b 分支待 CC 验收，未 push/部署；P3 DM 仍未接入 |
 | `HANDOFF-batch-1002.md` | 🔎 待 iPhone 走查 | Codex 实现，CC 验收：Linux 全量 Vitest 491 + build 通过，逐段核对后 2026-10-04 合并 main（`6ecd377`）。含 noop 过程文字、待办排序 / 居中 / 短 ID、日历跳转、时间线状态小框、房间列表间距、桶正文编辑与键盘适配、召回入口挪到 token 旁（`e72b4b4`）、搜索框玻璃底（`0aafb1d`）。`dashboard-auth` 篡改用例偶发失败为既有问题，待下一批修 |
 | `HANDOFF-4c-1-polish.md` | 🔎 待 iPhone 走查 | 两轮均由 CC 验收（Linux 全量测试含符号链接用例、build）并于 2026-10-01 合并 main（`f0cc3bd`、`6b262c6`）：提示词页、全高加载态、日记日期与缓存、日回顾共享周条与补写入口、待办手机全屏编辑 |
 | `HANDOFF-auto-tag-runtime.md` | 📦 已完成归档 | 已提交：Dashboard `8d29fdc`、Haven `4efd135` / `6cc656b` |

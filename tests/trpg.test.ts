@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { GET, POST } from '@/app/api/trpg/[...path]/route'
+import { GET, POST, PATCH } from '@/app/api/trpg/[...path]/route'
 import { kickTrpgTurn } from '@/app/lib/trpg/scheduler'
 import { mergeLogs, type Log } from '@/app/lib/trpg/table'
 
@@ -21,7 +21,7 @@ beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal('fetch', fetchMock); fetchM
 afterEach(() => vi.unstubAllGlobals())
 
 describe('TRPG proxy', () => {
-  it.each(['games/g/phase', 'games/g', 'modules/m/scenes', 'dm/mcp', 'games/g/table/extra', 'modules/../pregens', 'modules/m%2Fsecret/pregens'])('rejects %s without fetching', async path => {
+  it.each(['games/g/yanzhi-view', 'games/g/yanzhi-table-talk', 'games/g/phase', 'games/g', 'modules/m/scenes', 'dm/mcp', 'games/g/table/extra', 'modules/../pregens', 'modules/m%2Fsecret/pregens'])('rejects %s without fetching', async path => {
     expect((await GET(request(path), context(path))).status).toBe(404)
     expect((await POST(request(path, 'POST'), context(path))).status).toBe(404)
     expect(fetchMock).not.toHaveBeenCalled()
@@ -74,4 +74,20 @@ it('merges visible log increments by seq, deduplicates and sorts without mutatio
   expect(mergeLogs(existing, [log(3), log(4, 'updated'), log(8)])).toEqual([log(1), log(3), log(4, 'updated'), log(8)])
   expect(existing).toEqual([log(4), log(1)])
   expect(mergeLogs(existing, [])).toEqual([log(1), log(4)])
+})
+
+
+it('allows settings PATCH and runtime GET but never runtime writes', async () => {
+  fetchMock.mockImplementation(async () => Response.json({ ok: true }))
+  expect((await GET(request('games/g/yanzhi-runtime'), context('games/g/yanzhi-runtime'))).status).toBe(200)
+  expect((await POST(request('games/g/yanzhi-runtime', 'POST'), context('games/g/yanzhi-runtime'))).status).toBe(404)
+  expect((await PATCH(request('games/g/yanzhi-runtime', 'PATCH'), context('games/g/yanzhi-runtime'))).status).toBe(404)
+  expect((await PATCH(new Request('http://dashboard.test', { method: 'PATCH', body: '{"yanzhi_model":"claude-sonnet-5"}' }), context('games/g/settings'))).status).toBe(200)
+  expect(fetchMock.mock.calls.at(-1)?.[1].body).toBe('{"yanzhi_model":"claude-sonnet-5"}')
+  expect(kickTrpgTurn).not.toHaveBeenCalled()
+})
+
+it('returns immediately while the scheduler is running', async () => {
+  vi.mocked(kickTrpgTurn).mockReturnValueOnce(new Promise(() => {}))
+  expect((await POST(request('games/g/action', 'POST'), context('games/g/action'))).status).toBe(200)
 })
