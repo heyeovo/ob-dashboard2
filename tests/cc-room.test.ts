@@ -46,7 +46,7 @@ describe('房间边界', () => {
     expect(bucket.room.process).toHaveLength(1)
     deleteTurnBucket('room-hook', bucket); detachSend('room-hook', send)
   })
-  it('房间中需批准的操作直接拒绝，.room 写入允许且不生成批准卡', async () => {
+  it('房间中「永远要问」的操作直接拒绝，其余默认放行，.room 写入允许且不生成批准卡', async () => {
     mount.root = await mkdtemp(path.join(tmpdir(), 'room-perm-'))
     const bucket = newTurnBucket()
     setTurnBucket('room-perm', bucket)
@@ -57,7 +57,8 @@ describe('房间边界', () => {
       laneId: '', providerId: '', providerLabel: '', effort: '', thinking: false, disabledTools: [], permanentAllowRules: [],
       envOverrides: {}, webSettings: DEFAULT_WEB_SETTINGS } as TurnConfig, null)
     const meta = { requestId: 'p', signal: new AbortController().signal } as Parameters<NonNullable<typeof options.canUseTool>>[2]
-    expect(await options.canUseTool!('Bash', { command: 'echo secret' }, meta)).toMatchObject({ behavior: 'deny', message: '在房间里，需要小羊批准的操作出门再做' })
+    expect(await options.canUseTool!('Bash', { command: 'git push origin main' }, meta)).toMatchObject({ behavior: 'deny', message: '在房间里，需要小羊批准的操作出门再做' })
+    expect(await options.canUseTool!('Bash', { command: 'echo secret' }, meta)).toMatchObject({ behavior: 'allow' })
     const file = path.join(mount.root, '.room', 'room_abc', 'x.html')
     expect(await options.canUseTool!('Write', { file_path: file, content: 'private' }, meta)).toMatchObject({ behavior: 'allow' })
     expect(await isPrivateRoomWrite('Write', { file_path: path.join(mount.root, 'elsewhere') }, mount.root)).toBe(false)

@@ -12,6 +12,7 @@ import { isPrivateRoomWrite, isRoomTool, roomFileList } from './room'
 // 打进每一轮的快照里。
 
 import { createHash } from 'node:crypto'
+import path from 'node:path'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import {
   EXEC_TOOLS,
@@ -33,7 +34,7 @@ import {
 } from '@/app/lib/ccMcp'
 import type { CcMode } from '@/app/lib/ccModes'
 import type { RollingContextConfig, HavenTurn } from '@/app/lib/havenTurns'
-import { autoAllowEdits, recordCommand, recordFileChange, requestPermission } from '@/app/lib/ccChannel'
+import { recordCommand, recordFileChange, requestPermission } from '@/app/lib/ccChannel'
 import { diffForEdit, diffForWrite, diffPlaceholder } from '@/app/lib/ccDiff'
 import { getTurnBucket, pushToolEvent } from '@/app/lib/cc/processCollector'
 import { DEFAULT_WEB_SETTINGS, type CcWebSettings } from '@/app/cc/webSettings'
@@ -43,6 +44,8 @@ import {
   isSetAgentWakeTool,
 } from '@/app/lib/cc/agentWakeTool'
 import { builtInMcpServerNames, builtInMcpServers } from '@/app/lib/cc/builtInMcp'
+import { classifyBash, type BashVerdict } from '@/app/lib/cc/bashPolicy'
+import { MAIN_CHECKOUTS, WORKTREE_ROOT } from '@/app/lib/cc/worktree'
 
 /** CC 引擎每轮最多允许的工具调用次数。超过后 PreToolUse 拒绝后续调用，
  *  模型被迫输出文本汇报进度，用户下一轮再继续。
@@ -343,6 +346,58 @@ function countLines(text: string): number {
   return text.split('\n').length
 }
 
+/* ── 内置工具放行规则 ── */
+
+function isInsideRoot(root: string, target: string): boolean {
+  const rel = path.relative(root, target)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+/**
+ * 内置工具这一步放不放行（2026-10-09 起默认全放行，见 bashPolicy.ts 顶部清单）。
+ * PreToolUse 和 canUseTool 共用，保证 SDK 不管从哪条路问过来答案都一样。
+ *
+ *   写文件：只看写目录（硬规则，没配就是没配），后台另外不准写主仓库检出
+ *   Bash：classifyBash —— 前台危险的 ask，后台危险的或越出 worktree 的 deny
+ *   其它（Web 工具、BashOutput 等）：放行，Web 的开关和域名在 hook 里已经管过
+ */
+async function builtInToolVerdict(
+  sessionId: string,
+  toolName: string,
+  input: Record<string, unknown>,
+  cwd: string,
+): Promise<BashVerdict> {
+  const background = getCcTurnExecutionMode(sessionId) === 'background'
+  const dirs = writeDirsBySession.get(sessionId) || []
+  if (WRITE_TOOLS.includes(toolName)) {
+    const filePath = String(input.file_path || input.notebook_path || '')
+    if (!(await isWritablePath(filePath, dirs, cwd))) {
+      return {
+        level: 'deny',
+        reason: dirs.length
+          ? `这个路径不在允许写的目录里（${filePath}）。能写的是：${dirs.join('、')}。` +
+            '别改别处的文件，也别绕道用命令写。'
+          : '这个协作者还没配「能写哪些目录」，所以现在一个文件都不能改。' +
+            '把你想改什么、改成什么说出来，让用户自己决定要不要开写权限。',
+      }
+    }
+    const abs = path.resolve(cwd, filePath)
+    if (background && !isInsideRoot(WORKTREE_ROOT, abs) && MAIN_CHECKOUTS.some(root => isInsideRoot(root, abs))) {
+      return {
+        level: 'deny',
+        reason:
+          `后台醒来不改主仓库检出（${filePath}），那是前台窗口在用的。` +
+          `到 ${WORKTREE_ROOT}/ 下开 worktree 分支再改。`,
+      }
+    }
+    return { level: 'allow', reason: '' }
+  }
+  if (toolName === 'Bash') {
+    return classifyBash(String(input.command || ''), { cwd, writeDirs: dirs, background })
+  }
+  return { level: 'allow', reason: '' }
+}
+
 /* ── Options 组装 ── */
 
 /**
@@ -388,8 +443,17 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
       }
     }
 
-    if (getTurnBucket(sessionId)?.room.active) {
-      if (await isPrivateRoomWrite(toolName, input as Record<string, unknown>, cwd)) return { behavior: 'allow' }
+    const inRoom = getTurnBucket(sessionId)?.room.active === true
+    if (inRoom && await isPrivateRoomWrite(toolName, input as Record<string, unknown>, cwd)) {
+      return { behavior: 'allow' }
+    }
+    if (!isMcpTool(toolName)) {
+      const verdict = await builtInToolVerdict(sessionId, toolName, input as Record<string, unknown>, cwd)
+      if (verdict.level === 'allow') return { behavior: 'allow' }
+      if (verdict.level === 'deny') return { behavior: 'deny', message: verdict.reason }
+    }
+    // 走到这里的都是「永远要问」清单里的（或设为每次询问的 MCP）
+    if (inRoom) {
       return { behavior: 'deny', message: '在房间里，需要小羊批准的操作出门再做' }
     }
     if (getCcTurnExecutionMode(sessionId) === 'background') {
@@ -400,30 +464,11 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
     }
 
     const kind = toolKind(toolName)
-    const dirs = writeDirsBySession.get(sessionId) || []
     const filePath = String(
       (input as Record<string, unknown>).file_path ||
         (input as Record<string, unknown>).notebook_path ||
         '',
     )
-
-    // 写清单之外的一律硬拒，不弹卡片 —— 这不是「要不要批准」的问题，
-    // 是根本没配。空清单时这里会拒掉所有写操作，界面上会提示去哪加。
-    if (WRITE_TOOLS.includes(toolName) && !(await isWritablePath(filePath, dirs, cwd))) {
-      return {
-        behavior: 'deny',
-        message: dirs.length
-          ? `这个路径不在允许写的目录里（${filePath}）。能写的是：${dirs.join('、')}。` +
-            '别改别处的文件，也别绕道用命令写。'
-          : '这个协作者还没配「能写哪些目录」，所以现在一个文件都不能改。' +
-            '把你想改什么、改成什么说出来，让用户自己决定要不要开写权限。',
-      }
-    }
-
-    // 「本会话 Edit / Write 都放行」。⚠️ 只覆盖改文件，Bash 永远问。
-    if (WRITE_TOOLS.includes(toolName) && autoAllowEdits(sessionId)) {
-      return { behavior: 'allow' }
-    }
 
     // diff / 命令原文由服务端拼好，前端只渲染
     let diff = null
@@ -589,16 +634,6 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
               }
             }
 
-            if (background && (name === 'Bash' || WRITE_TOOLS.includes(name))) {
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'deny' as const,
-                  permissionDecisionReason: '后台 wake 禁止执行 Bash 或写文件。',
-                },
-              }
-            }
-
             if (name === 'WebSearch' || name === 'WebFetch') {
               const webSettings = currentWebSettings(sessionId)
               const current = getTurnBucket(sessionId)
@@ -697,6 +732,8 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'allow' as const,
+                  permissionDecisionReason: '窗口已开 Web Fetch，域名在允许范围内。',
                   updatedInput: {
                     ...webInput,
                     prompt: [String(webInput.prompt || '').trim(), lengthInstruction]
@@ -776,14 +813,22 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
               }
             }
 
-            // 写文件：强制走「问一次」，让 canUseTool 弹卡片。
-            // Bash 已加入 allowedTools，由 SDK 内置安全检查决定是否拦截。
-            if (WRITE_TOOLS.includes(String(toolName))) {
+            // 默认放行；只有「永远要问」清单里的才 ask（canUseTool 弹卡），
+            // 后台 / 房间里没人点卡，直接拒。
+            if (WRITE_TOOLS.includes(name) || name === 'Bash') {
+              const verdict = await builtInToolVerdict(sessionId, name, (toolInput || {}) as Record<string, unknown>, cwd)
+              const inRoom = getTurnBucket(sessionId)?.room.active === true
+              const decision = verdict.level === 'ask' && inRoom ? 'deny' : verdict.level
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,
-                  permissionDecision: 'ask' as const,
-                  permissionDecisionReason: '这一步要用户在浏览器里点批准。',
+                  permissionDecision: decision,
+                  permissionDecisionReason:
+                    decision === 'allow'
+                      ? '默认放行。'
+                      : decision === 'deny' && verdict.level === 'ask'
+                        ? `在房间里，需要小羊批准的操作出门再做（${verdict.reason}）`
+                        : verdict.reason,
                 },
               }
             }

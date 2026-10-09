@@ -56,7 +56,8 @@ for r in /workspace/dashboard /workspace/haven; do cd $r && git fetch -q --prune
 
 ## Git 与部署
 
-- CC 可直接 commit `main`，push 前先报告并等小羊同意；commit message 由 AI 拟
+- CC 自己的活先在分支上做（`feat/…` / `fix/…`），commit 和 push 分支不用问；合并进 `main` 前报告改了什么，push `main` 的命令会弹批准卡，小羊点批准即同意上线。commit message 由 AI 拟
+- 后台醒来的活只在 `/workspace/worktrees/<仓库>-<主题>` 的 worktree 分支里做，可以 push 分支，不碰 `main`（代码层面有拦，见 `docs/reference.md`「工作模式放行规则」）
 - Codex 不 push `main`、不合并：一件事一个分支（`fix/…` / `feat/…`），提交并 push 分支后用 `git ls-remote origin <分支名>` 确认远端已有该分支，再停下，由 CC 验收合并。收尾报告写明：分支名、改动范围、按 `MAINTENANCE_CONTRACT.md` 同步了哪些文档、build / 测试结果、对应 OB Todo（完成的写 ID，新增的写一句话原句）
 - push `main` 后 Coolify 自动部署：镜像构建先跑 `npm test` 再 build，测试失败则部署失败、旧容器继续服务；确认最新 deployment 对应目标 commit 且健康，未触发或失败时再手动 Redeploy
 - 生产收到 SIGTERM/SIGINT 后旧容器排空，等进行中轮次及 Haven 写入结束后再退出（上限约 10 分钟）；Coolify Stop grace period 当前为 600 秒，必须大于 `DRAIN_TIMEOUT_MS` 并额外留出 20 秒停止收尾及退出余量，变量定义见 `docs/reference.md`。feature 分支 push 不等于已上线。

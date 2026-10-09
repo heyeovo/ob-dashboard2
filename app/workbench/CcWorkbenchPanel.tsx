@@ -176,8 +176,8 @@ export default function CcWorkbenchPanel() {
           <div className="cc-wb-body space-y-3">
             {data.pending.length === 0 ? (
               <p className="cc-wb-empty">
-                没有等着的。模型要改文件或跑命令时，请求会出现在这里，也会出现在聊天页那一轮下面 ——
-                两处点哪边都一样，那一轮正停在服务端等。
+                没有等着的。改文件、跑命令默认放行，只有 push main、强推、删工作区外的东西、碰凭据这类才停下来问 ——
+                请求会出现在这里，也会出现在聊天页那一轮下面，两处点哪边都一样。
               </p>
             ) : (
               data.pending.map(req => <CcPermCard key={req.id} request={req} onAnswer={answer} />)

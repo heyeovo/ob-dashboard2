@@ -1,7 +1,8 @@
-import { lstat, realpath, stat } from 'node:fs/promises'
+import { lstat, mkdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { YANZHI_FILES_ROOT } from '@/app/lib/artifactMeta'
 import type { CcMode } from '@/app/lib/ccModes'
+import { WORKTREE_ROOT } from '@/app/lib/cc/worktree'
 
 // 协作者能读哪些目录，以及哪些文件一律不给读。
 //
@@ -103,18 +104,39 @@ export async function resolveWriteDirs(
   return resolveConfiguredDirs(dirs, options, false)
 }
 
+/** worktree 根只在 production 挂（见 cc/bashPolicy.ts）。 */
+function defaultWorktreeRoot(): string | null {
+  return process.env.NODE_ENV === 'production' ? WORKTREE_ROOT : null
+}
+
 /**
- * 工作模式固定可读写 yanzhi's files（不走协作者配置，它不在 VPS workspace 白名单里）。
+ * 工作模式固定可读写 yanzhi's files（不走协作者配置，它不在 VPS workspace 白名单里）
+ * 和 worktree 根（容器里的临时目录，重建会清空，所以每轮按需建）。
  * 没挂载或挂载点是 symlink 时返回空，不 fail 整轮。
  */
-export async function builtInWorkDirs(mode: CcMode, root = YANZHI_FILES_ROOT): Promise<string[]> {
+export async function builtInWorkDirs(
+  mode: CcMode,
+  root = YANZHI_FILES_ROOT,
+  worktreeRoot: string | null = defaultWorktreeRoot(),
+): Promise<string[]> {
   if (mode !== 'work') return []
+  const out: string[] = []
   const lexical = path.resolve(root)
   try {
-    return (await existingDirectory(lexical)) === lexical ? [lexical] : []
+    if ((await existingDirectory(lexical)) === lexical) out.push(lexical)
   } catch {
-    return []
+    // 没挂载就不给
   }
+  if (worktreeRoot) {
+    const wt = path.resolve(worktreeRoot)
+    try {
+      await mkdir(wt, { recursive: true })
+      if ((await existingDirectory(wt)) === wt) out.push(wt)
+    } catch {
+      // 建不了就不给，后台写 worktree 会被写目录规则拒掉
+    }
+  }
+  return out
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   claudeToolAudit,
   sdkModelForProvider,
   setTurnWebSettings,
+  setWriteDirs,
   thinkingConfigForModel,
   type TurnConfig,
 } from '@/app/lib/cc/ccOptions'
@@ -203,20 +204,37 @@ describe('cc 基础提示词渠道一致性', () => {
     }
   })
 
-  it('后台拒绝 Bash 和写入，不进入浏览器批准流程', async () => {
+  it('默认放行：只读命令和工作区内写文件不弹卡，push main 要问', async () => {
+    const work = { ...config('work'), cwd: '/workspace/dashboard' }
+    setWriteDirs('prompt-test', ['/tmp'])
+    const options = buildCcOptions(work, null)
+    const preTool = options.hooks?.PreToolUse?.[0]?.hooks?.[0]
+    const run = (tool_name: string, tool_input: Record<string, unknown>) =>
+      preTool!({ hook_event_name: 'PreToolUse', tool_name, tool_input } as never, undefined, { signal: new AbortController().signal })
+    expect(await run('Bash', { command: 'git status' })).toMatchObject({ hookSpecificOutput: { permissionDecision: 'allow' } })
+    expect(await run('Write', { file_path: '/tmp/cc-options-test.txt', content: 'x' })).toMatchObject({
+      hookSpecificOutput: { permissionDecision: 'allow' },
+    })
+    expect(await run('Bash', { command: 'git push origin main' })).toMatchObject({ hookSpecificOutput: { permissionDecision: 'ask' } })
+
+    const canUse = options.canUseTool!
+    const meta = { signal: new AbortController().signal, requestId: 'r1', toolUseID: 't1' } as never
+    expect(await canUse('Bash', { command: 'ls -la' }, meta)).toEqual({ behavior: 'allow' })
+  })
+
+  it('后台：只读命令放行，清单里的拒，不进入浏览器批准流程', async () => {
     beginAgentWakeTurn('prompt-test', 'background')
     try {
-      const options = buildCcOptions(config('work'), null)
+      const options = buildCcOptions({ ...config('work'), cwd: '/workspace/dashboard' }, null)
       const preTool = options.hooks?.PreToolUse?.[0]?.hooks?.[0]
-      expect(preTool).toBeTypeOf('function')
-      const decision = await preTool!(
-        { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'pwd' } } as never,
-        undefined,
-        { signal: new AbortController().signal },
-      )
-      expect(decision).toMatchObject({
-        hookSpecificOutput: { permissionDecision: 'deny' },
-      })
+      const run = (command: string) =>
+        preTool!({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } } as never, undefined, { signal: new AbortController().signal })
+      expect(await run('pwd')).toMatchObject({ hookSpecificOutput: { permissionDecision: 'allow' } })
+      expect(await run('git push origin main')).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
+      expect(await run('git commit -m x')).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
+      const canUse = options.canUseTool!
+      const meta = { signal: new AbortController().signal, requestId: 'r2', toolUseID: 't2' } as never
+      expect(await canUse('Bash', { command: 'git push origin main' }, meta)).toMatchObject({ behavior: 'deny' })
     } finally {
       endAgentWakeTurn('prompt-test')
     }
