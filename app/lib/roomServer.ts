@@ -78,9 +78,10 @@ export async function readRoomFile(id: string, name: string, raw: boolean): Prom
     return Response.json({ name, size: info.size, mime: mimeType(name), text: isTextFile(name) ? buffer.subarray(0, bytesRead).toString('utf8') : undefined, truncated: info.size > TEXT_LIMIT }, { headers: roomHeaders })
   } finally { await handle.close() }
 }
-export async function loadRoomDoors(sessionId: string, revision: number, chatDay: string): Promise<string> {
+// 只按 revision 冻结：门牌在 system prompt 里，换日就变 key 会让整段缓存重写；手动切换时本来就要重写，顺带刷新
+export async function loadRoomDoors(sessionId: string, revision: number): Promise<string> {
   try {
-    const query = new URLSearchParams({ session_id: sessionId, key: `${revision}:${chatDay}` })
+    const query = new URLSearchParams({ session_id: sessionId, key: `rev:${revision}` })
     const response = await fetchRoomHaven(`/api/rooms/door-snapshot?${query}`)
     if (!response.ok) return ''
     const content = String((await response.json()).content || '').trim()
