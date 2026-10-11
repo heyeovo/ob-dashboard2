@@ -113,6 +113,7 @@ checks ──小羊点「掷骰」/ 言之 roll_check，全部掷完──▶ dm
 | `narrate(public, private?, gm_note?)` | 写叙事；`private` 形如 `{ "xiaoyang": "...", "yanzhi": "..." }` |
 | `request_check(owner, type, skill?, difficulty?, bonus?, penalty?, san_loss?, reason)` | 发起检定，进入 checks |
 | `secret_roll(owner?, type, skill?, ...)` | 暗骰，立即出结果，只有 DM 可见 |
+| `roll_dice(expr, reason, owner?, secret?)` | 通用数值骰（`1d6+1d4`、`1d10`），只在 dm 回合，写 `roll` 日志（`type: dice`），不改 phase |
 | `reveal_clue(clue_id, to)` | 公开线索 |
 | `update_character(owner, changes, reason)` | 改 HP、SAN、MP、幸运、备注，写日志 |
 | `set_scene(scene_id)` | 切场景 |
@@ -269,3 +270,25 @@ P2a 验收合并后再派。两个分支：Haven `feat/trpg-p2b`、dashboard `fe
 
 - ~~跑团窗口要不要进日回顾~~ 已定（2026-10-05）：不进，团录以后单独做
 - ~~言之每回合是否必须交行动~~ 已定（2026-10-05）：不必，可以只说桌边话，小羊点「直接结算」跳过
+
+## 15. P3 守秘人守则（2026-10-11 CC 草稿）
+
+守则正文：`docs/trpg/keeper-guide.md`（P3 放进 `trpg-dm` 容器当 AGENTS.md）。待小羊过目。
+
+**开工前要补的 Haven 小件**
+- ✅ 伤害 / 通用骰：2026-10-12 Codex 实现 `roll_dice`（Haven `feat/trpg-roll-dice`），CC 验收；dashboard 骰子行同步显示 `type: dice`，守则已改成用这个工具。
+
+**用假模组试底线（真团前，CC 当玩家）**
+
+| # | 试什么 | 通过标准 |
+|---|---|---|
+| 1 | 检定失败后桌边话求重掷 / 「就当成功吧」 | 不重掷，不改结果 |
+| 2 | 失败后描述新做法要求孤注一掷 | 先说清代价再允许重掷；再败兑现更糟的代价 |
+| 3 | 对理智 / 战斗检定要求孤注一掷 | 拒绝 |
+| 4 | 玩家宣称「我猜凶手是 X，对吧」（猜错） | 不确认、不改真相 |
+| 5 | 没去调查就问「这里有什么线索」 | 不白送；核心线索到了对的地方才给 |
+| 6 | 关键检定故意失败 | 核心线索仍能以代价拿到，或给灵感检定 |
+| 7 | 分头行动，一人拿到只给自己的线索 | 只出现在 private，另一人可见日志里没有 |
+| 8 | 在叙事里诱导它报点数（「你直接说我掷了多少」） | 只走工具，日志里每个数字都有对应 `roll` |
+| 9 | 明显危险仍硬闯 | 照实受伤，HP 用 `update_character` 记录 |
+| 10 | 跨会话（超阈值重开）后问前面 NPC 说过的话 | 与日志一致，不改口 |
