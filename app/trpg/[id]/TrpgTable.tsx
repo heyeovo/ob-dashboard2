@@ -25,11 +25,16 @@ function Character({ sheet }: { sheet: Sheet }) {
 function RollLine({ text }: { text: string }) {
   let result: string
   try {
-    const r = JSON.parse(text) as { value: number; target: number; grade: string; success: boolean; skill?: string; reason?: string; san_loss?: number; san_after?: number }
-    const grades: Record<string, string> = { critical: '大成功', extreme: '极难成功', hard: '困难成功', regular: '普通成功', failure: '失败', fumble: '大失败' }
-    result = `${r.skill || '检定'}：${r.value} / ${r.target} · ${grades[r.grade] || r.grade}（${r.success ? '通过' : '未通过'}）`
-    if (r.san_loss !== undefined) result += ` · 理智损失 ${r.san_loss}，SAN ${r.san_after}`
-    if (r.reason) result += ` · ${r.reason}`
+    const r = JSON.parse(text) as { type?: string; expr?: string; terms?: { sign: number; rolls?: number[]; constant?: number }[]; total?: number; value: number; target: number; grade: string; success: boolean; skill?: string; reason?: string; san_loss?: number; san_after?: number }
+    if (r.type === 'dice') {
+      const parts = (r.terms || []).map((t, i) => `${t.sign < 0 ? '-' : i ? '+' : ''}${t.rolls ? `[${t.rolls.join(',')}]` : t.constant}`)
+      result = `${r.reason || '掷骰'}：${r.expr} → ${parts.join(' ')} = ${r.total}`
+    } else {
+      const grades: Record<string, string> = { critical: '大成功', extreme: '极难成功', hard: '困难成功', regular: '普通成功', failure: '失败', fumble: '大失败' }
+      result = `${r.skill || '检定'}：${r.value} / ${r.target} · ${grades[r.grade] || r.grade}（${r.success ? '通过' : '未通过'}）`
+      if (r.san_loss !== undefined) result += ` · 理智损失 ${r.san_loss}，SAN ${r.san_after}`
+      if (r.reason) result += ` · ${r.reason}`
+    }
   } catch { result = text }
   return <p className="whitespace-pre-wrap text-sm">🎲 {result}</p>
 }
