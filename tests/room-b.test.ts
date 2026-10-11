@@ -105,14 +105,14 @@ describe('room B server boundaries', () => {
     await symlink(path.join(mount.root, 'outside.txt'), path.join(base, 'innocent.txt'))
     expect(await roomFilePath('room_abc', 'innocent.txt')).toBeNull()
   })
-  it('uses revision:chat_day snapshot keys, omits title-only and upstream failure', async () => {
+  it('uses revision-only snapshot keys, omits title-only and upstream failure', async () => {
     const fetch = upstream({ content: `${ROOM_DOOR_TITLE}\n[room_abc] 私密便条` })
-    expect(await loadRoomDoors('session', 7, '2026-10-02')).toContain('私密便条')
-    expect(String(fetch.mock.calls[0][0])).toContain('key=7%3A2026-10-02')
+    expect(await loadRoomDoors('session', 7)).toContain('私密便条')
+    expect(String(fetch.mock.calls[0][0])).toContain('key=rev%3A7')
     fetch.mockResolvedValueOnce(Response.json({ content: ROOM_DOOR_TITLE }))
-    expect(await loadRoomDoors('session', 7, '2026-10-02')).toBe('')
+    expect(await loadRoomDoors('session', 7)).toBe('')
     fetch.mockRejectedValueOnce(new Error('offline'))
-    expect(await loadRoomDoors('session', 7, '2026-10-02')).toBe('')
+    expect(await loadRoomDoors('session', 7)).toBe('')
   })
   it('appends doors after reviews only in rolling windows', () => {
     const doors = `${ROOM_DOOR_TITLE}\n私密便条`

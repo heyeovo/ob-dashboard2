@@ -10,7 +10,6 @@ import { handoffSnapshotContent } from '@/app/lib/cc/handoffSnapshot'
 import { sessionStaticContext } from '@/app/lib/runtimeContext'
 import { getBuckets, getJournals } from '@/app/lib/api'
 import { loadRoomDoors } from '@/app/lib/roomServer'
-import { archiveChatDay } from './rollingArchive'
 
 type FixedWindowSource = Pick<
   HavenConversationSession,
@@ -278,8 +277,7 @@ export async function loadRollingWindowAppend(
   const effectiveTurns = options.upToTurnId == null
     ? turnResult.turns
     : turnResult.turns.filter(turn => turn.id <= options.upToTurnId!)
-  const roomDoors = await loadRoomDoors(sessionId, session.context_revision || 0,
-    archiveChatDay(new Date().toISOString(), session.rolling_context))
+  const roomDoors = await loadRoomDoors(sessionId, session.context_revision || 0)
   return {
     content: buildRollingWindowAppend(
       session,
