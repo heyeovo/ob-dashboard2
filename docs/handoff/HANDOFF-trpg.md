@@ -113,6 +113,7 @@ checks ──小羊点「掷骰」/ 言之 roll_check，全部掷完──▶ dm
 | `narrate(public, private?, gm_note?)` | 写叙事；`private` 形如 `{ "xiaoyang": "...", "yanzhi": "..." }` |
 | `request_check(owner, type, skill?, difficulty?, bonus?, penalty?, san_loss?, reason)` | 发起检定，进入 checks |
 | `secret_roll(owner?, type, skill?, ...)` | 暗骰，立即出结果，只有 DM 可见 |
+| `roll_dice(expr, reason, owner?, secret?)` | 通用数值骰（`1d6+1d4`、`1d10`），只在 dm 回合，写 `roll` 日志（`type: dice`），不改 phase |
 | `reveal_clue(clue_id, to)` | 公开线索 |
 | `update_character(owner, changes, reason)` | 改 HP、SAN、MP、幸运、备注，写日志 |
 | `set_scene(scene_id)` | 切场景 |
@@ -275,7 +276,7 @@ P2a 验收合并后再派。两个分支：Haven `feat/trpg-p2b`、dashboard `fe
 守则正文：`docs/trpg/keeper-guide.md`（P3 放进 `trpg-dm` 容器当 AGENTS.md）。待小羊过目。
 
 **开工前要补的 Haven 小件**
-- 伤害 / 通用骰：DM MCP 现在只有 d100 检定（`request_check` / `secret_roll`），没有 `1d6+1d4` 这类伤害骰和临时疯狂的 `1d10`。加一个 `roll_dice(expr, reason, secret?)`，服务端掷、写 `roll` 日志；补上后删掉守则里「伤害骰目前没有专门的工具」那段提示。
+- ✅ 伤害 / 通用骰：2026-10-12 Codex 实现 `roll_dice`（Haven `feat/trpg-roll-dice`），CC 验收；dashboard 骰子行同步显示 `type: dice`，守则已改成用这个工具。
 
 **用假模组试底线（真团前，CC 当玩家）**
 
