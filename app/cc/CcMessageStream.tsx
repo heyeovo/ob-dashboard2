@@ -7,6 +7,52 @@ import { visibleChatDay } from './format'
 import { MODE_LABEL } from '@/app/lib/ccModes'
 import type { CcChatScope } from './CcChatScope'
 
+type HistoryGap = { afterDay: string; beforeDay: string; nextDay: string }
+
+/** 相邻两条消息之间，会话里还有没读进来的日子 = 缺口（月历跳转后才会出现），按后一条消息的下标记下来 */
+function findHistoryGaps(messages: CcChatScope['chat']['messages'], days: string[] | null) {
+  const gaps = new Map<number, HistoryGap>()
+  if (!days || days.length === 0) return gaps
+  for (let index = 1; index < messages.length; index += 1) {
+    const afterDay = visibleChatDay(messages[index - 1])
+    const beforeDay = visibleChatDay(messages[index])
+    if (afterDay >= beforeDay) continue
+    const nextDay = days.find(day => day > afterDay && day < beforeDay)
+    if (nextDay) gaps.set(index, { afterDay, beforeDay, nextDay })
+  }
+  return gaps
+}
+
+/** 缺口处的接续条：滑到附近自动读下一天，也可以手点 */
+function HistoryGapLoader({ gap, loading, onLoad }: { gap: HistoryGap; loading: boolean; onLoad: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const onLoadRef = useRef(onLoad)
+  useEffect(() => {
+    onLoadRef.current = onLoad
+  })
+  useEffect(() => {
+    const node = ref.current
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) onLoadRef.current()
+    }, { rootMargin: '200px 0px' })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+  return (
+    <div ref={ref} className="mb-5 text-center">
+      <button
+        type="button"
+        onClick={onLoad}
+        disabled={loading}
+        className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-60"
+      >
+        {loading ? '正在加载…' : `接着看 ${gap.nextDay}`}
+      </button>
+    </div>
+  )
+}
+
 export function CcScrollJumps({
   children,
   sessionId,
@@ -310,6 +356,8 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
     .reverse()
     .find(message => message.role === 'assistant')?.id
 
+  const historyGaps = findHistoryGaps(conversationMessages, chat.historyDays)
+
   const firstMessageId = conversationMessages[0]?.id || ''
   const lastMessage = conversationMessages.at(-1)
   const lastMessageId = lastMessage?.id || ''
@@ -374,6 +422,17 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
         ) : (
           conversationMessages.map((m, index) => (
               <div key={m.renderKey || m.id}>
+                {historyGaps.has(index) ? (() => {
+                  const gap = historyGaps.get(index)!
+                  return (
+                    <HistoryGapLoader
+                      key={`${gap.afterDay}-${gap.beforeDay}`}
+                      gap={gap}
+                      loading={Boolean(chat.gapDayLoading)}
+                      onLoad={() => void chat.loadGapDay(gap.afterDay, gap.beforeDay)}
+                    />
+                  )
+                })() : null}
                 {index === 0 || visibleChatDay(conversationMessages[index - 1]) !== visibleChatDay(m) ? (
                   <div id={`chat-day-${visibleChatDay(m)}`} className="mb-5 flex items-center gap-3 pt-2 text-2xs text-[var(--color-text-disabled)]">
                     <span className="h-px flex-1 bg-[var(--color-border-light)]" />
