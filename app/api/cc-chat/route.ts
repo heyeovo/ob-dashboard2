@@ -1,3 +1,4 @@
+import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { createTurnBroadcast, getTurnBroadcast, publishTurn, finishTurn, activeTurn, turnStream } from '@/app/lib/cc/turnBroadcast'
 import { markTurnInterrupted, stopSession } from '@/app/lib/ccSession'
@@ -255,6 +256,7 @@ async function loadTurnInputs(body: ChatBody) {
     }
   }
   if (!model) model = process.env.ANTHROPIC_MODEL || ''
+  await refreshAgentWakePromptConfig()
   const mcpConfig = await loadMcpConfig()
   const permanentPermissions = await loadPermanentPermissionRules()
   const permanentAllowRules = permanentPermissions.ok

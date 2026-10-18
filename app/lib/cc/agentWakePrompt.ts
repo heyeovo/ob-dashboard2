@@ -1,9 +1,6 @@
 import 'server-only'
 
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
-import path from 'node:path'
-
-const CONFIG_PATH = path.join(process.cwd(), '.data', 'agent-wake-prompt.json')
+import { getHavenGatewayConnection, joinHavenUrl } from '../havenConfig'
 
 const NOOP_MARKER = '[agent_wake_noop]'
 const QUIET_MARKER = '[agent_wake_quiet]'
@@ -42,35 +39,50 @@ export type AgentWakePromptConfig = {
   updated_at: string
 }
 
-let cache: AgentWakePromptConfig | null | undefined = undefined
+let cache: AgentWakePromptConfig | null = null
+let generation = 0
 
-function loadSync(): AgentWakePromptConfig | null {
-  if (cache !== undefined) return cache
+async function havenRequest(method = 'GET', body?: unknown) {
+  const { baseUrl, token } = getHavenGatewayConnection()
+  const response = await fetch(joinHavenUrl(baseUrl, '/gateway/api/cc/agent-wake-prompt'), {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(1800),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  if (!response.ok) throw new Error(`Haven wake prompt HTTP ${response.status}`)
+  return await response.json() as { config: AgentWakePromptConfig | null }
+}
+
+// Refresh before assembling model surfaces; failed reads must never fail a turn.
+export async function refreshAgentWakePromptConfig(): Promise<void> {
+  const version = ++generation
+  let config: AgentWakePromptConfig | null = null
   try {
-    const raw = readFileSync(CONFIG_PATH, 'utf8')
-    cache = JSON.parse(raw) as AgentWakePromptConfig
-  } catch {
-    cache = null
-  }
-  return cache
+    const payload = await havenRequest()
+    if (payload.config && typeof payload.config.instructions === 'string'
+      && typeof payload.config.tool_description === 'string'
+      && typeof payload.config.updated_at === 'string') config = payload.config
+  } catch { /* Haven unavailable: use the unchanged defaults. */ }
+  if (version === generation) cache = config
+}
+
+function invalidateCache() {
+  generation++
+  cache = null
 }
 
 export function getAgentWakeToolDescription(): string {
-  const config = loadSync()
+  const config = cache
   const instructions = config?.instructions || DEFAULT_AGENT_WAKE_INSTRUCTIONS
   const toolDescription = config?.tool_description || DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION
   return `${instructions}\n\n${toolDescription}`
 }
 
-export function getAgentWakePromptConfig(): {
-  instructions: string
-  tool_description: string
-  default_instructions: string
-  default_tool_description: string
-  customized: boolean
-  updated_at: string
-} {
-  const config = loadSync()
+export async function getAgentWakePromptConfig() {
+  await refreshAgentWakePromptConfig()
+  const config = cache
   return {
     instructions: config?.instructions || DEFAULT_AGENT_WAKE_INSTRUCTIONS,
     tool_description: config?.tool_description || DEFAULT_AGENT_WAKE_TOOL_DESCRIPTION,
@@ -81,22 +93,17 @@ export function getAgentWakePromptConfig(): {
   }
 }
 
-export function saveAgentWakePromptConfig(
+export async function saveAgentWakePromptConfig(
   instructions: string,
   toolDescription: string,
-): AgentWakePromptConfig {
-  mkdirSync(path.dirname(CONFIG_PATH), { recursive: true })
-  const config: AgentWakePromptConfig = {
-    instructions,
-    tool_description: toolDescription,
-    updated_at: new Date().toISOString(),
-  }
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
-  cache = config
-  return config
+): Promise<AgentWakePromptConfig> {
+  const payload = await havenRequest('PUT', { instructions, tool_description: toolDescription })
+  invalidateCache()
+  if (!payload.config) throw new Error('Haven returned no wake prompt config')
+  return payload.config
 }
 
-export function resetAgentWakePromptConfig(): void {
-  try { unlinkSync(CONFIG_PATH) } catch {}
-  cache = null
+export async function resetAgentWakePromptConfig(): Promise<void> {
+  await havenRequest('DELETE')
+  invalidateCache()
 }
