@@ -2,6 +2,12 @@
 
 > 从 `TECH_DEBT.md` 搬出的已关闭项，只作追溯。按关闭时间倒序追加。
 
+## 2026-10-18
+
+### ✅ T-01｜鉴权篡改末位字符用例偶发失败
+
+- `tests/dashboard-auth.test.ts` 早已改为篡改签名中段字符；`tests/dashboard-proxy.test.ts`「accepts a valid session and rejects forged...」仍改末位，同样会因 base64url 填充位偶发验签通过。改为同样篡改签名中段，鉴权实现不动；两文件连续跑 20 次全过。
+
 ## 2026-09-30
 
 ### ✅ CC-P02｜纪念日（v1）
