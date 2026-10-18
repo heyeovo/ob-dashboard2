@@ -15,12 +15,14 @@ describe('Haven wake prompt', () => {
     expect(getAgentWakeToolDescription()).toBe(defaults)
     expect(fetch).toHaveBeenCalledWith('https://haven.test/gateway/api/cc/agent-wake-prompt', expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer secret' }) }))
   })
-  it('loads custom instructions and falls back on HTTP or network failure', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ config: custom })).mockResolvedValueOnce(new Response('', { status: 503 })).mockRejectedValueOnce(new Error('offline')))
+  it('loads custom instructions and keeps the last good read on HTTP or network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ config: custom })).mockResolvedValueOnce(new Response('', { status: 503 })).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(Response.json({ config: null })))
     await refreshAgentWakePromptConfig()
     expect(getAgentWakeToolDescription()).toBe('醒来说明\n\n工具说明')
     await refreshAgentWakePromptConfig()
-    expect(getAgentWakeToolDescription()).toBe(defaults)
+    expect(getAgentWakeToolDescription()).toBe('醒来说明\n\n工具说明')
+    await refreshAgentWakePromptConfig()
+    expect(getAgentWakeToolDescription()).toBe('醒来说明\n\n工具说明')
     await refreshAgentWakePromptConfig()
     expect(getAgentWakeToolDescription()).toBe(defaults)
   })

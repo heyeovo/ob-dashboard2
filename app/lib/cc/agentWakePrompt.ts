@@ -64,7 +64,10 @@ export async function refreshAgentWakePromptConfig(): Promise<void> {
     if (payload.config && typeof payload.config.instructions === 'string'
       && typeof payload.config.tool_description === 'string'
       && typeof payload.config.updated_at === 'string') config = payload.config
-  } catch { /* Haven unavailable: use the unchanged defaults. */ }
+  } catch {
+    // Haven 读不到时沿用上次读到的（进程刚起则是默认），免得一次抖动就换掉工具说明、整段重写缓存
+    return
+  }
   if (version === generation) cache = config
 }
 
