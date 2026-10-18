@@ -745,6 +745,23 @@ body:has(.home-page) > .rain-layer { display: none; }
 .home-ornament i { width: 34px; height: 1px; background: currentColor; }
 .home-ornament b { width: 4px; height: 4px; transform: rotate(45deg); background: currentColor; }
 .home-quote-space { height: 20px; }
+.home-words { height: 20px; margin-top: 6px; padding: 0 10px; font-size: var(--text-2xs); letter-spacing: .12em; color: var(--color-text-tertiary); }
+.home-words-detail { display: flex; flex-direction: column; gap: 14px; color: var(--color-text-primary); }
+.home-words-total { display: flex; align-items: baseline; gap: 6px; }
+.home-words-total b { font: italic 500 var(--text-3xl) var(--font-display); letter-spacing: .04em; color: var(--color-primary); }
+.home-words-total span, .home-words-split { font-size: var(--text-note); color: var(--color-text-secondary); }
+.home-words-split { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: -6px; }
+.home-words-rows { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-block: 1px solid var(--color-border-light); font-size: var(--text-note); }
+.home-words-rows div { display: flex; justify-content: space-between; }
+.home-words-rows span { color: var(--color-text-secondary); }
+.home-words-rows b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.home-words-months { display: flex; flex-direction: column; gap: 7px; font-size: var(--text-xs); }
+.home-words-month { display: grid; grid-template-columns: 2.6em 1fr 4.2em; align-items: center; gap: 10px; }
+.home-words-month span { color: var(--color-text-tertiary); }
+.home-words-month i { height: 6px; border-radius: var(--radius-sm); background: var(--color-surface-secondary); overflow: hidden; }
+.home-words-month em { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); opacity: .7; }
+.home-words-month b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; color: var(--color-text-secondary); }
+.home-words-note { font-size: var(--text-2xs); line-height: 1.6; color: var(--color-text-disabled); }
 .home-sill-cat { position: absolute; left: 10px; bottom: calc(var(--home-cat-width) * -0.19); z-index: 3; width: var(--home-cat-width); height: auto; pointer-events: none; filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--theme-ink) 14%, transparent)); }
 .home-anniversary { position: absolute; right: 10px; bottom: -60px; width: 60%; min-width: 188px; padding: 13px 15px 12px; border-radius: var(--radius-2xl); background: var(--home-anniversary-fill); box-shadow: var(--chat-bubble-edge), var(--glass-shadow); }
 .home-sill-clawd { position: absolute; right: 20px; bottom: calc(100% - 2px); width: 34px; }

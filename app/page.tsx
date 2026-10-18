@@ -6,6 +6,7 @@ import HomeToolDrawer from './components/HomeToolDrawer'
 import HomeSillArt from './components/HomeSillArt'
 import HomeRoomEntrance from './components/HomeRoomEntrance'
 import WeekCalendar from './components/WeekCalendar'
+import HomeWordCount from './components/HomeWordCount'
 import { daysTogether, upcomingAnniversaries } from './lib/anniversaries'
 import { bucketDate, bucketName, isLegacyDailyImpression, type DatedBucket } from './lib/dailyBucketDate'
 
@@ -111,7 +112,7 @@ export default function HomePage() {
           <h1>小言<span className="home-amp">&amp;</span>小羊的家</h1>
           <span className="home-day">Day {today ? daysTogether(today) : '—'}</span>
           <span className="home-ornament" aria-hidden="true"><i /><b /><i /></span>
-          <span className="home-quote-space" aria-hidden="true" />
+          <HomeWordCount today={today} />
         </div></div>
         <HomeSillArt kind="cat" />
         <div className={`home-room-sill${next ? ' with-anniversary' : ''}`}>

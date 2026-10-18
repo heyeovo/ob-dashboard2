@@ -15,6 +15,7 @@
 
 import { describeFetchError, fetchHavenWithReadRetry } from './havenReadFetch'
 import type { HavenAttachment } from './havenAttachments'
+import type { WordStatsDay } from './wordStats'
 import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 import type { HandoffSnapshot } from './cc/handoffSnapshot'
 
@@ -872,6 +873,20 @@ export async function listConversationChatDays(sessionId: string): Promise<{
     ok: res.ok,
     days: res.ok && Array.isArray(res.payload.days)
       ? res.payload.days as { day: string; turn_count: number }[] : [],
+    error: res.error,
+  }
+}
+
+/** 整个 profile 按天、按闲聊/工作模式汇总的字数（Haven 只回数字，不回正文） */
+export async function getConversationWordStats(): Promise<{
+  ok: boolean
+  days: WordStatsDay[]
+  error: string
+}> {
+  const res = await havenFetch({ method: 'GET', path: '/gateway/api/conversation/sessions?word_stats=1' })
+  return {
+    ok: res.ok,
+    days: res.ok && Array.isArray(res.payload.days) ? res.payload.days as WordStatsDay[] : [],
     error: res.error,
   }
 }
