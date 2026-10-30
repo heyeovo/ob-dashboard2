@@ -6,6 +6,7 @@ import type {
   HavenConversationSession,
   RollingContextConfig,
 } from '@/app/lib/havenTurns'
+import { contextParts, currentDayMode, dayParts, formatContextTokens as fmt, sumParts, type DayReceipt } from '@/app/lib/cc/rollingContextEstimate'
 import { estimateHandoffTokens } from '@/app/lib/cc/handoffSnapshot'
 
 type Props = {
@@ -34,7 +35,7 @@ type BucketCandidate = Candidate & {
   journal: boolean
 }
 
-const SELECT = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-meta text-[var(--color-text-secondary)]'
+const SELECT = 'min-h-11 text-base rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[var(--color-text-secondary)]'
 
 function defaultModes(days: ConversationContextDay[]): Record<string, 'raw' | 'review' | 'omit'> {
   const newest = [...days].sort((a, b) => b.day.localeCompare(a.day))
@@ -72,37 +73,6 @@ function latestConversationDay(days: ConversationContextDay[]): string {
     .sort((a, b) => b.localeCompare(a))[0] || ''
 }
 
-function effectiveRawTokenEstimate(day: ConversationContextDay, latestDay: string) {
-  const estimate = day.token_estimate
-  if (!estimate) {
-    const conversation = Math.ceil(day.raw_chars * 1.3)
-    return {
-      conversation, tools: 0, attachments: 0, recall: 0, thinking: 0,
-      timestamps: 0, message_overhead: 0, agent_wake: 0, total: conversation,
-    }
-  }
-  const conversation = Number(estimate.conversation || 0)
-  const tools = Number(estimate.tools || 0)
-  const attachments = Number(estimate.attachments || 0)
-  const recall = day.day === latestDay ? Number(estimate.recall || 0) : 0
-  const timestamps = Number(estimate.timestamps || 0)
-  const messageOverhead = Number(estimate.message_overhead || 0)
-  const agentWake = Number(estimate.agent_wake || 0)
-  const thinking = day.day === latestDay ? Number(estimate.thinking || 0) : 0
-  const total = conversation
-    + tools
-    + attachments
-    + recall
-    + thinking
-    + timestamps
-    + messageOverhead
-    + agentWake
-  return {
-    conversation, tools, attachments, recall, thinking, timestamps,
-    message_overhead: messageOverhead, agent_wake: agentWake, total,
-  }
-}
-
 function shuffled<T>(items: T[], seed: number): T[] {
   const next = [...items]
   let value = seed || 1
@@ -114,11 +84,11 @@ function shuffled<T>(items: T[], seed: number): T[] {
   return next
 }
 
-function LimitControl({ value, unit, onChange }: { value: number; unit: string; onChange: (value: number) => void }) {
+function LimitControl({ value, unit, onChange, random = false }: { value: number; unit: string; onChange: (value: number) => void; random?: boolean }) {
   return (
     <label className="flex items-center gap-1 text-2xs text-[var(--color-text-disabled)]">
-      展示候选
-      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="h-6 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-meta text-[var(--color-text-secondary)]" />
+      {random ? '' : '最近'}
+      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="min-h-11 w-16 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-base text-[var(--color-text-secondary)]" />
       {unit}
     </label>
   )
@@ -148,27 +118,26 @@ function SelectionSection({
   control?: React.ReactNode
 }) {
   const selectedCount = items.filter(item => selected.has(item.id)).length
-  const selectedChars = items.filter(item => selected.has(item.id)).reduce((sum, item) => sum + item.content.length, 0)
   return (
-    <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <button type="button" onClick={onToggleOpen} className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
+    <section className="border-t border-[var(--color-border-light)] first:border-t-0">
+      <button type="button" onClick={onToggleOpen} className="flex min-h-11 w-full items-center gap-3 px-3 py-2.5 text-left">
         <span className="min-w-0 flex-1">
           <span className="block text-meta font-medium text-[var(--color-text-heading)]">{title}</span>
           <span className="mt-0.5 block text-3xs text-[var(--color-text-disabled)]">
-            {hint} · 已选 {selectedCount}/{items.length} · {selectedChars.toLocaleString()} 字 · 约 {estimateHandoffTokens(items.filter(item => selected.has(item.id)).map(item => item.content).join('\n\n')).toLocaleString()} token
+            已选 {selectedCount}/{items.length} · {fmt(items.filter(item => selected.has(item.id)).reduce((sum, item) => sum + estimateHandoffTokens(item.content), 0))}
           </span>
         </span>
-        <span className="text-2xs text-[var(--color-text-disabled)]">{open ? '收起' : '展开'}</span>
+        <span className="text-2xs text-[var(--color-text-disabled)]">{open ? '⌄' : '›'}</span>
       </button>
       {open ? (
         <div className="border-t border-[var(--color-border-light)] px-3 pb-2.5 pt-2">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-2xs">
-            <div>{control}</div>
+            <div>{control || hint}</div>
             {items.length > 0 ? (
               <div className="flex items-center gap-2">
-                <button type="button" onClick={onAll} className="text-[var(--color-primary)]">全选当前候选</button>
+                <button type="button" onClick={onAll} className="min-h-11 text-[var(--color-primary)]">全选</button>
                 <span className="text-[var(--color-border)]">|</span>
-                <button type="button" onClick={onNone} className="text-[var(--color-primary)]">全不选</button>
+                <button type="button" onClick={onNone} className="min-h-11 text-[var(--color-primary)]">全不选</button>
               </div>
             ) : null}
           </div>
@@ -177,15 +146,15 @@ function SelectionSection({
           ) : (
             <div className="max-h-48 space-y-1 overflow-y-auto">
               {items.map(item => (
-                <label key={item.id} className={`flex cursor-pointer items-start gap-2 rounded-[var(--radius-md)] border px-2.5 py-1.5 transition-colors ${selected.has(item.id) ? 'border-[var(--color-primary)]/50 bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30'}`}>
+                <label key={item.id} className={`flex min-h-11 cursor-pointer items-center gap-2 border-t border-[var(--color-border-light)] px-1 py-1.5 `}>
                   <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggle(item.id)} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-primary)]" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
-                      {item.badge ? <span className="shrink-0 rounded-full bg-[var(--color-primary-muted)] px-1.5 py-0.5 text-3xs text-[var(--color-primary)]">{item.badge}</span> : null}
+                      {item.badge ? <span className="shrink-0 rounded-[var(--radius-sm)] bg-[var(--color-primary-muted)] px-1.5 py-0.5 text-3xs text-[var(--color-primary)]">{item.badge}</span> : null}
                       <span className="block truncate text-meta text-[var(--color-text-secondary)]">{item.title}</span>
                     </span>
                     <span className="mt-0.5 flex items-center justify-between text-3xs text-[var(--color-text-disabled)]">
-                      <span>{item.note ? `${item.note} · ` : ''}{item.content.length.toLocaleString()} 字</span>
+                      <span>{item.note ? `${item.note} · ` : ''}{fmt(estimateHandoffTokens(item.content))}</span>
                       {item.created ? <span className="shrink-0 pl-2">{item.created.slice(0, 10)}</span> : null}
                     </span>
                   </span>
@@ -200,6 +169,7 @@ function SelectionSection({
 }
 
 export default function CcRollingContext({ sessionId, personaId, busy }: Props) {
+  const [openedAt] = useState(() => Date.now())
   const [session, setSession] = useState<HavenConversationSession | null>(null)
   const [days, setDays] = useState<ConversationContextDay[]>([])
   const [draft, setDraft] = useState<RollingContextConfig | null>(null)
@@ -222,17 +192,22 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   const [feelLimit, setFeelLimit] = useState(20)
   const [randomHighImportanceLimit, setRandomHighImportanceLimit] = useState(10)
   const [randomBatch, setRandomBatch] = useState(() => Date.now())
+  const [savedSelection, setSavedSelection] = useState('')
+  const [pane, setPane] = useState('days')
+  const [receipts, setReceipts] = useState<DayReceipt[] | null>(null)
+  const [receiptRevision, setReceiptRevision] = useState<number | null>(null)
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    void Promise.resolve().then(() => { if (!cancelled) setLoading(true) })
     Promise.all([
       fetch(`/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&limit=1&context_days=1`, { cache: 'no-store' }),
       fetch('/api/buckets?full=1', { cache: 'no-store' }),
       fetch('/api/journal', { cache: 'no-store' }),
+      fetch(`/api/cc-rolling-state?session_id=${encodeURIComponent(sessionId)}`, { cache: 'no-store' }).then(r => r.json()).catch(() => null),
     ])
-      .then(async ([turnsRes, bucketsRes, journalRes]) => {
+      .then(async ([turnsRes, bucketsRes, journalRes, stateData]) => {
         const [turnsData, bucketsData, journalData] = await Promise.all([
           turnsRes.json(),
           bucketsRes.json(),
@@ -241,6 +216,8 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
         if (!turnsRes.ok || !turnsData.ok || !turnsData.session) throw new Error(turnsData.error || '读取失败')
         if (cancelled) return
 
+        setReceipts(Array.isArray(stateData?.days) ? stateData.days : null)
+        setReceiptRevision(stateData?.revision ?? null)
         setSession(turnsData.session)
         setDays(Array.isArray(turnsData.context_days) ? turnsData.context_days : [])
         const rollingContext: RollingContextConfig = turnsData.session.rolling_context
@@ -316,21 +293,17 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
 
         const savedJournalIds = rollingContext.selected_journal_ids
         setSelectedJournals(savedJournalIds != null ? new Set(savedJournalIds) : new Set())
+        setSavedSelection(JSON.stringify([
+          [...(savedPinnedIds ?? pinned.map(item => item.id))].sort(), [...(savedJournalIds || [])].sort(),
+          [...(rollingContext.selected_recent_ids || [])].sort(),
+          [...new Set([...(rollingContext.selected_feel_ids || []), ...feels.filter(item => item.pinned).map(item => item.id)])].sort(),
+          [...(rollingContext.selected_random_high_importance_ids || [])].sort(),
+        ]))
       })
       .catch(error => { if (!cancelled) setNote(error instanceof Error ? error.message : '读取失败') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [sessionId])
-
-  const estimatedDateTokens = useMemo(() => {
-    const latestDay = draft ? latestConversationDay(days) : ''
-    return days.reduce((total, day) => {
-    const mode = draft?.day_modes?.[day.day] || (draft?.strategy === 'daily_rolling' ? 'raw' : 'omit')
-    if (mode === 'raw') return total + effectiveRawTokenEstimate(day, latestDay).total
-    if (mode === 'review') return total + (day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || ''))
-    return total
-    }, 0)
-  }, [days, draft])
 
   const journalVisible = useMemo(
     () => includeSelected(journalItems.slice(0, journalLimit), journalItems, selectedJournals),
@@ -354,7 +327,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     return includeSelected(batch, highImportanceItems, selectedRandomHighImportance)
   }, [highImportanceItems, randomBatch, randomHighImportanceLimit, randomHighImportancePool, selectedRandomHighImportance])
 
-  const estimatedTotalTokens = useMemo(() => {
+  const draftLongTokens = useMemo(() => {
     const selectedBuckets = new Map<string, Candidate>()
     for (const [items, selected] of [
       [pinnedItems, selectedPinned],
@@ -366,11 +339,11 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     }
     const longTermTokens = [...selectedBuckets.values(), ...journalItems.filter(item => selectedJournals.has(item.id))]
       .reduce((total, item) => total + estimateHandoffTokens(item.content), 0)
-    return estimatedDateTokens + longTermTokens
-  }, [estimatedDateTokens, feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
+    return longTermTokens
+  }, [feelItems, highImportanceItems, journalItems, pinnedItems, recentItems, selectedFeels, selectedJournals, selectedPinned, selectedRandomHighImportance, selectedRecent])
 
-  if (loading) return <div className="py-8 text-center text-meta text-[var(--color-text-disabled)]">读取上下文日期…</div>
-  if (!draft || !session) return <div className="text-meta text-[var(--color-danger)]">{note || '没有可用的窗口配置'}</div>
+  if (loading) return <div className="py-8 text-center text-base text-[var(--color-text-disabled)]">读取上下文日期…</div>
+  if (!draft || !session) return <div className="text-meta text-[var(--color-primary)]">{note || '没有可用的窗口配置'}</div>
 
   const updateStrategy = (strategy: RollingContextConfig['strategy']) => {
     setDraft(current => current ? {
@@ -394,6 +367,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     setNote('')
     try {
       const rollingContext = {
+        rebuild_revision: draft.strategy === 'daily_rolling' && days.some(needsDayRebuild),
         strategy: draft.strategy,
         timezone: draft.timezone,
         day_start_hour: draft.day_start_hour,
@@ -418,6 +392,9 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
       if (!response.ok || !data.ok || !data.session) throw new Error(data.error || '保存失败')
       setSession(data.session)
       setDraft(data.session.rolling_context)
+      setSavedSelection(selectionSignature)
+      setReceipts(null)
+      setReceiptRevision(null)
       setNote(`已保存 · 版本 ${data.session.context_revision}。下一句话会使用这份上下文。`)
     } catch (error) {
       setNote(error instanceof Error ? error.message : '保存失败')
@@ -468,98 +445,117 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
   const sortedDays = [...days].sort((a, b) => b.day.localeCompare(a.day))
   const includedDays = sortedDays.filter(day => modeForDay(day) !== 'omit')
   const omittedDays = sortedDays.filter(day => modeForDay(day) === 'omit')
+  const actualReceipts = receiptRevision === session.context_revision ? receipts : null
+  const receiptFor = (day: string) => actualReceipts?.find(row => row.day === day)
+  const revisionLastDay = actualReceipts?.map(row => row.day).sort().at(-1)
+  const actualMode = (day: ConversationContextDay) => currentDayMode(day.day, session.rolling_context, receiptFor(day.day), day.turn_count > 0 ? revisionLastDay : undefined)
+  const currentParts = (day: ConversationContextDay) => dayParts(day, actualMode(day), receiptFor(day.day) || null,
+    !actualReceipts && day.day !== latestDay)
+  const nextParts = (day: ConversationContextDay) => dayParts(day, modeForDay(day), null, day.day !== latestDay)
+  const needsDayRebuild = (day: ConversationContextDay) => {
+    const now = currentParts(day)
+    const next = nextParts(day)
+    return contextParts.some(key => now[key] !== next[key])
+      || (actualMode(day) === 'raw' && modeForDay(day) === 'raw' && day.day !== latestDay
+        && receiptFor(day.day)?.treatment === 'full')
+  }
+  const currentTotals = Object.fromEntries(contextParts.map(key => [key, days.reduce((sum, day) => sum + currentParts(day)[key], 0)]))
+  const currentDateTokens = days.reduce((sum, day) => sum + sumParts(currentParts(day)), 0)
+  const nextDateTokens = days.reduce((sum, day) => sum + sumParts(nextParts(day)), 0)
+  const bucketGroups: Array<[Candidate[], string[] | null | undefined]> = [
+    [pinnedItems, session.rolling_context.selected_pinned_ids ?? pinnedItems.map(item => item.id)],
+    [recentItems, session.rolling_context.selected_recent_ids], [feelItems, session.rolling_context.selected_feel_ids],
+    [highImportanceItems, session.rolling_context.selected_random_high_importance_ids],
+  ]
+  const currentBuckets = new Map<string, Candidate>()
+  for (const [items, ids] of bucketGroups) for (const item of items) if (ids?.includes(item.id)) currentBuckets.set(item.id, item)
+  if (session.rolling_context.pinned_snapshot) {
+    for (const item of pinnedItems) if (session.rolling_context.selected_pinned_ids?.includes(item.id)) currentBuckets.delete(item.id)
+    for (const item of session.rolling_context.pinned_snapshot) currentBuckets.set(item.id, item)
+  }
+  const currentLongTokens = [...currentBuckets.values(), ...journalItems.filter(item => session.rolling_context.selected_journal_ids?.includes(item.id))]
+    .reduce((sum, item) => sum + estimateHandoffTokens(item.content), 0)
+  const currentTotal = currentDateTokens + currentLongTokens
+  const difference = nextDateTokens + draftLongTokens - currentTotal
+  const selectionSignature = JSON.stringify([selectedPinned, selectedJournals, selectedRecent, selectedFeels, selectedRandomHighImportance].map(ids => [...ids].sort()))
+  const pinnedChanged = session.rolling_context.pinned_snapshot != null && JSON.stringify(session.rolling_context.pinned_snapshot)
+    !== JSON.stringify(pinnedItems.filter(item => selectedPinned.has(item.id)).map(({ id, title, content }) => ({ id, title, content })))
+  const dirty = selectionSignature !== savedSelection || pinnedChanged
+    || draft.strategy !== session.rolling_context.strategy || draft.day_start_hour !== session.rolling_context.day_start_hour
+    || JSON.stringify(draft.day_modes) !== JSON.stringify(session.rolling_context.day_modes)
+    || (draft.strategy === 'daily_rolling' && (difference !== 0 || days.some(needsDayRebuild)))
+  const labels = ['正文', 'thinking', '工具', '附件', '召回', '其他', '长期层']
+  const totals = [...contextParts.map(key => currentTotals[key]), currentLongTokens]
+  const statusFor = (day: ConversationContextDay) => {
+    if (!actualReceipts) return ''
+    const receipt = receiptFor(day.day)
+    const state = receipt?.treatment
+    const status = state === 'removed' || !receipt && actualMode(day) !== 'raw' ? (actualMode(day) === 'review' ? '日回顾' : '不带')
+      : state === 'pruned' ? '已精简' : state === 'body_restored' ? '正文恢复' : '完整'
+    if (modeForDay(day) !== actualMode(day)) return `${status} · 保存后${modeForDay(day) === 'omit' ? '不带' : modeForDay(day) === 'review' ? '日回顾' : '恢复原文'}`
+    if (needsDayRebuild(day)) return `${status} · ${nextParts(day).thinking > currentParts(day).thinking ? '保存后恢复 thinking' : '保存后精简'}`
+    return status
+  }
   const renderDay = (day: ConversationContextDay) => {
     const mode = modeForDay(day)
-    const estimate = effectiveRawTokenEstimate(day, latestDay)
-    const reviewTokens = day.review?.estimated_tokens ?? estimateHandoffTokens(day.review?.content || '')
-    const rawTokens = estimate.total
-    const thinkingPruned = day.day !== latestDay && Number(day.token_estimate?.thinking || 0) > 0
-    const recallPruned = day.day !== latestDay && Number(day.token_estimate?.recall || 0) > 0
-    return (
-      <div key={day.day} className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-2.5 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-meta text-[var(--color-text-secondary)]">
-            <span>{day.day}</span>
-          </div>
-          {mode === 'raw' ? (
-            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-3xs text-[var(--color-text-disabled)]">
-              <span>{day.turn_count} 轮</span>
-              <span>正文 {estimate.conversation.toLocaleString()}</span>
-              <span>工具 {estimate.tools.toLocaleString()}</span>
-              <span>附件 {estimate.attachments.toLocaleString()}{day.attachment_unknown_count ? `（${day.attachment_unknown_count} 未知）` : ''}</span>
-              <span>召回 {estimate.recall.toLocaleString()}{recallPruned ? `（重建时清理 ${Number(day.token_estimate?.recall || 0).toLocaleString()}）` : ''}</span>
-              <span>thinking {estimate.thinking.toLocaleString()}{thinkingPruned ? '（重建时清理）' : ''}</span>
-              <span>时间戳≈{estimate.timestamps.toLocaleString()}</span>
-              <span>框架≈{estimate.message_overhead.toLocaleString()}</span>
-              <span>wake≈{estimate.agent_wake.toLocaleString()}</span>
-              <span className="text-[var(--color-text-secondary)]">合计约 {rawTokens.toLocaleString()} token</span>
-            </div>
-          ) : mode === 'review' ? (
-            <div className="mt-0.5 text-3xs text-[var(--color-text-disabled)]">日回顾合计约 {reviewTokens.toLocaleString()} token</div>
-          ) : (
-            <div className="mt-0.5 text-3xs text-[var(--color-text-disabled)]">当前不带 · 0 token</div>
-          )}
-        </div>
-        <select
-          className={SELECT}
-          value={mode}
-          onChange={event => setDraft({ ...draft, day_modes: { ...draft.day_modes, [day.day]: event.target.value as 'raw' | 'review' | 'omit' } })}
-        >
-          <option value="raw">原文</option>
-          <option value="review" disabled={!day.review}>日回顾</option>
-          <option value="omit">不带</option>
+    const now = currentParts(day)
+    const next = nextParts(day)
+    const full = dayParts(day, 'raw', null, false)
+    const imageTokens = day.token_estimate?.attachment_image_tokens || 0
+    const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'short', timeZone: 'Asia/Shanghai' }).format(new Date(`${day.day}T12:00:00+08:00`))
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: draft.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(openedAt - draft.day_start_hour * 3600000))
+    return <div key={day.day} className="border-t border-[var(--color-border-light)] first:border-t-0">
+      <div className="flex min-h-11 items-center gap-1 px-3 py-1">
+        <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => toggleSection(day.day)} aria-expanded={openSections.has(day.day)}>
+          <span className="text-note text-[var(--color-text-primary)]">{day.day}<small className="ml-2 text-2xs text-[var(--color-text-tertiary)]">{weekday}{day.day === today ? ' · 今天' : ''}</small></span>
+          <span className="block text-2xs text-[var(--color-text-tertiary)]">{day.turn_count} 轮 · {fmt(sumParts(now))}{statusFor(day) ? ` · ${statusFor(day)}` : ''}</span>
+        </button>
+        <select aria-label={`${day.day} 内容方式`} className="rolling-select min-h-11 text-base text-[var(--color-text-secondary)]" value={mode}
+          onChange={event => setDraft({ ...draft, day_modes: { ...draft.day_modes, [day.day]: event.target.value as 'raw' | 'review' | 'omit' } })}>
+          <option value="raw">原文</option><option value="review" disabled={!day.review}>日回顾</option><option value="omit">不带</option>
         </select>
+        <button type="button" aria-label={`展开 ${day.day}`} aria-expanded={openSections.has(day.day)} className="min-h-11 min-w-11 text-[var(--color-text-tertiary)]" onClick={() => toggleSection(day.day)}>{openSections.has(day.day) ? '⌄' : '›'}</button>
       </div>
-    )
+      {openSections.has(day.day) ? <div className="px-3 pb-3">
+        {mode === 'review' ? <div className="whitespace-pre-wrap text-note leading-relaxed text-[var(--color-text-secondary)]">{day.review?.content}</div>
+          : <div className="grid grid-cols-3 gap-x-3 gap-y-2 text-2xs">{contextParts.map((key, index) => {
+            const cut = full[key] > now[key]
+            const will = next[key] !== now[key]
+            const value = key === 'attachments' && imageTokens ? imageTokens : full[key]
+            return <div key={key} className="flex justify-between gap-1 text-[var(--color-text-tertiary)]"><span>{key === 'attachments' && imageTokens ? '图片' : labels[index]}</span>
+              <span className={cut ? 'text-[var(--color-text-disabled)] line-through' : will ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-secondary)]'}>{fmt(value)}</span></div>
+          })}</div>}
+      </div> : null}
+    </div>
   }
-
-  return (
-    <div>
-      <div className="mb-2 text-meta text-[var(--color-text-disabled)]">上下文方式</div>
-      <div className="mb-3 grid grid-cols-2 gap-1.5">
-        <button type="button" onClick={() => updateStrategy('fixed_window')} className={`${SELECT} ${draft.strategy === 'fixed_window' ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : ''}`}>原换窗机制</button>
-        <button type="button" onClick={() => updateStrategy('daily_rolling')} className={`${SELECT} ${draft.strategy === 'daily_rolling' ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : ''}`}>按天滚动</button>
+  const group = 'overflow-hidden rounded-[var(--radius-lg)] bg-[var(--rolling-group-fill)]'
+  return <div className="space-y-3">
+    <div className="px-1">
+      <div className="flex items-center justify-between gap-2">
+        <div>{draft.strategy === 'daily_rolling' ? <><div className="text-2xs text-[var(--color-text-tertiary)]">下一轮会带上</div>
+          <span className="text-2xl tabular-nums text-[var(--color-text-primary)]">{fmt(currentTotal)}</span>
+          {difference ? <span className="ml-2 text-2xs text-[var(--color-primary)]">保存后 {difference > 0 ? '+' : '−'}{fmt(Math.abs(difference))}</span> : null}</> : <span className="text-note text-[var(--color-text-secondary)]">原换窗机制</span>}</div>
+        <button type="button" disabled={saving || busy || !dirty} onClick={() => void save()} className="min-h-11 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-meta text-[var(--color-on-primary)] disabled:opacity-40">{saving ? '保存中…' : busy ? '回复结束后可保存' : '保存'}</button>
       </div>
-
-      {draft.strategy === 'daily_rolling' ? (
-        <>
-          <div className="mb-3 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] p-2.5 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
-            这里只决定模型下一轮能看到什么，不删除聊天记录。重建时只保留存档最新一天的召回和 thinking；旧召回剥离后可重新参与召回，但原文期新写入或被 breath 看过的桶仍会隔离。
-          </div>
-          <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] p-2.5 text-2xs leading-relaxed text-[var(--color-pending)]">
-            日期改回“原文”时从原生存档恢复工具、图片与正文；较早日期仍按规则清理 thinking、召回和过期提醒。只有存档中整天缺失时，才从 Haven 恢复该天正文。
-          </div>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <label className="text-meta text-[var(--color-text-tertiary)]">一天从北京时间</label>
-            <select className={SELECT} value={draft.day_start_hour} onChange={event => setDraft({ ...draft, day_start_hour: Number(event.target.value) })}>
-              {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}
-            </select>
-          </div>
-          <div className="mb-2 flex justify-between text-2xs text-[var(--color-text-disabled)]">
-            <span>日期内容</span><span>预估约 {estimatedDateTokens.toLocaleString()} token</span>
-          </div>
-          <div className="space-y-1.5">
-            {includedDays.map(renderDay)}
-            {omittedDays.length > 0 ? (
-              <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-light)]">
-                <button type="button" onClick={() => toggleSection('omitted-days')} className="flex w-full items-center justify-between px-2.5 py-2 text-2xs text-[var(--color-text-tertiary)]">
-                  <span>已不带 {omittedDays.length} 天</span>
-                  <span>{openSections.has('omitted-days') ? '收起' : '展开'}</span>
-                </button>
-                {openSections.has('omitted-days') ? <div className="space-y-1.5 border-t border-[var(--color-border-light)] p-1.5">{omittedDays.map(renderDay)}</div> : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className={`mb-3 mt-4 rounded-[var(--radius-md)] border px-2.5 py-2 text-2xs leading-relaxed ${estimatedTotalTokens >= 100000 ? 'border-[var(--color-pending-border)] bg-[var(--color-pending-bg)] text-[var(--color-pending)]' : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
-            当前日期内容与长期层已选项预估约 {estimatedTotalTokens.toLocaleString()} token（不含系统提示词和后续动态召回）。
-            {estimatedTotalTokens >= 100000 ? ' 已超过 10 万，建议精简；保存时不会自动截断。' : ''}
-          </div>
-          <div className="mb-2 text-2xs text-[var(--color-text-disabled)]">长期层</div>
-          <div className="space-y-1.5">
+      {draft.strategy === 'daily_rolling' ? <>
+        <div className="mt-3 flex h-1 gap-0.5 overflow-hidden rounded-[var(--radius-sm)]">{totals.map((value, index) => value > 0 ? <i key={index} style={{ flex: value, background: `var(--rolling-part-${index})` }} /> : null)}</div>
+        <div className="mt-3 grid grid-cols-4 gap-x-2 gap-y-3">{labels.map((label, index) => <div key={label}><div className="flex items-center gap-1 text-2xs text-[var(--color-text-tertiary)]"><i className="h-1.5 w-1.5 rounded-[var(--radius-sm)]" style={{ background: `var(--rolling-part-${index})` }} />{label}</div><div className="mt-0.5 pl-2.5 text-meta tabular-nums text-[var(--color-text-secondary)]">{fmt(totals[index])}</div></div>)}</div>
+        <div className={`mt-3 text-2xs ${currentTotal > 100000 ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>不含系统提示词和每轮动态召回{currentTotal > 100000 ? ' · 超过 100.0k，建议精简' : ''}</div>
+      </> : null}
+    </div>
+    {draft.strategy === 'daily_rolling' ? <nav className="flex gap-0.5 rounded-[var(--radius-md)] bg-[var(--rolling-group-fill)] p-0.5" aria-label="拼接内容">
+      {['days', 'long', 'settings'].map((id, index) => <button type="button" key={id} onClick={() => setPane(id)} className={`min-h-11 min-w-0 flex-1 rounded-[var(--radius-sm)] text-meta ${pane === id ? 'bg-[var(--color-surface-elevated)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]' : 'text-[var(--color-text-tertiary)]'}`}>
+        {['日期内容', '长期层', '设置'][index]}{index < 2 ? <small className="ml-1 text-2xs text-[var(--color-text-disabled)]">{fmt(index === 0 ? currentDateTokens : currentLongTokens)}</small> : null}
+      </button>)}
+    </nav> : null}
+    {draft.strategy === 'daily_rolling' && pane === 'days' ? <>
+      <div className={group}>{includedDays.map(renderDay)}</div>
+      {omittedDays.length ? <><button type="button" onClick={() => toggleSection('omitted-days')} className="min-h-11 w-full px-1 text-left text-meta text-[var(--color-text-tertiary)]">不带的日期 · {omittedDays.length} 天 {openSections.has('omitted-days') ? '⌄' : '›'}</button>{openSections.has('omitted-days') ? <div className={group}>{omittedDays.map(renderDay)}</div> : null}</> : null}
+    </> : null}
+    {draft.strategy === 'daily_rolling' && pane === 'long' ? <div className={group}>
             <SelectionSection
               title="钉选桶"
-              hint="每轮实时读取最新正文"
+              hint="保存时冻结"
               items={pinnedItems}
               selected={selectedPinned}
               open={openSections.has('pinned')}
@@ -590,7 +586,7 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
               onToggle={id => setSelectedRecent(current => toggleInSet(current, id))}
               onAll={() => setSelectedRecent(new Set(recentVisible.map(item => item.id)))}
               onNone={() => setSelectedRecent(new Set())}
-              control={<LimitControl value={recentLimit} unit="个桶" onChange={setRecentLimit} />}
+              control={<LimitControl value={recentLimit} unit="个" onChange={setRecentLimit} />}
             />
             <SelectionSection
               title="feel"
@@ -615,46 +611,28 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
               onAll={() => setSelectedRandomHighImportance(new Set(randomHighImportanceVisible.map(item => item.id)))}
               onNone={() => setSelectedRandomHighImportance(new Set())}
               control={(
-                <div className="flex items-center gap-2">
-                  <LimitControl value={randomHighImportanceLimit} unit="个桶" onChange={setRandomHighImportanceLimit} />
-                  <button type="button" onClick={() => setRandomBatch(current => current + 1)} className="text-2xs text-[var(--color-primary)] hover:underline">换一批</button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-2xs">重要度 ≥ 7 随机</span>
+                  <LimitControl value={randomHighImportanceLimit} unit="个" onChange={setRandomHighImportanceLimit} random />
+                  <button type="button" onClick={() => setRandomBatch(current => current + 1)} className="min-h-11 text-2xs text-[var(--color-primary)]">换一批</button>
                 </div>
               )}
             />
-          </div>
-        </>
-      ) : (
-        <div className={`rounded-[var(--radius-md)] px-2.5 py-2 text-2xs leading-relaxed ${
-          session.rolling_context?.strategy === 'daily_rolling'
-            ? 'bg-[var(--color-pending-bg)] text-[var(--color-pending)]'
-            : 'text-[var(--color-text-disabled)]'
-        }`}>
-          {session.rolling_context?.strategy === 'daily_rolling'
-            ? '切回后只会使用这个窗口创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。要保留最新衔接，请先使用“换窗继续”。'
-            : '继续使用当前的冻结换窗资料和原生会话续接，不改变现有行为。'}
-        </div>
-      )}
-
-      <button type="button" disabled={saving || busy} onClick={() => void save()} className="mt-4 w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 py-2 text-meta text-[var(--color-on-primary)] disabled:opacity-50">
-        {saving ? '保存中…' : busy ? '回复结束后可保存' : '保存上下文拼接'}
-      </button>
-      {draft.strategy === 'daily_rolling' ? (
-        <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger-bg)]/60 p-2.5">
-          <div className="text-2xs font-medium text-[var(--color-danger)]">损坏窗口恢复</div>
-          <div className="mt-1 text-3xs leading-relaxed text-[var(--color-text-tertiary)]">
-            仅在旧 transcript 无法继续时使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
-          </div>
-          <button
-            type="button"
-            disabled={recovering || saving || busy}
-            onClick={() => void recoverFromHavenBody()}
-            className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--color-danger)]/40 bg-[var(--color-surface)] px-3 py-2 text-2xs text-[var(--color-danger)] disabled:opacity-50"
-          >
-            {recovering ? '正在重建…' : '舍弃损坏的原生记录，用 Haven 正文重建'}
-          </button>
-        </div>
-      ) : null}
-      {note ? <div className="mt-2 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{note}</div> : null}
-    </div>
-  )
+    </div> : null}
+    {draft.strategy === 'fixed_window' || pane === 'settings' ? <div className="space-y-3">
+      <div className={group}>
+        <label className="flex min-h-11 items-center justify-between gap-2 px-3 py-2 text-note text-[var(--color-text-secondary)]">上下文方式<select className={SELECT} value={draft.strategy} onChange={event => updateStrategy(event.target.value as RollingContextConfig['strategy'])}><option value="daily_rolling">按天滚动</option><option value="fixed_window">原换窗机制</option></select></label>
+        <label className="flex min-h-11 items-center justify-between gap-2 border-t border-[var(--color-border-light)] px-3 py-2 text-note text-[var(--color-text-secondary)]">一天从几点开始<select aria-label="一天开始时间（北京时间）" className={SELECT} value={draft.day_start_hour} onChange={event => setDraft({ ...draft, day_start_hour: Number(event.target.value) })}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select></label>
+      </div>
+      {draft.strategy === 'fixed_window' ? <div className="text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{session.rolling_context.strategy === 'daily_rolling' ? '切回后只会使用这个窗口创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。要保留最新衔接，请先使用“换窗继续”。' : '继续使用当前的冻结换窗资料和原生会话续接，不改变现有行为。'}</div> : <>
+        <details className={group}><summary className="min-h-11 cursor-pointer px-3 py-3 text-note text-[var(--color-text-secondary)]">拼接规则</summary><ul className="list-disc space-y-1 px-7 pb-3 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
+          <li>这里只决定下一轮能看到什么，不删除聊天记录。</li><li>新 revision 的最新一天原样保留。</li><li>更早的原文日保留正文、thinking 和工具；清理召回、图片和过期提醒，图片替换成 [图片]。</li><li>改回原文从存档恢复；存档整天缺失才用 Haven 正文补。相同 revision 冷恢复沿用原拼接。</li><li>旧召回离开上下文后可重新召回；原文期新写入或被 breath 看过的桶仍隔离。</li><li>钉选桶保存时冻结；总数不含系统提示词和每轮动态召回。</li>
+        </ul></details>
+        <details className={group}><summary className="min-h-11 cursor-pointer px-3 py-3 text-note text-[var(--color-primary)]">用 Haven 正文重建</summary><div className="px-3 pb-3 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">旧 transcript 续不上时才使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
+          <button type="button" disabled={recovering || saving || busy} onClick={() => void recoverFromHavenBody()} className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-[var(--color-primary)] bg-[var(--color-surface)] px-3 text-meta text-[var(--color-primary)] disabled:opacity-50">{recovering ? '正在重建…' : '舍弃损坏的原生记录，用 Haven 正文重建'}</button>
+        </div></details>
+      </>}
+    </div> : null}
+    {note ? <div className="text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{note}</div> : null}
+  </div>
 }

@@ -6,7 +6,7 @@ import type { HavenTurn, RollingContextConfig } from '@/app/lib/havenTurns'
 import {
   buildRollingTranscriptEntries, captureLocalTranscript, cloneRollingTranscriptForSession,
   createManualRollingBodyRecoverySeed,
-  nativeClaudeSessionFile, openRollingHistoryResume, pruneCompletedThinking,
+  nativeClaudeSessionFile, openRollingHistoryResume, prunePersistedImages,
   prunePersistedRecall, rollingStoreRoot, RollingSeedStore, seedDiagnostic,
   stripStaleSystemReminders, transcriptEnvelopes,
   type ImportLocalSession, type RollingHistorySeed,
@@ -19,6 +19,7 @@ export type ArchiveDayAudit = {
   day: string
   envelopeCount: number
   treatment: 'full' | 'pruned' | 'removed' | 'body_restored'
+  imagePrunedBlockCount?: number
   thinkingPrunedBlockCount: number
   memoryRecallPrunedBlockCount: number
   attachmentPrunedBlockCount: number
@@ -167,7 +168,7 @@ export function sliceRollingArchive(
     const group = byDay.get(day)
     const row: ArchiveDayAudit = {
       day, envelopeCount: group?.length || 0, treatment: 'removed',
-      thinkingPrunedBlockCount: 0, memoryRecallPrunedBlockCount: 0, attachmentPrunedBlockCount: 0,
+      thinkingPrunedBlockCount: 0, imagePrunedBlockCount: 0, memoryRecallPrunedBlockCount: 0, attachmentPrunedBlockCount: 0,
     }
     if ((context.day_modes[day] || 'raw') === 'raw') {
       if (!group) {
@@ -183,10 +184,10 @@ export function sliceRollingArchive(
           if (day === lastDay) entries.push(...envelope.entries)
           else {
             const recall = prunePersistedRecall(envelope.entries)
-            const thinking = pruneCompletedThinking(recall.entries)
-            const attachments = stripStaleSystemReminders(thinking.entries)
+            const images = prunePersistedImages(recall.entries)
+            const attachments = stripStaleSystemReminders(images.entries)
             row.memoryRecallPrunedBlockCount += recall.removedBlockCount
-            row.thinkingPrunedBlockCount += thinking.removedBlockCount
+            row.imagePrunedBlockCount = (row.imagePrunedBlockCount || 0) + images.removedBlockCount
             row.attachmentPrunedBlockCount += attachments.removedBlockCount
             entries.push(...attachments.entries)
           }
@@ -214,6 +215,7 @@ export function createArchiveRevisionSeed(
       retainedEnvelopeCount: sliced.days.filter(day => day.treatment !== 'removed').reduce((sum, day) => sum + day.envelopeCount, 0),
       bodyRestoredTurnCount: sliced.bodyRestoredTurnCount,
       thinkingPrunedBlockCount: sliced.days.reduce((sum, day) => sum + day.thinkingPrunedBlockCount, 0),
+      imagePrunedBlockCount: sliced.days.reduce((sum, day) => sum + (day.imagePrunedBlockCount || 0), 0),
       memoryRecallPrunedBlockCount: sliced.days.reduce((sum, day) => sum + day.memoryRecallPrunedBlockCount, 0),
       attachmentPrunedBlockCount: sliced.days.reduce((sum, day) => sum + day.attachmentPrunedBlockCount, 0),
       days: sliced.days,

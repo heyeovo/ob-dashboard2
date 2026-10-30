@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { getSessionMessages, type SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
+import { type SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
 const api = vi.hoisted(() => ({ getBuckets: vi.fn(), getJournals: vi.fn(), initializeSnapshot: vi.fn() }))
 
 vi.mock('@/app/lib/havenTurns', async importOriginal => ({
@@ -15,7 +15,7 @@ vi.mock('@/app/lib/api', () => ({
   getJournals: api.getJournals,
 }))
 
-import { buildRollingWindowAppend, buildRollingWindowHistory, loadRollingWindowAppend, selectRollingPinnedSnapshot } from '@/app/lib/cc/windowPrompt'
+import { buildRollingWindowAppend, loadRollingWindowAppend, selectRollingPinnedSnapshot } from '@/app/lib/cc/windowPrompt'
 import {
   cloneRollingTranscriptForSession,
   inspectRollingHistoryTranscript, materializeRollingHistorySeed, materializeRollingNativeSession,
@@ -308,16 +308,16 @@ describe('native archive day slicing', () => {
     expect(sliced.entries.map(item => item.uuid)).not.toContain('prefix')
     expect(sliced.entries.map(item => item.uuid)).not.toContain('half')
     expect(sliced.entries.map(item => item.uuid)).not.toContain('wake')
-    expect(JSON.stringify(sliced.entries)).toContain('image/png')
+    expect(JSON.stringify(sliced.entries)).toContain('[图片]')
     expect(JSON.stringify(sliced.entries)).toContain('continued answer')
   })
 
-  it('keeps latest-day thinking/recall; prunes older completed thinking, recall and SDK attachments only', () => {
+  it('keeps thinking and latest-day images; replaces older images and removes recall/reminders', () => {
     const source = [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('latest', '2026-09-12T10:00:00Z')]
     const before = JSON.stringify(source)
     const sliced = sliceRollingArchive(source, context, [], seedOptions)
     const text = JSON.stringify(sliced.entries)
-    expect(text).not.toContain('thinking-old')
+    expect(text).toContain('thinking-old')
     expect(text).not.toContain('recall-old')
     expect(text).not.toContain('old-env')
     expect(text).toContain('old-file')
@@ -330,8 +330,31 @@ describe('native archive day slicing', () => {
       expect(text).toContain(`tool-${id}`)
       expect(text).toContain(`result-${id}`)
     }
-    expect(sliced.days[0]).toMatchObject({ thinkingPrunedBlockCount: 2, memoryRecallPrunedBlockCount: 1, attachmentPrunedBlockCount: 1 })
+    expect(sliced.days[0]).toMatchObject({ thinkingPrunedBlockCount: 0, imagePrunedBlockCount: 1, memoryRecallPrunedBlockCount: 1, attachmentPrunedBlockCount: 1 })
     expect(JSON.stringify(source)).toBe(before)
+  })
+
+  it('replaces user and tool-result images, preserving tool pairs, file text and source bytes', () => {
+    const source = [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('latest', '2026-09-12T10:00:00Z')]
+    const result = source.find(item => item.uuid === 'old-r')!
+    result.message = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-old', content: [
+      { type: 'text', text: '<window_file>keep file body</window_file>' },
+      { type: 'image', source: { type: 'base64', data: 'old-tool-image' } },
+    ] }] }
+    const original = JSON.stringify(source)
+    const sliced = sliceRollingArchive(source, context, [], seedOptions)
+    const text = JSON.stringify(sliced.entries)
+    expect(text).not.toContain('old-tool-image')
+    expect(text).toContain('<window_file>keep file body</window_file>')
+    expect(sliced.days[0].imagePrunedBlockCount).toBe(2)
+    expect(sliced.entries.find(item => item.uuid === 'old-r')?.message).toEqual({ role: 'user', content: [
+      { type: 'tool_result', tool_use_id: 'tool-old', content: [
+        { type: 'text', text: '<window_file>keep file body</window_file>' }, { type: 'text', text: '[图片]' },
+      ] },
+    ] })
+    expect(sliced.entries.find(item => item.uuid === 'latest-u')).toEqual(source.find(item => item.uuid === 'latest-u'))
+    expect(sliced.entries.find(item => item.uuid === 'old-a')).toEqual(source.find(item => item.uuid === 'old-a'))
+    expect(JSON.stringify(source)).toBe(original)
   })
 
   it('protects thinking when an older tool_use has no result', () => {
@@ -344,7 +367,7 @@ describe('native archive day slicing', () => {
   it('uses the archive latest day, even when that day is omitted', () => {
     const source = [...nativeRound('old', '2026-09-11T10:00:00Z'), ...nativeRound('latest', '2026-09-12T10:00:00Z')]
     const sliced = sliceRollingArchive(source, { ...context, day_modes: { '2026-09-12': 'omit' } }, [], seedOptions)
-    expect(JSON.stringify(sliced.entries)).not.toContain('thinking-')
+    expect(JSON.stringify(sliced.entries)).toContain('thinking-old')
     expect(sliced.days.map(day => day.treatment)).toEqual(['pruned', 'removed'])
   })
 

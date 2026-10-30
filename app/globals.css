@@ -11,6 +11,14 @@ html {
 }
 
 :root {
+  --rolling-group-fill: var(--color-surface-secondary);
+  --rolling-part-0: var(--color-primary);
+  --rolling-part-1: color-mix(in srgb, var(--color-primary) 72%, transparent);
+  --rolling-part-2: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  --rolling-part-3: color-mix(in srgb, var(--color-primary) 36%, transparent);
+  --rolling-part-4: color-mix(in srgb, var(--color-primary) 24%, transparent);
+  --rolling-part-5: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  --rolling-part-6: color-mix(in srgb, var(--color-primary) 85%, transparent);
   /* ---- Color: brand / 品牌色 ---- */
   --color-primary:          var(--theme-accent);
   --color-primary-hover:    color-mix(in srgb, var(--theme-accent) 88%, var(--theme-ink));
@@ -2104,3 +2112,6 @@ body:has(.home-page) > .rain-layer { display: none; }
 .room-reveal-live .room-reveal-top, .room-reveal-live .room-reveal-body, .room-reveal-live .room-reveal-files { animation: room-develop 2.4s var(--ease-standard) both; }
 @keyframes room-develop { 0% { filter: blur(6px) grayscale(1); opacity: .15; } 60% { filter: blur(1px) grayscale(.3); opacity: .8; } 100% { filter: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .room-reveal-live .room-reveal-top, .room-reveal-live .room-reveal-body, .room-reveal-live .room-reveal-files { animation: none; } }
+
+/* Keep native controls at 16px on iPhone; compact visual size without shrinking their hit area. */
+.rolling-select { background: transparent; border: none; max-width: 6em; }

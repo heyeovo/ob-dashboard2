@@ -44,6 +44,8 @@ export type HavenTurn = {
 }
 
 export type RollingContextConfig = {
+  /** One-shot explicit save request; never persisted as configuration. */
+  rebuild_revision?: boolean
   strategy: 'fixed_window' | 'daily_rolling'
   /** Haven 写入 revision 时记录的上一策略；用于决定是否必须保留旧滚动 transcript。 */
   previous_strategy?: 'fixed_window' | 'daily_rolling'
@@ -69,6 +71,7 @@ export type ConversationContextDay = {
     conversation: number
     tools: number
     attachments: number
+    attachment_image_tokens?: number
     recall: number
     thinking: number
     timestamps: number
@@ -1158,4 +1161,12 @@ export async function updatePersonaFromExchange(input: {
     updated: res.ok && res.payload.updated === true,
     error: res.error,
   }
+}
+
+/** Read the exact receipt from Haven; no recent-history window or second state store. */
+export async function getRollingSeedReceipt(sessionId: string, nativeSessionId: string) {
+  const params = new URLSearchParams({ session_id: sessionId, include_rolling_seed: '1', native_session_id: nativeSessionId })
+  const result = await havenFetch({ method: 'GET', path: `/gateway/api/conversation/session?${params}`, sessionId })
+  return result.ok && result.payload.rolling_seed && typeof result.payload.rolling_seed === 'object'
+    ? result.payload.rolling_seed as Record<string, unknown> : null
 }
