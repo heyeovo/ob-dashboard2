@@ -4,7 +4,7 @@ import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/c
 import { inspectRollingArchive } from '@/app/lib/cc/rollingArchive'
 import { ccLaneId } from '@/app/lib/cc/ccOptions'
 import { inspectRollingHistoryTranscript } from '@/app/lib/cc/rollingHistory'
-import { getConversationSession, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
+import { getConversationSession, getRollingSeedReceipt, listTurns, type HavenTurn } from '@/app/lib/havenTurns'
 import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/lib/havenPersonas'
 import { claudeToolAudit, mcpToolsContentHash, systemPromptContentHash } from '@/app/lib/cc/ccOptions'
 import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
@@ -112,11 +112,7 @@ export async function GET(request: NextRequest) {
     const laneId = ccLaneId(cred, cred === 'api' ? String(session.cc_overrides?.api?.provider_id || '') : '')
     const transcriptSessionId = String(session.cc_lanes?.[laneId]?.cc_session_id
       || stats.ccSessionId || (latestCacheRaw?.lane === laneId ? latestCacheRaw?.cc_session_id || latestCacheRaw?.resume_hint : '') || '')
-    const rollingSeedRaw = latestResult.ok
-      ? [...latestResult.turns].reverse()
-        .map(turn => objectValue(rawRecord(turn.raw_json).rolling_seed))
-        .find(seed => seed?.contextRevision === session.context_revision && seed?.newSessionId === transcriptSessionId) || null
-      : null
+    const rollingSeedRaw = await getRollingSeedReceipt(sessionId, transcriptSessionId)
     const transcript = transcriptSessionId
       ? await inspectRollingHistoryTranscript(transcriptSessionId)
       : null

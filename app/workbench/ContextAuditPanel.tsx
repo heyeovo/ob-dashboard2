@@ -19,7 +19,7 @@ type AuditMessage = {
 
 type ArchiveDay = {
   day: string; envelopeCount: number; treatment: 'full' | 'pruned' | 'removed' | 'body_restored'
-  thinkingPrunedBlockCount: number; memoryRecallPrunedBlockCount: number; attachmentPrunedBlockCount: number
+  imagePrunedBlockCount?: number; thinkingPrunedBlockCount: number; memoryRecallPrunedBlockCount: number; attachmentPrunedBlockCount: number
 }
 
 const archiveTreatment = { full: '完整', pruned: '删 thinking＋召回＋过期提醒', removed: '去掉', body_restored: 'body_restored（整天正文恢复）' }
@@ -281,14 +281,14 @@ export default function ContextAuditPanel() {
                     <div className="font-medium">本 revision 重建时的处理</div>
                     {data.rolling_archive.currentRevisionDays ? data.rolling_archive.currentRevisionDays.map(day => (
                       <div key={day.day}>
-                        {day.day} · {archiveTreatment[day.treatment]} · thinking 删除 {day.thinkingPrunedBlockCount} · 召回删除 {day.memoryRecallPrunedBlockCount} · attachment／提醒删除 {day.attachmentPrunedBlockCount}
+                        {day.day} · {archiveTreatment[day.treatment]} · 图片删除 {day.imagePrunedBlockCount || 0} · thinking 删除 {day.thinkingPrunedBlockCount} · 召回删除 {day.memoryRecallPrunedBlockCount} · attachment／提醒删除 {day.attachmentPrunedBlockCount}
                       </div>
                     )) : <div>尚无本 revision 的重建凭据；筛选为空时不会生成 seed。</div>}
                     <div className="font-medium">按当前配置重建预览（只读）</div>
                     {data.rolling_archive.revisionDays.map(day => (
                       <div key={day.day}>
                         {day.day} · {archiveTreatment[day.treatment]}
-                        {' · '}thinking 删除 {day.thinkingPrunedBlockCount} · 召回删除 {day.memoryRecallPrunedBlockCount} · attachment／提醒删除 {day.attachmentPrunedBlockCount}
+                        {' · '}图片删除 {day.imagePrunedBlockCount || 0} · thinking 删除 {day.thinkingPrunedBlockCount} · 召回删除 {day.memoryRecallPrunedBlockCount} · attachment／提醒删除 {day.attachmentPrunedBlockCount}
                       </div>
                     ))}
                   </div>

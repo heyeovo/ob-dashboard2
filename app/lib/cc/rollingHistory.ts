@@ -77,6 +77,7 @@ export type RollingSeedDiagnostic = {
   bodyRestoredTurnCount: number
   thinkingPrunedBlockCount: number
   memoryRecallPrunedBlockCount: number
+  imagePrunedBlockCount?: number
   attachmentPrunedBlockCount?: number
   days?: ArchiveDayAudit[]
   toolUseCount: number
@@ -429,6 +430,7 @@ export function seedDiagnostic(entries: SessionStoreEntry[], overrides: Partial<
     retainedEnvelopeCount: 0,
     bodyRestoredTurnCount: 0,
     thinkingPrunedBlockCount: 0,
+    imagePrunedBlockCount: 0,
     memoryRecallPrunedBlockCount: 0,
     toolUseCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_use').length, 0),
     toolResultCount: messages.reduce((sum, message) => sum + entryBlockTypes(message).filter(type => type === 'tool_result').length, 0),
@@ -450,39 +452,32 @@ function contentBlocks(message: Record<string, unknown>): Array<Record<string, u
   return content.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>
 }
 
-export function pruneCompletedThinking(entries: SessionStoreEntry[]): {
-  entries: SessionStoreEntry[]
-  removedBlockCount: number
+/** Replace image payloads without changing message order or tool pairing. */
+export function prunePersistedImages(entries: SessionStoreEntry[]): {
+  entries: SessionStoreEntry[]; removedBlockCount: number
 } {
-  const toolUseIds = new Set<string>()
-  const toolResultIds = new Set<string>()
-  for (const entry of entries) {
-    const message = messageRecord(entry)
-    if (!message) continue
-    for (const block of contentBlocks(message)) {
-      if (block.type === 'tool_use' && block.id) toolUseIds.add(String(block.id))
-      if (block.type === 'tool_result' && block.tool_use_id) toolResultIds.add(String(block.tool_use_id))
-    }
-  }
-  if ([...toolUseIds].some(id => !toolResultIds.has(id))) {
-    return { entries, removedBlockCount: 0 }
-  }
-
   let removedBlockCount = 0
-  const prunedEntries = entries.flatMap(entry => {
+  const replaceImage = (block: unknown): unknown => {
+    if (!block || typeof block !== 'object') return block
+    const record = block as Record<string, unknown>
+    if (record.type === 'image') {
+      removedBlockCount += 1
+      return { type: 'text', text: '[图片]' }
+    }
+    if (record.type === 'tool_result' && Array.isArray(record.content)) {
+      return { ...record, content: record.content.map(replaceImage) }
+    }
+    return block
+  }
+  const pruned = entries.map(entry => {
     const cloned = JSON.parse(JSON.stringify(entry)) as SessionStoreEntry
     const message = messageRecord(cloned)
-    if (message?.role !== 'assistant' || !Array.isArray(message.content)) return [cloned]
-    const content = contentBlocks(message).filter(block => {
-      const shouldRemove = block.type === 'thinking' || block.type === 'redacted_thinking'
-      if (shouldRemove) removedBlockCount += 1
-      return !shouldRemove
-    })
-    if (content.length === 0) return []
-    message.content = content
-    return [cloned]
+    if (message?.role === 'user' && Array.isArray(message.content)) {
+      message.content = message.content.map(replaceImage)
+    }
+    return cloned
   })
-  return { entries: prunedEntries, removedBlockCount }
+  return { entries: pruned, removedBlockCount }
 }
 
 const MEMORY_RECALL_BLOCKS = [
@@ -837,6 +832,7 @@ export async function createModelSurfaceRebaseSeed(
       retainedEnvelopeCount: envelopeCount,
       bodyRestoredTurnCount: 0,
       thinkingPrunedBlockCount: 0,
+      imagePrunedBlockCount: 0,
       memoryRecallPrunedBlockCount: 0,
     }),
   }
