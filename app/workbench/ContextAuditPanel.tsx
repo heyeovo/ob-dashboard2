@@ -22,7 +22,7 @@ type ArchiveDay = {
   imagePrunedBlockCount?: number; thinkingPrunedBlockCount: number; memoryRecallPrunedBlockCount: number; attachmentPrunedBlockCount: number
 }
 
-const archiveTreatment = { full: '完整', pruned: '删 thinking＋召回＋过期提醒', removed: '去掉', body_restored: 'body_restored（整天正文恢复）' }
+const archiveTreatment = { full: '完整', pruned: '精简（召回＋图片＋过期提醒；旧 revision 另删 thinking）', removed: '去掉', body_restored: 'body_restored（整天正文恢复）' }
 
 type AuditData = {
   ok: true
