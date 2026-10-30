@@ -35,8 +35,6 @@ type BucketCandidate = Candidate & {
   journal: boolean
 }
 
-const SELECT = 'min-h-11 text-base rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[var(--color-text-secondary)]'
-
 function defaultModes(days: ConversationContextDay[]): Record<string, 'raw' | 'review' | 'omit'> {
   const newest = [...days].sort((a, b) => b.day.localeCompare(a.day))
   let rawDays = 0
@@ -88,7 +86,7 @@ function LimitControl({ value, unit, onChange, random = false }: { value: number
   return (
     <label className="flex items-center gap-1 text-2xs text-[var(--color-text-disabled)]">
       {random ? '' : '最近'}
-      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="min-h-11 w-16 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-1 text-center text-base text-[var(--color-text-secondary)]" />
+      <input type="number" min={0} value={value} onChange={event => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))} className="rolling-num min-h-11" />
       {unit}
     </label>
   )
@@ -505,19 +503,19 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'short', timeZone: 'Asia/Shanghai' }).format(new Date(`${day.day}T12:00:00+08:00`))
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: draft.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(openedAt - draft.day_start_hour * 3600000))
     return <div key={day.day} className="border-t border-[var(--color-border-light)] first:border-t-0">
-      <div className="flex min-h-11 items-center gap-1 px-3 py-1">
-        <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => toggleSection(day.day)} aria-expanded={openSections.has(day.day)}>
-          <span className="text-note text-[var(--color-text-primary)]">{day.day}<small className="ml-2 text-2xs text-[var(--color-text-tertiary)]">{weekday}{day.day === today ? ' · 今天' : ''}</small></span>
-          <span className="block text-2xs text-[var(--color-text-tertiary)]">{day.turn_count} 轮 · {fmt(sumParts(now))}{statusFor(day) ? ` · ${statusFor(day)}` : ''}</span>
+      <div className="flex min-h-11 items-center gap-1 pl-3 pr-1">
+        <button type="button" className="min-w-0 flex-1 self-stretch py-1.5 text-left" onClick={() => toggleSection(day.day)} aria-expanded={openSections.has(day.day)}>
+          <span className="text-xs text-[var(--color-text-primary)]">{day.day}<small className="ml-1.5 text-2xs text-[var(--color-text-tertiary)]">{weekday}{day.day === today ? ' · 今天' : ''}</small></span>
+          <span className="mt-0.5 block text-2xs tabular-nums text-[var(--color-text-tertiary)]">{day.turn_count} 轮 · {fmt(sumParts(now))}{statusFor(day) ? ` · ${statusFor(day)}` : ''}</span>
         </button>
-        <select aria-label={`${day.day} 内容方式`} className="rolling-select min-h-11 text-base text-[var(--color-text-secondary)]" value={mode}
+        <select aria-label={`${day.day} 内容方式`} className="rolling-select min-h-11" value={mode}
           onChange={event => setDraft({ ...draft, day_modes: { ...draft.day_modes, [day.day]: event.target.value as 'raw' | 'review' | 'omit' } })}>
           <option value="raw">原文</option><option value="review" disabled={!day.review}>日回顾</option><option value="omit">不带</option>
         </select>
-        <button type="button" aria-label={`展开 ${day.day}`} aria-expanded={openSections.has(day.day)} className="min-h-11 min-w-11 text-[var(--color-text-tertiary)]" onClick={() => toggleSection(day.day)}>{openSections.has(day.day) ? '⌄' : '›'}</button>
+        <button type="button" aria-label={`展开 ${day.day}`} aria-expanded={openSections.has(day.day)} className="min-h-11 w-6 shrink-0 text-meta text-[var(--color-text-disabled)]" onClick={() => toggleSection(day.day)}>{openSections.has(day.day) ? '⌄' : '›'}</button>
       </div>
       {openSections.has(day.day) ? <div className="px-3 pb-3">
-        {mode === 'review' ? <div className="whitespace-pre-wrap text-note leading-relaxed text-[var(--color-text-secondary)]">{day.review?.content}</div>
+        {mode === 'review' ? <div className="whitespace-pre-wrap text-meta leading-relaxed text-[var(--color-text-secondary)]">{day.review?.content}</div>
           : <div className="grid grid-cols-3 gap-x-3 gap-y-2 text-2xs">{contextParts.map((key, index) => {
             const cut = full[key] > now[key]
             const will = next[key] !== now[key]
@@ -533,13 +531,13 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     <div className="px-1">
       <div className="flex items-center justify-between gap-2">
         <div>{draft.strategy === 'daily_rolling' ? <><div className="text-2xs text-[var(--color-text-tertiary)]">下一轮会带上</div>
-          <span className="text-2xl tabular-nums text-[var(--color-text-primary)]">{fmt(currentTotal)}</span>
-          {difference ? <span className="ml-2 text-2xs text-[var(--color-primary)]">保存后 {difference > 0 ? '+' : '−'}{fmt(Math.abs(difference))}</span> : null}</> : <span className="text-note text-[var(--color-text-secondary)]">原换窗机制</span>}</div>
-        <button type="button" disabled={saving || busy || !dirty} onClick={() => void save()} className="min-h-11 shrink-0 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-meta text-[var(--color-on-primary)] disabled:opacity-40">{saving ? '保存中…' : busy ? '回复结束后可保存' : '保存'}</button>
+          <span className="text-lg tabular-nums text-[var(--color-text-primary)]">{fmt(currentTotal)}</span>
+          {difference ? <span className="ml-2 text-2xs text-[var(--color-primary)]">保存后 {difference > 0 ? '+' : '−'}{fmt(Math.abs(difference))}</span> : null}</> : <span className="text-xs text-[var(--color-text-secondary)]">原换窗机制</span>}</div>
+        <button type="button" disabled={saving || busy || !dirty} onClick={() => void save()} className="group min-h-11 shrink-0 pl-2"><span className="block rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3.5 py-1.5 text-meta text-[var(--color-on-primary)] group-disabled:opacity-40">{saving ? '保存中…' : busy ? '回复结束后可保存' : '保存'}</span></button>
       </div>
       {draft.strategy === 'daily_rolling' ? <>
         <div className="mt-3 flex h-1 gap-0.5 overflow-hidden rounded-[var(--radius-sm)]">{totals.map((value, index) => value > 0 ? <i key={index} style={{ flex: value, background: `var(--rolling-part-${index})` }} /> : null)}</div>
-        <div className="mt-3 grid grid-cols-4 gap-x-2 gap-y-3">{labels.map((label, index) => <div key={label}><div className="flex items-center gap-1 text-2xs text-[var(--color-text-tertiary)]"><i className="h-1.5 w-1.5 rounded-[var(--radius-sm)]" style={{ background: `var(--rolling-part-${index})` }} />{label}</div><div className="mt-0.5 pl-2.5 text-meta tabular-nums text-[var(--color-text-secondary)]">{fmt(totals[index])}</div></div>)}</div>
+        <div className="mt-3 grid grid-cols-4 gap-x-2 gap-y-3">{labels.map((label, index) => <div key={label}><div className="flex items-center gap-1 text-3xs text-[var(--color-text-tertiary)]"><i className="h-1.5 w-1.5 rounded-[var(--radius-sm)]" style={{ background: `var(--rolling-part-${index})` }} />{label}</div><div className="mt-0.5 pl-2.5 text-meta tabular-nums text-[var(--color-text-secondary)]">{fmt(totals[index])}</div></div>)}</div>
         <div className={`mt-3 text-2xs ${currentTotal > 100000 ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>不含系统提示词和每轮动态召回{currentTotal > 100000 ? ' · 超过 100.0k，建议精简' : ''}</div>
       </> : null}
     </div>
@@ -621,14 +619,14 @@ export default function CcRollingContext({ sessionId, personaId, busy }: Props) 
     </div> : null}
     {draft.strategy === 'fixed_window' || pane === 'settings' ? <div className="space-y-3">
       <div className={group}>
-        <label className="flex min-h-11 items-center justify-between gap-2 px-3 py-2 text-note text-[var(--color-text-secondary)]">上下文方式<select className={SELECT} value={draft.strategy} onChange={event => updateStrategy(event.target.value as RollingContextConfig['strategy'])}><option value="daily_rolling">按天滚动</option><option value="fixed_window">原换窗机制</option></select></label>
-        <label className="flex min-h-11 items-center justify-between gap-2 border-t border-[var(--color-border-light)] px-3 py-2 text-note text-[var(--color-text-secondary)]">一天从几点开始<select aria-label="一天开始时间（北京时间）" className={SELECT} value={draft.day_start_hour} onChange={event => setDraft({ ...draft, day_start_hour: Number(event.target.value) })}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select></label>
+        <label className="flex min-h-11 items-center justify-between gap-2 pl-3 pr-2 text-xs text-[var(--color-text-secondary)]">上下文方式<select className="rolling-select min-h-11" value={draft.strategy} onChange={event => updateStrategy(event.target.value as RollingContextConfig['strategy'])}><option value="daily_rolling">按天滚动</option><option value="fixed_window">原换窗机制</option></select></label>
+        <label className="flex min-h-11 items-center justify-between gap-2 border-t border-[var(--color-border-light)] pl-3 pr-2 text-xs text-[var(--color-text-secondary)]">一天从几点开始<select aria-label="一天开始时间（北京时间）" className="rolling-select min-h-11" value={draft.day_start_hour} onChange={event => setDraft({ ...draft, day_start_hour: Number(event.target.value) })}>{Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select></label>
       </div>
       {draft.strategy === 'fixed_window' ? <div className="text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{session.rolling_context.strategy === 'daily_rolling' ? '切回后只会使用这个窗口创建时冻结的旧换窗资料，滚动期间的新对话不会自动带入。要保留最新衔接，请先使用“换窗继续”。' : '继续使用当前的冻结换窗资料和原生会话续接，不改变现有行为。'}</div> : <>
-        <details className={group}><summary className="min-h-11 cursor-pointer px-3 py-3 text-note text-[var(--color-text-secondary)]">拼接规则</summary><ul className="list-disc space-y-1 px-7 pb-3 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
+        <details className={group}><summary className="min-h-11 cursor-pointer px-3 py-3 text-xs text-[var(--color-text-secondary)]">拼接规则</summary><ul className="list-disc space-y-1 px-7 pb-3 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">
           <li>这里只决定下一轮能看到什么，不删除聊天记录。</li><li>新 revision 的最新一天原样保留。</li><li>更早的原文日保留正文、thinking 和工具；清理召回、图片和过期提醒，图片替换成 [图片]。</li><li>改回原文从存档恢复；存档整天缺失才用 Haven 正文补。相同 revision 冷恢复沿用原拼接。</li><li>旧召回离开上下文后可重新召回；原文期新写入或被 breath 看过的桶仍隔离。</li><li>钉选桶保存时冻结；总数不含系统提示词和每轮动态召回。</li>
         </ul></details>
-        <details className={group}><summary className="min-h-11 cursor-pointer px-3 py-3 text-note text-[var(--color-primary)]">用 Haven 正文重建</summary><div className="px-3 pb-3 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">旧 transcript 续不上时才使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
+        <details className={group}><summary className="min-h-11 cursor-pointer px-3 py-3 text-xs text-[var(--color-primary)]">用 Haven 正文重建</summary><div className="px-3 pb-3 text-2xs leading-relaxed text-[var(--color-text-tertiary)]">旧 transcript 续不上时才使用。保留 Haven 聊天正文和本窗口，舍弃旧工具、召回、图片及失败半截轮次。
           <button type="button" disabled={recovering || saving || busy} onClick={() => void recoverFromHavenBody()} className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-[var(--color-primary)] bg-[var(--color-surface)] px-3 text-meta text-[var(--color-primary)] disabled:opacity-50">{recovering ? '正在重建…' : '舍弃损坏的原生记录，用 Haven 正文重建'}</button>
         </div></details>
       </>}

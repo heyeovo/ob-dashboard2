@@ -2114,4 +2114,5 @@ body:has(.home-page) > .rain-layer { display: none; }
 @media (prefers-reduced-motion: reduce) { .room-reveal-live .room-reveal-top, .room-reveal-live .room-reveal-body, .room-reveal-live .room-reveal-files { animation: none; } }
 
 /* Keep native controls at 16px on iPhone; compact visual size without shrinking their hit area. */
-.rolling-select { background: transparent; border: none; max-width: 6em; }
+.rolling-select { appearance: none; -webkit-appearance: none; background: none; border: none; font-size: 16px; text-align: right; text-align-last: right; transform: scale(.72); transform-origin: right center; color: var(--color-text-secondary); }
+.rolling-num { width: 3.2em; font-size: 16px; transform: scale(.75); text-align: center; margin: 0 -.4em; color: var(--color-text-primary); background: var(--color-surface); border: 1px solid var(--color-border-light); border-radius: var(--radius-md); padding: 2px 0; }
