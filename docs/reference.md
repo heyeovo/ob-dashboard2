@@ -15,6 +15,7 @@ production 必须配置以下六项：
 | `DASHBOARD_LOGIN_SECRET` | 公网登录口令（>=12 字符） |
 | `DASHBOARD_SESSION_SECRET` | session 签名 secret（>=32 字符） |
 | `OMBRE_AGENT_WAKE_RUNNER_TOKEN` | Haven 主动唤醒 callback 的独立 Bearer 共享密钥；与 Brain 相同，不返回浏览器 |
+| `DEVICE_EVENTS_TOKEN` | 可选，快捷指令写入手机事件的独立 Bearer；未配置时公开写入口返回 503，仅服务端环境变量保存 |
 | `DRAIN_TIMEOUT_MS` | 可选，部署排空等待上限，默认 `570000`（570 秒）；必须小于 Coolify Stop grace period，另留最多 20 秒优雅停止和退出余量（当前 grace 600 秒）。容器和本地生产 start 在导入 Next 前设置 `NEXT_MANUAL_SIG_HANDLE=true`，dev 不变 |
 
 本机 `npm run dev` 继续兼容旧 `OMBRE_BASE_URL` / `NEXT_PUBLIC_OMBRE_*`。
@@ -56,6 +57,7 @@ production 必须配置以下六项：
 | `app/components/` | 共享组件 |
 | `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`bucket/[id]/comments/[commentId]` 代理单条年轮修改/删除；`health` 在排空期间返回 503；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff，新轮次排空时返回 `503 server_draining`（3 秒后重试），新容器遇到旧实例 11 分钟内的会话标记返回 `409 previous_instance_finishing`（5 秒后重试），已有 CC 同 request_id 可重放/接上；压缩、GC、rolling recovery 同样受门禁；`automation-pro-runner` 排空返回可重试 503（Haven 同次任务自动重试限制见 CC-09）；`cc-chat` stats 返回 `active_turn`，`cc-chat/attach` 按 SSE `id` / `after_seq` 补齐缓冲并订阅实时事件；浏览器断线只移除订阅，显式丢弃轮次才取消进程内队列与 Pro 文件锁等待，跨进程锁记录宿主机和 PID，同机持有进程死亡时立即回收；滚动模式的原文从每窗口／lane 的只追加原生存档按天筛选，日回顾、冻结钉选桶和日记仍放入背景 Context；`cc-rolling-recovery` 仅在原生存档、持久 revision 与原生 transcript 均不可用且用户精确确认窗口时，把全量 Haven 正文初始化为新存档，再物化当前 raw 日期的 seed，以旧 session ID + state version CAS 切换当前活跃 lane；`cc-rolling-state` 只读返回当前 lane/revision 的精确每日处理凭据（Haven 不受最近 50 轮限制，缺失为 null）；`cc-context-audit` 同样使用精确凭据，只读显示存档及按天筛选结果、当前持久 transcript、请求前保存的 system prompt 与去密后的模型表面诊断，不生成 revision 或修改指针；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback（含 `agent_followup`、多闹钟拼接 reason 与 `pending_alarms`），认证失败时暂停该窗口自动唤醒并返回一小时 `Retry-After`，Pro 额度耗尽时同样返回一小时退避但不保存额度提示为 wake 消息；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，并通过 `days=1` 按 profile/session 查询不含正文的月历日期与轮数，读写滚动上下文（保存时由服务端重取钉选桶快照，读取失败不保存；快照正文变化也生成 revision）、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；读取 `context_days` 时同时取得 Haven 按日汇总的正文、工具、附件、召回、thinking、时间戳、消息框架、agent wake token 预估及未知附件数，其中 attachment_image_tokens 为 attachments 的子集，缺失按 0，不重复加进 total；严格轮次提交会同步 `recalled_bucket_ids`、`created_bucket_ids` 和 `breath_bucket_ids` 给 Haven 隔离账本；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
 | `app/api/appearance/` | 服务端代理 Haven 外观配置与单张背景图；GET 首屏读取失败回默认值，POST 保存白名单 normalize 后的配置，图片 GET/POST/DELETE 经 Dashboard 登录保护且不暴露 Haven Bearer |
+| `app/api/device-events/` | 手机快捷指令公开 POST，独立 token、16KB 上限，服务端用 gateway bearer 转发 Haven；不提供公开读取 |
 | `app/api/care/` | 代理 Haven reminders/todos，Todo 的 DELETE 保留鉴权 Cookie 与上游状态码 |
 | `app/api/cc-turns/` | 窗口状态 PATCH 可单独写入 `recall_mode` 三态到 Haven，GET 按 session 返回该值供本窗设置刷新恢复。 |
 | `app/api/cc-context-audit/` | 只读读取活跃 lane 的原生存档：entry 数、首末 chat_day、每日轮数、本 revision 重建时的每日处理与 图片／thinking／召回／attachment 清理数量（凭据按 revision 与原生 session ID 精确查询）、按当前配置重建预览；保留逐日预算、持久 transcript 的工具／召回／正文恢复统计、长期层已保存／生效 ID、当前工具和 MCP 模型表面、最近请求的 hash 与 iterator 状态。房间原生过程在浏览器投影中封存；不与 Haven 逐轮或逐条正文匹配，不生成 seed、不改变设置或会话指针。 |
@@ -92,7 +94,7 @@ production 必须配置以下六项：
 - 正常用户 turn 成功提交时在 Haven 事务内只采样一次 conversation silence timer；下一条用户消息进入模型前原子取消尚未触发的 timer。缓存保活临时暂停会在下一条用户消息进入模型前解除，或在 Claude 正式主动消息成功保存时于同一 Haven 事务解除；后台 no-op、失败和 deferred 不解除。新 assistant 轮次保存版本化 `display_segments`，历史仍保留一轮一条原文；页面可见且空闲时按 round 游标增量刷新后台 wake 消息。
 - Haven 每 30 秒按持久 `due_at` claim 后调用 `cc-agent-wake-runner`；Dashboard 只有取得同一 `SessionTurnCoordinator` 的后台门禁后才向 Haven 原子 begin。旧 schedule version、无效 silence 来源、重复 `wake_id`、busy/compacting/待审批、失败退避、过期 lease、24 小时无用户活动和滚动后台 turn 上限均在模型请求前处理；deferred 不生成 wake event。
 - Bark profile 配置和密钥只存 Haven，Dashboard 读取只得到掩码；窗口设置只持久化 `bark_notification_enabled` 并显示该 scope 最近状态。可见 agent wake 与 outbox 在 Haven 同一事务提交，no-op 和普通前台回复不推送；通知复用已保存 `display_segments`，按渠道无关的 `agent_wake.delivery` 映射 Bark 级别：`quiet` 所有段 passive，`loud` / 缺省 / 非法值首条 active、后续 passive，支持持久重试、AES-128-CBC 正文加密和 `/cc?session_id=...` deep link。
-- 后台 wake 轮次在北京时间戳后追加一行天气（行内不写城市名，坐标只在代码里）（`app/lib/weather.ts`，Open-Meteo，3 秒超时、进程内缓存 20 分钟，属可丢运行态）；查不到整行不写，前台用户轮次不注入。
+- 后台 wake 轮次在北京时间戳后追加一行天气（行内不写城市名，坐标只在代码里）（`app/lib/weather.ts`，Open-Meteo，3 秒超时、进程内缓存 20 分钟，属可丢运行态）；查不到整行不写，前台用户轮次不注入。紧跟天气尝试追加手机 digest（`app/lib/deviceDigest.ts`，Haven `/api/device-events/digest`，2 秒超时，失败或空串不写），同样只在 `agent_wake` 注入。
 - CC 每轮 Context 快照优先采用 Agent SDK result 的 `modelUsage[当前模型].contextWindow`，同步本轮 usage 和本窗设置的百分比；缺值才按模型名回退到预置上限。selfhost 的 Context 预算另行计算。
 - cc 换窗的折叠逐项选择、统一 token 预算、Haven 固定快照及 CC/selfhost 一致注入契约见 `docs/architecture.md`
 - 「本窗口设置 → 窗口减负」只处理 Claude transcript 中可重取的 `ombre:<bucket_id>#...` 动态召回，以及 `breath`、`search_chat`、`WebSearch`、`WebFetch` 的纯文字结果；OB 单行引用为“召回内容已清理：title（bucket_id）”，工具结果单行以“已清理：…”标识，原工具调用 block 和完整参数始终保留。用户/助手正文、`date_recall`、报错/非文字结果及名单外工具不得修改。执行时用 Agent SDK `forkSession` 复制会话、只原子改写副本，再由 Haven CAS 切换该 CC lane 的 `cc_session_id`；Dashboard `ob2-*` 窗口 ID 和 `conversation_turns` 不变。每窗口可保存“始终保留”、释放 token 估算和历史；05:30 香港时区自动 runner 默认关闭。固定窗口保持原行为；按天滚动窗口在 RollingSeedStore 版 GC 完成并通过真实验收前，服务端硬性禁止手动减负且自动 runner 无条件跳过。
@@ -102,3 +104,5 @@ production 必须配置以下六项：
 - 工作台上传文件写入 `YANZHI_FILES_ROOT`（宿主机挂载卷，持久），不写入 Dashboard 仓库或临时目录。目录权限仍经 `/api/cc-personas` 存 Haven。
 - 内置 MCP 权限以 Haven MCP JSON 中的 `builtInPermissions` 持久化，不进入模型表面 hash：Agent Wake 固定自动允许；`yanzhi's files` 默认自动允许，可在 MCP 页切换为每次询问。要完全禁止时直接关闭服务，避免保留无法使用的工具定义。
 
+
+手机使用事件属于持久用户数据，事实源为 Haven `state_dir/device_events.sqlite`（保留 14 天）；`DEVICE_EVENTS_TOKEN` 仅存 dashboard 服务端环境变量，不返回浏览器。
