@@ -1,6 +1,7 @@
 'use client'
 import { Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
+import DeviceActivityReporter from './DeviceActivityReporter'
 import BottomTabBar from './BottomTabBar'
 import SideRail from './SideRail'
 import type { ReactNode } from 'react'
@@ -28,6 +29,7 @@ export default function MobileShell({ children }: { children: ReactNode }) {
   }, [pathname])
   return (
     <>
+      <DeviceActivityReporter />
       <Suspense fallback={null}>
         <SideRail />
       </Suspense>
