@@ -5,7 +5,6 @@ vi.mock('../app/lib/havenConfig', () => ({
   joinHavenUrl: (base: string, path: string) => base + path,
 }))
 import { POST } from '../app/api/device-events/route'
-import { deviceDigest } from '../app/lib/deviceDigest'
 const request = (body = '{}', token = 'phone') => new Request('https://home.test/api/device-events', {
   method: 'POST', headers: { Authorization: `Bearer ${token}` }, body,
 })
@@ -29,17 +28,5 @@ describe('phone write endpoint', () => {
   it('bounds streamed body bytes', async () => {
     expect((await POST(request('中'.repeat(5500)))).status).toBe(413)
     expect(fetch).not.toHaveBeenCalled()
-  })
-})
-describe('wake digest', () => {
-  it('silences failed, invalid and empty responses', async () => {
-    vi.mocked(fetch).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(new Response('', { status: 500 })).mockResolvedValueOnce(Response.json({ digest: '' })).mockResolvedValueOnce(new Response('invalid'))
-    for (let i = 0; i < 4; i++) expect(await deviceDigest()).toBe('')
-  })
-  it('uses a two second deadline and returns the digest', async () => {
-    const timeout = vi.spyOn(AbortSignal, 'timeout')
-    vi.mocked(fetch).mockResolvedValue(Response.json({ digest: '[手机 记录]' }))
-    expect(await deviceDigest()).toBe('[手机 记录]')
-    expect(timeout).toHaveBeenCalledWith(2000)
   })
 })

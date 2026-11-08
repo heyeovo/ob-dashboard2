@@ -1,4 +1,3 @@
-import { deviceDigest } from '../deviceDigest'
 // 单轮 cc 对话执行器（9.5 步从 route.ts 的 POST 闭包原样抽出）。
 //
 // route.ts 只负责：解析 body → 读 Haven 配置 → 组装 TurnConfig 快照 → 建 SSE 流 →
@@ -836,8 +835,6 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnResult> {
     if (turnKind === 'agent_wake') {
       const weather = await xiamenWeatherContext()
       if (weather) content += `\n${weather}`
-      const phone = await deviceDigest()
-      if (phone) content += `\n${phone}`
     }
     if (config.mode === 'work') {
       const stats = getSessionStats(sessionId)
