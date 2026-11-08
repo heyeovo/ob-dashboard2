@@ -47,8 +47,11 @@ export async function uploadAttachment(input: {
   kind?: 'image' | 'file'
   textContent?: string
   textTruncated?: boolean
+  /** assistant = 言之 send_image 发的图：不挂 turn，Haven 不按暂存清理。 */
+  origin?: 'user' | 'assistant'
 }): Promise<{ ok: boolean; attachment: HavenAttachment | null; error: string; status: number }> {
   const params = new URLSearchParams({ session_id: input.sessionId, filename: input.filename })
+  if (input.origin === 'assistant') params.set('origin', 'assistant')
   try {
     const { baseUrl, token } = getHavenGatewayConnection()
     const isFile = input.kind === 'file'

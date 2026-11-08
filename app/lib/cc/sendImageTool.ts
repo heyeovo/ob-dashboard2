@@ -42,7 +42,7 @@ export async function executeSendImage(input: z.infer<typeof schema>, sessionId:
         .rotate().resize(1200, 1200, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true })
     } catch { throw new Error('不是图片，或图片无法解码') }
     const thumbnail = await sharp(image.data).resize(512, 512, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
-    const uploaded = await uploadAttachment({ sessionId, filename: 'send-image.webp', bytes: Uint8Array.from(image.data).buffer, mimeType: 'image/webp', kind: 'image' })
+    const uploaded = await uploadAttachment({ sessionId, filename: 'send-image.webp', bytes: Uint8Array.from(image.data).buffer, mimeType: 'image/webp', kind: 'image', origin: 'assistant' })
     if (!uploaded.ok || !uploaded.attachment) throw new Error('图片保存失败，请稍后重试')
     return { content: [
       { type: 'image' as const, data: thumbnail.toString('base64'), mimeType: 'image/webp' },
