@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { SEND_IMAGE_TOOL } from './cc/sendImageResult'
+
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
@@ -503,5 +505,5 @@ export function mcpPermissionForTool(toolName: string): CcMcpPermission {
 }
 
 export function shouldSaveMcpResult(toolName: string): boolean {
-  return serverForTool(toolName)?.saveResults === true
+  return toolName === SEND_IMAGE_TOOL || serverForTool(toolName)?.saveResults === true
 }

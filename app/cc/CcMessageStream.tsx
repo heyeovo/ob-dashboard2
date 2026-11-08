@@ -441,6 +441,7 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
                   </div>
                 ) : null}
                 <CcMessageRow
+                  sessionId={chat.sessionId}
                   message={m}
                   isCurrentTurn={m.id === latestAssistantId}
                   persona={

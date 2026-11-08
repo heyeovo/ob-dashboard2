@@ -1,3 +1,4 @@
+import { createSendImageMcpServer, sendImageMcpModelSurface } from './sendImageTool'
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk'
 import type { CcMode } from '@/app/lib/ccModes'
 import type { CcBuiltInMcpPermission, CcBuiltInMcpServer, CcMcpPermission } from '@/app/lib/ccMcpTypes'
@@ -30,6 +31,14 @@ type BuiltInMcpRegistration = {
  * 旧窗口的 request-prefix 指纹就会自动感知变化。
  */
 const BUILT_IN_MCP: BuiltInMcpRegistration[] = [
+  {
+    name: 'send_image',
+    label: 'Send Image',
+    version: '1.0.0',
+    defaultPermission: 'allow',
+    modelSurface: sendImageMcpModelSurface,
+    create: createSendImageMcpServer,
+  },
   {
     name: AGENT_WAKE_SERVER_NAME,
     label: 'Agent Wake',

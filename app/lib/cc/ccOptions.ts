@@ -275,6 +275,7 @@ function fetchDomainAllowed(rawUrl: unknown, settings: CcWebSettings): boolean {
 /** 从工具结果里抠出文本。不同工具的 tool_response 形状不一样，都兜一下。 */
 function toolResponseText(res: unknown): string {
   if (typeof res === 'string') return res
+  if (Array.isArray(res)) return res.filter(b => b?.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n')
   if (!res || typeof res !== 'object') return ''
   const r = res as Record<string, unknown>
   for (const key of ['stdout', 'output', 'text', 'content', 'result']) {
@@ -283,7 +284,8 @@ function toolResponseText(res: unknown): string {
   }
   if (Array.isArray(r.content)) {
     return r.content
-      .map(b => (b && typeof b === 'object' ? String((b as Record<string, unknown>).text || '') : ''))
+      .filter(b => b && typeof b === 'object' && b.type === 'text' && typeof b.text === 'string')
+      .map(b => b.text)
       .join('\n')
   }
   return ''
@@ -292,9 +294,13 @@ function toolResponseText(res: unknown): string {
 /** MCP 返回值留给日常回看；限制体积，避免一个网页/搜索结果把整轮 raw_json 撑爆。 */
 function storedMcpResult(res: unknown, limit = 20_000): string {
   let text = toolResponseText(res)
-  if (!text && res != null) {
+  if (!text && res != null && !Array.isArray(res) && !(typeof res === 'object' && ('content' in res || 'type' in res))) {
     try {
-      text = JSON.stringify(res, null, 2)
+      text = JSON.stringify(res, (_key, value) => {
+        // SDK wrappers can nest content blocks outside content as well.
+        if (value && typeof value === 'object' && ['image', 'audio', 'resource', 'document'].includes(value.type)) return undefined
+        return value
+      }, 2)
     } catch {
       text = String(res)
     }

@@ -1,5 +1,6 @@
+import { safeTarget } from './yanzhiFilesPath'
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
-import { lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { ARTIFACTS_DIR, YANZHI_FILES_ROOT } from '@/app/lib/artifactMeta'
@@ -42,54 +43,6 @@ export type YanzhiFilesInput = {
 }
 
 const DESCRIPTION = "Manage text files only inside yanzhi's files. action=list lists one directory; search finds names/text using query; read returns lines using offset/limit; write uses content (existing files require overwrite=true); patch replaces one unique old_text with new_text; mkdir creates folders. Playable pages go in artifacts/<name>.html with <title> and <meta name=description>; chat shows them as an openable card. path is relative to the fixed root; no delete, move, commands, absolute paths, or access outside it."
-
-function cleanRelativePath(value: string | undefined, allowRoot = false): string {
-  const raw = String(value || '').trim().replaceAll('\\', '/')
-  if (!raw || raw === '.') {
-    if (allowRoot) return ''
-    throw new Error('path 必填。')
-  }
-  if (path.posix.isAbsolute(raw) || path.win32.isAbsolute(raw)) throw new Error('path 必须是专用目录内的相对路径。')
-  const parts = raw.split('/').filter(Boolean)
-  if (parts.some(part => part === '..')) throw new Error('path 不能包含 ..。')
-  return parts.filter(part => part !== '.').join('/')
-}
-
-function inside(root: string, target: string): boolean {
-  const relative = path.relative(root, target)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
-}
-
-async function existingRoot(root: string): Promise<string> {
-  let info
-  try {
-    info = await stat(root)
-  } catch {
-    throw new Error(`yanzhi's files 尚未挂载：${root}`)
-  }
-  if (!info.isDirectory()) throw new Error(`yanzhi's files 根路径不是目录：${root}`)
-  return realpath(root)
-}
-
-async function safeTarget(root: string, value: string | undefined, options: { allowRoot?: boolean; allowMissing?: boolean } = {}) {
-  const relative = cleanRelativePath(value, options.allowRoot)
-  const realRoot = await existingRoot(root)
-  const target = path.resolve(realRoot, relative)
-  if (!inside(realRoot, target)) throw new Error('path 超出 yanzhi\'s files 根目录。')
-
-  let current = realRoot
-  for (const part of relative.split('/').filter(Boolean)) {
-    current = path.join(current, part)
-    try {
-      const info = await lstat(current)
-      if (info.isSymbolicLink()) throw new Error('path 不能经过符号链接。')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && options.allowMissing) break
-      throw error
-    }
-  }
-  return { relative, target }
-}
 
 function ensureText(buffer: Buffer): string {
   if (buffer.includes(0)) throw new Error('仅支持文本文件。')

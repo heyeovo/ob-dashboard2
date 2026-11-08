@@ -1,5 +1,8 @@
 'use client'
 
+import CcSentImage from './CcSentImage'
+import { parseSentImage, SEND_IMAGE_TOOL } from '@/app/lib/cc/sendImageResult'
+
 import { wakeDisplayLines } from './wakeDisplay'
 import BodyPortal from '@/app/components/BodyPortal'
 import Link from 'next/link'
@@ -132,6 +135,7 @@ function toolStatusLabel(tool: CcToolEvent, streaming: boolean) {
 }
 
 type Props = {
+  sessionId?: string
   message: CcMessage
   /** 当前消息是否为消息流中最新的助手轮。新一轮出现时，上一轮 thinking 自动折叠。 */
   isCurrentTurn: boolean
@@ -191,6 +195,7 @@ function AssistantSegments({
 }
 
 export default function CcMessageRow({
+  sessionId = '',
   message,
   isCurrentTurn,
   persona: personaProp,
@@ -782,6 +787,10 @@ export default function CcMessageRow({
                     </button>
                   </div>) : null}
                   {/* 小作品卡片不跟着 Tools 折叠，照旧直接显示 */}
+                  {event.tools.map(tool => {
+                    const image = tool.status === 'completed' && tool.name === SEND_IMAGE_TOOL ? parseSentImage(tool.result) : null
+                    return image && sessionId ? <CcSentImage key={`image-${tool.id}`} sessionId={sessionId} image={image} /> : null
+                  })}
                   {event.tools.map(tool => artifactCardByToolId.has(tool.id)
                     ? <CcArtifactCard key={`artifact-${tool.id}`} {...artifactCardByToolId.get(tool.id)!} />
                     : null)}
