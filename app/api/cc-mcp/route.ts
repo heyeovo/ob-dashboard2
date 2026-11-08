@@ -43,6 +43,7 @@ async function refreshCatalog(
   const next: CcMcpConfig = {
     version: 1,
     builtIns: config.builtIns,
+    builtInDefaults: config.builtInDefaults,
     builtInPermissions: config.builtInPermissions,
     servers: config.servers.map(server => {
       const status = byName.get(server.name)
@@ -60,6 +61,7 @@ export async function PUT(request: NextRequest) {
     let config = await saveMcpConfig({
       version: 1,
       builtIns: body.builtIns,
+      ...(body.builtInDefaults !== undefined ? { builtInDefaults: body.builtInDefaults } : {}),
       builtInPermissions: body.builtInPermissions,
       servers: Array.isArray(body.servers) ? body.servers : [],
     })

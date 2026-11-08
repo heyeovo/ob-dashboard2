@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as havenTurns from '@/app/lib/havenTurns'
+import { loadMcpConfig } from '@/app/lib/ccMcp'
 import { DEFAULT_WEB_SETTINGS } from '@/app/cc/webSettings'
 import {
   buildCcOptions,
@@ -117,6 +119,10 @@ describe('cc 基础提示词渠道一致性', () => {
   })
 
   it("yanzhi's files 默认自动允许，不弹批准卡", async () => {
+    const sessionSpy = vi.spyOn(havenTurns, 'getConversationSession').mockResolvedValue({ ok: true, session: { mcp_overrides: {} } } as never)
+    vi.stubEnv('OMBRE_GATEWAY_TOKEN', 'test-token')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ config: { version: 1, servers: [], builtIns: {} } }))))
+    await loadMcpConfig()
     const options = buildCcOptions(config('chat'), null)
     const preTool = options.hooks?.PreToolUse?.[0]?.hooks?.[0]
     const decision = await preTool!(
@@ -127,6 +133,9 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(decision).toMatchObject({
       hookSpecificOutput: { permissionDecision: 'allow' },
     })
+    sessionSpy.mockRestore()
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it('闲聊模式不注入文件和命令工具，工作模式保持完整工具', () => {

@@ -1,3 +1,4 @@
+import { windowMcpConfig } from '@/app/lib/windowMcp'
 import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { NextRequest } from 'next/server'
 import { getSessionStats } from '@/app/lib/ccSession'
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = sessionResult.session
-    const [rolling, latestResult, mcpConfig] = await Promise.all([
+    const [rolling, latestResult, globalMcpConfig] = await Promise.all([
       loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { logDiagnostics: false, persistPinnedSnapshot: false }),
       listTurns(sessionId, { limit: 50, includeRaw: true }),
       loadMcpConfig(),
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
       'tool_names', 'mcp_server_names',
       'agent_wake_version', 'agent_wake_instructions_hash',
     ])
+    const mcpConfig = windowMcpConfig(globalMcpConfig, session.mcp_overrides)
     const configuredMcp = configuredMcpModelSurface(mcpConfig)
     const currentMode = session.mode === 'chat' ? 'chat' : 'work'
     await refreshAgentWakePromptConfig()

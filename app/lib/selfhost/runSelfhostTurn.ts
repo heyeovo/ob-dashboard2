@@ -614,7 +614,7 @@ export function createSelfhostStream(
           request.sessionId,
         )
         try {
-          mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal)
+          mcpRuntime = await (dependencies.createMcpRuntime || createSelfhostMcpRuntime)(signal, prepared.session?.mcp_overrides)
         } catch (error) {
           mcpRuntime = await unavailableMcpRuntime(error)
         }

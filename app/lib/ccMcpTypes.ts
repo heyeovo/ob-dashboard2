@@ -23,6 +23,7 @@ export type CcMcpServer = {
   /** Human-readable name shown in the UI. */
   label: string
   enabled: boolean
+  defaultInWindows?: boolean
   transport: CcMcpTransport
   command?: string
   args?: string[]
@@ -44,6 +45,7 @@ export type CcMcpConfig = {
   servers: CcMcpServer[]
   /** Dashboard 进程内提供的 MCP；false 时整个服务及工具定义都不进入模型上下文。 */
   builtIns?: Record<string, boolean>
+  builtInDefaults?: Record<string, boolean>
   /** 可调内置 MCP 的运行时批准策略；不改变模型可见工具定义。 */
   builtInPermissions?: Record<string, CcBuiltInMcpPermission>
 }

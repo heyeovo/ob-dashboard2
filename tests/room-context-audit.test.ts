@@ -11,7 +11,7 @@ vi.mock('@/app/lib/cc/rollingHistory', () => ({ inspectRollingHistoryTranscript:
 vi.mock('@/app/lib/ccSession', () => ({ getSessionStats: vi.fn(() => ({})) }))
 vi.mock('@/app/lib/havenPersonas', () => ({ getPersona: vi.fn(async () => ({ persona: {} })), buildPersonaAppend: vi.fn(() => '固定模块'), promptModulesForPersona: vi.fn(() => []) }))
 vi.mock('@/app/lib/cc/systemPromptAudit', () => ({ readSystemPromptAudit: vi.fn(async () => ({ dashboardAppend: fixture.content, systemHash: 'old' })) }))
-vi.mock('@/app/lib/ccMcp', () => ({ loadMcpConfig: vi.fn(async () => ({ builtIns: {} })), configuredMcpModelSurface: vi.fn(() => []), disabledMcpTools: vi.fn(() => []) }))
+vi.mock('@/app/lib/ccMcp', () => ({ loadMcpConfig: vi.fn(async () => ({ version: 1, servers: [], builtIns: {} })), configuredMcpModelSurface: vi.fn(() => []), disabledMcpTools: vi.fn(() => []) }))
 vi.mock('@/app/lib/cc/builtInMcp', () => ({ builtInMcpModelSurfaces: vi.fn(() => []), builtInMcpServerNames: vi.fn(() => []) }))
 vi.mock('@/app/lib/cc/agentWakeTool', () => ({ agentWakeMcpAudit: vi.fn(() => ({})) }))
 import { GET } from '@/app/api/cc-context-audit/route'

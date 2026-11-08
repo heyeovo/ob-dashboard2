@@ -60,13 +60,15 @@ production 必须配置以下六项：
 | `app/api/device-events/self/` | 必须登录 Cookie 的 PWA 写入口，服务端固定 home / 我们家 / pwa；MobileShell 挂载独立 DeviceActivityReporter，仅 standalone 上报 visibilitychange / pagehide，同状态 30 秒去重 |
 | `app/api/device-events/` | 手机快捷指令公开 POST，独立 token、16KB 上限，服务端用 gateway bearer 转发 Haven；不提供公开读取 |
 | `app/api/care/` | 代理 Haven reminders/todos，Todo 的 DELETE 保留鉴权 Cookie 与上游状态码 |
-| `app/api/cc-turns/` | 窗口状态 PATCH 可单独写入 `recall_mode` 三态到 Haven，GET 按 session 返回该值供本窗设置刷新恢复。 |
+| `app/api/cc-turns/` | 窗口状态 PATCH 可单独写入 `mcp_overrides` 整份覆盖（沿用 Haven 校验及 state version CAS）或 `recall_mode` 三态到 Haven，GET 按 session 返回该值供本窗设置刷新恢复。 |
 | `app/api/cc-context-audit/` | 只读读取活跃 lane 的原生存档：entry 数、首末 chat_day、每日轮数、本 revision 重建时的每日处理与 图片／thinking／召回／attachment 清理数量（凭据按 revision 与原生 session ID 精确查询）、按当前配置重建预览；保留逐日预算、持久 transcript 的工具／召回／正文恢复统计、长期层已保存／生效 ID、当前工具和 MCP 模型表面、最近请求的 hash 与 iterator 状态。房间原生过程在浏览器投影中封存；不与 Haven 逐轮或逐条正文匹配，不生成 seed、不改变设置或会话指针。 |
 | `app/lib/` | 客户端库与工具函数；`recallDisplay.ts` 统一召回 token 估算与模块拆分，`havenPersonas.ts` 每轮按 Haven 最新配置拼装基础提示词、“关于我”和可热更新提示词模块；召回背景使用规则由提示词模块维护，动态正文不重复说明 |
 | `app/globals.css` | 设计 Token 定义 |
 | `DESIGN.md` | 完整设计规范 |
 
 ## cc 数据持久化契约
+
+- 窗口 MCP 覆盖属于长期配置，存 Haven `conversation_sessions.mcp_overrides`（整份替换，最多 64 个合法 server name → boolean，空对象恢复跟随默认）；全局默认值存 Haven MCP 配置的 `servers[].defaultInWindows` / `builtInDefaults`，缺省 true。生效为全局开启且（本窗覆盖 ?? 默认带上）；全局关闭不能被本窗打开。Agent Wake 沿用自己的窗口开关，不参与覆盖。CC 前台、房间内调用及后台唤醒轮次共用窗口过滤，自建引擎也按相同窗口覆盖过滤远程 MCP；自动化 Pro runner 原本使用空 MCP 集合，继续不注入任何 MCP，CC 工具调用时重读 Haven 拒绝本窗禁用工具；权限读取失败拒绝调用。无覆盖且默认全带时保持原 MCP 定义 key、SDK 配置和 disallowedTools 字节一致；切换只影响有效集合变化窗口的下一轮缓存。
 
 - 内置 MCP `send_image` v1.0.0 在闲聊与工作模式均可用，默认自动允许；只接收 url / path 二选一及可选 caption（最多 200 字）。公网 URL 下载固定已校验 DNS 地址，每跳重验（最多 3 次重定向）、15 秒总超时、10 MB 图片 / 2 MB HTML 上限；网页依次取 og:image、twitter:image、image_src。path 复用 `yanzhi's files` 根目录与越界 / 符号链接防护。sharp 解码并将 SVG 栅格化、动图取首帧，最长边 1200 的 WebP 存入当前 session 的 Haven image 附件；模型另收最长边 512 的缩略图用于核对。数据归类：图片是 Haven 会话附件，聊天记录仅保存含 `[attachment:<id>]`、尺寸、来源和 caption 的工具结果文本，所有 MCP 的 block 数组均只提取 text，绝不把 image block base64 存入聊天记录；无新配置。前端实时结果与历史共用 `CcSentImage`，房间内调用仍留在私有过程、不向公开聊天展示图片。
 

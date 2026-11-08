@@ -29,7 +29,7 @@ import {
 import { buildCcEnv, type CredMode } from '@/app/lib/ccEnv'
 import {
   isMcpTool,
-  mcpPermissionForTool,
+  windowMcpPermissionForTool,
   toSdkMcpServers,
 } from '@/app/lib/ccMcp'
 import type { CcMode } from '@/app/lib/ccModes'
@@ -442,7 +442,7 @@ export function buildCcOptions(config: TurnConfig, resumeFrom: string | null): O
   const askPermission: NonNullable<Options['canUseTool']> = async (toolName, input, meta) => {
     if (isSetAgentWakeTool(toolName)) return { behavior: 'allow' }
     if (isMcpTool(toolName)) {
-      const policy = mcpPermissionForTool(toolName)
+      const policy = await windowMcpPermissionForTool(toolName, sessionId)
       if (policy === 'allow') return { behavior: 'allow' }
       if (policy === 'deny') {
         return { behavior: 'deny', message: '这个 MCP 服务当前设为禁止使用。' }
@@ -623,7 +623,7 @@ function buildCcHooks(config: TurnConfig): Options['hooks'] {
             // MCP 权限以 Home 管理页为准。显式在 hook 层定 allow/ask/deny，
             // 避免 SDK 把某些“看起来安全”的工具直接放行、绕过 canUseTool。
             if (isMcpTool(name)) {
-              const policy = mcpPermissionForTool(name)
+              const policy = await windowMcpPermissionForTool(name, sessionId)
               return {
                 hookSpecificOutput: {
                   hookEventName: 'PreToolUse' as const,

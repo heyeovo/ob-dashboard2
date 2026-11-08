@@ -14,7 +14,7 @@ vi.mock('@/app/lib/havenPersonas', () => ({ getPersona: vi.fn(async () => ({ per
 vi.mock('@/app/lib/havenUpstream', () => ({ loadUpstreamConfig: vi.fn(async () => ({ ok: false })), resolveProvider: vi.fn() }))
 vi.mock('@/app/lib/havenPermissions', () => ({ loadPermanentPermissionRules: vi.fn(async () => ({ ok: false })), permissionRuleStrings: vi.fn(() => []) }))
 vi.mock('@/app/lib/ccMcp', () => ({
-  loadMcpConfig: vi.fn(async () => ({ builtIns: {} })), configuredMcpModelSurface: vi.fn(() => []),
+  loadMcpConfig: vi.fn(async () => ({ version: 1, servers: [], builtIns: {} })), configuredMcpModelSurface: vi.fn(() => []),
   toSdkMcpServers: vi.fn(() => ({})), disabledMcpTools: vi.fn(() => []),
 }))
 vi.mock('@/app/lib/ccDirs', () => ({

@@ -123,6 +123,7 @@ export async function PATCH(request: NextRequest) {
     persona_id?: string
     local_engine_preference?: string
     prompt_module_overrides?: Record<string, boolean>
+    mcp_overrides?: Record<string, boolean>
     recall_mode?: '' | 'on' | 'off'
     expected_state_version?: number
     pinned?: boolean
@@ -177,7 +178,7 @@ export async function PATCH(request: NextRequest) {
     }
     session = result.session
     if (!title) return Response.json({ ok: true, session_id: sessionId, session })
-  } else if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides || hasRecallMode) {
+  } else if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides || hasRecallMode || body?.mcp_overrides !== undefined) {
     const result = await patchConversationSessionState({
       sessionId,
       personaId: String(body?.persona_id || ''),
@@ -187,6 +188,7 @@ export async function PATCH(request: NextRequest) {
           ? body.prompt_module_overrides
           : {}
         : undefined,
+      mcpOverrides: body?.mcp_overrides,
       recallMode: hasRecallMode && ['', 'on', 'off'].includes(String(body?.recall_mode))
         ? body?.recall_mode as '' | 'on' | 'off'
         : undefined,

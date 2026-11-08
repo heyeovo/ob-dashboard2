@@ -1,3 +1,4 @@
+import { windowMcpConfig } from '@/app/lib/windowMcp'
 import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { builtInWorkDirs, resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import { buildPersonaAppend, getPersona } from '@/app/lib/havenPersonas'
@@ -104,6 +105,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     sessionId,
     rolling.content,
   )
+  const effectiveMcpConfig = windowMcpConfig(mcpConfig, session.mcp_overrides)
   const config: TurnConfig = {
     sessionId,
     mode: session.mode,
@@ -117,17 +119,17 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
     systemPromptKey: '',
     modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({
-      configured: configuredMcpModelSurface(mcpConfig),
-      builtIn: builtInMcpModelSurfaces(mcpConfig.builtIns, session.mode),
+      configured: configuredMcpModelSurface(effectiveMcpConfig),
+      builtIn: builtInMcpModelSurfaces(effectiveMcpConfig.builtIns, session.mode),
     }),
-    builtInMcpStates: mcpConfig.builtIns,
+    builtInMcpStates: effectiveMcpConfig.builtIns,
     cwd: readDirs.cwd,
     additionalDirectories: [...new Set([...readDirs.additionalDirectories, ...builtInDirs])],
     sdkModel: sdkModelForProvider(model, cred),
     effort,
     thinking,
-    sdkMcpServers: toSdkMcpServers(mcpConfig),
-    disabledTools: disabledMcpTools(mcpConfig),
+    sdkMcpServers: toSdkMcpServers(effectiveMcpConfig),
+    disabledTools: disabledMcpTools(effectiveMcpConfig),
     webSettings,
     permanentAllowRules: permissions.ok ? permissionRuleStrings(permissions.rules) : [],
     cred,

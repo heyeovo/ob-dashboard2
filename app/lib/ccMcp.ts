@@ -1,4 +1,6 @@
 import 'server-only'
+import { windowMcpToolDisabled } from './windowMcp'
+import { getConversationSession } from './havenTurns'
 
 import { SEND_IMAGE_TOOL } from './cc/sendImageResult'
 
@@ -68,8 +70,8 @@ export function fallbackMcpConfig(): CcMcpConfig {
     : cloneConfig(DEVELOPMENT_DEFAULT_CONFIG)
 }
 
-function cleanBuiltIns(value: unknown): Record<string, boolean> {
-  const out: Record<string, boolean> = { ombre_agent_wake: true }
+function cleanBuiltIns(value: unknown, defaults: Record<string, boolean> = { ombre_agent_wake: true }): Record<string, boolean> {
+  const out: Record<string, boolean> = { ...defaults }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return out
   for (const [name, enabled] of Object.entries(value as Record<string, unknown>)) {
     if (/^[a-z][a-z0-9_]{0,63}$/.test(name) && typeof enabled === 'boolean') out[name] = enabled
@@ -190,6 +192,7 @@ function normalizeServer(value: unknown): CcMcpServer {
       originalName ||
       name,
     enabled: raw.enabled !== false,
+    defaultInWindows: raw.defaultInWindows !== false,
     transport: cleanTransport(raw.transport || raw.type),
     command: typeof raw.command === 'string' ? raw.command.trim() : undefined,
     args: Array.isArray(raw.args) ? raw.args.map(item => String(item)) : [],
@@ -246,6 +249,7 @@ export function validateMcpConfig(value: unknown): CcMcpConfig {
   return {
     version: 1,
     builtIns: cleanBuiltIns(raw.builtIns),
+    builtInDefaults: cleanBuiltIns(raw.builtInDefaults, {}),
     builtInPermissions: cleanBuiltInPermissions(raw.builtInPermissions),
     servers,
   }
@@ -270,6 +274,7 @@ function mergeMaskedSecrets(config: CcMcpConfig, previous: CcMcpConfig): CcMcpCo
   return {
     version: 1,
     builtIns: config.builtIns,
+    builtInDefaults: config.builtInDefaults,
     builtInPermissions: config.builtInPermissions,
     servers: config.servers.map(server => {
       const old = oldByName.get(server.name)
@@ -292,6 +297,7 @@ export function publicMcpConfig(config: CcMcpConfig): CcMcpConfig {
   return {
     version: 1,
     builtIns: config.builtIns,
+    builtInDefaults: config.builtInDefaults,
     builtInPermissions: config.builtInPermissions,
     servers: config.servers.map(server => ({
       ...server,
@@ -411,6 +417,7 @@ export async function saveMcpConfig(value: unknown): Promise<CcMcpConfig> {
       && Object.prototype.hasOwnProperty.call(value, 'builtInPermissions'),
   )
   const validated = validateMcpConfig(value)
+  if (!value || typeof value !== 'object' || !Object.prototype.hasOwnProperty.call(value, 'builtInDefaults')) validated.builtInDefaults = previous.builtInDefaults
   if (!hasBuiltIns) validated.builtIns = previous.builtIns
   if (!hasBuiltInPermissions) validated.builtInPermissions = previous.builtInPermissions
   const clean = mergeMaskedSecrets(validated, previous)
@@ -506,4 +513,12 @@ export function mcpPermissionForTool(toolName: string): CcMcpPermission {
 
 export function shouldSaveMcpResult(toolName: string): boolean {
   return toolName === SEND_IMAGE_TOOL || serverForTool(toolName)?.saveResults === true
+}
+
+/** Re-read the window at invocation time: callbacks can outlive the turn that created them. */
+export async function windowMcpPermissionForTool(toolName: string, sessionId: string): Promise<CcMcpPermission> {
+  const session = await getConversationSession(sessionId)
+  if (!session.ok || !session.session || !state.config) return 'deny'
+  if (windowMcpToolDisabled(toolName, state.config, session.session.mcp_overrides)) return 'deny'
+  return mcpPermissionForTool(toolName)
 }

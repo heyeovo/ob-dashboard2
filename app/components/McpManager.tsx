@@ -217,6 +217,7 @@ export default function McpManager() {
         body: JSON.stringify({
           servers,
           builtIns: config.builtIns,
+          builtInDefaults: config.builtInDefaults,
           builtInPermissions: config.builtInPermissions,
           discover,
         }),
@@ -244,7 +245,27 @@ export default function McpManager() {
     } finally {
       setSaving(false)
     }
-  }, [config.builtInPermissions, config.builtIns])
+  }, [config.builtInPermissions, config.builtIns, config.builtInDefaults])
+
+  const saveWindowDefault = async (name: string, value: boolean, builtIn: boolean) => {
+    setSaving(true)
+    setError('')
+    try {
+      const response = await fetch('/api/cc-mcp', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...config,
+          servers: config.servers.map(server => !builtIn && server.name === name ? { ...server, defaultInWindows: value } : server),
+          builtInDefaults: builtIn ? { ...config.builtInDefaults, [name]: value } : config.builtInDefaults,
+        }),
+      })
+      const data = await response.json() as ApiPayload
+      if (!response.ok || !data.ok || !data.config) throw new Error(data.error || '保存失败')
+      setConfig(data.config)
+      setBuiltIn(data.builtIn || [])
+      setNote('默认带上设置已保存，跟随默认的窗口下一轮生效。')
+    } catch (error) { setError((error as Error).message) }
+    finally { setSaving(false) }
+  }
 
   const toggleBuiltIn = async (name: string, enabled: boolean) => {
     const previous = config
@@ -261,6 +282,7 @@ export default function McpManager() {
         body: JSON.stringify({
           servers: config.servers,
           builtIns,
+          builtInDefaults: config.builtInDefaults,
           builtInPermissions: config.builtInPermissions,
         }),
       })
@@ -296,6 +318,7 @@ export default function McpManager() {
         body: JSON.stringify({
           servers: config.servers,
           builtIns: config.builtIns,
+          builtInDefaults: config.builtInDefaults,
           builtInPermissions,
         }),
       })
@@ -361,11 +384,11 @@ export default function McpManager() {
     const next = config.servers.map(server =>
       server.name === name ? { ...server, enabled } : server,
     )
-    setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: next })
+    setConfig({ version: 1, builtIns: config.builtIns, builtInDefaults: config.builtInDefaults, builtInPermissions: config.builtInPermissions, servers: next })
     try {
       await persist(next, enabled ? 'MCP 已启用。' : 'MCP 已停用。')
     } catch {
-      setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: previous })
+      setConfig({ version: 1, builtIns: config.builtIns, builtInDefaults: config.builtInDefaults, builtInPermissions: config.builtInPermissions, servers: previous })
     }
   }
 
@@ -438,7 +461,7 @@ export default function McpManager() {
           }
         : server,
     )
-    setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: next })
+    setConfig({ version: 1, builtIns: config.builtIns, builtInDefaults: config.builtInDefaults, builtInPermissions: config.builtInPermissions, servers: next })
     try {
       await persist(
         next,
@@ -447,7 +470,7 @@ export default function McpManager() {
           : '工具已关闭，说明与参数会从下一句话开始移出上下文。',
       )
     } catch {
-      setConfig({ version: 1, builtIns: config.builtIns, builtInPermissions: config.builtInPermissions, servers: previous })
+      setConfig({ version: 1, builtIns: config.builtIns, builtInDefaults: config.builtInDefaults, builtInPermissions: config.builtInPermissions, servers: previous })
     }
   }
 
@@ -748,6 +771,13 @@ export default function McpManager() {
                         <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-2xs text-[var(--color-primary)]">自动允许</span>
                       )}
                     </div>
+                    {server.name !== 'ombre_agent_wake' && (<>
+                    <label className="mt-2 flex min-h-11 items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                      <input type="checkbox" disabled={saving} checked={config.builtInDefaults?.[server.name] !== false} onChange={event => void saveWindowDefault(server.name, event.target.checked, true)} aria-label={`${server.label} 默认带上`} />
+                      默认带上
+                    </label>
+                    <p className="text-2xs text-[var(--color-text-tertiary)]">关掉后，只有在窗口设置里单独打开的窗口才会带上它</p>
+                    </>)}
                     <p className="mt-1 text-2xs text-[var(--color-text-tertiary)]">
                       v{server.version} · {server.tools.length} 个工具 · {server.enabled ? `预估 ${tokens.toLocaleString()} token` : `开启后约 ${server.tools.reduce((sum, tool) => sum + estimateMcpToolTokens(tool), 0).toLocaleString()} token`}
                     </p>
@@ -828,7 +858,12 @@ export default function McpManager() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 truncate font-mono text-meta text-[var(--color-text-disabled)]">
+                  <label className="mt-2 flex min-h-11 items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                      <input type="checkbox" disabled={saving} checked={server.defaultInWindows !== false} onChange={event => void saveWindowDefault(server.name, event.target.checked, false)} aria-label={`${server.label} 默认带上`} />
+                      默认带上
+                    </label>
+                    <p className="text-2xs text-[var(--color-text-tertiary)]">关掉后，只有在窗口设置里单独打开的窗口才会带上它</p>
+                    <p className="mt-1 truncate font-mono text-meta text-[var(--color-text-disabled)]">
                     {server.transport === 'stdio'
                       ? [server.command, ...(server.args || [])].filter(Boolean).join(' ')
                       : server.url}

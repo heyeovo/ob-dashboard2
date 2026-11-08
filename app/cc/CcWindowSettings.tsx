@@ -1,4 +1,6 @@
 'use client'
+import type { CcMcpConfig, CcBuiltInMcpServer } from '@/app/lib/ccMcpTypes'
+import { effectiveMcp } from '@/app/lib/windowMcp'
 import BodyPortal from '@/app/components/BodyPortal'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
@@ -139,12 +141,56 @@ export default function CcWindowSettings({
   onHandoff,
   onClose,
 }: Props) {
+  const [mcpConfig, setMcpConfig] = useState<CcMcpConfig | null>(null)
+  const [mcpBuiltIns, setMcpBuiltIns] = useState<CcBuiltInMcpServer[]>([])
+  const [mcpOverrides, setMcpOverrides] = useState<Record<string, boolean>>({})
+  const [mcpVersion, setMcpVersion] = useState<number>()
+  const [mcpSaving, setMcpSaving] = useState(false)
+  const [mcpNote, setMcpNote] = useState('')
+  useEffect(() => {
+    let live = true
+    setMcpConfig(null)
+    void Promise.all([
+      fetch('/api/cc-mcp', { cache: 'no-store' }).then(response => response.json()),
+      fetch(`/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&limit=1`, { cache: 'no-store' }).then(response => response.json()),
+    ]).then(([global, window]) => {
+      if (!live) return
+      if (!global.ok || !window.ok) throw new Error(global.error || window.error || '读取 MCP 设置失败')
+      setMcpConfig(global.config)
+      setMcpBuiltIns(global.builtIn || [])
+      setMcpOverrides(window.session?.mcp_overrides || {})
+      setMcpVersion(window.session?.state_version)
+    }).catch(error => { if (live) setMcpNote(error.message) })
+    return () => { live = false }
+  }, [sessionId])
+  const saveMcpOverrides = async (next: Record<string, boolean>) => {
+    if (mcpSaving) return
+    setMcpSaving(true)
+    setMcpNote('')
+    try {
+      const response = await fetch('/api/cc-turns', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, persona_id: personaId, mcp_overrides: next, expected_state_version: mcpVersion }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload.ok) {
+        // A concurrent settings edit must not overwrite a newer window snapshot.
+        const fresh = await fetch(`/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&limit=1`, { cache: 'no-store' }).then(response => response.json())
+        if (fresh.ok) { setMcpOverrides(fresh.session?.mcp_overrides || {}); setMcpVersion(fresh.session?.state_version) }
+        throw new Error(payload.error || '保存失败，请重试')
+      }
+      setMcpOverrides(payload.session.mcp_overrides || {})
+      setMcpVersion(payload.session.state_version)
+      setMcpNote('已保存，下一轮生效')
+    } catch (error) { setMcpNote(error instanceof Error ? error.message : '保存失败') }
+    finally { setMcpSaving(false) }
+  }
   const [compactNote, setCompactNote] = useState('')
   const [recallMode, setRecallMode] = useState<RecallMode>('')
   const [recallLoading, setRecallLoading] = useState(true)
   const [recallSaving, setRecallSaving] = useState(false)
   const [recallNote, setRecallNote] = useState('')
-  const [activeTab, setActiveTab] = useState<'session' | 'rolling' | 'context' | 'gc' | 'wake'>('session')
+  const [activeTab, setActiveTab] = useState<'session' | 'rolling' | 'context' | 'gc' | 'wake' | 'mcp'>('session')
   useEffect(() => {
     if (!sessionId) return
     let live = true
@@ -244,6 +290,7 @@ export default function CcWindowSettings({
             ['context', 'Context 分析'],
             ['gc', '窗口减负'],
             ['wake', '主动唤醒'],
+            ['mcp', 'MCP'],
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -261,7 +308,29 @@ export default function CcWindowSettings({
         </div>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {activeTab === 'rolling' ? (
+          {activeTab === 'mcp' ? (
+            <div className="space-y-3">
+              <p className={HINT}>只列出全局已开启的 MCP。未单独设置时跟随「默认带上」。</p>
+              {mcpConfig ? [
+                ...mcpConfig.servers.filter(server => server.enabled).map(server => ({ ...server, defaultValue: server.defaultInWindows !== false })),
+                ...mcpBuiltIns.filter(server => server.enabled && server.name !== 'ombre_agent_wake').map(server => ({ ...server, defaultValue: mcpConfig.builtInDefaults?.[server.name] !== false })),
+              ].map(server => (
+                <div key={server.name} className="border-b border-[var(--color-border-light)] pb-3">
+                  <label className="flex min-h-11 items-center justify-between gap-3 text-sm text-[var(--color-text-secondary)]">
+                    {server.label}
+                    <input type="checkbox" checked={effectiveMcp(true, server.defaultValue, mcpOverrides[server.name])} disabled={mcpSaving} onChange={event => void saveMcpOverrides({ ...mcpOverrides, [server.name]: event.target.checked })} aria-label={`${server.label} 本窗口开启`} />
+                  </label>
+                  <div className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-tertiary)]">
+                    <span>{mcpOverrides[server.name] === undefined ? '跟随默认' : '本窗口已单独设置'}</span>
+                    {mcpOverrides[server.name] !== undefined && <button type="button" disabled={mcpSaving} className="min-h-11 text-[var(--color-primary)]" onClick={() => { const next = { ...mcpOverrides }; delete next[server.name]; void saveMcpOverrides(next) }}>恢复默认</button>}
+                  </div>
+                </div>
+              )) : <p className={HINT}>{mcpNote || '读取中…'}</p>}
+              <button type="button" className="min-h-11 text-xs text-[var(--color-primary)]" disabled={!mcpConfig || mcpSaving || !Object.keys(mcpOverrides).length} onClick={() => void saveMcpOverrides({})}>恢复全部跟随默认</button>
+              <p className={HINT} role="status">{mcpNote}</p>
+              <p className={HINT}>切换后本窗口下一轮会整段重写一次缓存</p>
+            </div>
+          ) : activeTab === 'rolling' ? (
             <CcRollingContext sessionId={sessionId} personaId={personaId} busy={stats.busy} />
           ) : activeTab === 'context' ? (
             <CcContextAnalysis

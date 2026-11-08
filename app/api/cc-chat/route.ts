@@ -1,3 +1,4 @@
+import { windowMcpConfig } from '@/app/lib/windowMcp'
 import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { drainRejection, trackDrainWork } from '@/app/lib/serverDrain'
 import { createTurnBroadcast, getTurnBroadcast, publishTurn, finishTurn, activeTurn, turnStream } from '@/app/lib/cc/turnBroadcast'
@@ -351,6 +352,7 @@ async function loadTurnInputs(body: ChatBody) {
     semantic: body.semantic !== undefined ? body.semantic !== false : persona?.semantic_on !== false,
   })
 
+  const effectiveMcpConfig = windowMcpConfig(mcpConfig, promptSession.mcp_overrides)
   const config: TurnConfig = {
     sessionId: body.session_id || '',
     mode,
@@ -364,17 +366,17 @@ async function loadTurnInputs(body: ChatBody) {
     systemPromptKey: '',
     modelSurfaceKey: '',
     mcpDefinitionKey: JSON.stringify({
-      configured: configuredMcpModelSurface(mcpConfig),
-      builtIn: builtInMcpModelSurfaces(mcpConfig.builtIns, mode),
+      configured: configuredMcpModelSurface(effectiveMcpConfig),
+      builtIn: builtInMcpModelSurfaces(effectiveMcpConfig.builtIns, mode),
     }),
-    builtInMcpStates: mcpConfig.builtIns,
+    builtInMcpStates: effectiveMcpConfig.builtIns,
     cwd,
     additionalDirectories,
     sdkModel: sdkModelForProvider(model, cred),
     effort,
     thinking,
-    sdkMcpServers: toSdkMcpServers(mcpConfig),
-    disabledTools: disabledMcpTools(mcpConfig),
+    sdkMcpServers: toSdkMcpServers(effectiveMcpConfig),
+    disabledTools: disabledMcpTools(effectiveMcpConfig),
     webSettings,
     permanentAllowRules,
     cred,

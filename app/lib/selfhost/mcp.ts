@@ -1,3 +1,4 @@
+import { windowMcpConfig } from '@/app/lib/windowMcp'
 import 'server-only'
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -82,14 +83,14 @@ export function selfhostMcpToolTimeout(serverTimeout: number | undefined, remote
   return remoteName === 'hold' ? Math.max(timeout, HOLD_TOOL_TIMEOUT_MS) : timeout
 }
 
-export async function createSelfhostMcpRuntime(signal?: AbortSignal): Promise<SelfhostMcpRuntime> {
+export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: Record<string, boolean> = {}): Promise<SelfhostMcpRuntime> {
   const connected = new Map<string, ConnectedServer>()
   const tools: SelfhostMcpTool[] = []
   const warnings: Array<{ server: string; error: string }> = []
 
   let config: CcMcpConfig
   try {
-    config = await loadMcpConfig()
+    config = windowMcpConfig(await loadMcpConfig(), overrides)
   } catch (error) {
     return {
       tools,
