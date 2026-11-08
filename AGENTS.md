@@ -23,7 +23,7 @@ Ombre Brain 记忆系统的前端 + cc 聊天引擎。Next.js 16 App Router + Ta
 for r in /workspace/dashboard /workspace/haven; do cd $r && git fetch -q --prune origin && echo "== $r" && git status -sb | head -5 && git log --oneline origin/main..HEAD && git branch -r --no-merged origin/main; done
 ```
 
-- 本地有没推的提交 → 问小羊推不推；远端有没合并的分支 → 是待验收的 GPT 活还是刻意保留的备选（如 `try/tabbar-74`）
+- 本地有没推的提交 → 问小羊推不推；远端有没合并的分支 → 是待验收的 GPT 活还是刻意保留的备选（`try/…` 前缀）
 - `docs/handoff/README.md` 里 🔨 进行中 / 🔎 待验收的行
 - `list_todos(domain="tech", done=false)`：顺手核对有没有其实已经做完的，做完就勾
 
