@@ -110,7 +110,9 @@
 | `CLAUDE_PROMPT.md` | 给 Claude/ChatGPT 的行为指引 |
 | `docs/Tool Guide.md` | 粘贴给外部平台的工具指南 |
 | `docs/memory-layer-contract.md` | 记忆层契约 |
-| `docs/deploy-zeabur.md` | Zeabur 部署步骤 |
+| `docs/handoff/README.md` | Haven handoff 历史档案的状态索引 |
+| `docs/operations/` | 运维手册（如 VPS 备份） |
+| `docs/archive/` | 已归档的旧文档（Zeabur 部署、INTERNALS、BEHAVIOR_SPEC、合并规则），只作追溯 |
 
 ### 记忆库（OB记忆系统/）
 | 文档 | 职责 |
