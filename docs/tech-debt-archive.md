@@ -8,6 +8,14 @@
 
 - `tests/dashboard-auth.test.ts` 早已改为篡改签名中段字符；`tests/dashboard-proxy.test.ts`「accepts a valid session and rejects forged...」仍改末位，同样会因 base64url 填充位偶发验签通过。改为同样篡改签名中段，鉴权实现不动；两文件连续跑 20 次全过。
 
+#### CC-11｜唤醒提示词自定义存容器 `.data`，部署即丢
+
+- **现象：**`app/lib/cc/agentWakePrompt.ts` 把提示词页保存的唤醒说明 / 工具说明写到 `process.cwd()/.data/agent-wake-prompt.json`（线上 `/app/.data`，未挂卷）。每次部署容器重建后回到默认值，页面无提示。2026-10-02 查线上该目录不存在，当前生效的是默认值。违反 `AGENTS.md`「cc 数据持久化」硬规矩。
+- **修法：**改存 Haven（长期配置），读取带进程内缓存；注意工具说明进模型表面 hash，保存后下一轮缓存会写一次。
+- **验收：**保存自定义 → 重新部署 → 提示词页和模型看到的仍是自定义内容；恢复默认可用。
+
+- **关闭：**2026-10-18，改存 Haven 单行表，双入口 GET/PUT/DELETE；Dashboard 每轮异步刷新后同步读取工具说明，读取失败回退默认，默认文本逐字保留。OB Todo：`b1a970f0ba014250`（2026-11-08 CC 验收合并）。
+
 ## 2026-09-30
 
 ### ✅ CC-P02｜纪念日（v1）

@@ -1,3 +1,4 @@
+import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { NextRequest } from 'next/server'
 import { getSessionStats } from '@/app/lib/ccSession'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest) {
     ])
     const configuredMcp = configuredMcpModelSurface(mcpConfig)
     const currentMode = session.mode === 'chat' ? 'chat' : 'work'
+    await refreshAgentWakePromptConfig()
     const builtInMcp = builtInMcpModelSurfaces(mcpConfig.builtIns, currentMode)
     const currentMcpServers = [...configuredMcp, ...builtInMcp]
     const currentMcpServerNames = [

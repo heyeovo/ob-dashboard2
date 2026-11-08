@@ -1,3 +1,4 @@
+import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { builtInWorkDirs, resolveDirs, resolveWriteDirs } from '@/app/lib/ccDirs'
 import { buildPersonaAppend, getPersona } from '@/app/lib/havenPersonas'
 import { loadUpstreamConfig, resolveProvider } from '@/app/lib/havenUpstream'
@@ -74,6 +75,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   })
   if (!lane || (!resumeHint && !isRolling)) throw new Error(`最后活跃 CC lane 没有可恢复的 resume id：${laneId}`)
 
+  await refreshAgentWakePromptConfig()
   const [mcpConfig, permissions, readDirs, writeDirs, builtInDirs] = await Promise.all([
     loadMcpConfig(),
     loadPermanentPermissionRules(),

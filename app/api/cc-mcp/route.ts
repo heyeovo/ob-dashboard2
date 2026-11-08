@@ -1,3 +1,4 @@
+import { refreshAgentWakePromptConfig } from '@/app/lib/cc/agentWakePrompt'
 import { NextRequest } from 'next/server'
 import {
   loadMcpConfig,
@@ -14,6 +15,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  await refreshAgentWakePromptConfig()
   try {
     const config = await loadMcpConfig()
     return Response.json({
@@ -52,6 +54,7 @@ async function refreshCatalog(
 }
 
 export async function PUT(request: NextRequest) {
+  await refreshAgentWakePromptConfig()
   try {
     const body = (await request.json()) as Record<string, unknown>
     let config = await saveMcpConfig({
@@ -86,6 +89,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function POST() {
+  await refreshAgentWakePromptConfig()
   try {
     const current = await loadMcpConfig()
     const names = current.servers.filter(server => server.enabled).map(server => server.name)
