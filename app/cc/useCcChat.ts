@@ -169,6 +169,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [earlierHistoryLoading, setEarlierHistoryLoading] = useState(false)
   const [historyBeforeId, setHistoryBeforeId] = useState<number | null>(null)
   const [hasEarlierHistory, setHasEarlierHistory] = useState(false)
+  // 月历跳转后，跳到的那天和最新一段之间会空出几天；消息流靠这份日期清单认出缺口、接着往下补
+  const [historyDaysBySession, setHistoryDaysBySession] = useState<Record<string, string[]>>({})
+  const [gapDayLoading, setGapDayLoading] = useState('')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [stats, setStats] = useState<CcSessionStats>(EMPTY_STATS)
@@ -1013,32 +1016,69 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }
   }, [sessionId, hasEarlierHistory, historyBeforeId, earlierHistoryLoading])
 
+  const historyDays = historyDaysBySession[sessionId] || null
+
+  const ensureHistoryDays = useCallback(async (id: string) => {
+    const known = historyDaysBySession[id]
+    if (known) return known
+    const res = await fetch(`/api/cc-turns?session_id=${encodeURIComponent(id)}&days=1`, { cache: 'no-store' })
+    const data = await res.json() as { ok?: boolean; days?: { day: string }[] }
+    if (!res.ok || !data.ok || !Array.isArray(data.days)) throw new Error('日期读取失败')
+    const days = data.days.map(entry => entry.day).filter(Boolean).sort()
+    setHistoryDaysBySession(previous => ({ ...previous, [id]: days }))
+    return days
+  }, [historyDaysBySession])
+
+  /** 整天整天地读进来，按 id 去重后和已有消息合在一起 */
+  const mergeHistoryDays = useCallback(async (id: string, chatDays: string[]) => {
+    const res = await fetch(
+      `/api/cc-turns?session_id=${encodeURIComponent(id)}&all=1&chat_days=${encodeURIComponent(chatDays.join(','))}&raw=1`,
+      { cache: 'no-store' },
+    )
+    const data = await res.json()
+    if (!res.ok || !data.ok || !Array.isArray(data.turns)) throw new Error('历史消息读取失败')
+    const turns = data.turns as HavenTurnRow[]
+    if (turns.length === 0 || currentSessionRef.current !== id) return turns.length > 0
+    setMessages(previous => {
+      const combined = [...previous, ...turnsToMessages(turns)]
+      const unique = [...new Map(combined.map(message => [message.id, message])).values()]
+      return unique.sort((a, b) => a.createdAt - b.createdAt)
+    })
+    setHistoryBeforeId(previous => {
+      const earliest = turns.reduce((value, turn) => Math.min(value, turn.id), Number.POSITIVE_INFINITY)
+      return Number.isFinite(earliest) ? Math.min(previous ?? earliest, earliest) : previous
+    })
+    return true
+  }, [])
+
   const loadHistoryDay = useCallback(async (chatDay: string) => {
     if (!sessionId || !/^\d{4}-\d{2}-\d{2}$/.test(chatDay)) return false
     try {
-      const res = await fetch(
-        `/api/cc-turns?session_id=${encodeURIComponent(sessionId)}&all=1&chat_days=${encodeURIComponent(chatDay)}&raw=1`,
-        { cache: 'no-store' },
-      )
-      const data = await res.json()
-      if (!res.ok || !data.ok || !Array.isArray(data.turns)) throw new Error('历史消息读取失败')
-      const turns = data.turns as HavenTurnRow[]
-      if (turns.length === 0) return false
-      setMessages(previous => {
-        const combined = [...previous, ...turnsToMessages(turns)]
-        const unique = [...new Map(combined.map(message => [message.id, message])).values()]
-        return unique.sort((a, b) => a.createdAt - b.createdAt)
-      })
-      setHistoryBeforeId(previous => {
-        const earliest = turns.reduce((value, turn) => Math.min(value, turn.id), Number.POSITIVE_INFINITY)
-        return Number.isFinite(earliest) ? Math.min(previous ?? earliest, earliest) : previous
-      })
-      return true
+      // 连下一天一起读：最新一段可能从那天中间开始，只读一半会在两天交界处漏掉前半天
+      const days = await ensureHistoryDays(sessionId).catch(() => [] as string[])
+      const nextDay = days.find(day => day > chatDay)
+      return await mergeHistoryDays(sessionId, nextDay ? [chatDay, nextDay] : [chatDay])
     } catch {
       setError('这一天的历史消息读取失败')
       return false
     }
-  }, [sessionId])
+  }, [sessionId, ensureHistoryDays, mergeHistoryDays])
+
+  /** 补上 afterDay 和 beforeDay 之间空出来的下一天；补到最后一天时把 beforeDay 也整天读一遍 */
+  const loadGapDay = useCallback(async (afterDay: string, beforeDay: string) => {
+    if (!sessionId || gapDayLoading) return
+    const days = historyDaysBySession[sessionId] || []
+    const missing = days.filter(day => day > afterDay && day < beforeDay)
+    if (missing.length === 0) return
+    setGapDayLoading(missing[0])
+    try {
+      await mergeHistoryDays(sessionId, missing.length === 1 ? [missing[0], beforeDay] : [missing[0]])
+    } catch {
+      setError('这一天的历史消息读取失败')
+    } finally {
+      setGapDayLoading('')
+    }
+  }, [sessionId, gapDayLoading, historyDaysBySession, mergeHistoryDays])
 
   const startNewSession = useCallback(() => {
     draftsRef.current.set(sessionId, draft)
@@ -2217,6 +2257,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     hasEarlierHistory,
     loadEarlierHistory,
     loadHistoryDay,
+    historyDays,
+    gapDayLoading,
+    loadGapDay,
     draft,
     setDraft,
     sending: sending || messages.some(message => message.deliveryState === 'detached'),
