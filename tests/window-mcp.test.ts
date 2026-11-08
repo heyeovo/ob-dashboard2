@@ -94,7 +94,7 @@ describe('window MCP', () => {
     expect(publicMcpConfig(await loadMcpConfig()).builtInDefaults).toEqual(config.builtInDefaults)
     expect((await saveMcpConfig({ servers: config.servers })).builtInDefaults).toEqual(config.builtInDefaults)
   })
-  it('rechecks window permission on every cached callback invocation and fails closed', async () => {
+  it('rechecks window permission on every cached callback invocation and falls back to global policy', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ config: fixture() }))))
     await loadMcpConfig()
     sessionMock.mockResolvedValue({ ok: true, session: { mcp_overrides: { games: false, send_image: false } } })
@@ -110,7 +110,8 @@ describe('window MCP', () => {
     }
     sessionMock.mockResolvedValue({ ok: true, session: { mcp_overrides: {} } })
     expect(await windowMcpPermissionForTool('mcp__games__play', 'window')).toBe('allow')
+    // 窗口读不到（Haven 重启中）退回全局策略，不把所有 MCP 一起拒掉。
     sessionMock.mockResolvedValue({ ok: false })
-    expect(await windowMcpPermissionForTool('mcp__games__play', 'window')).toBe('deny')
+    expect(await windowMcpPermissionForTool('mcp__games__play', 'window')).toBe('allow')
   })
 })

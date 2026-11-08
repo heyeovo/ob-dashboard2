@@ -515,10 +515,14 @@ export function shouldSaveMcpResult(toolName: string): boolean {
   return toolName === SEND_IMAGE_TOOL || serverForTool(toolName)?.saveResults === true
 }
 
-/** Re-read the window at invocation time: callbacks can outlive the turn that created them. */
+/**
+ * Re-read the window at invocation time: callbacks can outlive the turn that created them.
+ * 窗口开关只是偏好，不是安全边界：读不到窗口（如 Haven 正在重启）时退回全局策略，
+ * 不能因此把 yanzhi files 等工具全部拒掉。
+ */
 export async function windowMcpPermissionForTool(toolName: string, sessionId: string): Promise<CcMcpPermission> {
   const session = await getConversationSession(sessionId)
-  if (!session.ok || !session.session || !state.config) return 'deny'
-  if (windowMcpToolDisabled(toolName, state.config, session.session.mcp_overrides)) return 'deny'
+  if (session.ok && session.session && state.config
+    && windowMcpToolDisabled(toolName, state.config, session.session.mcp_overrides)) return 'deny'
   return mcpPermissionForTool(toolName)
 }
