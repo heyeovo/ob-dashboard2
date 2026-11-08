@@ -24,7 +24,6 @@
 | CC-09 | Pro 自动化遇到部署 503 后缺少同次任务自动重试 | ⬜ | `1bc081e4036c4a53` |
 | CC-10 | 排空期间 detached 气泡先收起、轮次存完后整轮弹出 | ⬜ | `c8742f1f0eff488f` |
 | CC-11 | 唤醒提示词自定义存容器 `.data`，部署即丢 | ⬜ | `b1a970f0ba014250` |
-| T-01 | `dashboard-auth` 篡改末位字符用例偶发失败 | ⬜ | — |
 | CC-P01 | UI 设置与聊天信息层级整理 | 产品候选 | `ea074ff139f64c54` |
 | CC-P03 | 群聊 / 多协作者 | 产品候选（低优先级） | `b9ee09a407be43be` |
 
@@ -151,12 +150,6 @@
 - **现象：**`app/lib/cc/agentWakePrompt.ts` 把提示词页保存的唤醒说明 / 工具说明写到 `process.cwd()/.data/agent-wake-prompt.json`（线上 `/app/.data`，未挂卷）。每次部署容器重建后回到默认值，页面无提示。2026-10-02 查线上该目录不存在，当前生效的是默认值。违反 `AGENTS.md`「cc 数据持久化」硬规矩。
 - **修法：**改存 Haven（长期配置），读取带进程内缓存；注意工具说明进模型表面 hash，保存后下一轮缓存会写一次。
 - **验收：**保存自定义 → 重新部署 → 提示词页和模型看到的仍是自定义内容；恢复默认可用。
-
-#### T-01｜`dashboard-auth` 篡改末位字符用例偶发失败
-
-- **现象：**`tests/dashboard-auth.test.ts`「compares login input and verifies only authentic, unexpired sessions」约三成概率失败。2026-10-02 多闹钟验证也观察到 `tests/dashboard-proxy.test.ts`「accepts a valid session and rejects forged, expired, and retired plaintext cookies」同类偶发失败（最终全量失败，单独复测通过）。token 随机生成，用例把最后一个字符换成 `x`/`y` 再断言验签失败；base64url 末位含不参与解码的填充位，换掉后可能解出同样的字节，验签仍通过。2026-10-01 Linux 全量连续复现，单跑与 main 上同样偶发，与当时改动无关。
-- **修法：**改为篡改签名中段字符（或解码后翻转一个字节再编码），不动鉴权实现。
-- **验收：**该用例连续跑 20 次全部通过。
 
 ## cc 产品候选卡（尚未形成实施窗口）
 
