@@ -151,6 +151,15 @@ describe('send_image tool and persistence', () => {
     }
     expect(storedMcpResult([{ type: 'text', text: 'safe' }, image])).toBe('safe')
     expect(parseSentImage('unrelated [attachment:id]')).toBeNull()
+    expect(parseSentImage('前面的话 已发送图片 [attachment:x] 1×1\nsrc')).toBeNull()
+  })
+  it('parses results where the CLI prepends an [Image: source] line', () => {
+    const value = [
+      { type: 'image', source: { type: 'base64', media_type: 'image/webp', data: 'AAAA' } },
+      { type: 'text', text: '[Image: source: /home/cc/.claude/projects/x/tool-results/mcp-send_image-blob-1.webp]' },
+      { type: 'text', text: '已发送图片 [attachment:500af3d8] 1200×800\nfirst-image.svg\n发图真机测试\n看一眼缩略图，不对就在回复里说明，别假装是对的' },
+    ]
+    expect(parseSentImage(storedMcpResult(value))).toEqual({ attachmentId: '500af3d8', width: 1200, height: 800, source: 'first-image.svg', caption: '发图真机测试' })
   })
 })
 
