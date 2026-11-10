@@ -211,7 +211,7 @@ CC Pro (`subscription`) 与每个 CC API provider (`api:<provider_id>`) 分别�
 
 `useCcChat.ts` + `ccSseConsumer.ts` 统一消费两种引擎的 `start / recall / context / init / thinking / delta / usage / done / error`。`local_engine_preference` 与窗口固定 `handoff_snapshot` 存 Haven，Vercel 只在运行时强制 `effective_engine=selfhost`。CC Pro、CC API 和 selfhost 各自保留供应商/模型选择，空闲时可在同一窗口人工往返。
 
-Pro 订阅线路收到 SDK `rate_limit_event: rejected` 或额度耗尽时，按可保存的中断终态处理：用户原话与已有半截回复原子写入 Haven，`raw_json.interrupted_reason=pro_limit`。普通 provider、断流和其他上游错误不保存，但 SDK 非成功 `result` 会原样保留已生成正文和工具过程。CC thinking 开启时，对 Opus/Sonnet 4.6+ 显式使用 `adaptive + summarized`；关闭时显式 `disabled`。中途切换 thinking 会保留线路原生 session、回收空闲 query。
+Pro 订阅线路收到 SDK `rate_limit_event: rejected` 或额度耗尽时，按可保存的中断终态处理：用户原话与已有半截回复原子写入 Haven，`raw_json.interrupted_reason=pro_limit`。普通 provider、断流和其他上游错误不保存，但 SDK 非成功 `result` 会原样保留已生成正文和工具过程。CC thinking 开启时，对 Opus/Sonnet 4.6+ 及 5 代全家（Fable / Mythos / Haiku 5+）显式使用 `adaptive + summarized`（`thinkingConfigForModel`，新模型名要进这个正则，否则落到“未知模型”不传 thinking）；关闭时显式 `disabled`。中途切换 thinking 会保留线路原生 session、回收空闲 query。
 
 Pro 额度属于当前 profile 的订阅账号，不属于单个窗口。任一在线 Pro 窗口成功读取 SDK 实验性额度后覆盖 Haven 单条全局快照；其他窗口和 Dashboard 重部署后显示同一份快照并标注上次读取时间，下一次实时读取再覆盖旧值。
 
