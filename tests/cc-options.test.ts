@@ -61,6 +61,12 @@ describe('cc 基础提示词渠道一致性', () => {
     expect(thinkingConfigForModel('claude-opus-4-5-20251101', true)).toEqual({
       type: 'enabled', budgetTokens: 10_000, display: 'summarized',
     })
+    for (const m of ['claude-fable-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-mythos-5']) {
+      expect(thinkingConfigForModel(m, true)).toEqual({ type: 'adaptive', display: 'summarized' })
+    }
+    expect(thinkingConfigForModel('claude-haiku-4-5', true)).toEqual({
+      type: 'enabled', budgetTokens: 10_000, display: 'summarized',
+    })
     expect(thinkingConfigForModel('unknown-provider-model', true)).toBeUndefined()
     expect(thinkingConfigForModel('claude-opus-4-6', false)).toEqual({ type: 'disabled' })
   })

@@ -95,7 +95,8 @@ export function thinkingConfigForModel(
   if (!enabled) return { type: 'disabled' }
   const value = model.trim().toLowerCase()
   const movingAlias = /^(?:opus|sonnet|fable|mythos)(?:\[1m\])?$/.test(value)
-  const adaptiveClaude = /(?:^|[-_.])(?:opus|sonnet)[-_.]?(?:4[-_.]?(?:6|[7-9])|[5-9])(?:$|[-_.])/.test(value)
+  // opus/sonnet 4.6 起、以及 5 代全家（含 fable / mythos / haiku 5+）都走 adaptive
+  const adaptiveClaude = /(?:^|[-_.])(?:(?:opus|sonnet)[-_.]?4[-_.]?[6-9]|(?:opus|sonnet|haiku|fable|mythos)[-_.]?[5-9])(?:$|[-_.])/.test(value)
   if (movingAlias || adaptiveClaude) return { type: 'adaptive', display: 'summarized' }
   const legacyClaude = /(?:^|[-_.])(?:opus|sonnet|haiku)[-_.]?(?:3|4[-_.]?[0-5])(?:$|[-_.])/.test(value)
   if (legacyClaude) {
