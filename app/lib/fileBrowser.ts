@@ -11,7 +11,7 @@ export const ROOT_PATHS: Record<Exclude<FileRoot, 'notes'>, string> = {
 }
 export const NOTES_PROJECTS = '/home/cc/.claude/projects'
 export const TEXT_LIMIT = 256 * 1024
-export const UPLOAD_LIMIT = 10 * 1024 * 1024
+export const UPLOAD_LIMIT = 100 * 1024 * 1024
 
 export function isFileRoot(value: string): value is FileRoot {
   return value === 'yanzhi' || value === 'dashboard' || value === 'haven' || value === 'notes'

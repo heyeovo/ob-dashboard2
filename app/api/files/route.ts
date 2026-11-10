@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
   for (const file of files) {
     const name = cleanUploadName(file.name)
     if (!name || isBlockedSegment(name)) { results.push({ name: file.name, ok: false, error: '文件名不允许' }); continue }
-    if (file.size > UPLOAD_LIMIT) { results.push({ name, ok: false, error: '单个文件不能超过 10 MB' }); continue }
+    if (file.size > UPLOAD_LIMIT) { results.push({ name, ok: false, error: '单个文件不能超过 100 MB' }); continue }
     try {
       for (let index = 1; ; index++) {
         const candidate = numberedName(name, index)
