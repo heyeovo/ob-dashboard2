@@ -7,6 +7,9 @@ describe('prettyModelName', () => {
     expect(prettyModelName('claude-opus-5-5[1m]')).toBe('Opus 5.5')
     expect(prettyModelName('claude-sonnet-5')).toBe('Sonnet 5')
     expect(prettyModelName('claude-haiku-4-5-20261001')).toBe('Haiku 4.5')
+    expect(prettyModelName('claude-fable-5-2')).toBe('Fable 5.2')
+    expect(prettyModelName('claude-fable-5')).toBe('Fable 5')
+    expect(prettyModelName('claude-mythos-5-1')).toBe('Mythos 5.1')
     expect(prettyModelName('custom-model')).toBe('custom-model')
   })
 
