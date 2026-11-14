@@ -92,6 +92,14 @@
 
 本窗口复用了 Haven 人设/模块与固定事实、固定 handoff/日回顾、滚动日期选择与冻结钉选 revision、历史召回正文、严格提交及事件订阅缓冲；GPT 原生传输和后台轮次独立，不进入 Claude SDK 或订阅账号锁。数据库新增项与准入登记长期事实维护在 Haven reference，ENV_VARS 未变。
 
+### 窗口 3 提出的浏览器代理补件（2026-11-15）
+
+用户明确要求补 connection GET/POST、connections GET、models GET 的浏览器 Cookie 认证代理，不改窗口 3 UI 或 Haven。补件仅在窗口 2 Dashboard 分支实施：新 `/api/gpt-subscription/[operation]`，仍使用既有 Cookie 门禁和服务端 Haven Bearer；按白名单重建状态/列表/错误、再次掩码账号、替换任意上游错误文本，不透传令牌、请求头或上游响应头。浏览器路由、请求与返回类型唯一维护在 Dashboard reference「GPT 授权与模型的浏览器代理」，`app/cc/types.ts` 重导出类型。
+
+主 runner 的已推固定版本仍是 Dashboard `46d9a126f64e089307223899f7b070ccde85bf61` 和 Haven `ea52a9d87f0a63e5281965152cf7becb75239be8`。本补件固定提交为包含本节的 `fix: proxy GPT subscription connection endpoints`；用户要求提供固定提交，因此生成本地 commit，新增范围的 push 仍须单独确认。最终 SHA 与是否已推以本聊天报告和远端核对为准。窗口 3 应先引入主 runner 固定版本，再引入该补件；不得猜测路径或自行透传授权数据。
+
+补件测试：`gpt-connection-proxy.test.ts`、`dashboard-proxy.test.ts`、`gpt-contract.test.ts` 共 23 项，覆盖 Cookie 门禁、只读预览、服务端 Bearer、输出字段白名单、掩码、错误/状态保留、输入能力限制和异常不泄漏；使用模拟 fetch/合成数据，未操作真实授权。webpack build 含 TypeScript；默认 Turbopack 仍有前述独立克隆依赖链接限制。本补件不改变 runner 生成与 Haven 数据结构，不部署，真实联调继续留窗口 4。
+
 ### 留给窗口 4 的验收
 
 窗口 2/3 分支尚未集成；由窗口 4 审阅后集成，不在任一窗口擅自合并。需在集成环境补全真实 Haven→Gateway→模型多轮实测、手机 UI 接回/停止/模型跨设备恢复、部署切换和进程异常恢复；Linux、Docker、真实刷新/撤销/授权交接及 VPS 验收继续按上方窗口 1 边界，尚未执行。本窗口本地测试通过不等于线上完成。本次暂不部署。

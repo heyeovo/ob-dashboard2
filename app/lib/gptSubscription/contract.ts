@@ -2,6 +2,23 @@ import type { HandoffSnapshot } from '../cc/handoffSnapshot'
 import type { CcSseDelta, CcSseStart, CcSseRecall } from '../cc/sseEvents'
 
 export const GPT_ENGINE = 'gpt_subscription' as const
+export type GptConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reauth_required'
+export type GptConnectionError = {
+  code: string; message: string; retryable: boolean
+  action: 'reconnect' | 'usage_settings' | 'enable_sharing' | 'retry' | 'inspect'
+  status?: number
+}
+export type GptConnectionFailure = { ok: false; error: GptConnectionError }
+export type GptConnectionResponse = GptConnectionFailure | {
+  ok: true; configured: boolean; status: GptConnectionStatus; sharing: boolean
+  login_method: 'local_ssh_import'; limits: null; usage_url: string
+  connection_id?: string; label?: string; account?: string; error?: GptConnectionError
+}
+export type GptConnectionsResponse = GptConnectionFailure | {
+  ok: true; connections: Array<{ connection_id: string; label: string; status: GptConnectionStatus; sharing: boolean }>
+}
+export type GptModelsResponse = GptConnectionFailure | { ok: true; models: Array<{ slug: string; displayName: string }> }
+export type GptConnectionRequest = { action: 'select'; connection_id: string } | { action: 'disconnect' }
 export type GptUsage = {
   input_tokens: number | null; output_tokens: number | null; total_tokens: number | null
   cached_tokens: number | null; reasoning_tokens: number | null

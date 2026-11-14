@@ -1,5 +1,7 @@
 import type { GptUsage, GptDone, GptRequest } from '@/app/lib/gptSubscription/contract'
 export type { GptUsage, GptDone, GptRequest, GptError, GptEventMap } from '@/app/lib/gptSubscription/contract'
+export type { GptConnectionStatus, GptConnectionError, GptConnectionFailure, GptConnectionResponse,
+  GptConnectionsResponse, GptModelsResponse, GptConnectionRequest } from '@/app/lib/gptSubscription/contract'
 import type { WakeDisplayOp } from './wakeDisplay'
 // /cc 聊天页的前端类型。故意跟 Haven 的 HavenTurn 分开：
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
