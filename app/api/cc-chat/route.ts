@@ -432,7 +432,8 @@ export async function POST(request: NextRequest) {
   if (existing.found && existing.turn) {
     const raw = rawRecord(existing.turn.raw_json)
     const storedPersonaId = String(existing.turn.persona_id || raw.persona_id || '')
-    const matches = existing.turn.session_id === sessionId
+    const matches = existing.turn.source !== 'gpt_subscription' && raw.engine !== 'gpt_subscription'
+      && existing.turn.session_id === sessionId
       && existing.turn.user_text === text
       && storedPersonaId === personaId
       && JSON.stringify((existing.turn.attachments || []).map(item => item.id)) === JSON.stringify(attachmentIds)
@@ -447,6 +448,7 @@ export async function POST(request: NextRequest) {
   }
 
   const running = getTurnBroadcast(sessionId)
+  if (running?.engine === 'gpt_subscription' && !running.done) return Response.json({ ok: false, error: 'engine_mismatch' }, { status: 409 })
   if (running && !running.done) {
     if (running.requestId !== requestId) {
       const rejected = drainRejection(sessionId)

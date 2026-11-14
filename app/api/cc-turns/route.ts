@@ -178,11 +178,11 @@ export async function PATCH(request: NextRequest) {
     }
     session = result.session
     if (!title) return Response.json({ ok: true, session_id: sessionId, session })
-  } else if (preference === 'cc' || preference === 'selfhost' || hasPromptOverrides || hasRecallMode || body?.mcp_overrides !== undefined) {
+  } else if (preference === 'cc' || preference === 'selfhost' || preference === 'gpt_subscription' || hasPromptOverrides || hasRecallMode || body?.mcp_overrides !== undefined) {
     const result = await patchConversationSessionState({
       sessionId,
       personaId: String(body?.persona_id || ''),
-      localEnginePreference: preference === 'cc' || preference === 'selfhost' ? preference : undefined,
+      localEnginePreference: preference === 'cc' || preference === 'selfhost' || preference === 'gpt_subscription' ? preference : undefined,
       promptModuleOverrides: hasPromptOverrides
         ? body?.prompt_module_overrides && typeof body.prompt_module_overrides === 'object'
           ? body.prompt_module_overrides

@@ -124,7 +124,8 @@ export async function prepareSelfhostTurn(request: SelfhostRequest, signal?: Abo
   if (replay.found && replay.turn) {
     const turn = replay.turn
     if (
-      turn.session_id !== request.sessionId
+      turn.source === 'gpt_subscription'
+      || turn.session_id !== request.sessionId
       || turn.persona_id !== request.personaId
       || turn.user_text !== request.text
       || JSON.stringify((turn.attachments || []).map(item => item.id)) !== JSON.stringify(request.attachmentIds || [])

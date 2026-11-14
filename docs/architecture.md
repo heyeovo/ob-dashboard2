@@ -236,3 +236,18 @@ selfhost thinking：中转站若把 `<thinking>` / `<think>` 放进 `text_delta`
 ## 待办
 
 统一维护在 `TECH_DEBT.md`。
+
+
+## GPT 文字 runner
+
+GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读取、`recordTurnStrict` compare-and-append 和 `cc/turnBroadcast` 订阅缓冲，不复用 selfhost 的 Anthropic adapter、MCP 或浏览器断线取消语义。共享广播增加可选 engine 标记，旧 CC 值缺省不变；旧引擎的接回与已存请求重放显式拒绝 GPT 来源，通用会话丢弃的 abort 仍能转发到 GPT 生成。具体路由/事件及恢复契约唯一维护在 reference「GPT 订阅聊天（文字）」。
+
+预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端向 Haven 原子登记请求后，CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照。登记只有请求摘要与状态，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
+
+固定窗口复用 composeWindowPersonaAppend 的 handoff/日回顾及 session 静态背景；滚动窗口复用 loadRollingWindowAppend 的 raw/review/omit 日期、revision 冻结钉选桶、所选日记及其他既有长期层，通过 includeRooms:false 关闭房间读取和注入（旧调用缺省仍开启）。当前召回使用已有排除集合和冻结钉选 ID，历史召回从 raw_json.recall.additional_context 重放。仅投影 user/assistant 正文和召回参考，不投影 Claude 原生工具过程、thinking、附件内容或原生 session ID；当前文字追加北京时间。人设、固定事实与模块开关沿用 Haven。
+
+应用以 UTF-8 bytes / 3 加 5% 余量估算输入，采用 120k 应用预算和 Gateway 的 2000 条文字消息/4 MiB 传输限制，按完整连续轮次从近到远选历史。它不声称 GPT 模型的真实 context window；超大的固定背景在模型调用前拒绝。只收到官方 completed 才记 completed；EOF、取消、额度或认证失败都保存为 cancelled/failed 和实际已收到的正文，usage 缺失为 null。
+
+生成任务与浏览器订阅分离。服务端从预检到最终 Haven 写入均登记 drain work；单轮 9 分钟上限，Haven admission lease 12 分钟，lease 到期只允许新 request_id 进入、从不重新执行原请求。停止仅中断生成，最终 strict commit 用独立超时。raw_json 保存引擎/模型、请求摘要、上下文 revision、召回、应用预算、官方 usage 与响应标识、outcome 和去密后的错误；正文和永久消息 ID 沿用现有历史，所以日回顾和日期正文读取不增加第二套数据源。
+
+保存不明时，进程保留期内可复用原草稿，仅核对/重试保存；丢失草稿后不会假装从服务端恢复未落库正文。GPT 线路保存为窗口偏好后，loadBackgroundTurnInputs 在加载 Claude 后台运行配置前拒绝执行，旧 wake 配置留存但不在 GPT 窗口运行；切回旧线路是否恢复开关由 UI 明示处理，不静默改掉用户旧配置。

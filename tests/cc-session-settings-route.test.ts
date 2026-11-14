@@ -79,3 +79,19 @@ describe('/api/cc-session-settings', () => {
     expect(haven.getConversationSession).not.toHaveBeenCalled()
   })
 })
+
+
+describe('GPT window preference', () => {
+  it('persists model and engine with CAS without touching Claude runtime or other overrides', async () => {
+    const response = await POST(new NextRequest('http://localhost/api/cc-session-settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: 's1', persona_id: 'ombre', engine: 'gpt_subscription', model: 'gpt-test' }),
+    }))
+    expect(response.status).toBe(200)
+    expect(haven.patchConversationSessionState).toHaveBeenCalledWith({ sessionId: 's1', personaId: 'ombre',
+      localEnginePreference: 'gpt_subscription', gptSubscriptionOverrides: { model: 'gpt-test' }, expectedStateVersion: 7 })
+    expect(ccSession.peekSession).not.toHaveBeenCalled()
+    expect(ccSession.applyRuntimeSettings).not.toHaveBeenCalled()
+    expect((await response.json()).applied).toBe(false)
+  })
+})

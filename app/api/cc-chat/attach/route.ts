@@ -11,7 +11,7 @@ export function GET(request: NextRequest) {
     return Response.json({ ok: false, reason: 'invalid_request' }, { status: 400 })
   }
   const turn = getTurnBroadcast(sessionId, requestId)
-  if (!turn) return Response.json({ ok: false, reason: 'not_found' }, { status: 404 })
+  if (!turn || turn.engine === 'gpt_subscription') return Response.json({ ok: false, reason: 'not_found' }, { status: 404 })
   if (turn.truncated) return Response.json({ ok: false, reason: 'truncated' }, { status: 409 })
   return turnStream(turn, request.signal, afterSeq)
 }

@@ -49,7 +49,7 @@ export type CcSseInit = {
   model?: string
   cwd?: string
   session_id?: string
-  engine?: 'cc' | 'selfhost'
+  engine?: 'cc' | 'selfhost' | 'gpt_subscription'
   provider_id?: string
   provider_label?: string
   request_id?: string

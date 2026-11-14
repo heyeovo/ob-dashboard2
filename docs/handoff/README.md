@@ -7,7 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
-| `HANDOFF-gpt-subscription-chat.md` | 🔨 窗口 1 已交付，窗口 2/3 并行启动 | 2026-11-15 用户同意 commit＋push 后同时开窗口 2/3；Haven `76bca8c`，Dashboard 为本交接提交。Node 66 通过/1 Windows 跳过，Python 定向及旧接口 16 通过，Dashboard build 通过。Linux/真实授权留待后续，未部署。独立目录和文件归属见正文；UI 发送/恢复仍等窗口 2 可测试接口，不能声称生产验收完成。OB Todo 原句见交接。 |
+| `HANDOFF-gpt-subscription-chat.md` | 🔨 窗口 2 后端交付；窗口 3 接 UI | 2026-11-15 具体方案获确认；GPT 接口及偏好契约已落正式 reference，Dashboard 定向 70 项、Haven 新增 9 项＋既有持久化 57 项＋传输 10 项＋路由文档 2 项通过；webpack build 通过，默认 Turbopack 有依赖链接限制。未修改 UI、未部署；用户已确认两仓库提交推送，Haven `ea52a9d` 已核对远端，Dashboard 交付为本索引所在 runner 提交；窗口 4 负责集成及 Linux/真实授权验收。 |
 | `HANDOFF-trpg.md` | 🔨 进行中 | 2026-10-05 CC 起草：CoC 7 速成规则 +《闹鬼》，小羊 + 言之当玩家，GPT（Codex 走 Plus）当守秘人，先不接 Foundry。P0 通过；P1（Haven）2026-10-05 上线（`c956926`）；P2a 页面、P2b 调度器与言之会话均已验收合并（2026-10-05）；结束这局 / 模组软删除、言之入座背景、输入框贴底 2026-10-06 验收上线并 iPhone 走查通过；下一步 P3（DM 容器 + 守秘人守则，`9f0e173c`）；守则草稿 2026-10-11 写好待小羊过目，见 `docs/trpg/keeper-guide.md` 与文内 §15 |
 | `HANDOFF-batch-1002.md` | 🔎 待 iPhone 走查 | Codex 实现，CC 验收：Linux 全量 Vitest 491 + build 通过，逐段核对后 2026-10-04 合并 main（`6ecd377`）。含 noop 过程文字、待办排序 / 居中 / 短 ID、日历跳转、时间线状态小框、房间列表间距、桶正文编辑与键盘适配、召回入口挪到 token 旁（`e72b4b4`）、搜索框玻璃底（`0aafb1d`）。`dashboard-auth` 篡改用例偶发失败为既有问题，待下一批修 |
 | `HANDOFF-4c-1-polish.md` | 🔎 待 iPhone 走查 | 两轮均由 CC 验收（Linux 全量测试含符号链接用例、build）并于 2026-10-01 合并 main（`f0cc3bd`、`6b262c6`）：提示词页、全高加载态、日记日期与缓存、日回顾共享周条与补写入口、待办手机全屏编辑 |

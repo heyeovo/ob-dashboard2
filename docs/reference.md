@@ -55,7 +55,7 @@ production 必须配置以下六项：
 | `app/journal/` | 日记本按月阅读；月份名只取钉选「YYYY年关系时间线」桶的正文；列表与 `[id]` 阅读页共用允许丢失的模块缓存，先显示缓存再后台刷新，返回列表恢复搜索与滚动位置；单篇原地编辑、前后篇与删除 |
 | `app/journey/` | 关系轨迹页 |
 | `app/components/` | 共享组件 |
-| `app/api/` | API 路由（大部分透传 Haven）；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`bucket/[id]/comments/[commentId]` 代理单条年轮修改/删除；`health` 在排空期间返回 503；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff，新轮次排空时返回 `503 server_draining`（3 秒后重试），新容器遇到旧实例 11 分钟内的会话标记返回 `409 previous_instance_finishing`（5 秒后重试），已有 CC 同 request_id 可重放/接上；压缩、GC、rolling recovery 同样受门禁；`automation-pro-runner` 排空返回可重试 503（Haven 同次任务自动重试限制见 CC-09）；`cc-chat` stats 返回 `active_turn`，`cc-chat/attach` 按 SSE `id` / `after_seq` 补齐缓冲并订阅实时事件；浏览器断线只移除订阅，显式丢弃轮次才取消进程内队列与 Pro 文件锁等待，跨进程锁记录宿主机和 PID，同机持有进程死亡时立即回收；滚动模式的原文从每窗口／lane 的只追加原生存档按天筛选，日回顾、冻结钉选桶和日记仍放入背景 Context；`cc-rolling-recovery` 仅在原生存档、持久 revision 与原生 transcript 均不可用且用户精确确认窗口时，把全量 Haven 正文初始化为新存档，再物化当前 raw 日期的 seed，以旧 session ID + state version CAS 切换当前活跃 lane；`cc-rolling-state` 只读返回当前 lane/revision 的精确每日处理凭据（Haven 不受最近 50 轮限制，缺失为 null）；`cc-context-audit` 同样使用精确凭据，只读显示存档及按天筛选结果、当前持久 transcript、请求前保存的 system prompt 与去密后的模型表面诊断，不生成 revision 或修改指针；`cc-agent-wake-prompt` 异步代理 Haven `/gateway/api/cc/agent-wake-prompt` 读写与恢复默认，保存/恢复后清进程缓存；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback（含 `agent_followup`、多闹钟拼接 reason 与 `pending_alarms`），认证失败时暂停该窗口自动唤醒并返回一小时 `Retry-After`，Pro 额度耗尽时同样返回一小时退避但不保存额度提示为 wake 消息；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，并通过 `days=1` 按 profile/session 查询不含正文的月历日期与轮数，读写滚动上下文（保存时由服务端重取钉选桶快照，读取失败不保存；快照正文变化也生成 revision）、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；读取 `context_days` 时同时取得 Haven 按日汇总的正文、工具、附件、召回、thinking、时间戳、消息框架、agent wake token 预估及未知附件数，其中 attachment_image_tokens 为 attachments 的子集，缺失按 0，不重复加进 total；严格轮次提交会同步 `recalled_bucket_ids`、`created_bucket_ids` 和 `breath_bucket_ids` 给 Haven 隔离账本；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
+| `app/api/` | API 路由（大部分透传 Haven）；`cc-chat-gpt` 为独立 GPT 文字 runner，发送、停止、SSE 接回及保存核对见下方 GPT 契约；`cc-session-settings` 持久化各引擎独立设置，GPT 不调用 Claude runtime；`edit-bucket` 保留上游状态码并转换非 JSON 错误；`bucket/[id]/comments/[commentId]` 代理单条年轮修改/删除；`health` 在排空期间返回 503；`cc-chat` / `cc-chat-selfhost` 在固定模式沿用 handoff，新轮次排空时返回 `503 server_draining`（3 秒后重试），新容器遇到旧实例 11 分钟内的会话标记返回 `409 previous_instance_finishing`（5 秒后重试），已有 CC 同 request_id 可重放/接上；压缩、GC、rolling recovery 同样受门禁；`automation-pro-runner` 排空返回可重试 503（Haven 同次任务自动重试限制见 CC-09）；`cc-chat` stats 返回 `active_turn`，`cc-chat/attach` 按 SSE `id` / `after_seq` 补齐缓冲并订阅实时事件；浏览器断线只移除订阅，显式丢弃轮次才取消进程内队列与 Pro 文件锁等待，跨进程锁记录宿主机和 PID，同机持有进程死亡时立即回收；滚动模式的原文从每窗口／lane 的只追加原生存档按天筛选，日回顾、冻结钉选桶和日记仍放入背景 Context；`cc-rolling-recovery` 仅在原生存档、持久 revision 与原生 transcript 均不可用且用户精确确认窗口时，把全量 Haven 正文初始化为新存档，再物化当前 raw 日期的 seed，以旧 session ID + state version CAS 切换当前活跃 lane；`cc-rolling-state` 只读返回当前 lane/revision 的精确每日处理凭据（Haven 不受最近 50 轮限制，缺失为 null）；`cc-context-audit` 同样使用精确凭据，只读显示存档及按天筛选结果、当前持久 transcript、请求前保存的 system prompt 与去密后的模型表面诊断，不生成 revision 或修改指针；`cc-agent-wake-prompt` 异步代理 Haven `/gateway/api/cc/agent-wake-prompt` 读写与恢复默认，保存/恢复后清进程缓存；`cc-agent-wake` 以 CAS 管理当前窗口 wake/silence/Bark 开关；`cc-agent-wake-runner` 以独立 Bearer 接受 Haven 的持久 wake callback（含 `agent_followup`、多闹钟拼接 reason 与 `pending_alarms`），认证失败时暂停该窗口自动唤醒并返回一小时 `Retry-After`，Pro 额度耗尽时同样返回一小时退避但不保存额度提示为 wake 消息；`cc-notifications` 服务端代理 Bark 掩码配置、最近状态与测试推送；`cc-turns` 支持按 `after_round_id`、`chat_days` 读取消息，并通过 `days=1` 按 profile/session 查询不含正文的月历日期与轮数，读写滚动上下文（保存时由服务端重取钉选桶快照，读取失败不保存；快照正文变化也生成 revision）、主窗置顶，并以 `offset + total` 分页区分活动/软删除窗口；读取 `context_days` 时同时取得 Haven 按日汇总的正文、工具、附件、召回、thinking、时间戳、消息框架、agent wake token 预估及未知附件数，其中 attachment_image_tokens 为 attachments 的子集，缺失按 0，不重复加进 total；严格轮次提交会同步 `recalled_bucket_ids`、`created_bucket_ids` 和 `breath_bucket_ids` 给 Haven 隔离账本；`conversation-slices` 以 Dashboard Cookie 代理 Haven 的离线切片检查、额度估算和任务/人工反馈接口，不参与召回或 Context |
 | `app/api/appearance/` | 服务端代理 Haven 外观配置与单张背景图；GET 首屏读取失败回默认值，POST 保存白名单 normalize 后的配置，图片 GET/POST/DELETE 经 Dashboard 登录保护且不暴露 Haven Bearer |
 | `app/api/device-events/self/` | 必须登录 Cookie 的 PWA 写入口，服务端固定 home / 我们家 / pwa；MobileShell 挂载独立 DeviceActivityReporter，仅 standalone 上报 visibilitychange / pagehide，同状态 30 秒去重 |
 | `app/api/device-events/` | 手机快捷指令公开 POST，独立 token、16KB 上限，服务端用 gateway bearer 转发 Haven；不提供公开读取 |
@@ -112,3 +112,31 @@ production 必须配置以下六项：
 
 
 手机使用事件属于持久用户数据，事实源为 Haven `state_dir/device_events.sqlite`（保留 14 天）；`DEVICE_EVENTS_TOKEN` 仅存 dashboard 服务端环境变量，不返回浏览器。
+
+
+### GPT 订阅聊天（文字）
+
+- 引擎及轮次 `source` 固定为 `gpt_subscription`；实现为 `app/lib/gptSubscription/{contract,context,transport,runner}.ts`，不进入 Claude SDK。浏览器安全类型由 `app/cc/types.ts` 重导出 `GptRequest/GptEventMap/GptDone/GptError/GptUsage`；旧 CC/selfhost 类型和行为保持兼容。
+- 每窗口的选择以 Haven 为事实源：`local_engine_preference="gpt_subscription"`，`gpt_subscription_overrides={model}`；旧窗口缺省 `{}`，不会覆盖 `cc_overrides/selfhost_overrides`。`POST /api/cc-session-settings` 接 `{session_id,persona_id,engine:"gpt_subscription",model}`，CAS 保存并返回 `{ok,applied:false,session}`，表示下轮使用，不启动或修改 Claude 进程。`PATCH /api/cc-turns` 也接受该引擎偏好。协作者 engine 字段可携带 GPT 值，但首版模型选择只存本窗口，不增设协作者 GPT 默认模型。
+
+| 方法与路由 | 请求与响应 |
+|---|---|
+| `POST /api/cc-chat-gpt` | `{session_id,request_id,persona_id,text,expected_last_round_id,model?,mode?:"chat",recall?,include_daily_review?,handoff_snapshot?}`；`request_id` 为 1–100 位字母数字、下划线或连字符。`model` 优先于已保存的窗口选择，首次发送两者至少有一项。`expected_last_round_id` 必须是数字整数。首版只接受文字；非空 `attachment_ids`、work、tools 及其他未知字段返回 400，空附件数组兼容接受。预检冲突返回带结构化 error 的 409，Haven 读取失败为可重试 502。成功返回 SSE。 |
+| `GET /api/cc-chat-gpt?session_id=…` | `{ok,active_turn}`；该进程活跃请求包含 `request_id/user_text/engine/started_at`。没有活跃项不证明历史未保存。 |
+| `GET /api/cc-chat-gpt?session_id=…&request_id=…&after_seq=N` | 本进程有缓冲时为 SSE，按 `id` 补发 N 之后事件；亦接受 `Last-Event-ID`。否则核对 Haven：已保存为 JSON `{ok:true,status:"saved",turn}`（整轮规范正文和永久 ID）；登记未收尾为 `{status:"running",retry_after_ms:5000}`；过期登记为 `interrupted`，无已保存轮次的完成登记为 `finished_without_turn`，未登记为 `not_found`。这些都不是模型成功，不自动重新发起生成。 |
+| `DELETE /api/cc-chat-gpt` | `{session_id,request_id}`，仅停止精确匹配的本进程 GPT 轮次，返回 `{ok,cancel_requested,request_id}`；不会停止其他 GPT 窗口或 CC。不存在当前轮次返回 409；旧实例仍运行时通过 GET 等待收尾，不能假装已停止。 |
+
+SSE 事件沿用聊天名称，所有事件带递增的 `id`；具体 payload 以 `GptEventMap` 为准：
+
+- `start/init`：请求、窗口、引擎及实际所选模型；`delta={id:"text-0",text}`，正文是增量。
+- `recall`：沿用 `CcRecallInfo` 的卡片与注入信息；`context` 是应用侧预算与估算，`model_context_limit:null`，不是官方模型上限。`usage={usage}`，其中 usage 为官方实际数字或 null，单个未提供字段也为 null。
+- `error`：`code/message/stage/retryable/request_id`，可附 `action/http_status/generated_not_saved/persistence_unknown/partial_saved`。授权或额度提示保留 Gateway 的 reconnect / usage_settings 等 action；不推断额度恢复时间。
+- `done` **只在严格保存成功后发出**，包含永久 turn/round/user/assistant ID、`engine/model/usage/idempotent_replay/outcome/interrupted/elapsed_ms`。`outcome=completed|cancelled|failed`；只有 completed 是模型成功。取消和失败后的已保存轮次同样有 done，但 interrupted=true，失败提示还会带 partial_saved=true。模型前失败没有保存正文，不发 done。
+
+用量不转换成 Claude 成本、缓存写入或 Pro 余量。UI 用 `CcMessage.gptUsage/gptOutcome`，不把 GPT 数据强塞进 `CcTurnUsage`；有待核对保存的消息可用 `gptRetryRequest` 保留完整原请求。
+
+请求身份与恢复：同 request_id 只能对应同一份规范化请求（包括显式模型、召回、日回顾和 handoff 选择），重试须保留原 body。相同活跃请求接回原流，不再次调用模型；不同内容复用标识、旧轮次号或同窗另一活跃请求拒绝。Haven 持久请求登记防止重启后重复生成；进程内缓冲只为可丢失的接回运行态，2 分钟保留、4 MiB 上限。缓冲超限返回 409 stream_buffer_lost，等待 Haven 已保存历史；无效游标返回 stream_cursor_invalid。POST 核对已保存请求时重放完整正文，不续接旧序号，客户端须原位替换同请求消息，不能再次追加成新轮。
+
+保存失败不发 done；本进程仍有未保存草稿时，新 request_id 返回 409 persistence_pending，先核对或重试保存，避免覆盖草稿。`persistence_unknown` 表示无法确认结果。原进程仍保留草稿时，相同 POST 先按 request_id 核对 Haven，存在则重放，不存在则只重试严格保存，绝不再次生成；保留期过后/重启丢失的未保存草稿无法恢复，登记阻止静默重跑，用户应核对历史后另发新请求。刷新或断网仅断订阅，显式停止、9 分钟单轮上限或部署排空截止才中止生成；最终保存不沿用被取消的 signal。部署沿用 serverDrain 的旧实例标记和门禁，GPT 不碰 Claude 订阅锁。共享事件缓冲用 engine 标记来源，CC attach/发送重放和 selfhost 预检拒绝把 GPT 当成旧引擎轮次，CC active_turn 不冒充报告 GPT。跨实例/多副本实时接回不在当前单 Gateway 部署契约内。
+
+上下文与保存实现细节见 `docs/architecture.md`「GPT 文字 runner」；Gateway 授权、传输、登记与后端持久层事实见 Haven `docs/reference.md`。UI 发送/停止/恢复必须实现上表的 SSE 与 JSON 两种响应，不能只解析一种。

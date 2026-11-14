@@ -1,3 +1,5 @@
+import type { GptUsage, GptDone, GptRequest } from '@/app/lib/gptSubscription/contract'
+export type { GptUsage, GptDone, GptRequest, GptError, GptEventMap } from '@/app/lib/gptSubscription/contract'
 import type { WakeDisplayOp } from './wakeDisplay'
 // /cc 聊天页的前端类型。故意跟 Haven 的 HavenTurn 分开：
 // 界面上一条消息是 user 或 assistant，Haven 存的是「一轮」（user + assistant 一行）。
@@ -5,7 +7,7 @@ import type { WakeDisplayOp } from './wakeDisplay'
 import type { DisplaySegment } from '@/app/lib/cc/displaySegments'
 
 export type CcRole = 'user' | 'assistant' | 'system'
-export type CcEngine = 'cc' | 'selfhost'
+export type CcEngine = 'cc' | 'selfhost' | 'gpt_subscription'
 
 export type CcProUsage = {
   available: boolean
@@ -156,6 +158,11 @@ export type CcMessage = {
   thinkingMs?: number
   /** 这一轮的用量（只有助手消息有；老消息没有就是 undefined，不显示） */
   usage?: CcTurnUsage | null
+  /** GPT actual usage is separate; unavailable fields stay null, with no fake CC cost/cache. */
+  gptUsage?: GptUsage | null
+  gptOutcome?: GptDone['outcome']
+  /** Preserve the exact request while its save is unresolved, for idempotent retry. */
+  gptRetryRequest?: GptRequest
   /** 助手这一轮调过的工具 */
   tools?: CcToolEvent[]
   /** thinking / 助手文字 / 工具按实际发生顺序组成的过程时间线 */
@@ -418,5 +425,5 @@ export type CcSessionListItem = {
   pinned_at?: string | null
   deleted_at?: string | null
   mode?: 'chat' | 'work'
-  local_engine_preference?: 'cc' | 'selfhost'
+  local_engine_preference?: 'cc' | 'selfhost' | 'gpt_subscription'
 }

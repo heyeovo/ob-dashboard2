@@ -7,6 +7,7 @@ export const TURN_UNATTENDED_MS = 30 * 60_000
 export type TurnEvent = { seq: number; event: string; data: unknown }
 type Subscriber = { send: (event: TurnEvent) => void; close: () => void }
 export type TurnBroadcast = {
+  engine?: 'cc' | 'gpt_subscription'
   requestId: string; sessionId: string; userText: string; attachmentIds: string[]; startedAt: number
   events: TurnEvent[]; done: boolean; truncated: boolean; subscribers: Set<Subscriber>
   controller: AbortController; seq: number; bytes: number; executing: boolean
@@ -27,7 +28,7 @@ function armUnattended(turn: TurnBroadcast) {
 }
 
 export function createTurnBroadcast(
-  input: Pick<TurnBroadcast, 'requestId' | 'sessionId' | 'userText' | 'attachmentIds' | 'startedAt'>,
+  input: Pick<TurnBroadcast, 'requestId' | 'sessionId' | 'userText' | 'attachmentIds' | 'startedAt' | 'engine'>,
   stop: (reason?: 'unattended') => Promise<void>,
 ): TurnBroadcast | null {
   const previous = turns.get(input.sessionId)
@@ -51,7 +52,7 @@ export function unfinishedTurns() { return [...turns.values()].filter(turn => !t
 
 export function activeTurn(sessionId: string) {
   const turn = turns.get(sessionId)
-  return turn && !turn.done ? {
+  return turn && turn.engine !== 'gpt_subscription' && !turn.done ? {
     request_id: turn.requestId, user_text: turn.userText,
     attachment_ids: turn.attachmentIds, started_at: turn.startedAt,
   } : null

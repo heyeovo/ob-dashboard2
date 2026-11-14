@@ -66,6 +66,36 @@
 
 后续 Linux/联调验收：先在临时环境用合成数据运行 Node tests 和 Python 定向测试、干净 npm ci/完整 Docker build，补验证 Linux owner-only 和符号链接项；再按用户确认的真实平台值准备独立 secret 和授权交接，验证真实轮换、撤销与重启恢复。不得把本机或示例路径当作生产配置。后续任务已有明确窗口安排，留在本文，不另记成技术债。
 
+## 窗口 2 交付状态（2026-11-15）
+
+**用户已回复“开始动手”，确认本窗口的五项具体修改方案和三个产品决定：每窗口独立记住 GPT 模型、刷新继续生成、停止保留部分回复。** 后端实现与本地定向验证完成；没有修改 UI、原始工作目录、窗口 3 克隆、真实授权、VPS 或平台配置。两仓库当前分支均为 `feat/gpt-subscription-chat-window2`，工作目录仍是上方列出的 window2 独立克隆。用户随后已明确同意按本窗口列明的两仓库范围 commit + push。Haven 已推送 `ea52a9d87f0a63e5281965152cf7becb75239be8`，并用 ls-remote 核对；Dashboard 的交付提交为包含本节的 runner 实现提交，目标分支同为 `feat/gpt-subscription-chat-window2`。最终提交 SHA 与远端核对结果以本聊天收尾报告及 Git 为准；未授权合并或部署。
+
+### 接口可测试阶段与窗口 3 入口
+
+接口已由可直接运行的契约测试固定，详细事实唯一维护在 Dashboard `docs/reference.md`「GPT 订阅聊天（文字）」；不要从旧聊天摘要猜路由或自行改共享类型。引擎固定 `gpt_subscription`；路由为 `/api/cc-chat-gpt` 的 POST（发送）、GET（active/接回/核对历史）和 DELETE（精确停止）；模型偏好经已有 `/api/cc-session-settings` 存 Haven 的独立 GPT overrides。共享浏览器安全类型从 `app/cc/types.ts` 导出。窗口 2 独占该共享类型、app/lib 和后端文件。
+
+可交接证据（均为合成数据）：
+
+| 检查 | 结果与边界 |
+|---|---|
+| Dashboard GPT 契约/runner 及相邻回归 | 11 文件、70 项通过：GPT 流解析/请求校验/上下文/重复与冲突/停止/断线接回/保存失败重试/额度错误/排空；窗口设置、Claude 唤醒隔离、windowPrompt、selfhost runner、serverDrain、CC 原有接回及跨引擎事件/历史隔离。未调用真实账号；runner 编排使用模拟 Gateway/Haven 依赖，传输和真实 SQLite 持久层另有独立契约测试。命令：`node node_modules/vitest/vitest.mjs run tests/gpt-contract.test.ts tests/gpt-runner.test.ts tests/cc-session-settings-route.test.ts tests/cc-background-turn-inputs.test.ts tests/window-prompt.test.ts tests/selfhost-runTurn.test.ts tests/server-drain.test.ts tests/gpt-engine-boundary.test.ts tests/cc-turn-broadcast.test.ts tests/cc-chat-strict-route.test.ts tests/cc-chat-disconnect-route.test.ts`。 |
+| Haven 新增聊天契约 | `test_gpt_chat_contracts.py` 9 项通过：旧库迁移、重复初始化、偏好 CAS/profile 隔离、跨连接原子准入、进程重开防重、lease/owner、真实轮次提交及日期统计、HTTP 认证先行与可信 profile。 |
+| Haven 相邻回归 | `test_gateway_state_contracts.py` 57 项通过；`test_gpt_subscription.py` 10 项通过（含真实本地 Node 辅助进程、合成临时数据）；`test_reference_routes.py` 2 项通过。 |
+| Dashboard build | `npm run build -- --webpack` 通过，含 TypeScript。默认 Turbopack 因独立克隆 node_modules 连接指向项目外而拒绝；没有修改 next.config 或 package scripts。沙箱字体网络/目录权限失败后，在普通本机权限运行 webpack 成功。仅在本克隆创建依赖目录连接，未安装依赖、未复制原环境私密配置；Haven 本克隆同样复用既有 Node 依赖并生成本地编译产物。 |
+
+窗口 3 对接要求：
+
+- 发送须保留整份 GptRequest，保存不明时用同一 request_id 和原 body 核对/重试；不得自动换 request_id 重新调用模型。
+- 接回须按 Content-Type 处理 SSE 与 JSON 已保存快照；同请求正文原位替换，不能重复追加。失去缓冲/进程后只用 Haven 已保存轮次恢复，未落库草稿丢失不能声称可恢复。
+- 展示 native gptUsage/null 和 outcome；只有 completed 才显示正常完成，cancelled/failed 即使已保存也要标明中断。不可展示虚构的 Claude 成本、Pro 余量、工具或精确 GPT context window。
+- 已有附件或 wake/工作模式状态的线路切换须显式说明/阻止，不静默忽略；后端已拒绝非文字能力，持久偏好为 GPT 的窗口不能进入 Claude 后台唤醒输入加载。旧 wake 配置没有被删改。
+
+本窗口复用了 Haven 人设/模块与固定事实、固定 handoff/日回顾、滚动日期选择与冻结钉选 revision、历史召回正文、严格提交及事件订阅缓冲；GPT 原生传输和后台轮次独立，不进入 Claude SDK 或订阅账号锁。数据库新增项与准入登记长期事实维护在 Haven reference，ENV_VARS 未变。
+
+### 留给窗口 4 的验收
+
+窗口 2/3 分支尚未集成；由窗口 4 审阅后集成，不在任一窗口擅自合并。需在集成环境补全真实 Haven→Gateway→模型多轮实测、手机 UI 接回/停止/模型跨设备恢复、部署切换和进程异常恢复；Linux、Docker、真实刷新/撤销/授权交接及 VPS 验收继续按上方窗口 1 边界，尚未执行。本窗口本地测试通过不等于线上完成。本次暂不部署。
+
 ## 已完成的独立验证
 
 - 本地：官方 SIWC DevKit 登录成功，返回 `connected` 且 `sharing=true`；模型列表可读；GPT-6-Luna 完整返回测试回复。
@@ -88,7 +118,7 @@
 
 ## 四个实施窗口与依赖
 
-执行顺序：窗口 1 → 窗口 2、3 可并行 → 窗口 4。窗口 2、3 只有在接口已冻结、分别准备独立工作目录/分支并划清共享文件归属后才并行；当前尚未创建这些并行环境。2026-11-15 用户要求由助手新建聊天分配窗口 1；本聊天交接后不再同时修改产品仓库。
+执行顺序：窗口 1 → 窗口 2、3 可并行 → 窗口 4。窗口 2、3 只有在接口已冻结、分别准备独立工作目录/分支并划清共享文件归属后才并行；独立环境已创建，实际目录与归属以上方并行安排为准；后续仍按各窗口验收和提交确认推进。
 
 ### 窗口 1：授权、持久化与执行接口
 
@@ -148,7 +178,7 @@
 
 ## 下一窗口入口与待办
 
-下一窗口按上方「窗口 1 交付状态」继续：先核对本地改动和是否已提交，再读取 Haven 正式接口契约。窗口 2 只做聊天后端与 Haven 上下文；Linux/真实授权验收仍待后续授权补齐。不要从 UI、工具或整套 Codex app-server 重建开始。
+窗口 3 按上方「窗口 2 交付状态」及 Dashboard 正式接口契约接 UI；先核对本窗口提交状态，不直接依赖另一个克隆未提交的文件。窗口 4 负责集成和 Linux/真实授权/部署验收，需另行获得正式配置与凭据操作授权。不要扩大到工具或整套 Codex app-server 重建。
 
 OB Todo 本窗口尝试写入失败：连接器仍指向旧 Zeabur MCP，返回 404；未创建成功，不为此修改连接配置。待转交的 Todo 原句：
 

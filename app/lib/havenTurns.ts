@@ -21,7 +21,7 @@ import type { HandoffSnapshot } from './cc/handoffSnapshot'
 
 /** 来源标记。第一版只有 cc（新前端）和 gateway（Haven 自己那条链写的）。
  *  polaris 留给第 6 步迁历史用。 */
-export type TurnSource = 'cc' | 'selfhost' | 'gateway' | 'polaris'
+export type TurnSource = 'cc' | 'selfhost' | 'gpt_subscription' | 'gateway' | 'polaris'
 
 export type HavenTurn = {
   id: number
@@ -89,7 +89,8 @@ export type HavenConversationSession = {
   session_id: string
   persona_id: string
   title: string
-  local_engine_preference: 'cc' | 'selfhost'
+  local_engine_preference: 'cc' | 'selfhost' | 'gpt_subscription'
+  gpt_subscription_overrides?: { model?: string }
   selfhost_overrides: Record<string, unknown>
   cc_overrides: {
     active_cred?: 'subscription' | 'api'
@@ -161,7 +162,7 @@ export type HavenSession = {
   pinned_at?: string | null
   deleted_at?: string | null
   mode?: 'chat' | 'work'
-  local_engine_preference?: 'cc' | 'selfhost'
+  local_engine_preference?: 'cc' | 'selfhost' | 'gpt_subscription'
 }
 
 export type RecordTurnInput = {
@@ -963,7 +964,8 @@ export async function pinConversationSession(
 export async function patchConversationSessionState(input: {
   sessionId: string
   personaId: string
-  localEnginePreference?: 'cc' | 'selfhost'
+  localEnginePreference?: 'cc' | 'selfhost' | 'gpt_subscription'
+  gptSubscriptionOverrides?: { model?: string }
   selfhostOverrides?: Record<string, unknown>
   ccOverrides?: HavenConversationSession['cc_overrides']
   promptModuleOverrides?: Record<string, boolean>
@@ -981,13 +983,14 @@ export async function patchConversationSessionState(input: {
   if (!sessionId || !personaId) {
     return { ok: false, session: null, error: 'session_id / persona_id 不能为空', httpStatus: null }
   }
-  if (!input.localEnginePreference && input.selfhostOverrides === undefined && input.ccOverrides === undefined && input.promptModuleOverrides === undefined
+  if (!input.localEnginePreference && input.gptSubscriptionOverrides === undefined && input.selfhostOverrides === undefined && input.ccOverrides === undefined && input.promptModuleOverrides === undefined
     && input.mcpOverrides === undefined && input.mode === undefined && input.recallMode === undefined && input.dailyReviewEnabled === undefined && !input.initializeDailyReviewSnapshot
     && input.handoffSnapshot === undefined && input.frozenPersonaAppend === undefined) {
     return { ok: false, session: null, error: '没有可保存的窗口设置', httpStatus: null }
   }
   const body: Record<string, unknown> = { session_id: sessionId, persona_id: personaId }
   if (input.localEnginePreference) body.local_engine_preference = input.localEnginePreference
+  if (input.gptSubscriptionOverrides !== undefined) body.gpt_subscription_overrides = input.gptSubscriptionOverrides
   if (input.selfhostOverrides) body.selfhost_overrides = input.selfhostOverrides
   if (input.ccOverrides) body.cc_overrides = input.ccOverrides
   if (input.promptModuleOverrides !== undefined) body.prompt_module_overrides = input.promptModuleOverrides

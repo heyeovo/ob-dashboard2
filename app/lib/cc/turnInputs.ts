@@ -27,6 +27,7 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   })
   const session = sessionResult.session
   if (!sessionResult.ok || !session) throw new Error(sessionResult.error || 'Haven 返回空窗口')
+  if (session.local_engine_preference === 'gpt_subscription') throw new Error('GPT 窗口不支持 Claude 主动唤醒')
   if (!session.frozen_persona_append_initialized) {
     throw new Error('窗口还没有成功启动过 CC，不能由后台冷启动')
   }

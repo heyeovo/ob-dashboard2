@@ -117,3 +117,10 @@ describe('background rolling turn inputs', () => {
     )
   })
 })
+
+
+it('refuses GPT windows before loading any Claude background runtime inputs', async () => {
+  deps.getSession.mockResolvedValue({ ok: true, session: { local_engine_preference: 'gpt_subscription' } })
+  await expect(loadBackgroundTurnInputs('gpt-window')).rejects.toThrow('GPT')
+  expect(deps.loadRolling).not.toHaveBeenCalled()
+})

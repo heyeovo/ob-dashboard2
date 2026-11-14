@@ -26,6 +26,22 @@ export async function POST(request: NextRequest) {
   const sessionId = String(body.session_id || '').trim()
   if (!sessionId) return Response.json({ ok: false, error: 'session_id 为空' }, { status: 400 })
 
+  if (body.engine === 'gpt_subscription') {
+    const personaId = String(body.persona_id || '').trim()
+    const model = typeof body.model === 'string' ? body.model.trim() : ''
+    if (!personaId || !model || model.length > 200) {
+      return Response.json({ ok: false, error: 'GPT 线路需要 persona_id 和有效 model' }, { status: 400 })
+    }
+    const current = await getConversationSession(sessionId)
+    if (!current.ok) return Response.json({ ok: false, error: current.error }, { status: 502 })
+    const result = await patchConversationSessionState({
+      sessionId, personaId, localEnginePreference: 'gpt_subscription',
+      gptSubscriptionOverrides: { model }, expectedStateVersion: current.session?.state_version ?? 0,
+    })
+    if (!result.ok) return Response.json({ ok: false, error: result.error }, { status: result.httpStatus || 502 })
+    return Response.json({ ok: true, applied: false, session: result.session })
+  }
+
   if (body.engine === 'cc') {
     const personaId = String(body.persona_id || '').trim()
     const cred = body.cred === 'subscription' ? 'subscription' : body.cred === 'api' ? 'api' : ''

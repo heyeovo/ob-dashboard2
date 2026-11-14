@@ -21,7 +21,7 @@ import { getHavenGatewayConnection, joinHavenUrl } from './havenConfig'
 const PATH = '/gateway/api/cc/personas'
 
 /** 引擎（= 额度 + 请求拼装归谁）。selfhost 是第 7 步的自建引擎，界面里灰着。 */
-export type CcEngine = 'subscription' | 'api' | 'selfhost'
+export type CcEngine = 'subscription' | 'api' | 'selfhost' | 'gpt_subscription'
 
 export type HavenPromptModule = {
   id: string

@@ -197,7 +197,7 @@ export async function loadRollingWindowAppend(
   sessionId: string,
   session: FixedWindowSource,
   days: ConversationContextDay[],
-  options: { upToTurnId?: number; logDiagnostics?: boolean; persistPinnedSnapshot?: boolean } = {},
+  options: { upToTurnId?: number; logDiagnostics?: boolean; persistPinnedSnapshot?: boolean; includeRooms?: boolean } = {},
 ): Promise<{
   content: string
   history: HavenTurn[]
@@ -277,7 +277,7 @@ export async function loadRollingWindowAppend(
   const effectiveTurns = options.upToTurnId == null
     ? turnResult.turns
     : turnResult.turns.filter(turn => turn.id <= options.upToTurnId!)
-  const roomDoors = await loadRoomDoors(sessionId, session.context_revision || 0)
+  const roomDoors = options.includeRooms === false ? '' : await loadRoomDoors(sessionId, session.context_revision || 0)
   return {
     content: buildRollingWindowAppend(
       session,
