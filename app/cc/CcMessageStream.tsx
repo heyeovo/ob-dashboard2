@@ -474,10 +474,10 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
         )}
         {/* 等着点批准的操作。放在消息流最后 —— 那一轮正停在这里等，
             它就是「现在该看的东西」。刷新页面不会丢（队列在服务端）。 */}
-        {chat.pending.map(req => (
+        {chat.effectiveEngine !== 'gpt_subscription' && chat.pending.map(req => (
           <CcPermCard key={req.id} request={req} onAnswer={chat.answerPermission} />
         ))}
-        {chat.autoAllowEdits ? (
+        {chat.effectiveEngine !== 'gpt_subscription' && chat.autoAllowEdits ? (
           <div className="cc-auto-allow">
             <span>这次对话里改文件不再一条条问了（跑命令仍然每次都问）</span>
             <button

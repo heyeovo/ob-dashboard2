@@ -83,6 +83,7 @@ type Props = {
   onPromptModuleToggle?: (moduleId: string, defaultEnabled: boolean, enabled: boolean) => Promise<boolean>
   sending: boolean
   disabled?: boolean
+  textOnly?: boolean
   placeholder?: string
   forwardedBlock?: { title: string; lines: string[] } | null
   onClearForward?: () => void
@@ -104,6 +105,7 @@ export default function CcComposer({
   onPromptModuleToggle,
   sending,
   disabled,
+  textOnly = false,
   placeholder,
   forwardedBlock,
   onClearForward,
@@ -204,6 +206,7 @@ export default function CcComposer({
   }
 
   const addFiles = async (files: File[]) => {
+    if (textOnly) { onError?.('GPT 首版仅支持文字，不能添加附件。'); return }
     const remaining = MAX_ATTACHMENTS - attachments.length
     if (remaining <= 0) return onError?.('每轮图片和文件合计最多 4 个')
     const supported = files.filter(file => file.type.startsWith('image/') || isSupportedDocument(file))
@@ -240,6 +243,8 @@ export default function CcComposer({
   }
 
   const submit = () => {
+    if (disabled || sending) return
+    if (textOnly && attachments.length) { onError?.('请先移除草稿附件；GPT 不会发送或丢弃这些附件。'); return }
     if (uploading || (value.trim().length === 0 && attachments.length === 0)) return
     const sent = attachments
     setAttachments([])
@@ -340,14 +345,14 @@ export default function CcComposer({
             {menuView === 'main' ? (
               <>
                 <div className="grid grid-cols-3 gap-3">
-                  <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); cameraRef.current?.click() }}>
-                    <CameraIcon /><span>拍照</span>
+                  <button type="button" disabled={textOnly} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)] disabled:opacity-50" onClick={() => { setMenuOpen(false); cameraRef.current?.click() }}>
+                    <CameraIcon /><span>{textOnly ? 'GPT 不支持拍照' : '拍照'}</span>
                   </button>
-                  <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); photoRef.current?.click() }}>
-                    <PhotoIcon /><span>照片</span>
+                  <button type="button" disabled={textOnly} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)] disabled:opacity-50" onClick={() => { setMenuOpen(false); photoRef.current?.click() }}>
+                    <PhotoIcon /><span>{textOnly ? 'GPT 不支持照片' : '照片'}</span>
                   </button>
-                  <button type="button" className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)]" onClick={() => { setMenuOpen(false); documentRef.current?.click() }}>
-                    <FileIcon /><span>上传文件</span>
+                  <button type="button" disabled={textOnly} className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-[var(--color-surface-secondary)] text-sm text-[var(--color-text-primary)] disabled:opacity-50" onClick={() => { setMenuOpen(false); documentRef.current?.click() }}>
+                    <FileIcon /><span>{textOnly ? 'GPT 不支持附件' : '上传文件'}</span>
                   </button>
                 </div>
                 <div className="mt-5 border-t border-[var(--color-border-light)] pt-2">

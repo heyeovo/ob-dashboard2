@@ -19,6 +19,8 @@ import CcContextAnalysis from './CcContextAnalysis'
 import CcContextGc from './CcContextGc'
 import CcAgentWakeSettings from './CcAgentWakeSettings'
 import CcRollingContext from './CcRollingContext'
+import { gptConnectionErrorNote, gptConnectionLabel } from './gptConnectionUi'
+import type { useGptConnection } from './useGptConnection'
 
 // 「本窗口设置」弹窗（5.2）。只管**这一个对话**。
 //
@@ -67,6 +69,11 @@ type Props = {
   engine: CcEngine
   onEngineChange: (engine: CcEngine) => void
   engineDisabled: boolean
+  isRemote: boolean | null
+  gptModel: string
+  gptModelSaving: boolean
+  gptAccount: ReturnType<typeof useGptConnection>
+  onGptModelSave: (model: string) => void
   mode: CcMode
   onModeChange: (next: CcMode) => void
   modeLocked: boolean
@@ -131,6 +138,11 @@ export default function CcWindowSettings({
   engine,
   onEngineChange,
   engineDisabled,
+  isRemote,
+  gptModel,
+  gptModelSaving,
+  gptAccount,
+  onGptModelSave,
   mode,
   onModeChange,
   modeLocked,
@@ -227,6 +239,12 @@ export default function CcWindowSettings({
     }
   }
   const models = modelsFor(upstream, pick.kind, pick.providerId)
+  const isGpt = engine === 'gpt_subscription'
+  const gptModels = gptAccount.models?.ok ? gptAccount.models.models : []
+  const gptConnection = gptAccount.connection?.ok ? gptAccount.connection : null
+  const gptConnectionError = gptAccount.connection && (!gptAccount.connection.ok || gptAccount.connection.error)
+    ? gptAccount.connection.error : null
+  useEffect(() => { if (isGpt) void gptAccount.reload() }, [isGpt, gptAccount.reload])
   const shownActiveModel = modelLabel(activeModel, models, pick.kind)
   const activeUpstream = [activeProvider, shownActiveModel].filter(Boolean).join(' · ')
   const recent = stats.recentCostUsd || []
@@ -308,7 +326,9 @@ export default function CcWindowSettings({
         </div>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {activeTab === 'mcp' ? (
+          {engine === 'gpt_subscription' && activeTab !== 'session' && activeTab !== 'rolling' ? (
+            <p className={HINT}>GPT 首版不支持此项 CC 能力。原设置保留，切回 CC 后可查看。</p>
+          ) : activeTab === 'mcp' ? (
             <div className="space-y-3">
               <p className={HINT}>只列出全局已开启的 MCP。未单独设置时跟随「默认带上」。</p>
               {mcpConfig ? [
@@ -376,7 +396,7 @@ export default function CcWindowSettings({
                 </span>
               </div>
             ) : null}
-            <div className={ROW}>
+            {engine !== 'gpt_subscription' ? <><div className={ROW}>
               <span className={KEY}>{shownContextTokens > 0 ? (stats.live ? '当前窗口 Context' : '上次模型调用 Context') : 'Context'}</span>
               <span className={VAL}>
                 {shownContextTokens > 0 ? (
@@ -422,6 +442,7 @@ export default function CcWindowSettings({
               <span className={KEY}>近 {recent.length} 轮累计</span>
               <span className={VAL}>{subscription ? '$0（订阅）' : fmtCost(recentSum)}</span>
             </div>
+            </> : <p className={HINT}>GPT 模型上下文上限未知；不提供 Claude 花费或缓存统计。</p>}
           </div>
 
           {engine === 'cc' ? (
@@ -459,13 +480,29 @@ export default function CcWindowSettings({
           <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
           <div className={LABEL}>引擎</div>
           <div className="mb-3 flex gap-1.5">
-            {(['cc', 'selfhost'] as const).map(nextEngine => (
-              <button key={nextEngine} type="button" disabled={engineDisabled}
+            {(['cc', 'selfhost', 'gpt_subscription'] as const).map(nextEngine => (
+              <button key={nextEngine} type="button" disabled={engineDisabled || (isRemote === true && nextEngine === 'cc')}
                 onClick={() => onEngineChange(nextEngine)} className={seg(engine === nextEngine)}>
-                {nextEngine === 'cc' ? 'cc' : '自建'}
+                {nextEngine === 'cc' ? 'cc' : nextEngine === 'selfhost' ? '自建' : 'GPT'}
               </button>
             ))}
           </div>
+
+          {isGpt ? <div className={HINT}>
+            <div className="flex flex-wrap items-center justify-between gap-x-3">
+              <span role="status">{gptConnectionLabel(gptAccount.connection, gptAccount.loading)} · 额度未知</span>
+              <button type="button" disabled={gptAccount.loading} onClick={() => void gptAccount.reload()}
+                className="min-h-11 text-xs text-[var(--color-primary)] disabled:opacity-50">刷新</button>
+            </div>
+            {gptConnectionError ? <p role="alert">{gptConnectionErrorNote(gptConnectionError)}</p>
+              : gptConnection && !gptConnection.configured ? <p>请先由管理员完成服务器授权配置。</p>
+                : gptConnection?.status === 'disconnected' || gptConnection?.status === 'reauth_required'
+                  ? <p>请在电脑专用管理工具登录，再通过 SSH 安全交接；完成后回到这里刷新。手机不能直接完成授权。</p>
+                  : gptConnection && !gptConnection.sharing ? <p>请到 ChatGPT 设置开启订阅共享，再刷新。</p> : null}
+            {gptAccount.models && !gptAccount.models.ok ? <p role="alert">{gptConnectionErrorNote(gptAccount.models.error)}</p> : null}
+          </div> : null}
+
+          {!isGpt ? <>
 
           {engine === 'cc' && mode === 'work' ? (
             <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-pending-border)] bg-[var(--color-pending-bg)]/60 p-2.5">
@@ -586,10 +623,12 @@ export default function CcWindowSettings({
             </div>
           ) : null}
 
-          {/* ── 模型 / 力度 / 思考：能中途改 ── */}
+          </> : null}
+
+          {/* 复用现有模型入口；GPT 选择后直接保存到 Haven。 */}
           <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
           <div className={LABEL}>模型</div>
-          {models.length === 0 ? (
+          {!isGpt && models.length === 0 ? (
             <div className={HINT}>
               这一侧还没填模型名，去{' '}
               <Link href="/settings/upstream" className="underline">
@@ -599,18 +638,28 @@ export default function CcWindowSettings({
             </div>
           ) : (
             <select
-              className={`${SELECT} mb-3`}
-              value={pick.model}
-              onChange={e => onPick({ model: e.target.value })}
+              aria-label="模型"
+              className={`${SELECT} mb-3${isGpt ? ' min-h-11 text-base' : ''}`}
+              value={isGpt ? gptModel : pick.model}
+              disabled={isGpt ? engineDisabled || gptModelSaving || !gptAccount.ready || !gptModels.length : undefined}
+              onChange={e => isGpt ? onGptModelSave(e.target.value) : onPick({ model: e.target.value })}
             >
-              {models.map(m => (
+              {isGpt ? <>
+                <option value="" disabled>请选择模型</option>
+                {gptModel && !gptModels.some(item => item.slug === gptModel)
+                  ? <option value={gptModel} disabled>{gptModel}（当前列表不可用）</option> : null}
+                {gptModels.map(item => <option key={item.slug} value={item.slug}>{item.displayName || item.slug}</option>)}
+              </> : models.map(m => (
                 <option key={m} value={m}>
                   {m}
                 </option>
               ))}
             </select>
           )}
+          {isGpt && gptAccount.models?.ok && !gptModels.length
+            ? <p className={HINT}>账号没有返回可用模型，请刷新或检查账号模型权限。</p> : null}
 
+          {!isGpt ? <>
           <div className={LABEL}>力度</div>
           <div className="mb-3 flex gap-1">
             {EFFORT_OPTIONS.map(o => (
@@ -776,10 +825,8 @@ export default function CcWindowSettings({
             {webSaving ? '保存中…' : '保存为新窗口默认'}
           </button>
 
-          {note ? (
-            <div className="mt-2 text-2xs leading-relaxed text-[var(--color-primary)]">{note}</div>
-          ) : null}
-
+          </> : null}
+          {note ? <div role="status" className="mt-2 text-2xs leading-relaxed text-[var(--color-primary)]">{note}</div> : null}
           {/* ── 换窗 ── */}
           <div className="my-3.5 h-px bg-[var(--color-border-light)]" />
           <button

@@ -20,9 +20,10 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
     return () => document.removeEventListener('pointerdown', close)
   }, [quickOpen])
   const selfhost = chat.effectiveEngine === 'selfhost'
-  const mode = selfhost ? '自建' : chat.mode === 'work' ? 'WORK' : 'CHAT'
+  const gpt = chat.effectiveEngine === 'gpt_subscription'
+  const mode = gpt ? 'GPT' : selfhost ? '自建' : chat.mode === 'work' ? 'WORK' : 'CHAT'
   const channel = chat.pick.kind === 'subscription' ? 'Pro' : shownProvider || 'API'
-  const model = prettyModelName(chat.pick.model || shownModel || '')
+  const model = prettyModelName(gpt ? chat.gptModel : chat.pick.model || shownModel || '')
   const effort = chat.pick.effort
   const effortLabel = effort === 'xhigh' ? 'XHigh' : effort ? effort[0].toUpperCase() + effort.slice(1) : ''
   const models = modelsFor(chat.upstream, chat.pick.kind, chat.pick.providerId)
@@ -52,16 +53,16 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold tracking-[var(--label-tracking)] ${mode === 'CHAT' ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]'}`}>{mode}</span>
           </div>
           <div ref={quickRef} className="relative max-w-full">
-            <button type="button" onClick={() => !selfhost && setQuickOpen(open => !open)} disabled={selfhost}
+            <button type="button" onClick={() => gpt ? setWinSetOpen(true) : !selfhost && setQuickOpen(open => !open)} disabled={selfhost}
               aria-expanded={quickOpen} aria-haspopup="menu"
               className="flex max-w-full items-center gap-0.5 text-left text-2xs text-[var(--color-text-tertiary)] disabled:cursor-default"
-              title={selfhost ? '自建引擎' : '切换模型和力度'}>
+              title={gpt ? '设置 GPT 模型' : selfhost ? '自建引擎' : '切换模型和力度'}>
               <span className="truncate">
-                {selfhost ? `${(shownProvider || '自建').slice(0, 8)} · ${model || '默认模型'}` : `${channel.slice(0, 8)} · ${model || '默认模型'}${effortLabel ? ` · ${effortLabel}` : ''}`}
+                {gpt ? `GPT 订阅 · ${model || '尚未选择模型'}` : selfhost ? `${(shownProvider || '自建').slice(0, 8)} · ${model || '默认模型'}` : `${channel.slice(0, 8)} · ${model || '默认模型'}${effortLabel ? ` · ${effortLabel}` : ''}`}
               </span>
               {selfhost ? null : <span className={`cc-fold-caret down${quickOpen ? ' open' : ''}`} aria-hidden="true" />}
             </button>
-            {quickOpen ? (
+            {quickOpen && !gpt ? (
               <div className="cc-popmenu absolute left-0 top-full z-50 mt-1.5 flex w-60 flex-col p-1" role="menu">
                 <div className="px-2.5 pb-1 pt-1.5 text-3xs uppercase tracking-[var(--label-tracking)] text-[var(--color-text-disabled)]">Model</div>
                 {models.map(value => (
@@ -85,8 +86,8 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
             ) : null}
           </div>
           <div className="hidden truncate whitespace-nowrap text-2xs text-[var(--color-text-disabled)] md:block">
-            {chat.stats.turnCount} 轮 · {chat.stats.compacting ? 'Context 压缩中' : ctxTokens > 0 ? `${formatTokens(ctxTokens)}${ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}` : 'Context 待确认'}
-            {chat.stats.totalCostUsd > 0 && chat.pick.kind !== 'subscription' ? ` · ${formatCost(chat.stats.totalCostUsd)}` : ''}
+            {chat.stats.turnCount} 轮 · {gpt ? '文字聊天 · 额度未知' : chat.stats.compacting ? 'Context 压缩中' : ctxTokens > 0 ? `${formatTokens(ctxTokens)}${ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}` : 'Context 待确认'}
+            {!gpt && chat.stats.totalCostUsd > 0 && chat.pick.kind !== 'subscription' ? ` · ${formatCost(chat.stats.totalCostUsd)}` : ''}
             {chat.effectiveEngine === 'cc' ? ` · ${cacheLabel}` : ''}
           </div>
         </div>

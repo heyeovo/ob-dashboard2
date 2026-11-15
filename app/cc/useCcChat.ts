@@ -1,6 +1,10 @@
 'use client'
 
 import { parseWakeOps } from './wakeDisplay'
+import { useGptChat } from './useGptChat'
+import { useGptConnection } from './useGptConnection'
+import { gptConnectionLabel } from './gptConnectionUi'
+import { loadCcDraftAttachments } from './ccNavMemory'
 import { mergeTurnMessages } from './turnRecovery'
 import { fetchWithDeploymentRetry, DeploymentRetryTimeout, DEPLOY_RETRY_NOTE, detachedWaitExpired } from './deploymentRetry'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -93,6 +97,7 @@ type SessionHistorySnapshot = {
   ccPick: CcUpstreamPick
   ccRoutePicks: CcRoutePicks
   selfhostPick: CcUpstreamPick
+  gptModel: string
   webSettings: CcWebSettings
   promptModuleOverrides: Record<string, boolean>
   credChosen: boolean
@@ -182,6 +187,8 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionActionNote, setSessionActionNote] = useState('')
   const [localEnginePreference, setLocalEnginePreference] = useState<CcEngine>('cc')
   const [engineSaving, setEngineSaving] = useState(false)
+  const [gptModel, setGptModel] = useState('')
+  const [gptModelSaving, setGptModelSaving] = useState(false)
   const [promptModuleOverrides, setPromptModuleOverrides] = useState<Record<string, boolean>>({})
   const [promptModulesSaving, setPromptModulesSaving] = useState(false)
   const promptModuleOverridesRef = useRef<Record<string, boolean>>({})
@@ -272,6 +279,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
   const handoffRef = useRef<{ snapshot: HandoffPayload['snapshot'] } | null>(null)
   const dailyReviewEnabledRef = useRef(false)
+  const gptAccount = useGptConnection(effectiveEngine === 'gpt_subscription')
+  const gptReady = gptAccount.ready && Boolean(gptAccount.models?.ok
+    && gptAccount.models.models.some(model => model.slug === gptModel))
 
   // 上游配置：进页面拉一次。拉不到就用空配置（引擎层会退回 .env.local）
   useEffect(() => {
@@ -301,7 +311,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         }
         ccPickRef.current = ccRoutePicksRef.current[ccPickRef.current.kind]
         selfhostPickRef.current = normalizeLoadedPick(selfhostPickRef.current)
-        setPick(effectiveEngineRef.current === 'selfhost' ? selfhostPickRef.current : ccPickRef.current)
+        if (effectiveEngineRef.current !== 'gpt_subscription') setPick(effectiveEngineRef.current === 'selfhost' ? selfhostPickRef.current : ccPickRef.current)
         // 配过东西（有中转站 / 填过订阅模型）才算「定过」，空配置不抢协作者的 engine
         if (config.providers.length > 0 || config.subscriptionModels.length > 0) setCredChosen(true)
       } catch {
@@ -701,6 +711,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           ccPick: ccPickRef.current,
           ccRoutePicks: ccRoutePicksRef.current,
           selfhostPick: selfhostPickRef.current,
+          gptModel,
           webSettings,
           promptModuleOverrides,
           credChosen,
@@ -754,6 +765,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         ccPickRef.current = cached.ccPick
         ccRoutePicksRef.current = cached.ccRoutePicks || routePicksFromConfig(upstreamRef.current)
         selfhostPickRef.current = cached.selfhostPick
+        setGptModel(cached.gptModel || '')
         setWebSettings(cached.webSettings)
         const cachedPromptOverrides = cached.promptModuleOverrides || {}
         setPromptModuleOverrides(cachedPromptOverrides)
@@ -770,6 +782,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         setHistoryBeforeId(null)
         setHasEarlierHistory(false)
         setLocalEnginePreference('cc')
+        setGptModel('')
         setPromptModuleOverrides({})
         promptModuleOverridesRef.current = {}
         setMode('chat')
@@ -787,13 +800,14 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         historyLoadedAtRef.current = 0
       }
 
-      const cacheIsFresh = cached && Date.now() - cached.cachedAt < SESSION_HISTORY_CACHE_TTL_MS
+      const cacheIsFresh = cached && cached.localEnginePreference !== 'gpt_subscription'
+        && Date.now() - cached.cachedAt < SESSION_HISTORY_CACHE_TTL_MS
       if (cacheIsFresh) {
         setHistoryLoading(false)
         return
       }
 
-      setHistoryLoading(!cached)
+      setHistoryLoading(!cached || cached.localEnginePreference === 'gpt_subscription')
       const historyController = new AbortController()
       historyAbortRef.current = historyController
       try {
@@ -816,6 +830,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           const sessionState = data.session as {
             local_engine_preference?: string
             selfhost_overrides?: { provider_id?: unknown; model?: unknown }
+            gpt_subscription_overrides?: { model?: unknown }
             cc_overrides?: {
               active_cred?: unknown
               subscription?: { model?: unknown; effort?: unknown; thinking?: unknown }
@@ -829,7 +844,9 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           } | null
           const restoredHandoffTranscript = handoffChatTranscript(sessionState?.handoff_snapshot)
           setIsRolling(sessionState?.rolling_context?.strategy === 'daily_rolling')
-          const restoredEngine = sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc'
+          const restoredEngine = sessionState?.local_engine_preference === 'gpt_subscription' ? 'gpt_subscription'
+            : sessionState?.local_engine_preference === 'selfhost' ? 'selfhost' : 'cc'
+          const restoredGptModel = String(sessionState?.gpt_subscription_overrides?.model || '').trim()
           const selfhostProviderId = String(sessionState?.selfhost_overrides?.provider_id || '').trim()
           const selfhostModel = String(sessionState?.selfhost_overrides?.model || '').trim()
           const restoredPromptModuleOverrides = sessionState?.prompt_module_overrides
@@ -936,6 +953,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           selfhostPickRef.current = restoredSelfhostPick
           setPick(restoredPick)
           setLocalEnginePreference(restoredEngine)
+          setGptModel(restoredGptModel)
           setPromptModuleOverrides(restoredPromptModuleOverrides)
           promptModuleOverridesRef.current = restoredPromptModuleOverrides
           resumeHintRef.current = meta.ccSessionId
@@ -963,6 +981,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
             ccPick: restoredCcPick,
             ccRoutePicks: restoredCcRoutePicks,
             selfhostPick: restoredSelfhostPick,
+            gptModel: restoredGptModel,
             webSettings: restoredWebSettings,
             promptModuleOverrides: restoredPromptModuleOverrides,
             credChosen: restoredCredChosen,
@@ -1101,6 +1120,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     setAutoAllowEdits(false)
     setSettingsNote('')
     setLocalEnginePreference('cc')
+    setGptModel('')
     setPromptModuleOverrides({})
     promptModuleOverridesRef.current = {}
     lastRoundIdRef.current = 0
@@ -1169,10 +1189,23 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [refreshSessions])
 
   const changeEngine = useCallback(async (next: CcEngine) => {
-    if (!sessionId || !personaId || next === localEnginePreference) return
-    if (isRemote === true) {
-      setError('Vercel 环境仅支持自建引擎；本地首选没有被修改。')
+    if (!sessionId || !personaId || engineSaving || gptModelSaving || next === localEnginePreference) return
+    if (sending || messagesRef.current.some(message => message.role === 'assistant'
+      && ['detached', 'persistence_unknown', 'not_saved'].includes(message.deliveryState || ''))) {
+      setError('请先结束当前回复或核对保存状态，再切换线路。')
       return
+    }
+    if (isRemote === true && next === 'cc') {
+      setError('远程环境不能运行 CC，请选择自建或 GPT 订阅。')
+      return
+    }
+    if (next === 'gpt_subscription') {
+      if (pending.length) { setError('CC 还有待处理的工具批准，请先结束这轮操作，再切换到 GPT。'); return }
+      if (mode === 'work') { setError('GPT 不支持工作模式，请新建闲聊窗口后选择 GPT。'); return }
+      if ((loadCcDraftAttachments(window.localStorage).get(sessionId) || []).length) {
+        setError('草稿中还有附件，请先移除附件，再切换到 GPT。'); return
+      }
+      if (!window.confirm('切换到 GPT 仅支持文字闲聊。已有工具、房间、联网与主动唤醒设置会保留，但不会在 GPT 线路执行。是否继续？')) return
     }
     const previous = localEnginePreference
     const previousPick = pick
@@ -1193,14 +1226,42 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       })
       const data = await res.json()
       if (!res.ok || !data.ok) throw new Error(String(data.error || '引擎首选保存失败'))
+      historyCacheRef.current.delete(sessionId)
     } catch (reason) {
+      if (currentSessionRef.current !== sessionId) return
       setPick(previousPick)
       setLocalEnginePreference(previous)
       setError(reason instanceof Error ? reason.message : '引擎首选保存失败')
     } finally {
       setEngineSaving(false)
     }
-  }, [isRemote, localEnginePreference, personaId, pick, sessionId])
+  }, [isRemote, localEnginePreference, personaId, pick, sessionId, mode, sending, engineSaving, gptModelSaving, pending.length])
+
+  const saveGptModel = useCallback(async (value: string) => {
+    const model = value.trim()
+    if (!model || !sessionId || !personaId || gptModelSaving || sending) return
+    if (!gptAccount.ready || !gptAccount.models?.ok || !gptAccount.models.models.some(item => item.slug === model)) {
+      setSettingsNote('请先刷新连接状态，并从当前账号的模型列表中选择。'); return
+    }
+    if (messagesRef.current.some(message => message.engine === 'gpt_subscription'
+      && message.role === 'assistant' && ['detached', 'persistence_unknown', 'not_saved'].includes(message.deliveryState || ''))) {
+      setSettingsNote('请先核对上一条 GPT 请求的保存状态'); return
+    }
+    setGptModelSaving(true)
+    setSettingsNote('正在保存 GPT 模型…')
+    try {
+      const response = await fetch('/api/cc-session-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, persona_id: personaId, engine: 'gpt_subscription', model }) })
+      const data = await response.json()
+      if (!response.ok || !data.ok) throw new Error(String(data.error || 'GPT 模型保存失败'))
+      if (currentSessionRef.current !== sessionId) return
+      setGptModel(String(data.session?.gpt_subscription_overrides?.model || model))
+      historyCacheRef.current.delete(sessionId)
+      setSettingsNote('GPT 模型已保存到 Haven，下一轮生效')
+    } catch (reason) {
+      if (currentSessionRef.current === sessionId) setSettingsNote((reason as Error).message || '模型保存失败，请重试')
+    } finally { setGptModelSaving(false) }
+  }, [sessionId, personaId, gptModelSaving, sending, gptAccount.ready, gptAccount.models])
 
   const setPromptModuleEnabled = useCallback(async (
     moduleId: string,
@@ -1261,6 +1322,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       setHistoryBeforeId(null)
       setHasEarlierHistory(false)
       setLocalEnginePreference('cc')
+      setGptModel('')
       setPromptModuleOverrides({})
       promptModuleOverridesRef.current = {}
       lastRoundIdRef.current = 0
@@ -1302,11 +1364,12 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     historyTurnCount > 0 || messages.some(message => !message.fromHistory)
   // 自建轮次不能锁住 cc 的启动模式；只有 cc 真正开口后才锁。
   const ccSessionStarted = messages.some(
-    message => message.role === 'assistant' && message.engine !== 'selfhost' && !message.handoff,
+    message => message.role === 'assistant' && message.engine !== 'selfhost' && message.engine !== 'gpt_subscription' && !message.handoff,
   )
 
   const applyPick = useCallback(
     async (next: Partial<CcUpstreamPick>) => {
+      if (effectiveEngine === 'gpt_subscription') return
       if (sending) {
         setSettingsNote('正在回复，结束后才能切换线路')
         return
@@ -1437,7 +1500,17 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     }
   }, [webSettings])
 
+  const gpt = useGptChat({ sessionId, personaId, enabled: effectiveEngine === 'gpt_subscription',
+    ready: !historyLoading, model: gptModel, mode, messagesRef, currentSessionRef, abortRef, lastRoundIdRef,
+    setMessages, setSending, setError, setDraft,
+    requestContext: () => ({ include_daily_review: dailyReviewEnabledRef.current,
+      ...(handoffRef.current ? { handoff_snapshot: handoffRef.current.snapshot } : {}) }),
+    accepted: () => { handoffRef.current = null }, saved: () => { void refreshSessions() },
+    attention: () => { void gptAccount.reload() },
+  })
+
   const stop = useCallback(() => {
+    if (effectiveEngine === 'gpt_subscription') { void gpt.stop(); return }
     const pendingDeploy = messagesRef.current.find(message => message.deliveryState === 'detached' && message.deploymentRetryAt !== undefined)
     if (pendingDeploy) {
       abortRef.current?.abort(new DOMException('deployment_retry_stopped', 'AbortError'))
@@ -1483,7 +1556,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       stoppingRef.current = false
       recoveryTickRef.current()
     }).catch(() => undefined)
-  }, [effectiveEngine, sessionId])
+  }, [effectiveEngine, sessionId, gpt.stop])
 
   const compactNow = useCallback(async (): Promise<{ ok: boolean; compacted: boolean; error: string }> => {
     if (effectiveEngine !== 'cc' || mode !== 'work') {
@@ -1884,6 +1957,15 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   const send = useCallback(
     async (rawText: string, retry?: RetryTurn, selectedAttachments: CcAttachment[] = []) => {
+      if (engineSaving || gptModelSaving || historyLoading) return
+      if (effectiveEngine === 'gpt_subscription' && !retry) {
+        if (!gptReady) {
+          setError(`${gptConnectionLabel(gptAccount.connection, gptAccount.loading)}。请打开本窗设置，检查授权并保存当前账号可用的模型。`)
+          return
+        }
+        await gpt.send(rawText, selectedAttachments.length)
+        return
+      }
       const text = rawText.trim()
       const attachmentIds = retry?.attachmentIds || selectedAttachments.map(item => item.id)
       if ((!text && attachmentIds.length === 0) || sending || !sessionId
@@ -2042,7 +2124,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
         }
       }
     },
-    [sessionId, sending, personaId, refreshSessions, refreshPending, refreshProUsage, mode, pick, credChosen, webSettings, effectiveEngine, consumeTurn],
+    [sessionId, sending, personaId, refreshSessions, refreshPending, refreshProUsage, mode, pick, credChosen, webSettings, effectiveEngine, consumeTurn, gpt.send, engineSaving, gptModelSaving, historyLoading, gptReady, gptAccount.connection, gptAccount.loading],
   )
 
   const recoverTurn = useCallback(async () => {
@@ -2164,6 +2246,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [recoverTurn])
 
   const retryPersistence = useCallback((message: CcMessage) => {
+    if (message.engine === 'gpt_subscription') {
+      if (message.gptRetryRequest) void gpt.send(message.gptRetryRequest.text, 0, message.gptRetryRequest)
+      else void gpt.recover(message)
+      return
+    }
     if (!message.requestId || !message.retryText || message.retryExpectedLastRoundId == null || !message.engine) return
     void send(message.retryText, {
       assistantId: message.id,
@@ -2172,7 +2259,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       engine: message.engine,
       attachmentIds: message.retryAttachmentIds || [],
     })
-  }, [send])
+  }, [send, gpt.send, gpt.recover])
 
   const clearAttachment = useCallback(async (messageId: string, attachmentId: string) => {
     try {
@@ -2282,6 +2369,11 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
     localEnginePreference,
     effectiveEngine,
     engineSaving,
+    gptModel,
+    gptModelSaving,
+    gptAccount,
+    gptReady,
+    saveGptModel,
     changeEngine,
     promptModuleOverrides,
     promptModulesSaving,

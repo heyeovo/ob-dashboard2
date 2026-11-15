@@ -1,4 +1,5 @@
 import { parseWakeOps, type WakeDisplayOp } from './wakeDisplay'
+import { gptErrorNote, gptOutcomeNote, normalizeGptUsage } from './gptPresentation'
 // /cc 聊天页的历史数据转换（9.5 从 useCcChat 原样抽出，纯函数，可单独测）。
 //
 // Haven 的一轮（user + assistant 一行）→ 界面上的消息；raw_json 里的
@@ -199,6 +200,7 @@ export function personaOfClient(client: string | undefined): string {
   const value = (client || '').trim()
   if (value.startsWith('ob2-chat/')) return value.slice('ob2-chat/'.length).trim()
   if (value.startsWith('ob2-selfhost/')) return value.slice('ob2-selfhost/'.length).trim()
+  if (value.startsWith('ob2-gpt/')) return value.slice('ob2-gpt/'.length).trim()
   return ''
 }
 
@@ -217,7 +219,10 @@ export function parseTurnRaw(rawJson: string | undefined): {
   usage: CcTurnUsage | null
   interrupted: boolean
   interruptedReason: CcInterruptedReason | undefined
-  engine: 'cc' | 'selfhost' | undefined
+  engine: CcMessage['engine']
+  gptUsage?: CcMessage['gptUsage']
+  gptOutcome?: CcMessage['gptOutcome']
+  gptFailureNote?: string
   providerId: string
   providerLabel: string
   laneId: string
@@ -262,6 +267,16 @@ export function parseTurnRaw(rawJson: string | undefined): {
   } catch {
     // Haven 侧超长会存成带 _truncated 的存根，解不出来就当没有
     return empty
+  }
+  if (raw.engine === 'gpt_subscription') {
+    const outcome = raw.outcome === 'completed' ? 'completed' : raw.outcome === 'cancelled' ? 'cancelled' : 'failed'
+    const error = raw.generation_error && typeof raw.generation_error === 'object'
+      ? raw.generation_error as Record<string, unknown> : null
+    return { ...empty, engine: 'gpt_subscription', model: typeof raw.model === 'string' ? raw.model : '',
+      gptUsage: normalizeGptUsage(raw.usage), gptOutcome: outcome, interrupted: outcome !== 'completed',
+      gptFailureNote: error && typeof error.message === 'string'
+        ? gptErrorNote({ message: error.message, action: typeof error.action === 'string' ? error.action : undefined }) : undefined,
+      recall: normalizeRecall(raw.recall) }
   }
   const parseTool = (t: Record<string, unknown>, fallbackId: string): CcToolEvent => ({
     name: String(t.name || '工具'),
@@ -385,11 +400,13 @@ export function parseTurnRaw(rawJson: string | undefined): {
  */
 export function modeOfTurns(turns: HavenTurnRow[]): CcMode {
   for (let i = turns.length - 1; i >= 0; i -= 1) {
+    if (turns[i].source === 'gpt_subscription') continue
     const rawJson = turns[i]?.raw_json
     // 非常早的 cc 轮次连 raw 都没有，当时只有工作模式。
     if (!rawJson) return 'work'
     try {
       const parsed = JSON.parse(rawJson) as Record<string, unknown>
+      if (parsed.engine === 'gpt_subscription') continue
       if (parsed?.engine === 'selfhost') continue
       if (parsed?.mode === 'chat') return 'chat'
       if (parsed?.mode === 'work') return 'work'
@@ -420,6 +437,7 @@ export function metaOfTurns(turns: HavenTurnRow[]): {
   ccSessionId: string
 } {
   for (let i = turns.length - 1; i >= 0; i -= 1) {
+    if (turns[i].source === 'gpt_subscription') continue
     const rawJson = turns[i]?.raw_json
     if (!rawJson) continue
     try {
@@ -526,7 +544,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         fromHistory: true,
       })
     }
-    if (extra.process.some(event => event.type === 'room') || t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit' || (t.source === 'cc' && (extra.interrupted || t.request_id))) {
+    if (extra.process.some(event => event.type === 'room') || t.assistant_text?.trim() || extra.interruptedReason === 'pro_limit' || ((t.source === 'cc' || t.source === 'gpt_subscription') && (extra.interrupted || t.request_id))) {
       out.push({
         id: t.assistant_message_id || `h${t.id}a`,
         role: 'assistant',
@@ -541,9 +559,11 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         process: extra.process.length ? extra.process : undefined,
         recall: extra.recall,
         usage: extra.usage,
+        gptUsage: extra.gptUsage,
+        gptOutcome: extra.gptOutcome,
         interrupted: extra.interrupted || undefined,
         interruptedReason: extra.interruptedReason,
-        engine: extra.engine || (t.source === 'selfhost' ? 'selfhost' : t.source === 'cc' ? 'cc' : undefined),
+        engine: extra.engine || (t.source === 'gpt_subscription' ? 'gpt_subscription' : t.source === 'selfhost' ? 'selfhost' : t.source === 'cc' ? 'cc' : undefined),
         providerId: extra.providerId || undefined,
         providerLabel: extra.providerLabel || undefined,
         laneId: extra.laneId || undefined,
@@ -562,7 +582,7 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
           : null),
         roundId: t.round_id,
         deliveryState: 'saved',
-        deliveryNote: extra.interruptedReason === 'pro_limit'
+        deliveryNote: extra.gptOutcome ? [extra.gptOutcome === 'failed' ? extra.gptFailureNote : '', gptOutcomeNote(extra.gptOutcome)].filter(Boolean).join(' ') : extra.interruptedReason === 'pro_limit'
           ? t.assistant_text?.trim()
             ? 'Pro 额度中断；已生成内容和用户消息均已保存到 Haven'
             : 'Pro 额度不足，未生成回复；用户消息已保存到 Haven'

@@ -2,13 +2,14 @@
 import CcComposer from './CcComposer'
 import { extractXhsUrl } from './CcXhsCard'
 import { requiresImportedSessionHandoff } from './engineRouting'
+import { gptConnectionLabel } from './gptConnectionUi'
 import type { CcChatScope } from './CcChatScope'
 
 export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
   const { chat, people, xhs, selectMode, selectedMessageIds, forwardSelectedMessages,
     searchVisible, searchQuery, setSearchQuery, setActiveSearchMessageId, moveSearch,
     searchResults, activeSearchIndex, closeSearch, normalizedSearchQuery,
-    setHandoffOpen, forwardedBlock, setForwardedBlock } = scope
+    setHandoffOpen, setWinSetOpen, forwardedBlock, setForwardedBlock } = scope
   return (
     <div className="px-4 pb-4 pt-1">
       <div className="mx-auto max-w-[var(--chat-assistant-width)]">
@@ -90,10 +91,19 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
             ) : null}
           </div>
         ) : null}
-        {chat.isRemote === true ? (
+        {chat.isRemote === true && chat.effectiveEngine !== 'gpt_subscription' ? (
           <div className="mb-2 rounded-xl bg-[var(--color-primary-soft)] px-3 py-2 text-meta text-[var(--color-primary)]">
-            Vercel 环境仅支持自建引擎；你的本地引擎首选没有被修改。
+            远程环境可用自建或 GPT 订阅；当前使用自建引擎。
           </div>
+        ) : null}
+        {chat.effectiveEngine === 'gpt_subscription' ? (
+          <p className="mb-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+            GPT 仅文字：不执行工具、房间、工作模式或主动唤醒，也不接收附件。
+            {chat.mode === 'work' ? '当前为工作窗口，请新建闲聊窗口。' : !chat.gptReady
+              ? ` ${gptConnectionLabel(chat.gptAccount.connection, chat.gptAccount.loading)}；请在本窗设置检查连接及模型。` : ''}
+            {!chat.gptReady ? <button type="button" onClick={() => setWinSetOpen(true)}
+              className="block min-h-11 text-sm text-[var(--color-primary)]">检查 GPT 连接与模型</button> : null}
+          </p>
         ) : null}
         {requiresImportedSessionHandoff(chat.activeSessionSource, chat.effectiveEngine) ? (
           <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-secondary)] shadow-sm">
@@ -118,7 +128,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
                 : ''
               const fullText = prefix + chat.draft
               const xhsUrl = extractXhsUrl(fullText)
-              if (xhsUrl) {
+              if (xhsUrl && chat.effectiveEngine !== 'gpt_subscription') {
                 chat.setDraft('')
                 setForwardedBlock(null)
                 void (async () => {
@@ -148,7 +158,8 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
             onPromptModuleToggle={chat.setPromptModuleEnabled}
             onError={chat.setError}
             sending={chat.sending || xhs.loading}
-            disabled={xhs.loading}
+            textOnly={chat.effectiveEngine === 'gpt_subscription'}
+            disabled={xhs.loading || chat.engineSaving || chat.gptModelSaving || (chat.effectiveEngine === 'gpt_subscription' && !chat.sending && (chat.historyLoading || !chat.gptReady || chat.mode === 'work'))}
             placeholder={xhs.loading ? '📕 正在读取小红书笔记…' : undefined}
             forwardedBlock={forwardedBlock}
             onClearForward={() => setForwardedBlock(null)}

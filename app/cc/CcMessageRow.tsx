@@ -1,4 +1,5 @@
 'use client'
+import CcGptUsage from './CcGptUsage'
 
 import CcSentImage from './CcSentImage'
 import { parseSentImage, SEND_IMAGE_TOOL } from '@/app/lib/cc/sendImageResult'
@@ -214,7 +215,8 @@ export default function CcMessageRow({
   const isUser = message.role === 'user'
   const persona = personaProp || FALLBACK_PERSONA
   const shownModel = modelLabel(message.model || '')
-  const usage = message.usage || null
+  const gpt = message.engine === 'gpt_subscription'
+  const usage = gpt ? null : message.usage || null
   const { showRuntimeInfo, showTokenInfo } = useChatDisplayPreferences()
   const [menuOpen, setMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -831,7 +833,7 @@ export default function CcMessageRow({
         {/* 被停止的半截回复：在正文下方标一句，不跟完整回复混着看 */}
         {message.interrupted && !message.streaming ? (
           <div className="mt-1 text-meta text-[var(--color-text-tertiary)]">
-            {message.interruptedReason === 'pro_limit' ? 'Pro 额度中断' : '已停止生成'}
+            {gpt ? message.gptOutcome === 'cancelled' ? '已停止 · 部分回复已保存' : 'GPT 回复中断' : message.interruptedReason === 'pro_limit' ? 'Pro 额度中断' : '已停止生成'}
           </div>
         ) : null}
 
@@ -839,7 +841,7 @@ export default function CcMessageRow({
         {!message.streaming && showRuntimeInfo && (message.engine || message.providerLabel || shownModel) ? (
           <div className="relative mt-1.5 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)]/70 px-3 py-2 text-2xs text-[var(--color-text-tertiary)]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {message.engine ? <span>引擎：{message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
+              {message.engine ? <span>引擎：{gpt ? 'GPT 订阅' : message.engine === 'selfhost' ? '自建' : 'cc'}</span> : null}
               {message.providerLabel ? <span>Provider：{message.providerLabel}</span> : null}
               {shownModel ? <span>模型：{shownModel}</span> : null}
             </div>
@@ -959,6 +961,17 @@ export default function CcMessageRow({
           </div>
         ) : null}
 
+        {gpt && !isUser ? <div className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+          <span>来源：GPT 订阅{message.model ? ` · ${message.model}` : ''}</span>
+          {message.gptOutcome === 'failed' && message.deliveryNote ? <p role="alert" className="mt-1 break-words text-[var(--color-danger)]">{message.deliveryNote}</p> : null}
+          {showTokenInfo ? <CcGptUsage usage={message.gptUsage} /> : null}
+          {['not_saved', 'persistence_unknown'].includes(message.deliveryState || '') ? <>
+            <p className="mt-1 break-words text-[var(--color-danger)]">{message.deliveryNote}</p>
+            <button type="button" onClick={() => onRetryPersistence?.(message)} className="min-h-11 text-[var(--color-primary)]">
+              {message.gptRetryRequest ? '核对并重试保存原请求' : '核对保存状态'}
+            </button>
+          </> : null}
+        </div> : null}
         {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
         {usage && showTokenInfo && usageOpen ? <UsageDetails usage={usage} /> : null}
       </div>

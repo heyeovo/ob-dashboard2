@@ -91,6 +91,13 @@ export function getCcChatMetrics(chat: Chat, people: People, cacheClock: number)
       : '',
   ].filter(Boolean).join('\n\n')
 
+  if (chat.effectiveEngine === 'gpt_subscription') return {
+    shownModel: chat.gptModel, shownProvider: 'GPT 订阅', contextSnapshot: null, ctxTokens: 0, ctxMax: 0, cacheLabel: '',
+    displayStats: { ...displayStats, contextSnapshot: null, contextTokens: 0, contextMaxTokens: 0,
+      cacheRefreshedAt: 0, cacheRemainingMs: 0, cacheSystemRemainingMs: 0,
+      lastCompaction: null, compactionCount: 0, totalCostUsd: 0, recentCosts: [] },
+    totalChars, conversationText, systemPromptText,
+  }
   return { shownModel, shownProvider, contextSnapshot, ctxTokens, ctxMax, cacheLabel,
     displayStats, totalChars, conversationText, systemPromptText }
 }

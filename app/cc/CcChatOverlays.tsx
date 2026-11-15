@@ -85,7 +85,12 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
             void chat.changeEngine(engine)
             if (chooseMode) setWinSetOpen(true)
           }}
-          engineDisabled={chat.isRemote === true || chat.engineSaving || chat.sending}
+          engineDisabled={chat.engineSaving || chat.gptModelSaving || chat.historyLoading || chat.sending}
+          isRemote={chat.isRemote}
+          gptModel={chat.gptModel}
+          gptModelSaving={chat.gptModelSaving}
+          gptAccount={chat.gptAccount}
+          onGptModelSave={value => void chat.saveGptModel(value)}
           mode={chat.mode}
           onModeChange={chat.setMode}
           modeLocked={chat.modeLocked}

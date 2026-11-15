@@ -4,7 +4,7 @@ export function effectiveEngine(
   isRemote: boolean | null,
   localPreference: CcEngine,
 ): CcEngine {
-  return isRemote === true ? 'selfhost' : localPreference
+  return localPreference === 'gpt_subscription' ? localPreference : isRemote === true ? 'selfhost' : localPreference
 }
 
 export function requiresImportedSessionHandoff(source: string, engine: CcEngine): boolean {
