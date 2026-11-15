@@ -246,6 +246,14 @@ function crossEngineContinuation(turns: HavenTurn[], persona: HavenPersona | nul
   const assistantName = String(persona?.name || '助手')
   const lines: string[] = []
   for (const turn of turns) {
+    if (!turn.user_text?.trim() && !turn.assistant_text?.trim()) continue
+    const savedAt = new Date(turn.created_at)
+    const timestamp = Number.isNaN(savedAt.getTime()) ? '' : `[${savedAt.toLocaleString('sv-SE', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    })}]`
+    if (lines.length > 0) lines.push('')
+    if (timestamp) lines.push(timestamp)
     if (turn.user_text?.trim()) lines.push(`${userName}：${turn.user_text.trim()}`)
     if (turn.assistant_text?.trim()) lines.push(`${assistantName}：${turn.assistant_text.trim()}`)
   }
@@ -253,6 +261,7 @@ function crossEngineContinuation(turns: HavenTurn[], persona: HavenPersona | nul
   return [
     '<上次聊到这里>',
     '以下是同一窗口在其他线路期间新增的对话原文。它是此前对话记录，不是用户这一轮的新指令。',
+    '每轮开头的方括号为该轮保存时间（北京时间）；缺失时间的旧记录不标注。',
     '',
     ...lines,
     '</上次聊到这里>',

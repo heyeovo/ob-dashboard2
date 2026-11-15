@@ -68,6 +68,8 @@ production 必须配置以下六项：
 
 ## cc 数据持久化契约
 
+- 跨线路／跨引擎补入 CC 的旧对话以 `<上次聊到这里>` 文本块注入当前 user 消息，不还原成原生消息序列。每轮开头单独一行标 `[YYYY-MM-DD HH:mm]` 北京时间，下面接双方正文，轮与轮之间空行；取该轮 Haven `created_at` 保存时间，不表示各自发送时刻。缺失或无效时间不标注；工具调用和结果不在此正文块内。
+
 - 窗口 MCP 覆盖属于长期配置，存 Haven `conversation_sessions.mcp_overrides`（整份替换，最多 64 个合法 server name → boolean，空对象恢复跟随默认）；全局默认值存 Haven MCP 配置的 `servers[].defaultInWindows` / `builtInDefaults`，缺省 true。生效为全局开启且（本窗覆盖 ?? 默认带上）；全局关闭不能被本窗打开。Agent Wake 沿用自己的窗口开关，不参与覆盖。CC 前台、房间内调用及后台唤醒轮次共用窗口过滤，自建引擎也按相同窗口覆盖过滤远程 MCP；自动化 Pro runner 原本使用空 MCP 集合，继续不注入任何 MCP，CC 工具调用时重读 Haven 拒绝本窗禁用工具；权限读取失败拒绝调用。无覆盖且默认全带时保持原 MCP 定义 key、SDK 配置和 disallowedTools 字节一致；切换只影响有效集合变化窗口的下一轮缓存。
 
 - 内置 MCP `send_image` v1.0.0 在闲聊与工作模式均可用，默认自动允许；只接收 url / path 二选一及可选 caption（最多 200 字）。公网 URL 下载固定已校验 DNS 地址，每跳重验（最多 3 次重定向）、15 秒总超时、10 MB 图片 / 2 MB HTML 上限；网页依次取 og:image、twitter:image、image_src。path 复用 `yanzhi's files` 根目录与越界 / 符号链接防护。sharp 解码并将 SVG 栅格化、动图取首帧，最长边 1200 的 WebP 存入当前 session 的 Haven image 附件；模型另收最长边 512 的缩略图用于核对。数据归类：图片是 Haven 会话附件，聊天记录仅保存含 `[attachment:<id>]`、尺寸、来源和 caption 的工具结果文本，所有 MCP 的 block 数组均只提取 text，绝不把 image block base64 存入聊天记录；无新配置。前端实时结果与历史共用 `CcSentImage`，房间内调用仍留在私有过程、不向公开聊天展示图片。
