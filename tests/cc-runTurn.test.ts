@@ -890,7 +890,7 @@ describe('runTurn：普通回复', () => {
       ok: true,
       turns: [
         {
-          id: 2, session_id: 'ob2-test-session', round_id: 2, created_at: '',
+          id: 2, session_id: 'ob2-test-session', round_id: 2, created_at: '2026-11-15T16:30:00Z',
           user_text: '出门后说的话', assistant_text: '自建引擎的回答', model: '', client: '',
           route: '/api/cc-chat-selfhost', source: 'selfhost',
           raw_json: JSON.stringify({
@@ -910,6 +910,8 @@ describe('runTurn：普通回复', () => {
     expect(content).toContain('<上次聊到这里>')
     expect(content).toContain('出门后说的话')
     expect(content).toContain('自建引擎的回答')
+    expect(content).toMatch(/\[2026-11-16 00:30\]\n[^\n]+：出门后说的话\n[^\n]+：自建引擎的回答/)
+    expect(content.match(/\[2026-11-16 00:30\]/g)).toHaveLength(1)
     expect(content.indexOf('<之前的记忆>')).toBeLessThan(content.indexOf('<上次聊到这里>'))
     expect(content.lastIndexOf('你好')).toBeGreaterThan(content.indexOf('</上次聊到这里>'))
     expect(turns.listAllTurns).toHaveBeenCalledWith('ob2-test-session', expect.objectContaining({
