@@ -102,7 +102,7 @@
 
 ### 留给窗口 4 的验收
 
-窗口 3 固定提交已包含窗口 2 runner 和代理补件，无需重复应用，当前版本见下节。需在集成环境补全真实 Haven→Gateway→模型多轮实测、手机 UI 接回/停止/模型跨设备恢复、部署切换和进程异常恢复；Linux、Docker、真实刷新/撤销/授权交接及 VPS 验收继续按上方窗口 1 边界，尚未执行。本地测试通过不等于线上完成。本次暂不部署。
+窗口 3 固定提交已包含窗口 2 runner 和代理补件，无需重复应用。当前版本、本机 Linux/Docker 合成验收结果及剩余范围见下节；真实 Haven→Gateway→模型多轮、手机/跨设备和正式授权/部署验收继续遵守窗口 1 授权边界。本地测试通过不等于线上完成。本次暂不部署。
 
 ### 窗口 4：集成审阅与失败恢复（2026-11-15）
 
@@ -111,7 +111,10 @@
 - 用户确认修复配置保存失败后的聊天卡死路径，并已回复“好”授权本轮 6 文件 commit + 普通 push。Dashboard 工作分支为 `fix/gpt-subscription-preflight-window4`，提交消息为 `fix: preserve GPT request retries after preparation failure`；最终提交和远端核对结果以 Git 及本聊天收尾为准。只调整 runner 的准入顺序及其测试和文档，不修改 Haven 登记结构、UI、旧引擎或真实配置；长期行为见 reference/architecture，不在此重复维护。
 - 修复前新增 3 项均失败，原有 runner 13 项通过；真实 `useGptChat` hook 经实际 POST 路由复现同一请求重试仍停在保存不明。修复后 runner/UI 生命周期/流解析/临时请求副本共 4 文件、40 项通过，覆盖原请求重试成功、缓存清除及下一条可发送。依赖只复用已有安装，测试缓存位于窗口 4；没有复制配置或凭据。
 - `npm run build -- --webpack` 通过，含 TypeScript 和 95 页生成；初次沙箱字体 DNS/目录权限失败后，在普通本机权限完成。`git diff --check` 通过。本轮验证使用模拟 Haven/Gateway；上述 hook 测试不是手机浏览器或真实账号实测。
-- 仍待手机、Linux/Docker、真实账号及 VPS 验收，按本节上方的授权边界执行。本轮提交推送确认仅覆盖 Dashboard runner、对应测试、reference/architecture 与中央 handoff/索引 6 文件；后续再安排独立环境验收，不自动合并、部署或迁移凭据。
+- 修复已提交并普通推送 `e65f89a65892390e405f40e634d06b3a1cb1526e`，远端已核对。该次确认仅覆盖 Dashboard runner、对应测试、reference/architecture 与中央 handoff/索引 6 文件。
+- 用户随后授权本机 Linux/Docker 合成验收。两仓库从固定提交 git archive 导出纯源码，原始 Dockerfile 完整构建均成功：Haven Node 67 项全部通过且无跳过，Python 定向及相邻回归 78 项通过；Dashboard Linux 全量 108 文件/734 项通过，默认 Turbopack 构建、TypeScript 和 95 页生成通过。Brain/Gateway/Dashboard 启动及健康检查通过；Gateway 临时合成模型配置经容器重启仍保留，Dashboard 默认 UID 10001，生产认证未配置时 GPT 接口返回 503。
+- 本轮临时容器均已停止/移除，没有使用真实授权或正式数据。详细报告与日志在 `C:/Users/yangh/projects/gpt-subscription-window4/validation/linux/LINUX-ACCEPTANCE.md`；npm 自动依赖审计告警和既有 Turbopack 警告单列报告，本轮没有升级依赖或扩改其他模块。用户已确认仅中央 handoff 和索引两份文档提交并普通推送，消息为 `docs: record GPT Linux acceptance results`；最终提交及远端结果以 Git 和聊天收尾为准。
+- 仍待手机、跨设备、完整真实模型聊天、真实授权导入/刷新/撤销及真实授权重启恢复、VPS 验收；合成配置重启成功不替代真实授权验收。下一步先人工确认实际服务器配置，再准备可审阅的真实授权交接步骤并单独取得授权，不自动合并、部署或迁移凭据。
 
 ## 已完成的独立验证
 
@@ -195,7 +198,7 @@
 
 ## 下一窗口入口与待办
 
-窗口 3 UI 已在上述固定基线中完成；后续从「窗口 4：集成审阅与失败恢复」记录的独立目录和分支继续，先核对本地提交状态。窗口 4 的 Linux/真实授权/部署验收仍未完成，正式配置与凭据操作需另行授权。不要重复应用 runner/代理、重做已确认 UI，或扩大到工具及整套 Codex app-server 重建。
+窗口 3 UI 已在上述固定基线中完成；后续从「窗口 4：集成审阅与失败恢复」记录的独立目录和分支继续，先核对本地提交状态及当前验收边界。真实授权、手机/跨设备和 VPS 验收仍未完成，正式配置与凭据操作需另行授权。不要重复应用 runner/代理、重做已确认 UI，或扩大到工具及整套 Codex app-server 重建。
 
 OB Todo 本窗口尝试写入失败：连接器仍指向旧 Zeabur MCP，返回 404；未创建成功，不为此修改连接配置。待转交的 Todo 原句：
 

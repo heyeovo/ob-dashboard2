@@ -7,7 +7,7 @@
 
 | 文件 | 状态 | 备注 |
 |---|---|---|
-| `HANDOFF-gpt-subscription-chat.md` | 🔨 窗口 4 集成审阅；真实环境待验收 | 2026-11-15 Dashboard 固定 `4c6beb1` 已包含 runner、代理和 UI，Haven 固定 `ea52a9d`。窗口 4 独立目录修复配置/滚动上下文准备失败后的原请求重试，4 文件 40 项及 webpack build 通过；用户已确认本轮 6 文件提交并普通推送修复分支，最终结果以 Git 为准。手机、Linux/Docker、真实账号及 VPS 仍待验收；未合并、未部署、未迁移凭据。具体状态见正文窗口 4 节。 |
+| `HANDOFF-gpt-subscription-chat.md` | 🔎 Linux 合成验收通过；真实环境待验收 | 2026-11-15 修复分支已推 `e65f89a`（包含 runner/代理/UI），Haven 固定 `ea52a9d`。本机 Linux：Dashboard 108 文件/734 项、默认构建与完整镜像通过；Haven Node 67 项无跳过、Python 78 项及完整镜像通过，三服务启动/健康及合成配置重启通过。用户已确认两份验收记录提交并普通推送，最终结果以 Git 为准。手机、跨设备、真实账号及 VPS 仍待验收；未合并、未部署、未迁移凭据。边界及本地证据位置见正文窗口 4 节。 |
 | `HANDOFF-trpg.md` | 🔨 进行中 | 2026-10-05 CC 起草：CoC 7 速成规则 +《闹鬼》，小羊 + 言之当玩家，GPT（Codex 走 Plus）当守秘人，先不接 Foundry。P0 通过；P1（Haven）2026-10-05 上线（`c956926`）；P2a 页面、P2b 调度器与言之会话均已验收合并（2026-10-05）；结束这局 / 模组软删除、言之入座背景、输入框贴底 2026-10-06 验收上线并 iPhone 走查通过；下一步 P3（DM 容器 + 守秘人守则，`9f0e173c`）；守则草稿 2026-10-11 写好待小羊过目，见 `docs/trpg/keeper-guide.md` 与文内 §15 |
 | `HANDOFF-batch-1002.md` | 🔎 待 iPhone 走查 | Codex 实现，CC 验收：Linux 全量 Vitest 491 + build 通过，逐段核对后 2026-10-04 合并 main（`6ecd377`）。含 noop 过程文字、待办排序 / 居中 / 短 ID、日历跳转、时间线状态小框、房间列表间距、桶正文编辑与键盘适配、召回入口挪到 token 旁（`e72b4b4`）、搜索框玻璃底（`0aafb1d`）。`dashboard-auth` 篡改用例偶发失败为既有问题，待下一批修 |
 | `HANDOFF-4c-1-polish.md` | 🔎 待 iPhone 走查 | 两轮均由 CC 验收（Linux 全量测试含符号链接用例、build）并于 2026-10-01 合并 main（`f0cc3bd`、`6b262c6`）：提示词页、全高加载态、日记日期与缓存、日回顾共享周条与补写入口、待办手机全屏编辑 |
