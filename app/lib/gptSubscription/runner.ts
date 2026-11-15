@@ -206,11 +206,6 @@ export async function startGptTurn(request: GptRequest, signal: AbortSignal): Pr
       expected_last_round_id: request.expected_last_round_id, actual_last_round_id: actual }
     const model = request.model || old?.gpt_subscription_overrides?.model || ''
     if (!model) throw gptError(request.request_id, 'model_not_configured', '请先选择 GPT 模型')
-    const claim = await controlGptRequest({ action: 'claim', request_id: request.request_id, session_id: request.session_id,
-      fingerprint, owner: job.owner })
-    if (!claim.ok) throw gptError(request.request_id, claim.code || 'request_admission_failed',
-      claim.code === 'request_already_admitted' ? '该请求已执行或正在另一实例收尾，请读取历史；不要重复发送' : '这个窗口正在处理另一条消息，请稍后重试')
-    job.admitted = true
     const initialized = await patchConversationSessionState({ sessionId: request.session_id, personaId: request.persona_id,
       localEnginePreference: GPT_ENGINE, gptSubscriptionOverrides: { model }, mode: 'chat',
       dailyReviewEnabled: request.include_daily_review ?? old?.daily_review_enabled ?? false,
@@ -221,6 +216,15 @@ export async function startGptTurn(request: GptRequest, signal: AbortSignal): Pr
     const rolling = session.rolling_context.strategy === 'daily_rolling'
       ? await loadRollingWindowAppend(request.session_id, session, sessionResult.contextDays, { includeRooms: false })
       : { content: '', history: history.turns, pinnedBucketIds: [] }
+    // Session/rolling preparation failures must not consume non-repeatable admission.
+    // Keep admission immediately before handing off generation; an admitted request
+    // still cannot repeat a model call, including after a process restart.
+    job.abort.signal.throwIfAborted()
+    const claim = await controlGptRequest({ action: 'claim', request_id: request.request_id, session_id: request.session_id,
+      fingerprint, owner: job.owner })
+    if (!claim.ok) throw gptError(request.request_id, claim.code || 'request_admission_failed',
+      claim.code === 'request_already_admitted' ? '该请求已执行或正在另一实例收尾，请读取历史；不要重复发送' : '这个窗口正在处理另一条消息，请稍后重试')
+    job.admitted = true
     send(job, 'start', { session_id: request.session_id, request_id: request.request_id, at: turn.startedAt })
     send(job, 'init', { engine: GPT_ENGINE, model, session_id: request.session_id, request_id: request.request_id })
     handedOff = true

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { useGptChat } from '@/app/cc/useGptChat'
+import type { CcMessage } from '@/app/cc/types'
 
 const f = vi.hoisted(() => ({ session: vi.fn(), history: vi.fn(), persona: vi.fn(), lookup: vi.fn(),
   patch: vi.fn(), persist: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn() }))
@@ -47,9 +51,71 @@ beforeEach(() => {
   f.rolling.mockResolvedValue({ content: '钉选与回顾', history: [], pinnedBucketIds: ['pinned'] })
   f.stream.mockImplementation(async (_input, _signal, delta) => { delta('回答'); return { usage: null } })
 })
-afterEach(() => { resetServerDrainForTests(); vi.useRealTimers(); vi.unstubAllEnvs() })
+afterEach(() => { resetServerDrainForTests(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe('GPT runner', () => {
+  function durableAdmission() {
+    const admitted = new Set<string>()
+    f.control.mockImplementation(async (body: { action: string; request_id: string }) => {
+      if (body.action !== 'claim') return { ok: true }
+      if (admitted.has(body.request_id)) return { ok: false, code: 'request_already_admitted' }
+      admitted.add(body.request_id)
+      return { ok: true }
+    })
+  }
+  it.each(['configuration', 'rolling context'])('retries the original request after failed %s preparation without consuming admission', async failure => {
+    durableAdmission()
+    if (failure === 'configuration') f.patch.mockResolvedValueOnce({ ok: false })
+    else {
+      session.rolling_context = { strategy: 'daily_rolling' }
+      f.rolling.mockRejectedValueOnce(new Error('temporary context failure'))
+    }
+    const body = request()
+    const failed = await POST(http(body))
+    expect(failed.status).toBe(502)
+    expect(f.stream).not.toHaveBeenCalled()
+    expect(f.control).not.toHaveBeenCalled()
+    const retry = await POST(http(body))
+    expect(await retry.text()).toContain('event: done')
+    expect(f.stream).toHaveBeenCalledTimes(1)
+    expect(f.persist).toHaveBeenCalledTimes(1)
+  })
+  it('recovers the real browser hook from a configuration failure and unlocks subsequent sends', async () => {
+    durableAdmission()
+    f.patch.mockResolvedValueOnce({ ok: false })
+    const cache = new Map<string, string>()
+    vi.stubGlobal('window', { sessionStorage: {
+      getItem: (key: string) => cache.get(key) ?? null,
+      setItem: (key: string, value: string) => cache.set(key, value),
+      removeItem: (key: string) => cache.delete(key),
+    } })
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => POST(http(JSON.parse(String(init.body))))))
+    const body = request()
+    const messagesRef = { current: [] as CcMessage[] }
+    const options: Parameters<typeof useGptChat>[0] = {
+      sessionId: body.session_id, personaId: body.persona_id, model: body.model!, mode: 'chat', enabled: true, ready: true,
+      messagesRef, currentSessionRef: { current: body.session_id }, abortRef: { current: null }, lastRoundIdRef: { current: 0 },
+      setMessages: apply => { messagesRef.current = typeof apply === 'function' ? apply(messagesRef.current) : apply },
+      setSending: () => {}, setError: () => {}, setDraft: () => {}, requestContext: () => ({}), accepted: vi.fn(), saved: vi.fn(),
+    }
+    let chat!: ReturnType<typeof useGptChat>
+    function Mount() { chat = useGptChat(options); return null }
+    renderToStaticMarkup(createElement(Mount))
+    await chat.send('first', 0)
+    const original = messagesRef.current[1].gptRetryRequest!
+    expect(original).toBeDefined()
+    expect(cache.size).toBe(1)
+    expect(f.stream).not.toHaveBeenCalled()
+    await chat.send(original.text, 0, original)
+    expect(messagesRef.current).toHaveLength(2)
+    expect(messagesRef.current[1].deliveryState).toBe('saved')
+    expect(cache.size).toBe(0)
+    expect(f.stream).toHaveBeenCalledTimes(1)
+    f.history.mockResolvedValue({ ok: true, turns: [{ round_id: 1, user_text: 'first', assistant_text: '回答' }] })
+    await chat.send('next', 0)
+    expect(f.stream).toHaveBeenCalledTimes(2)
+    expect(f.persist).toHaveBeenCalledTimes(2)
+  })
   it('persists source/model/fingerprint/revision and returns stable IDs only after strict commit', async () => {
     const body = request()
     const response = await POST(http(body))

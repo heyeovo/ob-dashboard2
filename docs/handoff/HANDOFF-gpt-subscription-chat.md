@@ -102,7 +102,16 @@
 
 ### 留给窗口 4 的验收
 
-窗口 2/3 分支尚未集成；由窗口 4 审阅后集成，不在任一窗口擅自合并。需在集成环境补全真实 Haven→Gateway→模型多轮实测、手机 UI 接回/停止/模型跨设备恢复、部署切换和进程异常恢复；Linux、Docker、真实刷新/撤销/授权交接及 VPS 验收继续按上方窗口 1 边界，尚未执行。本窗口本地测试通过不等于线上完成。本次暂不部署。
+窗口 3 固定提交已包含窗口 2 runner 和代理补件，无需重复应用，当前版本见下节。需在集成环境补全真实 Haven→Gateway→模型多轮实测、手机 UI 接回/停止/模型跨设备恢复、部署切换和进程异常恢复；Linux、Docker、真实刷新/撤销/授权交接及 VPS 验收继续按上方窗口 1 边界，尚未执行。本地测试通过不等于线上完成。本次暂不部署。
+
+### 窗口 4：集成审阅与失败恢复（2026-11-15）
+
+- 独立目录：`C:/Users/yangh/projects/gpt-subscription-window4/`。Dashboard 基线为 `4c6beb131ea5796eaec054c008876d4804c7db82`，包含窗口 2 runner `46d9a12`、代理补件 `95a0bd2` 和窗口 3 UI；Haven 固定 `ea52a9d87f0a63e5281965152cf7becb75239be8`，本轮未修改。原仓库及窗口 2/3 目录保持只读。
+- UI 产品决定不变：原 cc/自建旁增加 GPT，共用原模型下拉，选择即保存；没有独立授权卡或保存区。
+- 用户确认修复配置保存失败后的聊天卡死路径，并已回复“好”授权本轮 6 文件 commit + 普通 push。Dashboard 工作分支为 `fix/gpt-subscription-preflight-window4`，提交消息为 `fix: preserve GPT request retries after preparation failure`；最终提交和远端核对结果以 Git 及本聊天收尾为准。只调整 runner 的准入顺序及其测试和文档，不修改 Haven 登记结构、UI、旧引擎或真实配置；长期行为见 reference/architecture，不在此重复维护。
+- 修复前新增 3 项均失败，原有 runner 13 项通过；真实 `useGptChat` hook 经实际 POST 路由复现同一请求重试仍停在保存不明。修复后 runner/UI 生命周期/流解析/临时请求副本共 4 文件、40 项通过，覆盖原请求重试成功、缓存清除及下一条可发送。依赖只复用已有安装，测试缓存位于窗口 4；没有复制配置或凭据。
+- `npm run build -- --webpack` 通过，含 TypeScript 和 95 页生成；初次沙箱字体 DNS/目录权限失败后，在普通本机权限完成。`git diff --check` 通过。本轮验证使用模拟 Haven/Gateway；上述 hook 测试不是手机浏览器或真实账号实测。
+- 仍待手机、Linux/Docker、真实账号及 VPS 验收，按本节上方的授权边界执行。本轮提交推送确认仅覆盖 Dashboard runner、对应测试、reference/architecture 与中央 handoff/索引 6 文件；后续再安排独立环境验收，不自动合并、部署或迁移凭据。
 
 ## 已完成的独立验证
 
@@ -186,7 +195,7 @@
 
 ## 下一窗口入口与待办
 
-窗口 3 按上方「窗口 2 交付状态」及 Dashboard 正式接口契约接 UI；先核对本窗口提交状态，不直接依赖另一个克隆未提交的文件。窗口 4 负责集成和 Linux/真实授权/部署验收，需另行获得正式配置与凭据操作授权。不要扩大到工具或整套 Codex app-server 重建。
+窗口 3 UI 已在上述固定基线中完成；后续从「窗口 4：集成审阅与失败恢复」记录的独立目录和分支继续，先核对本地提交状态。窗口 4 的 Linux/真实授权/部署验收仍未完成，正式配置与凭据操作需另行授权。不要重复应用 runner/代理、重做已确认 UI，或扩大到工具及整套 Codex app-server 重建。
 
 OB Todo 本窗口尝试写入失败：连接器仍指向旧 Zeabur MCP，返回 404；未创建成功，不为此修改连接配置。待转交的 Todo 原句：
 

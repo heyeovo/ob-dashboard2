@@ -242,7 +242,7 @@ selfhost thinking：中转站若把 `<thinking>` / `<think>` 放进 `text_delta`
 
 GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读取、`recordTurnStrict` compare-and-append 和 `cc/turnBroadcast` 订阅缓冲，不复用 selfhost 的 Anthropic adapter、MCP 或浏览器断线取消语义。共享广播增加可选 engine 标记，旧 CC 值缺省不变；旧引擎的接回与已存请求重放显式拒绝 GPT 来源，通用会话丢弃的 abort 仍能转发到 GPT 生成。具体路由/事件及恢复契约唯一维护在 reference「GPT 订阅聊天（文字）」。
 
-预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端向 Haven 原子登记请求后，CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照。登记只有请求摘要与状态，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
+预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端先 CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照，再加载滚动上下文；两项准备成功并确认未取消后，才向 Haven 原子登记请求并交给生成任务。登记只有请求摘要与状态，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
 
 固定窗口复用 composeWindowPersonaAppend 的 handoff/日回顾及 session 静态背景；滚动窗口复用 loadRollingWindowAppend 的 raw/review/omit 日期、revision 冻结钉选桶、所选日记及其他既有长期层，通过 includeRooms:false 关闭房间读取和注入（旧调用缺省仍开启）。当前召回使用已有排除集合和冻结钉选 ID，历史召回从 raw_json.recall.additional_context 重放。仅投影 user/assistant 正文和召回参考，不投影 Claude 原生工具过程、thinking、附件内容或原生 session ID；当前文字追加北京时间。人设、固定事实与模块开关沿用 Haven。
 

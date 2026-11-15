@@ -158,6 +158,8 @@ SSE 事件沿用聊天名称，所有事件带递增的 `id`；具体 payload �
 
 用量不转换成 Claude 成本、缓存写入或 Pro 余量。UI 用 `CcMessage.gptUsage/gptOutcome`，不把 GPT 数据强塞进 `CcTurnUsage`；有待核对保存的消息可用 `gptRetryRequest` 保留完整原请求。
 
+窗口配置 CAS 保存和滚动上下文加载成功后，才进行 Haven 持久请求登记并进入生成。上述准备失败时不消耗 request_id 的永久准入，故障恢复后可用完整原 body 和同一 request_id 重试；前端仍须等待严格保存成功才清除待核对请求。已登记请求的永久防重规则不变。
+
 请求身份与恢复：同 request_id 只能对应同一份规范化请求（包括显式模型、召回、日回顾和 handoff 选择），重试须保留原 body。相同活跃请求接回原流，不再次调用模型；不同内容复用标识、旧轮次号或同窗另一活跃请求拒绝。Haven 持久请求登记防止重启后重复生成；进程内缓冲只为可丢失的接回运行态，2 分钟保留、4 MiB 上限。缓冲超限返回 409 stream_buffer_lost，等待 Haven 已保存历史；无效游标返回 stream_cursor_invalid。POST 核对已保存请求时重放完整正文，不续接旧序号，客户端须原位替换同请求消息，不能再次追加成新轮。
 
 保存失败不发 done；本进程仍有未保存草稿时，新 request_id 返回 409 persistence_pending，先核对或重试保存，避免覆盖草稿。`persistence_unknown` 表示无法确认结果。原进程仍保留草稿时，相同 POST 先按 request_id 核对 Haven，存在则重放，不存在则只重试严格保存，绝不再次生成；保留期过后/重启丢失的未保存草稿无法恢复，登记阻止静默重跑，用户应核对历史后另发新请求。刷新或断网仅断订阅，显式停止、9 分钟单轮上限或部署排空截止才中止生成；最终保存不沿用被取消的 signal。部署沿用 serverDrain 的旧实例标记和门禁，GPT 不碰 Claude 订阅锁。共享事件缓冲用 engine 标记来源，CC attach/发送重放和 selfhost 预检拒绝把 GPT 当成旧引擎轮次，CC active_turn 不冒充报告 GPT。跨实例/多副本实时接回不在当前单 Gateway 部署契约内。
