@@ -242,7 +242,7 @@ selfhost thinking：中转站若把 `<thinking>` / `<think>` 放进 `text_delta`
 
 GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读取、`recordTurnStrict` compare-and-append 和 `cc/turnBroadcast` 订阅缓冲，不复用 selfhost 的 Anthropic adapter、MCP 或浏览器断线取消语义。共享广播增加可选 engine 标记，旧 CC 值缺省不变；旧引擎的接回与已存请求重放显式拒绝 GPT 来源，通用会话丢弃的 abort 仍能转发到 GPT 生成。具体路由/事件及恢复契约唯一维护在 reference「GPT 订阅聊天（文字）」。
 
-预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端先 CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照，再加载滚动上下文；两项准备成功并确认未取消后，才向 Haven 原子登记请求并交给生成任务。登记只有请求摘要与状态，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
+预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端先 CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照，再加载滚动上下文；两项准备成功并确认未取消后，才向 Haven 原子登记请求并交给生成任务。登记保存请求摘要、状态及无正文的发送前审计记录，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
 
 固定窗口复用 composeWindowPersonaAppend 的 handoff/日回顾及 session 静态背景；滚动窗口复用 loadRollingWindowAppend 的 raw/review/omit 日期、revision 冻结钉选桶、所选日记及其他既有长期层，通过 includeRooms:false 关闭房间读取和注入（旧调用缺省仍开启）。当前召回使用已有排除集合和冻结钉选 ID，历史召回从 raw_json.recall.additional_context 重放。仅投影 user/assistant 正文和召回参考，不投影 Claude 原生工具过程、thinking、附件内容或原生 session ID；当前文字追加北京时间。人设、固定事实与模块开关沿用 Haven。
 
@@ -251,3 +251,11 @@ GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读�
 生成任务与浏览器订阅分离。服务端从预检到最终 Haven 写入均登记 drain work；单轮 9 分钟上限，Haven admission lease 12 分钟，lease 到期只允许新 request_id 进入、从不重新执行原请求。停止仅中断生成，最终 strict commit 用独立超时。raw_json 保存引擎/模型、请求摘要、上下文 revision、召回、应用预算、官方 usage 与响应标识、outcome 和去密后的错误；正文和永久消息 ID 沿用现有历史，所以日回顾和日期正文读取不增加第二套数据源。
 
 保存不明时，进程保留期内可复用原草稿，仅核对/重试保存；丢失草稿后不会假装从服务端恢复未落库正文。GPT 线路保存为窗口偏好后，loadBackgroundTurnInputs 在加载 Claude 后台运行配置前拒绝执行，旧 wake 配置留存但不在 GPT 窗口运行；切回旧线路是否恢复开关由 UI 明示处理，不静默改掉用户旧配置。
+
+### GPT 上下文审计
+
+`context.ts` 在保留原拼接、时间和历史裁剪逻辑的同时，返回指纹所需的分段来源；`audit.ts` 对实际组装结果生成 SHA-256 元数据。runner 在调用传输前通过 Haven `prepare` 持久保存；失败或无法确认时不调用模型。这里的 body_hash 覆盖最终 SDK 请求对象的 model/instructions/input/store/stream，按对象键排序、数组原序进行 UTF-8 JSON 序列化；它不是原始 HTTP 字节抓包。`gpt_request_fingerprint` 仍只用于原发送参数幂等，不能代替 body_hash。
+
+Haven 在最终 SDK 调用处校验 body_hash，并通过私有管道等待数据库确认后才发 HTTP 请求。准备、开始发送、上游回执和终态分别记录，崩溃或断线缺少回执时不推断送达。Haven 持久化格式、隔离、迁移和删除边界唯一维护在 Haven reference。Dashboard 不把审计信息加入模型 input，也不在 raw_json 重复保存审计副本；保存重试不重新生成指纹或再次请求模型。
+
+`cc-context-audit` 的 GPT 分支在 CC transcript/MCP/背景重建之前分流，只读 Haven 轮次真实 usage 和持久指纹；当前 revision 只标为当前配置。原 `ContextAuditPanel` 内的 GPT 内容支持两轮选择、较早记录分页和首次不同消息位置，比较共同前缀而非整包哈希。历史正文恢复不含上一轮当时的运行时间，因此这也可能成为首个差异，面板明确提示，不在审计工作中修改缓存策略。旧轮次无证据显示“未记录”；记录读取失败显示失败，不当作缺失；真实缓存 0 与字段未知分开。哈希不能证明上游内部路由、分词、缓存保留或必然命中。

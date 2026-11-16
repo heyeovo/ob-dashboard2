@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { ACTIVE_SESSION_KEY } from '../cc/ccHistory'
 import Stat from '../components/Stat'
+import GptContextAudit from './GptContextAudit'
+import type { GptAuditData } from '../lib/gptSubscription/auditTypes'
 
 type AuditMessage = {
   id: string
@@ -165,6 +167,8 @@ function text(value: unknown): string {
 export default function ContextAuditPanel() {
   const [sessionId, setSessionId] = useState('')
   const [data, setData] = useState<AuditData | null>(null)
+  const [gptData, setGptData] = useState<GptAuditData | null>(null)
+  const [readVersion, setReadVersion] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -187,7 +191,9 @@ export default function ContextAuditPanel() {
       const response = await fetch(`/api/cc-context-audit?session_id=${encodeURIComponent(sessionId)}`, { cache: 'no-store' })
       const payload = await response.json()
       if (!response.ok || !payload.ok) throw new Error(String(payload.error || '读取失败'))
-      setData(payload as AuditData)
+      if (payload.engine === 'gpt_subscription') { setGptData(payload as GptAuditData); setData(null) }
+      else { setData(payload as AuditData); setGptData(null) }
+      setReadVersion(value => value + 1)
     } catch (reason) {
       setError((reason as Error).message || '读取失败')
     } finally {
@@ -204,7 +210,7 @@ export default function ContextAuditPanel() {
     <details
       className="group rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm"
       onToggle={event => {
-        if (event.currentTarget.open && !data && !loading) void refresh()
+        if (event.currentTarget.open && !data && !gptData && !loading) void refresh()
       }}
     >
       <summary className="cursor-pointer list-none px-4 py-4 sm:px-5">
@@ -225,6 +231,7 @@ export default function ContextAuditPanel() {
         {loading ? <p className="text-sm text-[var(--color-text-tertiary)]">正在读取 Haven 和最近一轮记录…</p> : null}
         {error ? <p className="rounded-lg bg-[var(--color-danger-bg)] px-3 py-2 text-sm text-[var(--color-danger)]">{error}</p> : null}
 
+        {gptData ? <GptContextAudit key={readVersion} initial={gptData} onRefresh={() => void refresh()} /> : null}
         {data ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-tertiary)]">

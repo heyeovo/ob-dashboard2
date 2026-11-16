@@ -54,6 +54,35 @@ beforeEach(() => {
 afterEach(() => { resetServerDrainForTests(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe('GPT runner', () => {
+  it('saves body-free assembled evidence before generation and refuses generation after audit failure', async () => {
+    const body = request()
+    const actions: string[] = []
+    f.control.mockImplementation(async value => {
+      actions.push(value.action)
+      if (value.action === 'prepare') {
+        expect(value.snapshot.body_hash).toMatch(/^[a-f0-9]{64}$/)
+        expect(JSON.stringify(value.snapshot)).not.toContain('人设')
+        return { ok: false, code: 'audit_persistence_failed' }
+      }
+      return { ok: true }
+    })
+    const response = await startGptTurn(body, new AbortController().signal)
+    const events = await response.text()
+    expect(actions).toContain('prepare')
+    expect(events).toContain('audit_persistence_failed')
+    expect(f.stream).not.toHaveBeenCalled()
+    expect(f.persist).not.toHaveBeenCalled()
+  })
+
+  it('persists the evidence before allowing streamGpt to run', async () => {
+    let prepared = false
+    f.control.mockImplementation(async value => { if (value.action === 'prepare') prepared = true; return { ok: true } })
+    f.stream.mockImplementation(async () => { expect(prepared).toBe(true); return { usage: null } })
+    const response = await startGptTurn(request(), new AbortController().signal)
+    await response.text()
+    expect(f.stream).toHaveBeenCalledOnce()
+  })
+
   function durableAdmission() {
     const admitted = new Set<string>()
     f.control.mockImplementation(async (body: { action: string; request_id: string }) => {

@@ -22,12 +22,13 @@ export function buildGptContext(input: {
   persona: HavenPersona; session: HavenConversationSession; history: HavenTurn[]
   rollingAppend: string; recall: string; text: string; now?: Date
 }) {
-  const instructions = [composeWindowPersonaAppend(
-    buildPersonaAppend(input.persona, input.session.prompt_module_overrides),
-    input.session, input.session.session_id, input.rollingAppend),
-  '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。',
-  recallBlock(input.recall)].filter(Boolean).join('\n\n')
-  const current = `${input.text}\n\n${beijingRuntimeContext(input.now)}`
+  const persona = buildPersonaAppend(input.persona, input.session.prompt_module_overrides)
+  const window = composeWindowPersonaAppend(persona, input.session, input.session.session_id, input.rollingAppend)
+  const capability = '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。'
+  const recalledCurrent = recallBlock(input.recall)
+  const instructions = [window, capability, recalledCurrent].filter(Boolean).join('\n\n')
+  const currentTime = beijingRuntimeContext(input.now)
+  const current = `${input.text}\n\n${currentTime}`
   const fixed = Math.ceil((estimateTokens(instructions) + estimateTokens(current) + 16) * 1.05)
   if (fixed > GPT_INPUT_BUDGET) throw new Error('人设、背景和当前消息过长，请减少带入的日期或记忆')
   const selected: HavenTurn[] = []
@@ -43,14 +44,19 @@ export function buildGptContext(input: {
     selected.unshift(turn); total += tokens; messages += count
   }
   const history: GptInput[] = []
+  const sourceRounds: Array<number | null> = []
   for (const turn of selected) {
     const recalled = recallBlock(turnRecall(turn))
     if (recalled) history.push({ role: 'developer', content: recalled })
     if (turn.user_text) history.push({ role: 'user', content: turn.user_text })
     if (turn.assistant_text) history.push({ role: 'assistant', content: turn.assistant_text })
+    for (let i = sourceRounds.length; i < history.length; i++) sourceRounds.push(turn.round_id)
   }
   history.push({ role: 'user', content: current })
-  return { instructions, input: history, context: {
+  sourceRounds.push(null)
+  return { instructions, input: history, sourceRounds,
+    auditParts: { persona, window, background: input.rollingAppend, capability, recall: recalledCurrent, current_text: input.text, current_time: currentTime },
+    context: {
     estimator: 'utf8-bytes-div-3-v1', estimate_safety_ratio: 1.05,
     input_tokens_estimated: total, application_input_budget: GPT_INPUT_BUDGET,
     model_context_limit: null, included_history_rounds: selected.length,

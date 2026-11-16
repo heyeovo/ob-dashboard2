@@ -11,6 +11,7 @@ import { buildPersonaAppend, getPersona, promptModulesForPersona } from '@/app/l
 import { claudeToolAudit, mcpToolsContentHash, systemPromptContentHash } from '@/app/lib/cc/ccOptions'
 import { readSystemPromptAudit } from '@/app/lib/cc/systemPromptAudit'
 import { redactRoomDoorsDeep } from '@/app/lib/roomPrivacy'
+import { readGptAudit } from '@/app/lib/gptSubscription/auditRead'
 import { configuredMcpModelSurface, disabledMcpTools, loadMcpConfig } from '@/app/lib/ccMcp'
 import { builtInMcpModelSurfaces, builtInMcpServerNames } from '@/app/lib/cc/builtInMcp'
 import { agentWakeMcpAudit } from '@/app/lib/cc/agentWakeTool'
@@ -71,6 +72,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = sessionResult.session
+    if (session.local_engine_preference === 'gpt_subscription' || request.nextUrl.searchParams.get('engine') === 'gpt_subscription') {
+      return Response.json(await readGptAudit(sessionId, session, request.nextUrl.searchParams), { headers: { 'Cache-Control': 'no-store' } })
+    }
     const [rolling, latestResult, globalMcpConfig] = await Promise.all([
       loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { logDiagnostics: false, persistPinnedSnapshot: false }),
       listTurns(sessionId, { limit: 50, includeRaw: true }),

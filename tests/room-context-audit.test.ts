@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 const fixture = vi.hoisted(() => {
   const content = '<rolling_window_context>\n日回顾\n【我的房间 · 今天的门牌】\n[room_abc] 私密标题\n便条：秘密\n</rolling_window_context>'
-  return { content }
+  return { content, engine: '' }
 })
-vi.mock('@/app/lib/havenTurns', () => ({ getRollingSeedReceipt: vi.fn(async () => null), getConversationSession: vi.fn(async () => ({ ok: true, found: true, contextDays: [], session: { title: '测试', mode: 'chat', persona_id: 'p', context_revision: 1, rolling_context: { strategy: 'daily_rolling', day_modes: {} }, prompt_module_overrides: {} } })), listTurns: vi.fn(async () => ({ ok: true, turns: [] })) }))
+vi.mock('@/app/lib/havenTurns', () => ({ getRollingSeedReceipt: vi.fn(async () => null), getConversationSession: vi.fn(async () => ({ ok: true, found: true, contextDays: [], session: { local_engine_preference: fixture.engine, title: '测试', mode: 'chat', persona_id: 'p', context_revision: 1, rolling_context: { strategy: 'daily_rolling', day_modes: {} }, prompt_module_overrides: {} } })), listTurns: vi.fn(async () => ({ ok: true, turns: [] })) }))
+vi.mock('@/app/lib/gptSubscription/auditRead', () => ({ readGptAudit: vi.fn(async () => ({ ok: true, engine: 'gpt_subscription', turns: [] })) }))
 vi.mock('@/app/lib/cc/windowPrompt', () => ({ loadRollingWindowAppend: vi.fn(async () => ({ content: fixture.content, history: [], pinnedBucketIds: [], journalIds: [], recentBucketIds: [], feelBucketIds: [], randomHighImportanceBucketIds: [] })), composeWindowPersonaAppend: vi.fn(() => fixture.content) }))
 vi.mock('@/app/lib/cc/rollingArchive', () => ({ inspectRollingArchive: vi.fn(async () => null) }))
 vi.mock('@/app/lib/cc/rollingHistory', () => ({ inspectRollingHistoryTranscript: vi.fn(async () => null) }))
@@ -15,9 +16,12 @@ vi.mock('@/app/lib/ccMcp', () => ({ loadMcpConfig: vi.fn(async () => ({ version:
 vi.mock('@/app/lib/cc/builtInMcp', () => ({ builtInMcpModelSurfaces: vi.fn(() => []), builtInMcpServerNames: vi.fn(() => []) }))
 vi.mock('@/app/lib/cc/agentWakeTool', () => ({ agentWakeMcpAudit: vi.fn(() => ({})) }))
 import { GET } from '@/app/api/cc-context-audit/route'
+import { loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
+import { readGptAudit } from '@/app/lib/gptSubscription/auditRead'
 
 describe('context audit room privacy', () => {
   it('seals current append, saved latest append and rolling background at the actual browser route', async () => {
+    fixture.engine = ''
     const response = await GET(new NextRequest('https://dashboard.example/api/cc-context-audit?session_id=s'))
     const data = await response.json()
     expect(response.status).toBe(200)
@@ -25,5 +29,14 @@ describe('context audit room privacy', () => {
       expect(content).toContain('【我的房间 · 今天的门牌】已封存')
       expect(content).not.toContain('私密标题'); expect(content).not.toContain('秘密')
     }
+  })
+  it('branches GPT before inspecting CC transcripts, rebuilding background or loading tools', async () => {
+    fixture.engine = 'gpt_subscription'
+    vi.mocked(loadRollingWindowAppend).mockClear()
+    const response = await GET(new NextRequest('https://dashboard.example/api/cc-context-audit?session_id=s'))
+    expect((await response.json()).engine).toBe('gpt_subscription')
+    expect(readGptAudit).toHaveBeenCalled()
+    expect(loadRollingWindowAppend).not.toHaveBeenCalled()
+    fixture.engine = ''
   })
 })

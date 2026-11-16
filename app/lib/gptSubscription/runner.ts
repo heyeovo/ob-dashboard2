@@ -10,6 +10,7 @@ import { loadRollingWindowAppend } from '../cc/windowPrompt'
 import { createTurnBroadcast, finishTurn, publishTurn, turnStream, type TurnBroadcast } from '../cc/turnBroadcast'
 import { drainRejection, trackDrainWork } from '../serverDrain'
 import { buildGptContext } from './context'
+import { buildGptAudit } from './audit'
 import { controlGptRequest, GptTransportError, streamGpt } from './transport'
 import { GPT_ENGINE, gptError, type GptDone, type GptError, type GptEventMap, type GptRequest } from './contract'
 
@@ -131,6 +132,9 @@ async function generate(job: Job, prepared: {
     recallData.additional_context = recalledText
     const assembled = buildGptContext({ ...prepared, recall: recalledText, text: request.text })
     context = assembled.context; send(job, 'context', context)
+    const audit = await controlGptRequest({ action: 'prepare', request_id: request.request_id,
+      session_id: request.session_id, owner: job.owner, snapshot: buildGptAudit(prepared.model, assembled) })
+    if (!audit.ok) throw new GptTransportError(audit.code || 'audit_persistence_failed', '发送前审计记录未保存，本轮尚未发送', true)
     job.abort.signal.throwIfAborted()
     startedModel = true
     const result = await streamGpt({ request_id: request.request_id, model: prepared.model,
