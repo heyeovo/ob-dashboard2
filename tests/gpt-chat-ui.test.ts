@@ -119,4 +119,26 @@ describe('GPT UI request and recovery contract', () => {
     expect(normalizeGptUsage({ total_tokens: null, input_tokens: -1 })).toEqual({ input_tokens: null,
       output_tokens: null, total_tokens: null, cached_tokens: null, reasoning_tokens: null })
   })
+  it('receives application estimates and elapsed time without inventing model limits', async () => {
+    const h = harness()
+    await h.consume(stream([['context', { input_tokens_estimated: 1234, application_input_budget: 120000,
+      model_context_limit: null, included_history_rounds: 2, omitted_history_rounds: 0 }], ['done', done]]))
+    expect(h.messages[1]).toMatchObject({ gptContext: { inputTokensEstimated: 1234,
+      applicationInputBudget: 120000, modelContextLimit: null, includedHistoryRounds: 2, omittedHistoryRounds: 0 },
+      gptElapsedMs: 12 })
+    expect(h.messages[1].context).toBeUndefined()
+  })
+  it('restores saved estimates, leaving absent duration and model maximum unavailable', () => {
+    const row = turn()
+    row.raw_json = JSON.stringify({ ...JSON.parse(row.raw_json!), context: {
+      input_tokens_estimated: 0, application_input_budget: 120000,
+      model_context_limit: null, included_history_rounds: 0, omitted_history_rounds: 0 } })
+    expect(turnsToMessages([row])[1]).toMatchObject({ gptContext: { inputTokensEstimated: 0,
+      modelContextLimit: null, includedHistoryRounds: 0 }, gptElapsedMs: null })
+  })
+  it('does not turn a replay placeholder duration into a measured zero', async () => {
+    const h = harness()
+    await h.consume(stream([['done', { ...done, elapsed_ms: 0, idempotent_replay: true }]]))
+    expect(h.messages[1].gptElapsedMs).toBeNull()
+  })
 })

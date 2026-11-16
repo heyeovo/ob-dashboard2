@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 import { formatCost, formatTokens } from './format'
 import { EFFORT_OPTIONS, modelsFor, prettyModelName } from './upstream'
 import type { CcChatScope } from './CcChatScope'
+import { useChatDisplayPreferences } from '@/app/lib/chatDisplayPreferences'
 
 export default function CcTopbar({ scope }: { scope: CcChatScope }) {
   const { chat, people, selectMode, stopSelecting, selectedMessageIds, setMobileView,
     setActiveHistorical, setPersonaRailOpen, setWinSetOpen, setHistoryDateOpen } = scope
-  const { shownProvider, shownModel, ctxTokens, ctxMax, cacheLabel } = scope.metrics
+  const { shownProvider, shownModel, ctxTokens, ctxMax, cacheLabel, gptContext } = scope.metrics
+  const { showRuntimeInfo } = useChatDisplayPreferences()
   const [quickOpen, setQuickOpen] = useState(false)
   const quickRef = useRef<HTMLDivElement>(null)
   // 模型快切下拉点外面收起
@@ -52,7 +54,7 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
             <span className="truncate font-[family-name:var(--font-display)] text-md font-semibold text-[var(--color-text-heading)]">{people.active.name}</span>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold tracking-[var(--label-tracking)] ${mode === 'CHAT' ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' : 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]'}`}>{mode}</span>
           </div>
-          <div ref={quickRef} className="relative max-w-full">
+          {!gpt || showRuntimeInfo ? <div ref={quickRef} className="relative max-w-full">
             <button type="button" onClick={() => gpt ? setWinSetOpen(true) : !selfhost && setQuickOpen(open => !open)} disabled={selfhost}
               aria-expanded={quickOpen} aria-haspopup="menu"
               className="flex max-w-full items-center gap-0.5 text-left text-2xs text-[var(--color-text-tertiary)] disabled:cursor-default"
@@ -84,9 +86,9 @@ export default function CcTopbar({ scope }: { scope: CcChatScope }) {
                 </div>
               </div>
             ) : null}
-          </div>
+          </div> : null}
           <div className="hidden truncate whitespace-nowrap text-2xs text-[var(--color-text-disabled)] md:block">
-            {chat.stats.turnCount} 轮 · {gpt ? '文字聊天 · 额度未知' : chat.stats.compacting ? 'Context 压缩中' : ctxTokens > 0 ? `${formatTokens(ctxTokens)}${ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}` : 'Context 待确认'}
+            {chat.stats.turnCount} 轮 · {gpt ? `${showRuntimeInfo ? `Context ${gptContext?.inputTokensEstimated != null ? `估算 ${formatTokens(ctxTokens)}` : '未取得'} · ` : ''}额度未取得` : chat.stats.compacting ? 'Context 压缩中' : ctxTokens > 0 ? `${formatTokens(ctxTokens)}${ctxMax > 0 ? ` / ${formatTokens(ctxMax)}` : ''}` : 'Context 待确认'}
             {!gpt && chat.stats.totalCostUsd > 0 && chat.pick.kind !== 'subscription' ? ` · ${formatCost(chat.stats.totalCostUsd)}` : ''}
             {chat.effectiveEngine === 'cc' ? ` · ${cacheLabel}` : ''}
           </div>

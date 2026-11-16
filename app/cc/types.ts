@@ -9,6 +9,14 @@ import type { WakeDisplayOp } from './wakeDisplay'
 import type { DisplaySegment } from '@/app/lib/cc/displaySegments'
 
 export type CcRole = 'user' | 'assistant' | 'system'
+/** GPT application estimates, separate from CC model limits and actual usage. */
+export type GptDisplayContext = {
+  inputTokensEstimated: number | null
+  applicationInputBudget: number | null
+  modelContextLimit: number | null
+  includedHistoryRounds: number | null
+  omittedHistoryRounds: number | null
+}
 export type CcEngine = 'cc' | 'selfhost' | 'gpt_subscription'
 
 export type CcProUsage = {
@@ -162,6 +170,8 @@ export type CcMessage = {
   usage?: CcTurnUsage | null
   /** GPT actual usage is separate; unavailable fields stay null, with no fake CC cost/cache. */
   gptUsage?: GptUsage | null
+  gptContext?: GptDisplayContext | null
+  gptElapsedMs?: number | null
   gptOutcome?: GptDone['outcome']
   /** Preserve the exact request while its save is unresolved, for idempotent retry. */
   gptRetryRequest?: GptRequest

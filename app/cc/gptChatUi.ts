@@ -2,7 +2,7 @@ import type { CcMessage, GptEventMap, GptRequest, GptError } from './types'
 import { consumeSseStream, type SseHandlers } from './ccSseConsumer'
 import { turnsToMessages, type HavenTurnRow } from './ccHistory'
 import { mergeTurnMessages } from './turnRecovery'
-import { gptErrorNote, gptOutcomeNote, normalizeGptUsage } from './gptPresentation'
+import { gptErrorNote, gptOutcomeNote, normalizeGptUsage, normalizeGptContext, normalizeGptElapsed } from './gptPresentation'
 import { buildStableDisplaySegments } from '@/app/lib/cc/displaySegments'
 
 type Update = (apply: (messages: CcMessage[]) => CcMessage[]) => void
@@ -56,7 +56,8 @@ export async function consumeGptResponse(response: Response, options: {
     streaming: true, deliveryState: 'generating', deliveryNote: undefined }))
   const noop = () => {}
   const handlers: SseHandlers = {
-    onStart: noop, onContext: noop, onContextSnapshot: noop, onCompact: noop, onCompactStatus: noop,
+    onStart: noop, onContext: value => patch(message => ({ ...message, gptContext: normalizeGptContext(value) })),
+    onContextSnapshot: noop, onCompact: noop, onCompactStatus: noop,
     onThinking: noop, onTool: noop, onToolResult: noop, onPermission: noop, onPermissionResolved: noop, onAfter: noop,
     onInit: value => { const data = value as GptEventMap['init']; patch(message => ({ ...message, model: data.model })) },
     onDelta: value => { const data = value as GptEventMap['delta']; patch(message => {
@@ -78,6 +79,7 @@ export async function consumeGptResponse(response: Response, options: {
         roundId: data.round_id,
         ...(message.role === 'assistant' ? { streaming: false, engine: 'gpt_subscription' as const,
           model: data.model, gptUsage: normalizeGptUsage(data.usage), gptOutcome: data.outcome,
+          gptElapsedMs: normalizeGptElapsed(data.elapsed_ms),
           interrupted: data.outcome !== 'completed', gptRetryRequest: undefined,
           deliveryState: 'saved' as const,
           deliveryNote: data.outcome === 'failed' && message.deliveryNote

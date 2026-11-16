@@ -67,6 +67,7 @@ for r in /workspace/dashboard /workspace/haven; do cd $r && git fetch -q --prune
 ## 设计与组件
 
 - 动 UI 前完整读 `DESIGN.md`。优先复用现有组件；颜色、边框、背景、圆角、阴影和动效必须用现有设计 Token，禁止硬编码或自行拼装重复组件。缺语义 Token 时先更新 `globals.css` 和 `DESIGN.md` 再用
+- GPT 消息复用原 token 操作栏与明细样式，不另加来源/用量行；模型来源和上下文入口服从现有运行信息开关，token 服从 Token 开关。GPT 的输入估算、真实 token、耗时及未知值边界见 `docs/reference.md`「GPT 订阅聊天」。
 - 字号只用 `DESIGN.md` 的命名档位类，不再写 `text-[Npx]`；标题、正文、小字各由独立系数缩放
 - 移动端优先：新功能和样式调整先保证手机端体验
 - 弹窗统一 `DetailPanel`（`mode="drawer"` 右侧滑入，`mode="modal"` 居中）；自己写的全屏浮层包 `BodyPortal` 挂到 body，否则会被底部 Tab 压住（见 `DESIGN.md`「层级」）

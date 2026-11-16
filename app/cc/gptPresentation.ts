@@ -1,4 +1,25 @@
-import type { GptUsage, GptError, GptDone } from './types'
+import type { GptUsage, GptError, GptDone, GptDisplayContext } from './types'
+
+export function normalizeGptContext(value: unknown): GptDisplayContext | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const number = (key: string) => typeof raw[key] === 'number' && Number.isFinite(raw[key])
+    && Number(raw[key]) >= 0 ? Number(raw[key]) : null
+  const context = { inputTokensEstimated: number('input_tokens_estimated'),
+    applicationInputBudget: number('application_input_budget'), modelContextLimit: number('model_context_limit'),
+    includedHistoryRounds: number('included_history_rounds'), omittedHistoryRounds: number('omitted_history_rounds') }
+  return Object.values(context).some(value => value !== null) ? context : null
+}
+
+/** Replayed done events use zero when the original duration is unavailable. */
+export function normalizeGptElapsed(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+export function gptTotalTokens(usage: GptUsage | null | undefined): number | null {
+  return usage?.total_tokens ?? (usage?.input_tokens != null && usage.output_tokens != null
+    ? usage.input_tokens + usage.output_tokens : null)
+}
 
 export function normalizeGptUsage(value: unknown): GptUsage | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null

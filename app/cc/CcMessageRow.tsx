@@ -1,5 +1,5 @@
 'use client'
-import CcGptUsage from './CcGptUsage'
+import CcGptUsage, { GptUsageTokenButton } from './CcGptUsage'
 
 import CcSentImage from './CcSentImage'
 import { parseSentImage, SEND_IMAGE_TOOL } from '@/app/lib/cc/sendImageResult'
@@ -849,7 +849,7 @@ export default function CcMessageRow({
         ) : null}
 
         {/* 行内操作和时间 */}
-        {(!message.streaming && message.text) || message.recall?.injected || message.deliveryState === 'detached' || message.deliveryState === 'persistence_unknown' ? (
+        {(!message.streaming && (message.text || (gpt && (message.gptUsage || message.gptElapsedMs != null)))) || message.recall?.injected || message.deliveryState === 'detached' || message.deliveryState === 'persistence_unknown' ? (
           <div className="cc-row-actions flex items-center gap-3 pt-0.5 text-meta text-[var(--color-text-tertiary)]">
             {!message.streaming && message.text ? <>
             <button
@@ -897,7 +897,7 @@ export default function CcMessageRow({
             ) : null}
 
             {/* 上下文详情 */}
-            {message.context ? (
+            {(gpt ? showRuntimeInfo && message.gptContext : message.context) ? (
               <div ref={contextRef} className="relative">
                 <button
                   type="button"
@@ -920,7 +920,13 @@ export default function CcMessageRow({
                     className="absolute bottom-full left-0 z-30 mb-1.5 w-64 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3 text-meta text-[var(--color-text-tertiary)] shadow-lg"
                   >
                     <div className="mb-2 font-medium text-[var(--color-text-secondary)]">上下文详情</div>
-                    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
+                    {gpt ? <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
+                      <dt>本轮总输入估算</dt><dd className={USAGE_NUM}>{message.gptContext?.inputTokensEstimated?.toLocaleString() ?? '未取得'}</dd>
+                      <dt>带入历史</dt><dd className={USAGE_NUM}>{message.gptContext?.includedHistoryRounds == null ? '未取得' : `${message.gptContext.includedHistoryRounds.toLocaleString()} 轮`}</dd>
+                      <dt>丢弃历史</dt><dd className={USAGE_NUM}>{message.gptContext?.omittedHistoryRounds == null ? '未取得' : `${message.gptContext.omittedHistoryRounds.toLocaleString()} 轮`}</dd>
+                      <dt>应用输入预算</dt><dd className={USAGE_NUM}>{message.gptContext?.applicationInputBudget?.toLocaleString() ?? '未取得'}</dd>
+                      <dt>模型名义上限</dt><dd className={USAGE_NUM}>{message.gptContext?.modelContextLimit?.toLocaleString() ?? '未取得'}</dd>
+                    </dl> : message.context ? <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5">
                       <dt>本轮总输入估算</dt>
                       <dd className={USAGE_NUM}>{message.context.inputTokensEstimated.toLocaleString()}</dd>
                       <dt>带入历史</dt>
@@ -933,13 +939,13 @@ export default function CcMessageRow({
                       <dd className={USAGE_NUM}>{message.context.modelContextLimit.toLocaleString()}</dd>
                       <dt>回复预留</dt>
                       <dd className={USAGE_NUM}>{message.context.replyReserveTokens.toLocaleString()} token</dd>
-                    </dl>
+                    </dl> : null}
                   </div>
                 ) : null}
               </div>
             ) : null}
 
-            {message.recall?.injected || (usage && showTokenInfo) ? (
+            {message.recall?.injected || ((usage || gpt) && showTokenInfo) ? (
               <div className="ml-auto flex items-center gap-1.5">
                 {message.recall?.injected ? (
                   // 点击范围 44px 向左延伸，图标和条数靠右贴着 token 数
@@ -956,15 +962,14 @@ export default function CcMessageRow({
                   </button>
                 ) : null}
                 {usage && showTokenInfo ? <UsageTokenButton usage={usage} onClick={() => setUsageOpen(v => !v)} /> : null}
+                {gpt && showTokenInfo ? <GptUsageTokenButton usage={message.gptUsage} onClick={() => setUsageOpen(v => !v)} /> : null}
               </div>
             ) : null}
           </div>
         ) : null}
 
         {gpt && !isUser ? <div className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-          <span>来源：GPT 订阅{message.model ? ` · ${message.model}` : ''}</span>
           {message.gptOutcome === 'failed' && message.deliveryNote ? <p role="alert" className="mt-1 break-words text-[var(--color-danger)]">{message.deliveryNote}</p> : null}
-          {showTokenInfo ? <CcGptUsage usage={message.gptUsage} /> : null}
           {['not_saved', 'persistence_unknown'].includes(message.deliveryState || '') ? <>
             <p className="mt-1 break-words text-[var(--color-danger)]">{message.deliveryNote}</p>
             <button type="button" onClick={() => onRetryPersistence?.(message)} className="min-h-11 text-[var(--color-primary)]">
@@ -974,6 +979,7 @@ export default function CcMessageRow({
         </div> : null}
         {/* token 明细。⚠️ 「缓存读」那部分是按 1/10 价计费的，别把它跟输入加起来看成花了多少钱 */}
         {usage && showTokenInfo && usageOpen ? <UsageDetails usage={usage} /> : null}
+        {gpt && showTokenInfo && usageOpen ? <CcGptUsage usage={message.gptUsage} elapsedMs={message.gptElapsedMs} /> : null}
       </div>
 
       {openTool ? <CcToolDialog tool={openTool} onClose={() => setOpenToolId(null)} /> : null}

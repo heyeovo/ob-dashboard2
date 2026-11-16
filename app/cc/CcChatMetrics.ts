@@ -91,13 +91,20 @@ export function getCcChatMetrics(chat: Chat, people: People, cacheClock: number)
       : '',
   ].filter(Boolean).join('\n\n')
 
-  if (chat.effectiveEngine === 'gpt_subscription') return {
-    shownModel: chat.gptModel, shownProvider: 'GPT 订阅', contextSnapshot: null, ctxTokens: 0, ctxMax: 0, cacheLabel: '',
-    displayStats: { ...displayStats, contextSnapshot: null, contextTokens: 0, contextMaxTokens: 0,
-      cacheRefreshedAt: 0, cacheRemainingMs: 0, cacheSystemRemainingMs: 0,
-      lastCompaction: null, compactionCount: 0, totalCostUsd: 0, recentCosts: [] },
-    totalChars, conversationText, systemPromptText,
+  if (chat.effectiveEngine === 'gpt_subscription') {
+    const latestGpt = [...chat.messages].reverse().find(message =>
+      message.role === 'assistant' && message.engine === 'gpt_subscription')
+    const gptTokens = latestGpt?.gptContext?.inputTokensEstimated ?? 0
+    const gptMax = latestGpt?.gptContext?.modelContextLimit ?? 0
+    return {
+      shownModel: latestGpt?.model || chat.gptModel, shownProvider: 'GPT 订阅', contextSnapshot: null,
+      gptContext: latestGpt?.gptContext || null, ctxTokens: gptTokens, ctxMax: gptMax, cacheLabel: '',
+      displayStats: { ...displayStats, contextSnapshot: null, contextTokens: gptTokens, contextMaxTokens: gptMax,
+        cacheRefreshedAt: 0, cacheRemainingMs: 0, cacheSystemRemainingMs: 0,
+        lastCompaction: null, compactionCount: 0, totalCostUsd: 0, recentCosts: [] },
+      totalChars, conversationText, systemPromptText,
+    }
   }
-  return { shownModel, shownProvider, contextSnapshot, ctxTokens, ctxMax, cacheLabel,
+  return { shownModel, shownProvider, contextSnapshot, gptContext: null, ctxTokens, ctxMax, cacheLabel,
     displayStats, totalChars, conversationText, systemPromptText }
 }

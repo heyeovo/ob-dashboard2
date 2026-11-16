@@ -1,5 +1,5 @@
 import { parseWakeOps, type WakeDisplayOp } from './wakeDisplay'
-import { gptErrorNote, gptOutcomeNote, normalizeGptUsage } from './gptPresentation'
+import { gptErrorNote, gptOutcomeNote, normalizeGptUsage, normalizeGptContext, normalizeGptElapsed } from './gptPresentation'
 // /cc 聊天页的历史数据转换（9.5 从 useCcChat 原样抽出，纯函数，可单独测）。
 //
 // Haven 的一轮（user + assistant 一行）→ 界面上的消息；raw_json 里的
@@ -221,6 +221,8 @@ export function parseTurnRaw(rawJson: string | undefined): {
   interruptedReason: CcInterruptedReason | undefined
   engine: CcMessage['engine']
   gptUsage?: CcMessage['gptUsage']
+  gptContext?: CcMessage['gptContext']
+  gptElapsedMs?: CcMessage['gptElapsedMs']
   gptOutcome?: CcMessage['gptOutcome']
   gptFailureNote?: string
   providerId: string
@@ -274,6 +276,7 @@ export function parseTurnRaw(rawJson: string | undefined): {
       ? raw.generation_error as Record<string, unknown> : null
     return { ...empty, engine: 'gpt_subscription', model: typeof raw.model === 'string' ? raw.model : '',
       gptUsage: normalizeGptUsage(raw.usage), gptOutcome: outcome, interrupted: outcome !== 'completed',
+      gptContext: normalizeGptContext(raw.context), gptElapsedMs: normalizeGptElapsed(raw.elapsed_ms),
       gptFailureNote: error && typeof error.message === 'string'
         ? gptErrorNote({ message: error.message, action: typeof error.action === 'string' ? error.action : undefined }) : undefined,
       recall: normalizeRecall(raw.recall) }
@@ -560,6 +563,8 @@ export function turnsToMessages(turns: HavenTurnRow[]): CcMessage[] {
         recall: extra.recall,
         usage: extra.usage,
         gptUsage: extra.gptUsage,
+        gptContext: extra.gptContext,
+        gptElapsedMs: extra.gptElapsedMs,
         gptOutcome: extra.gptOutcome,
         interrupted: extra.interrupted || undefined,
         interruptedReason: extra.interruptedReason,
