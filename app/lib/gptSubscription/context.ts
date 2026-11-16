@@ -18,6 +18,18 @@ function recallBlock(value: string) {
   return value.trim() ? `<haven_recall_reference>\n${value.trim()}\n</haven_recall_reference>` : ''
 }
 
+function turnUserContent(turn: HavenTurn): string {
+  if (turn.source === 'gpt_subscription' && turn.user_text) {
+    try {
+      const runtime = JSON.parse(turn.raw_json || '{}')?.gpt_runtime_context
+      if (typeof runtime === 'string' && runtime.length > 0 && runtime.length <= 1024) {
+        return `${turn.user_text}\n\n${runtime}`
+      }
+    } catch { /* Old or malformed metadata must not invent a historical time. */ }
+  }
+  return turn.user_text || ''
+}
+
 export function buildGptContext(input: {
   persona: HavenPersona; session: HavenConversationSession; history: HavenTurn[]
   rollingAppend: string; recall: string; text: string; now?: Date
@@ -26,19 +38,21 @@ export function buildGptContext(input: {
   const window = composeWindowPersonaAppend(persona, input.session, input.session.session_id, input.rollingAppend)
   const capability = '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。'
   const recalledCurrent = recallBlock(input.recall)
-  const instructions = [window, capability, recalledCurrent].filter(Boolean).join('\n\n')
+  const instructions = [window, capability].filter(Boolean).join('\n\n')
   const currentTime = beijingRuntimeContext(input.now)
   const current = `${input.text}\n\n${currentTime}`
-  const fixed = Math.ceil((estimateTokens(instructions) + estimateTokens(current) + 16) * 1.05)
+  const fixed = Math.ceil((estimateTokens(instructions) + estimateTokens(current)
+    + estimateTokens(recalledCurrent) + 16 + (recalledCurrent ? 8 : 0)) * 1.05)
   if (fixed > GPT_INPUT_BUDGET) throw new Error('人设、背景和当前消息过长，请减少带入的日期或记忆')
   const selected: HavenTurn[] = []
   let total = fixed
-  let messages = 1
+  let messages = 1 + Number(Boolean(recalledCurrent))
   for (let i = input.history.length - 1; i >= 0; i--) {
     const turn = input.history[i]
     const recalled = turnRecall(turn)
+    const userContent = turnUserContent(turn)
     const count = Number(Boolean(turn.user_text)) + Number(Boolean(turn.assistant_text)) + Number(Boolean(recalled))
-    const tokens = Math.ceil((estimateTokens(turn.user_text) + estimateTokens(turn.assistant_text)
+    const tokens = Math.ceil((estimateTokens(userContent) + estimateTokens(turn.assistant_text)
       + estimateTokens(recallBlock(recalled)) + 16) * 1.05)
     if (total + tokens > GPT_INPUT_BUDGET || messages + count > 1999) break
     selected.unshift(turn); total += tokens; messages += count
@@ -48,9 +62,13 @@ export function buildGptContext(input: {
   for (const turn of selected) {
     const recalled = recallBlock(turnRecall(turn))
     if (recalled) history.push({ role: 'developer', content: recalled })
-    if (turn.user_text) history.push({ role: 'user', content: turn.user_text })
+    if (turn.user_text) history.push({ role: 'user', content: turnUserContent(turn) })
     if (turn.assistant_text) history.push({ role: 'assistant', content: turn.assistant_text })
     for (let i = sourceRounds.length; i < history.length; i++) sourceRounds.push(turn.round_id)
+  }
+  if (recalledCurrent) {
+    history.push({ role: 'developer', content: recalledCurrent })
+    sourceRounds.push(null)
   }
   history.push({ role: 'user', content: current })
   sourceRounds.push(null)

@@ -115,6 +115,7 @@ async function generate(job: Job, prepared: {
   let startedModel = false
   let recallData: Record<string, unknown> = {}
   let context: Record<string, unknown> = {}
+  let runtimeContext: string | undefined
   try {
     const recall = resolveRecallEnabled(request.recall, prepared.session.recall_mode, 'chat')
       ? await recallForPrompt(request.text, { sessionId: request.session_id, excludeIds: prepared.exclusions,
@@ -131,6 +132,7 @@ async function generate(job: Job, prepared: {
     send(job, 'recall', recallData as GptEventMap['recall'])
     recallData.additional_context = recalledText
     const assembled = buildGptContext({ ...prepared, recall: recalledText, text: request.text })
+    runtimeContext = assembled.auditParts.current_time
     context = assembled.context; send(job, 'context', context)
     const audit = await controlGptRequest({ action: 'prepare', request_id: request.request_id,
       session_id: request.session_id, owner: job.owner, snapshot: buildGptAudit(prepared.model, assembled) })
@@ -156,6 +158,7 @@ async function generate(job: Job, prepared: {
     recalledBucketIds: recallData.recalled_ids as string[] || [], timeoutMs: 30_000,
     raw: { version: 1, engine: GPT_ENGINE, model: prepared.model, request_id: request.request_id,
       gpt_request_fingerprint: job.fingerprint, rolling_context_revision: prepared.session.context_revision,
+      gpt_runtime_context: runtimeContext,
       outcome, stop_reason: outcome, usage, response_id: responseId, official_request_id: officialRequestId,
       recall: recallData, context, generation_error: job.generationError },
   }

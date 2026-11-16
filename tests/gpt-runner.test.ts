@@ -155,8 +155,11 @@ describe('GPT runner', () => {
     expect(f.persist).toHaveBeenCalledWith(expect.objectContaining({ source: 'gpt_subscription', model: 'gpt-test',
       requestId: body.request_id, expectedLastRoundId: 0, recalledBucketIds: ['memory'],
       raw: expect.objectContaining({ usage: null, rolling_context_revision: 2, gpt_request_fingerprint: requestFingerprint(body) }) }))
-    expect(f.stream.mock.calls[0][0].instructions).toContain('记忆')
+    expect(f.stream.mock.calls[0][0].instructions).not.toContain('记忆')
+    expect(f.stream.mock.calls[0][0].input.at(-2).content).toContain('记忆')
     expect(f.stream.mock.calls[0][0].input.at(-1).content).toContain('北京时间')
+    expect(f.persist.mock.calls[0][0].raw.gpt_runtime_context).toContain('北京时间')
+    expect(f.stream.mock.calls[0][0].input.at(-1).content).toBe(`${body.text}\n\n${f.persist.mock.calls[0][0].raw.gpt_runtime_context}`)
   })
   it('rejects stale history before calling the model', async () => {
     f.history.mockResolvedValue({ ok: true, turns: [{ round_id: 1 }] })
@@ -238,6 +241,7 @@ describe('GPT runner', () => {
     const text = await (await POST(http(body))).text()
     expect(text).toContain('"generated_not_saved":true')
     expect(text).not.toContain('event: done')
+    const originalRuntime = f.persist.mock.calls[0][0].raw.gpt_runtime_context
     const blocked = await POST(http({ ...body, request_id: `${body.request_id}-next` }))
     expect(blocked.status).toBe(409)
     expect((await blocked.json()).error.code).toBe('persistence_pending')
@@ -245,6 +249,7 @@ describe('GPT runner', () => {
     expect(retry).toContain('event: done')
     expect(f.stream).toHaveBeenCalledTimes(1)
     expect(f.persist).toHaveBeenCalledTimes(2)
+    expect(f.persist.mock.calls[1][0].raw.gpt_runtime_context).toBe(originalRuntime)
   })
   it('rolling context uses revision-selected history, exclusions, and omits rooms', async () => {
     session.rolling_context = { strategy: 'daily_rolling' }

@@ -77,7 +77,8 @@ describe('GPT context projection', () => {
     const result = buildGptContext({ persona, session, history, rollingAppend: '', recall: '本轮召回', text: '新问题' })
     expect(result.instructions).toContain('我是言之')
     expect(result.instructions).toContain('昨天回顾')
-    expect(result.instructions).toContain('本轮召回')
+    expect(result.instructions).not.toContain('本轮召回')
+    expect(result.input.at(-2)).toEqual({ role: 'developer', content: '<haven_recall_reference>\n本轮召回\n</haven_recall_reference>' })
     expect(result.input.map(m => m.content).join('\n')).toContain('先前召回')
     expect(result.input.at(-1)?.content).toContain('北京时间')
     expect(JSON.stringify(result)).not.toContain('秘密过程')
@@ -91,5 +92,44 @@ describe('GPT context projection', () => {
     expect(result.instructions).toContain('冻结钉选和所选日期回顾')
     expect(result.instructions).not.toContain('昨天回顾')
     expect(() => buildGptContext({ persona, session, history: [], rollingAppend: '', recall: '字'.repeat(200_000), text: 'hi' })).toThrow()
+  })
+
+  it.each(['', '第一轮召回'])('preserves the complete sent prefix with recall %j when a different recall follows', recall => {
+    const first = buildGptContext({ persona, session, history: [], rollingAppend: '', recall, text: '第一问', now: new Date('2026-11-16T01:00:00Z') })
+    const turn = { round_id: 1, source: 'gpt_subscription', user_text: '第一问', assistant_text: '第一答',
+      raw_json: JSON.stringify({ recall: { additional_context: recall }, gpt_runtime_context: first.auditParts.current_time }) } as HavenTurn
+    const next = buildGptContext({ persona, session, history: [turn], rollingAppend: '', recall: '不同的新召回', text: '第二问', now: new Date('2026-11-17T02:00:00Z') })
+    expect(next.instructions).toBe(first.instructions)
+    expect(next.input.slice(0, first.input.length)).toEqual(first.input)
+    expect(next.sourceRounds).toEqual([...first.input.map(() => 1), 1, null, null])
+    expect(next.input[first.input.length]).toEqual({ role: 'assistant', content: '第一答' })
+    const withoutRuntime = buildGptContext({ persona, session,
+      history: [{ ...turn, raw_json: JSON.stringify({ recall: { additional_context: recall } }) }],
+      rollingAppend: '', recall: '不同的新召回', text: '第二问', now: new Date('2026-11-17T02:00:00Z') })
+    expect(next.context.input_tokens_estimated).toBeGreaterThan(withoutRuntime.context.input_tokens_estimated)
+  })
+
+  it('never invents old timestamps or borrows metadata from other engines', () => {
+    const history = [
+      { source: 'gpt_subscription', raw_json: '{}' },
+      { source: 'gpt_subscription', raw_json: '{bad' },
+      { source: 'gpt_subscription', raw_json: JSON.stringify({ gpt_runtime_context: 123 }) },
+      { source: 'gpt_subscription', raw_json: JSON.stringify({ gpt_runtime_context: 'x'.repeat(1025) }) },
+      { source: 'cc', raw_json: JSON.stringify({ gpt_runtime_context: '不可借用的时间' }) },
+    ].map((turn, i) => ({ ...turn, round_id: i + 1, user_text: `旧问题${i}`, assistant_text: '' })) as HavenTurn[]
+    const result = buildGptContext({ persona, session, history, rollingAppend: '', recall: '', text: '新问题' })
+    expect(result.input.slice(0, -1).map(message => message.content)).toEqual(history.map(turn => turn.user_text))
+  })
+
+  it('reserves a message slot for the current recall when trimming history', () => {
+    const history = Array.from({ length: 999 }, (_, i) => ({ round_id: i + 1,
+      user_text: '问', assistant_text: '答', raw_json: '{}' })) as HavenTurn[]
+    const result = buildGptContext({ persona, session, history, rollingAppend: '', recall: '本轮召回', text: '新问题' })
+    expect(result.context.omitted_history_rounds).toBe(1)
+    expect(result.context.included_history_rounds).toBe(998)
+    expect(result.input).toHaveLength(1998)
+    expect(result.sourceRounds).toHaveLength(result.input.length)
+    expect(result.sourceRounds[0]).toBe(2)
+    expect(result.sourceRounds.slice(-2)).toEqual([null, null])
   })
 })

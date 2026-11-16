@@ -168,6 +168,8 @@ GPT token 总数在消息原操作栏显示，点击展开沿用原明细样式�
 
 保存失败不发 done；本进程仍有未保存草稿时，新 request_id 返回 409 persistence_pending，先核对或重试保存，避免覆盖草稿。`persistence_unknown` 表示无法确认结果。原进程仍保留草稿时，相同 POST 先按 request_id 核对 Haven，存在则重放，不存在则只重试严格保存，绝不再次生成；保留期过后/重启丢失的未保存草稿无法恢复，登记阻止静默重跑，用户应核对历史后另发新请求。刷新或断网仅断订阅，显式停止、9 分钟单轮上限或部署排空截止才中止生成；最终保存不沿用被取消的 signal。部署沿用 serverDrain 的旧实例标记和门禁，GPT 不碰 Claude 订阅锁。共享事件缓冲用 engine 标记来源，CC attach/发送重放和 selfhost 预检拒绝把 GPT 当成旧引擎轮次，CC active_turn 不冒充报告 GPT。跨实例/多副本实时接回不在当前单 Gateway 部署契约内。
 
+GPT 的 instructions 只放人设、窗口背景与固定能力说明；本轮召回作为独立 developer 消息放在已有历史之后、当前 user 消息之前，历史召回在原轮次重放。新 GPT 轮次的运行时间文字随现有 strict commit 存入 Haven `raw_json.gpt_runtime_context`，历史恢复原样追加，预算包含该文字与当前召回消息；旧记录缺失、元数据无效或其他引擎轮次不补造时间。该字段为轮次元数据，不重复保存聊天正文；保存重试沿用原草稿，不刷新时间。此契约用于保持应用侧可比较前缀，不保证上游缓存命中。
+
 上下文与保存实现细节见 `docs/architecture.md`「GPT 文字 runner」；Gateway 授权、传输、登记与后端持久层事实见 Haven `docs/reference.md`。UI 发送/停止/恢复必须实现上表的 SSE 与 JSON 两种响应，不能只解析一种。
 
 GPT 上下文审计复用 `GET /api/cc-context-audit?session_id=…` 与现有面板。窗口偏好为 GPT 或显式 `engine=gpt_subscription` 时返回独立 GPT 投影，不走 CC transcript、工具或当前背景重建；返回连续轮次的真实 usage、估算 context 和发送前指纹，旧数据缺证据保留 null。`before_cursor` 与 `before_turn_id` 分别翻页审计记录和历史轮次（0 表示对应列表已读完）；接口返回 `before_cursor/before_turn_id/has_more_turns`，并精确补查当前页轮次的审计记录，避免失败请求挤占分页后把已有证据误报为未记录。`records_error` 明确区分读取失败与旧数据未记录。模型真实上限未知；缓存 token 是输入子集，不制造缓存写入或账号剩余额度。完整比较语义见 architecture「GPT 上下文审计」。

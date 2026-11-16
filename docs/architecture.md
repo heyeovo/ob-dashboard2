@@ -244,7 +244,7 @@ GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读�
 
 预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端先 CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照，再加载滚动上下文；两项准备成功并确认未取消后，才向 Haven 原子登记请求并交给生成任务。登记保存请求摘要、状态及无正文的发送前审计记录，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
 
-固定窗口复用 composeWindowPersonaAppend 的 handoff/日回顾及 session 静态背景；滚动窗口复用 loadRollingWindowAppend 的 raw/review/omit 日期、revision 冻结钉选桶、所选日记及其他既有长期层，通过 includeRooms:false 关闭房间读取和注入（旧调用缺省仍开启）。当前召回使用已有排除集合和冻结钉选 ID，历史召回从 raw_json.recall.additional_context 重放。仅投影 user/assistant 正文和召回参考，不投影 Claude 原生工具过程、thinking、附件内容或原生 session ID；当前文字追加北京时间。人设、固定事实与模块开关沿用 Haven。
+固定窗口复用 composeWindowPersonaAppend 的 handoff/日回顾及 session 静态背景；滚动窗口复用 loadRollingWindowAppend 的 raw/review/omit 日期、revision 冻结钉选桶、所选日记及其他既有长期层，通过 includeRooms:false 关闭房间读取和注入（旧调用缺省仍开启）。当前召回使用已有排除集合和冻结钉选 ID，历史召回从 raw_json.recall.additional_context 重放。instructions 仅含人设/窗口背景和固定能力说明；当前召回作为独立 developer 消息放在全部历史之后、当前 user 消息之前，恢复历史时保留其原轮次位置。仅投影 user/assistant 正文和召回参考，不投影 Claude 原生工具过程、thinking、附件内容或原生 session ID；当前文字追加北京时间，具体存储/恢复边界唯一维护在 reference「GPT 订阅聊天」。人设、固定事实与模块开关沿用 Haven。
 
 应用以 UTF-8 bytes / 3 加 5% 余量估算输入，采用 120k 应用预算和 Gateway 的 2000 条文字消息/4 MiB 传输限制，按完整连续轮次从近到远选历史。它不声称 GPT 模型的真实 context window；超大的固定背景在模型调用前拒绝。只收到官方 completed 才记 completed；EOF、取消、额度或认证失败都保存为 cancelled/failed 和实际已收到的正文，usage 缺失为 null。
 
@@ -258,4 +258,4 @@ GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读�
 
 Haven 在最终 SDK 调用处校验 body_hash，并通过私有管道等待数据库确认后才发 HTTP 请求。准备、开始发送、上游回执和终态分别记录，崩溃或断线缺少回执时不推断送达。Haven 持久化格式、隔离、迁移和删除边界唯一维护在 Haven reference。Dashboard 不把审计信息加入模型 input，也不在 raw_json 重复保存审计副本；保存重试不重新生成指纹或再次请求模型。
 
-`cc-context-audit` 的 GPT 分支在 CC transcript/MCP/背景重建之前分流，只读 Haven 轮次真实 usage 和持久指纹；当前 revision 只标为当前配置。原 `ContextAuditPanel` 内的 GPT 内容支持两轮选择、较早记录分页和首次不同消息位置，比较共同前缀而非整包哈希。历史正文恢复不含上一轮当时的运行时间，因此这也可能成为首个差异，面板明确提示，不在审计工作中修改缓存策略。旧轮次无证据显示“未记录”；记录读取失败显示失败，不当作缺失；真实缓存 0 与字段未知分开。哈希不能证明上游内部路由、分词、缓存保留或必然命中。
+`cc-context-audit` 的 GPT 分支在 CC transcript/MCP/背景重建之前分流，只读 Haven 轮次真实 usage 和持久指纹；当前 revision 只标为当前配置。原 `ContextAuditPanel` 内的 GPT 内容支持两轮选择、较早记录分页和首次不同消息位置，比较共同前缀而非整包哈希。旧轮次缺少原运行时间时仍可能成为首个差异，不能用当前时钟补造；新轮次按 reference 的持久时间元数据契约恢复。旧轮次无证据显示“未记录”；记录读取失败显示失败，不当作缺失；真实缓存 0 与字段未知分开。哈希不能证明上游内部路由、分词、缓存保留或必然命中。
