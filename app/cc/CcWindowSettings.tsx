@@ -326,7 +326,7 @@ export default function CcWindowSettings({
         </div>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {engine === 'gpt_subscription' && activeTab !== 'session' && activeTab !== 'rolling' && activeTab !== 'mcp' ? (
+          {engine === 'gpt_subscription' && activeTab !== 'session' && activeTab !== 'rolling' && activeTab !== 'mcp' && activeTab !== 'wake' ? (
             <p className={HINT}>GPT 首版不支持此项 CC 能力。原设置保留，切回 CC 后可查看。</p>
           ) : activeTab === 'mcp' ? (
             <div className="space-y-3">
@@ -368,7 +368,8 @@ export default function CcWindowSettings({
           ) : activeTab === 'gc' ? (
             <CcContextGc sessionId={sessionId} laneId={laneId} busy={stats.busy} />
           ) : activeTab === 'wake' ? (
-            <CcAgentWakeSettings sessionId={sessionId} laneId={laneId} busy={stats.busy} />
+            <CcAgentWakeSettings key={isGpt ? 'gpt_subscription' : laneId} sessionId={sessionId}
+              laneId={isGpt ? 'gpt_subscription' : laneId} busy={stats.busy} isGpt={isGpt} />
           ) : (
           <>
           {/* ── 只读信息 ── */}

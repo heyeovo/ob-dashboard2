@@ -20,15 +20,26 @@ function harness() {
 }
 afterEach(() => vi.unstubAllGlobals())
 describe('GPT browser lifecycle wiring', () => {
-  it('rejects attachments, work mode and missing model before a request', async () => {
+  it('rejects work mode and missing model before a request', async () => {
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher)
     const h = harness()
-    await h.chat.send('hello', 1)
-    h.options.mode = 'work'; await h.chat.send('hello', 0)
-    h.options.mode = 'chat'; h.options.model = ''; await h.chat.send('hello', 0)
+    h.options.mode = 'work'; await h.chat.send('hello', [])
+    h.options.mode = 'chat'; h.options.model = ''; await h.chat.send('hello', [])
     expect(fetcher).not.toHaveBeenCalled()
-    expect(h.errors.join(' ')).toMatch(/附件.*工作模式.*模型/)
+    expect(h.errors.join(' ')).toMatch(/工作模式.*模型/)
   })
+  it('sends an image without text and keeps it on the pending user message', async () => {
+    const fetcher = vi.fn(async (_url: string, _init: RequestInit) =>
+      Response.json({ error: { code: 'persistence_unknown', message: 'save unknown' } }, { status: 502 }))
+    vi.stubGlobal('fetch', fetcher)
+    const h = harness()
+    const image = { id: 'a'.repeat(32), sessionId: 's', filename: 'fixture.png',
+      kind: 'image' as const, mimeType: 'image/png', byteSize: 10, sha256: 'b'.repeat(64) }
+    await h.chat.send('', [image])
+    expect(JSON.parse(String(fetcher.mock.calls[0][1].body))).toMatchObject({ text: '', attachment_ids: [image.id] })
+    expect(h.messages[0].attachments).toEqual([image])
+  })
+
   it('preserves the complete body and request ID on uncertain save retry', async () => {
     const bodies: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
@@ -36,11 +47,11 @@ describe('GPT browser lifecycle wiring', () => {
       return Response.json({ error: { code: 'persistence_unknown', message: 'save unknown' } }, { status: 502 })
     }))
     const h = harness()
-    await h.chat.send('original text', 0)
+    await h.chat.send('original text', [])
     const original = h.messages[1].gptRetryRequest!
     h.options.model = 'changed-model'
     h.options.lastRoundIdRef.current = 99
-    await h.chat.send('different input', 0, original)
+    await h.chat.send('different input', [], original)
     expect(bodies[1]).toBe(bodies[0])
     expect(JSON.parse(bodies[0])).toMatchObject({ text: 'original text', expected_last_round_id: 7,
       model: 'chosen-model', include_daily_review: false, mode: 'chat' })
@@ -49,9 +60,9 @@ describe('GPT browser lifecycle wiring', () => {
   it('network failure detaches without cancelling the server and blocks a new ID', async () => {
     const fetcher = vi.fn(async () => { throw new Error('offline') }); vi.stubGlobal('fetch', fetcher)
     const h = harness()
-    await h.chat.send('hello', 0)
+    await h.chat.send('hello', [])
     expect(h.messages[1]).toMatchObject({ deliveryState: 'detached', gptRetryRequest: { text: 'hello' } })
-    await h.chat.send('another generation', 0)
+    await h.chat.send('another generation', [])
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls.some(call => (call as unknown[])[1] && ((call as unknown[])[1] as RequestInit).method === 'DELETE')).toBe(false)
   })
@@ -79,7 +90,7 @@ describe('GPT browser lifecycle wiring', () => {
         : new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } })
     }))
     const h = harness()
-    const sending = h.chat.send('hello', 0)
+    const sending = h.chat.send('hello', [])
     await Promise.resolve(); await Promise.resolve()
     const request = h.messages[1].gptRetryRequest!
     await h.chat.stop()
@@ -110,7 +121,7 @@ describe('GPT browser lifecycle wiring', () => {
       ? Response.json({ error: { code: 'persistence_unknown', message: 'save unknown' } }, { status: 502 })
       : Response.json({ ok: true, status: 'finished_without_turn' }))
     vi.stubGlobal('fetch', fetcher)
-    const first = harness(); await first.chat.send('original', 0)
+    const first = harness(); await first.chat.send('original', [])
     const original = first.messages[1].gptRetryRequest
     const reloaded = harness(); await reloaded.chat.recover()
     expect(reloaded.messages[1].gptRetryRequest).toEqual(original)

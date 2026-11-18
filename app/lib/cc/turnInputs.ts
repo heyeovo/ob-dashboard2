@@ -19,15 +19,27 @@ import { builtInMcpModelSurfaces } from '@/app/lib/cc/builtInMcp'
 import { composeWindowPersonaAppend, loadRollingWindowAppend } from '@/app/lib/cc/windowPrompt'
 import { ccResumeHintForContext } from '@/app/lib/ccSession'
 
-/** Restore the single last-active native CC lane without any browser state. */
-export async function loadBackgroundTurnInputs(sessionId: string) {
-  let sessionResult = await getConversationSession(sessionId, {
+/** Restore the active engine and lane without any browser state. */
+type CcWakeInputs = Awaited<ReturnType<typeof loadCcWakeInputs>>
+type GptWakeInputs = { engine: 'gpt_subscription' }
+export function loadBackgroundTurnInputs(sessionId: string): Promise<CcWakeInputs>
+export function loadBackgroundTurnInputs(sessionId: string, allowGpt: true): Promise<CcWakeInputs | GptWakeInputs>
+export async function loadBackgroundTurnInputs(sessionId: string, allowGpt?: true) {
+  const sessionResult = await getConversationSession(sessionId, {
     includeBucketExclusions: true,
     includeContextDays: true,
   })
   const session = sessionResult.session
   if (!sessionResult.ok || !session) throw new Error(sessionResult.error || 'Haven 返回空窗口')
-  if (session.local_engine_preference === 'gpt_subscription') throw new Error('GPT 窗口不支持 Claude 主动唤醒')
+  if (session.local_engine_preference === 'gpt_subscription') {
+    if (allowGpt) return { engine: 'gpt_subscription' as const }
+    throw new Error('GPT 窗口不支持 Claude 主动唤醒')
+  }
+  return loadCcWakeInputs(sessionId, sessionResult, session)
+}
+
+async function loadCcWakeInputs(sessionId: string, sessionResult: Awaited<ReturnType<typeof getConversationSession>>,
+  session: NonNullable<Awaited<ReturnType<typeof getConversationSession>>['session']>) {
   if (!session.frozen_persona_append_initialized) {
     throw new Error('窗口还没有成功启动过 CC，不能由后台冷启动')
   }
@@ -143,5 +155,5 @@ export async function loadBackgroundTurnInputs(sessionId: string) {
   const fingerprint = cacheRelevantFingerprint(config)
   config.systemPromptKey = fingerprint.sdkCacheRelevantOptionsHash
   config.modelSurfaceKey = fingerprint.modelSurfaceHash
-  return { persona, config, sessionSnapshot: sessionResult, resumeHint, laneId }
+  return { engine: 'cc' as const, persona, config, sessionSnapshot: sessionResult, resumeHint, laneId }
 }

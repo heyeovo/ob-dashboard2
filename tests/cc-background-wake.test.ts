@@ -292,3 +292,13 @@ describe('Dashboard background wake runner', () => {
     expect(foregroundRun).toHaveBeenCalledOnce()
   })
 })
+
+it('supersedes old CC keepalive before GPT generation or Haven begin', async () => {
+  loader.load.mockResolvedValue({ engine: 'gpt_subscription' })
+  await expect(runBackgroundWake({
+    sessionId: 'gpt-window', wakeId: 'stale-cc-wake', at: '2026-11-19T01:00:00Z',
+    cause: 'cache_keepalive', laneId: 'subscription',
+  })).resolves.toMatchObject({ status: 'superseded' })
+  expect(haven.begin).not.toHaveBeenCalled()
+  expect(runner.run).not.toHaveBeenCalled()
+})

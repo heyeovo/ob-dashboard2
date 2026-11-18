@@ -2,6 +2,7 @@ import type { HandoffSnapshot } from '../cc/handoffSnapshot'
 import type { CcSseDelta, CcSseStart, CcSseRecall, CcSseEventMap } from '../cc/sseEvents'
 
 export const GPT_ENGINE = 'gpt_subscription' as const
+export const GPT_WAKE_CAUSES = ['long_silence_first', 'long_silence_second', 'random_wake_first', 'random_wake_second'] as const
 export type GptConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reauth_required'
 export type GptConnectionError = {
   code: string; message: string; retryable: boolean

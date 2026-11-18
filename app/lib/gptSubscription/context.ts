@@ -32,17 +32,19 @@ function turnUserContent(turn: HavenTurn): string {
 
 export function buildGptContext(input: {
   persona: HavenPersona; session: HavenConversationSession; history: HavenTurn[]
-  rollingAppend: string; recall: string; text: string; now?: Date; mcpEnabled?: boolean
+  rollingAppend: string; recall: string; text: string; now?: Date; mcpEnabled?: boolean; wake?: boolean
   image?: { url: string; roundId: number | null }
 }) {
   const persona = buildPersonaAppend(input.persona, input.session.prompt_module_overrides)
   const window = composeWindowPersonaAppend(persona, input.session, input.session.session_id, input.rollingAppend)
-  const capability = [
-    input.image ? '可读取本轮附带的一张用户图片。' : '',
-    input.mcpEnabled
-      ? '可以调用本轮提供的 MCP 工具。工具只有返回成功才算执行完成；写入结果未知时不要重试。'
-      : '当前线路仅提供文字回复。',
-  ].filter(Boolean).join(' ')
+  const capability = input.wake
+    ? '这是后台主动唤醒机会，用户没有发出新消息。你可以主动发一条消息；无需打扰时，回复 [agent_wake_noop]；希望消息低调送达时，把 [agent_wake_quiet] 放在正文开头。只能生成文字。'
+    : [
+      input.image ? '可读取本轮附带的一张用户图片。' : '',
+      input.mcpEnabled
+        ? '可以调用本轮提供的 MCP 工具。工具只有返回成功才算执行完成；写入结果未知时不要重试。'
+        : '当前线路仅提供文字回复。',
+    ].filter(Boolean).join(' ')
   const imageRound = input.image?.roundId
   const userContentWithImage = (text: string, roundId: number | null): string | GptImageContent =>
     input.image && imageRound === roundId
@@ -85,7 +87,8 @@ export function buildGptContext(input: {
     history.push({ role: 'developer', content: recalledCurrent })
     sourceRounds.push(null)
   }
-  history.push({ role: 'user', content: userContentWithImage(current, null) })
+  if (input.wake) history.push({ role: 'developer', content: current })
+  else history.push({ role: 'user', content: userContentWithImage(current, null) })
   sourceRounds.push(null)
   return { instructions, input: history, sourceRounds,
     auditParts: { persona, window, background: input.rollingAppend, capability, recall: recalledCurrent, current_text: input.text, current_time: currentTime },

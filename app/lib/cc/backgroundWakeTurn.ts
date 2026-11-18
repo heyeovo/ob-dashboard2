@@ -1,3 +1,4 @@
+import { GPT_WAKE_CAUSES } from '@/app/lib/gptSubscription/contract'
 import { randomUUID } from 'node:crypto'
 import { isDraining, previousInstanceFinishing, trackDrainWork } from '@/app/lib/serverDrain'
 import { hasPending } from '@/app/lib/ccChannel'
@@ -13,7 +14,7 @@ import {
   type BackgroundTurnDeferredReason,
 } from '@/app/lib/cc/sessionTurnCoordinator'
 
-export type BackgroundWakeCause = 'cache_keepalive' | 'agent_schedule' | 'conversation_silence' | 'agent_followup'
+export type BackgroundWakeCause = typeof GPT_WAKE_CAUSES[number] | 'cache_keepalive' | 'agent_schedule' | 'conversation_silence' | 'agent_followup'
 
 export type BackgroundWakeInput = {
   sessionId: string
@@ -75,7 +76,20 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
   if (previousInstanceFinishing(sessionId)) return { status: 'deferred', reason: 'previous_instance_finishing' }
   const finishWork = trackDrainWork({ sessionId, requestId: input.wakeId || 'background-wake-preflight' })
   try {
-    const loaded = await loadBackgroundTurnInputs(sessionId)
+    const loaded = await loadBackgroundTurnInputs(sessionId, true)
+    if (loaded.engine === 'gpt_subscription') {
+      if (!GPT_WAKE_CAUSES.some(cause => cause === input.cause)) {
+        return { status: 'superseded', reason: 'claimed_lane_is_not_active' }
+      }
+      const { runGptBackgroundWake } = await import('@/app/lib/gptSubscription/runner')
+      const gated = await tryRunBackgroundSessionTurn(sessionId,
+        () => runGptBackgroundWake(input, wakePrompt(input)), () => Boolean(hasPending(sessionId)),
+        { requestId: input.wakeId })
+      return gated.status === 'deferred' ? gated : gated.value
+    }
+    if (GPT_WAKE_CAUSES.some(cause => cause === input.cause)) {
+      return { status: 'superseded', reason: 'claimed_lane_is_not_active' }
+    }
     const expectedLane = input.laneId?.trim() || ''
     if (expectedLane && loaded.laneId !== expectedLane) {
       return { status: 'superseded', reason: 'claimed_lane_is_not_active' }
@@ -104,8 +118,8 @@ export async function runBackgroundWake(input: BackgroundWakeInput): Promise<Bac
         // Inputs are loaded once before the non-blocking gate to choose the account-wide
         // subscription lock. Reload after acquiring the session lock so Haven CAS uses
         // the round that is current when this wake actually starts.
-        const current = await loadBackgroundTurnInputs(sessionId)
-        if (expectedLane && current.laneId !== expectedLane) {
+        const current = await loadBackgroundTurnInputs(sessionId, true)
+        if (current.engine === 'gpt_subscription' || (expectedLane && current.laneId !== expectedLane)) {
           return { status: 'superseded', reason: 'claimed_lane_is_not_active' } as BackgroundWakeResult
         }
         if (input.leaseOwner) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { AgentWakeSchedule, BarkNotificationConfig, BarkNotificationRecent } from '@/app/lib/havenTurns'
 
@@ -33,12 +33,15 @@ function notificationStatus(value: BarkNotificationRecent['status']) {
   } as const)[value] || value
 }
 
-export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
+export default function CcAgentWakeSettings({ sessionId, laneId, busy, isGpt = false }: {
   sessionId: string
   laneId: string
   busy: boolean
+  isGpt?: boolean
 }) {
   const [schedule, setSchedule] = useState<AgentWakeSchedule | null>(null)
+  const latestSchedule = useRef<AgentWakeSchedule | null>(null)
+  const gptSaveQueue = useRef<Promise<void>>(Promise.resolve())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -59,6 +62,7 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
         notificationResponse.json() as Promise<NotificationPayload>,
       ])
       if (!response.ok || !payload.ok || !payload.schedule) throw new Error(payload.error || '读取失败')
+      latestSchedule.current = payload.schedule
       setSchedule(payload.schedule)
       if (notificationResponse.ok && notificationPayload.ok && notificationPayload.config) {
         setNotificationReady(notificationPayload.config.ready)
@@ -75,41 +79,73 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
 
   const save = async (changes: Record<string, unknown>, action = 'update') => {
     if (!schedule) return
-    setSaving(true)
-    setError('')
-    try {
+    const patch = async (version: number) => {
       const response = await fetch('/api/cc-agent-wake', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: sessionId,
-          lane_id: laneId,
-          expected_version: schedule.schedule_version,
-          action,
-          changes,
+          session_id: sessionId, lane_id: laneId, expected_version: version, action, changes,
         }),
       })
-      const payload = await response.json() as Payload
-      if (!response.ok || !payload.ok || !payload.schedule) throw new Error(payload.error || '保存失败')
-      setSchedule(payload.schedule)
-    } catch (cause) {
-      setError((cause as Error).message || '保存失败')
-      await load()
-    } finally {
-      setSaving(false)
+      return { response, payload: await response.json() as Payload }
     }
+    const perform = async () => {
+      setError('')
+      try {
+        let result = await patch((isGpt ? latestSchedule.current ?? schedule : schedule).schedule_version)
+        if (isGpt && result.response.status === 409) {
+          const query = new URLSearchParams({ session_id: sessionId, lane_id: laneId })
+          const response = await fetch(`/api/cc-agent-wake?${query.toString()}`, { cache: 'no-store' })
+          const fresh = await response.json() as Payload
+          if (response.ok && fresh.ok && fresh.schedule) result = await patch(fresh.schedule.schedule_version)
+        }
+        const { response, payload } = result
+        if (!response.ok || !payload.ok || !payload.schedule) throw new Error(payload.error || '保存失败')
+        latestSchedule.current = payload.schedule
+        setSchedule(payload.schedule)
+      } catch (cause) {
+        if (!isGpt) await load()
+        setError((cause as Error).message || '保存失败')
+      }
+    }
+
+    setSaving(true)
+    if (!isGpt) {
+      try { await perform() } finally { setSaving(false) }
+      return
+    }
+    const pending = gptSaveQueue.current.then(perform)
+    gptSaveQueue.current = pending
+    await pending
+    if (gptSaveQueue.current === pending) setSaving(false)
   }
 
   if (loading) return <div className="text-meta text-[var(--color-text-tertiary)]">正在读取主动唤醒状态…</div>
   if (!schedule) return <div className="text-meta text-[var(--color-danger)]">{error || '主动唤醒状态不可用'}</div>
 
   return (
-    <div className="space-y-3 text-meta text-[var(--color-text-secondary)]">
-      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
+    <div aria-busy={saving} className="space-y-3 text-meta text-[var(--color-text-secondary)]">
+      {!isGpt && <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] p-3 leading-relaxed">
         只影响当前 CC 线路。暂停后，下一条用户消息或 Claude 正式主动消息会恢复固定保活；24 小时没有用户活动也会自动暂停，但不会删除 Claude 已安排的未来 wake。
-      </div>
+      </div>}
 
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3">
+        {isGpt ? <>
+          <label className={ROW}>
+            <span>长沉默唤醒</span>
+            <input type="checkbox" checked={schedule.long_silence_enabled} disabled={busy}
+              onChange={event => void save({ long_silence_enabled: event.target.checked })} />
+          </label>
+          <WakeHours label="第一次唤醒（小时）" hours={schedule.long_silence_first_hours ?? 2}
+            disabled={busy} onSave={hours => void save({ long_silence_first_hours: hours })} />
+          <WakeHours label="第二次唤醒（小时）" hours={schedule.long_silence_second_hours ?? 6}
+            disabled={busy} onSave={hours => void save({ long_silence_second_hours: hours })} />
+          <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
+            <span>随机唤醒（每天两次）</span>
+            <input type="checkbox" checked={schedule.random_wake_enabled} disabled={busy}
+              onChange={event => void save({ random_wake_enabled: event.target.checked })} />
+          </label>
+        </> : <>
         <label className={ROW}>
           <span>允许 Claude 主动唤醒</span>
           <input type="checkbox" checked={schedule.agent_wake_enabled} disabled={saving || busy} onChange={event => void save({ agent_wake_enabled: event.target.checked })} />
@@ -122,23 +158,25 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
           <span>对话沉默检查</span>
           <input type="checkbox" checked={schedule.conversation_silence_enabled} disabled={saving || busy} onChange={event => void save({ conversation_silence_enabled: event.target.checked })} />
         </label>
+        </>}
         <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
           <span>主动消息推送到 Bark</span>
-          <input type="checkbox" checked={schedule.bark_notification_enabled} disabled={saving || busy || !notificationReady} onChange={event => void save({ bark_notification_enabled: event.target.checked })} />
+          <input type="checkbox" checked={schedule.bark_notification_enabled} disabled={(!isGpt && saving) || busy || !notificationReady} onChange={event => void save({ bark_notification_enabled: event.target.checked })} />
         </label>
         {!notificationReady ? (
           <div className="border-t border-[var(--color-border-light)] py-2 text-2xs text-[var(--color-text-tertiary)]">
             请先到 <Link href="/settings/notifications" className="underline">设置 → 通知</Link> 完成 Bark 配置。
           </div>
         ) : null}
-        <div className={`${ROW} border-t border-[var(--color-border-light)]`}>
+        {!isGpt && <div className={`${ROW} border-t border-[var(--color-border-light)]`}>
           <span>暂停到下次对话活动</span>
           <button className={BUTTON} disabled={saving || busy || schedule.keepalive_paused_until_user} onClick={() => void save({ keepalive_paused_until_user: true })}>
             {schedule.keepalive_paused_until_user ? '已暂停' : '暂停'}
           </button>
-        </div>
+        </div>}
       </div>
 
+      {!isGpt && <>
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] px-3">
         <div className={ROW}><span>Cache 状态</span><span>{schedule.cache_state}</span></div>
         <div className={`${ROW} border-t border-[var(--color-border-light)]`}><span>最近 cache refresh</span><span>{fmt(schedule.last_cache_refresh_at)}</span></div>
@@ -197,15 +235,50 @@ export default function CcAgentWakeSettings({ sessionId, laneId, busy }: {
         </label>
       </div>
 
+      </>}
       {schedule.last_error || error ? <div className="text-[var(--color-danger)]">{error || schedule.last_error}</div> : null}
       <button
         type="button"
         className="w-full rounded-[var(--radius-md)] border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] px-3 py-2 text-meta text-[var(--color-danger)] disabled:opacity-50"
-        disabled={saving || busy}
+        disabled={saving || (busy && !isGpt)}
         onClick={() => { if (window.confirm('立即停止当前窗口的所有后台唤醒？')) void save({}, 'stop_all') }}
       >
         立即停止所有后台唤醒
       </button>
     </div>
   )
+}
+
+function WakeHours({ label, hours, disabled, onSave }: {
+  label: string
+  hours: number
+  disabled: boolean
+  onSave: (hours: number) => void
+}) {
+  const [draft, setDraft] = useState(String(hours))
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => { setDraft(String(hours)) }, [hours])
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  function commit(value: string) {
+    clearTimeout(timer.current)
+    timer.current = undefined
+    const number = Number(value)
+    if (!disabled && Number.isFinite(number) && number > 0 && number !== hours) onSave(number)
+  }
+
+  return <label className={`${ROW} border-t border-[var(--color-border-light)]`}>
+    <span>{label}</span>
+    <input type="number" inputMode="decimal" step="any" min={0}
+      value={draft} disabled={disabled}
+      aria-invalid={draft !== '' && !(Number.isFinite(Number(draft)) && Number(draft) > 0)}
+      className="w-24 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-2 text-right text-body"
+      onChange={event => {
+        const value = event.target.value
+        setDraft(value)
+        clearTimeout(timer.current)
+        timer.current = setTimeout(() => commit(value), 450)
+      }}
+      onBlur={() => { if (timer.current) commit(draft) }} />
+  </label>
 }
