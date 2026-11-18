@@ -158,7 +158,7 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
             onPromptModuleToggle={chat.setPromptModuleEnabled}
             onError={chat.setError}
             sending={chat.sending || xhs.loading}
-            textOnly={chat.effectiveEngine === 'gpt_subscription'}
+            imageOnly={chat.effectiveEngine === 'gpt_subscription'}
             disabled={xhs.loading || chat.engineSaving || chat.gptModelSaving || (chat.effectiveEngine === 'gpt_subscription' && !chat.sending && (chat.historyLoading || !chat.gptReady || chat.mode === 'work'))}
             placeholder={xhs.loading ? '📕 正在读取小红书笔记…' : undefined}
             forwardedBlock={forwardedBlock}

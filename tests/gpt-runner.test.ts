@@ -6,7 +6,8 @@ import { useGptChat } from '@/app/cc/useGptChat'
 import type { CcMessage } from '@/app/cc/types'
 
 const f = vi.hoisted(() => ({ session: vi.fn(), history: vi.fn(), persona: vi.fn(), lookup: vi.fn(),
-  patch: vi.fn(), persist: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn() }))
+  patch: vi.fn(), persist: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn(), attachments: vi.fn() }))
+vi.mock('@/app/lib/havenAttachments', () => ({ resolveAttachments: f.attachments }))
 vi.mock('@/app/lib/havenTurns', () => ({ getConversationSession: f.session, listAllTurns: f.history,
   getTurnByRequestId: f.lookup, patchConversationSessionState: f.patch, recordTurnStrict: f.persist }))
 vi.mock('@/app/lib/havenPersonas', () => ({ getPersona: f.persona, buildPersonaAppend: () => '人设' }))
@@ -54,6 +55,39 @@ beforeEach(() => {
 afterEach(() => { resetServerDrainForTests(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe('GPT runner', () => {
+  it('sends one inline image, binds only the current attachment, and reloads it from history', async () => {
+    const id = 'a'.repeat(32)
+    const body = { ...request(), text: '', attachment_ids: [id] }
+    const attachment = { id, kind: 'image', mime_type: 'image/png', base64: 'aW1hZ2U=' }
+    f.attachments.mockResolvedValue([attachment])
+    expect(requestFingerprint(body)).not.toBe(requestFingerprint({ ...body, attachment_ids: ['b'.repeat(32)] }))
+    expect(await (await startGptTurn(body, new AbortController().signal)).text()).toContain('event: done')
+    expect(f.attachments).toHaveBeenCalledWith([id], body.session_id, undefined)
+    expect(f.recall).not.toHaveBeenCalled()
+    expect(f.stream.mock.calls[0][0].input.at(-1).content[1]).toEqual({
+      type: 'input_image', image_url: 'data:image/png;base64,aW1hZ2U=', detail: 'auto',
+    })
+    expect(f.persist.mock.calls[0][0]).toMatchObject({ userText: '', attachmentIds: [id] })
+    f.history.mockResolvedValue({ ok: true, turns: [{
+      round_id: 1, source: 'gpt_subscription', user_text: '', assistant_text: '回答', attachments: [attachment],
+    }] })
+    const followup = { ...body, request_id: body.request_id + '-next', text: '再看一次', attachment_ids: [], expected_last_round_id: 1 }
+    expect(await (await startGptTurn(followup, new AbortController().signal)).text()).toContain('event: done')
+    const messages = f.stream.mock.calls[1][0].input
+    expect(messages.find((message: { content: unknown }) => Array.isArray(message.content))?.content[1].type).toBe('input_image')
+    expect(messages.at(-1).content).toContain('再看一次')
+    expect(f.persist.mock.calls[1][0].attachmentIds).toEqual([])
+  })
+
+  it('does not admit a request or silently send text when the selected image cannot be read', async () => {
+    f.attachments.mockRejectedValue(new Error('not found'))
+    const response = await startGptTurn({ ...request(), attachment_ids: ['a'.repeat(32)] }, new AbortController().signal)
+    expect((await response.json()).error.code).toBe('attachment_unavailable')
+    expect(f.control.mock.calls.some(([value]) => value.action === 'claim')).toBe(false)
+    expect(f.stream).not.toHaveBeenCalled()
+    expect(f.persist).not.toHaveBeenCalled()
+  })
+
   it('saves body-free assembled evidence before generation and refuses generation after audit failure', async () => {
     const body = request()
     const actions: string[] = []
@@ -130,18 +164,18 @@ describe('GPT runner', () => {
     let chat!: ReturnType<typeof useGptChat>
     function Mount() { chat = useGptChat(options); return null }
     renderToStaticMarkup(createElement(Mount))
-    await chat.send('first', 0)
+    await chat.send('first', [])
     const original = messagesRef.current[1].gptRetryRequest!
     expect(original).toBeDefined()
     expect(cache.size).toBe(1)
     expect(f.stream).not.toHaveBeenCalled()
-    await chat.send(original.text, 0, original)
+    await chat.send(original.text, [], original)
     expect(messagesRef.current).toHaveLength(2)
     expect(messagesRef.current[1].deliveryState).toBe('saved')
     expect(cache.size).toBe(0)
     expect(f.stream).toHaveBeenCalledTimes(1)
     f.history.mockResolvedValue({ ok: true, turns: [{ round_id: 1, user_text: 'first', assistant_text: '回答' }] })
-    await chat.send('next', 0)
+    await chat.send('next', [])
     expect(f.stream).toHaveBeenCalledTimes(2)
     expect(f.persist).toHaveBeenCalledTimes(2)
   })

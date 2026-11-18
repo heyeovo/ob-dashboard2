@@ -10,6 +10,7 @@ import { loadRollingWindowAppend } from '../cc/windowPrompt'
 import { createTurnBroadcast, finishTurn, publishTurn, turnStream, type TurnBroadcast } from '../cc/turnBroadcast'
 import { drainRejection, trackDrainWork } from '../serverDrain'
 import { buildGptContext } from './context'
+import { resolveAttachments } from '../havenAttachments'
 import { buildGptAudit } from './audit'
 import { controlGptRequest, GptTransportError, streamGpt } from './transport'
 import { GPT_ENGINE, gptError, type GptDone, type GptError, type GptEventMap, type GptRequest } from './contract'
@@ -31,7 +32,8 @@ function stable(value: unknown): unknown {
 }
 export function requestFingerprint(request: GptRequest) {
   // Include all behavior-affecting explicit choices; absent choices stay absent on retry.
-  return createHash('sha256').update(JSON.stringify(stable({ ...request, mode: 'chat', attachment_ids: undefined }))).digest('hex')
+  return createHash('sha256').update(JSON.stringify(stable({ ...request, mode: 'chat',
+    attachment_ids: request.attachment_ids?.length ? request.attachment_ids : undefined }))).digest('hex')
 }
 function raw(turn: HavenTurn): Record<string, unknown> {
   try { return JSON.parse(turn.raw_json || '{}') } catch { return {} }
@@ -93,10 +95,12 @@ async function finish(job: Job) {
   timer.unref?.()
 }
 
-function generationFailure(job: Job, error: unknown): GptError {
+function generationFailure(job: Job, error: unknown, hasImage: boolean): GptError {
   if (job.abort.signal.aborted) return gptError(job.request.request_id, 'cancelled', '生成已停止', 'generation')
   if (error instanceof GptTransportError) return { ...gptError(job.request.request_id, error.code,
-    error.message, 'generation', error.retryable), action: error.action, http_status: error.status,
+    hasImage && ['invalid_image', 'invalid_image_format', 'image_too_large', 'subscription_sharing_unsupported_capability'].includes(error.code)
+      ? '当前模型拒绝了这次输入。请尝试换一张图片或选择支持图片的模型。'
+      : error.message, 'generation', error.retryable), action: error.action, http_status: error.status,
     official_request_id: error.officialRequestId }
   return gptError(job.request.request_id, 'gpt_generation_failed', 'GPT 回复中断，已有文字会保留，请重试', 'generation', true)
 }
@@ -105,6 +109,7 @@ async function generate(job: Job, prepared: {
   session: NonNullable<Awaited<ReturnType<typeof getConversationSession>>['session']>
   persona: NonNullable<Awaited<ReturnType<typeof getPersona>>['persona']>
   history: HavenTurn[]; exclusions: string[]; rollingAppend: string; model: string
+  image?: Parameters<typeof buildGptContext>[0]['image']
 }) {
   const request = job.request
   let text = ''
@@ -117,7 +122,7 @@ async function generate(job: Job, prepared: {
   let context: Record<string, unknown> = {}
   let runtimeContext: string | undefined
   try {
-    const recall = resolveRecallEnabled(request.recall, prepared.session.recall_mode, 'chat')
+    const recall = request.text.trim() && resolveRecallEnabled(request.recall, prepared.session.recall_mode, 'chat')
       ? await recallForPrompt(request.text, { sessionId: request.session_id, excludeIds: prepared.exclusions,
         maxChars: 80_000, signal: job.abort.signal }) : null
     const recalledText = recall?.ok ? recall.additionalContext : ''
@@ -147,13 +152,14 @@ async function generate(job: Job, prepared: {
     outcome = 'completed'
     send(job, 'usage', { usage })
   } catch (error) {
-    job.generationError = generationFailure(job, error)
+    job.generationError = generationFailure(job, error, Boolean(prepared.image))
     outcome = job.abort.signal.aborted ? 'cancelled' : 'failed'
     if (!startedModel) { send(job, 'error', job.generationError); return }
   }
   job.draft = {
     sessionId: request.session_id, requestId: request.request_id, personaId: request.persona_id,
     expectedLastRoundId: request.expected_last_round_id, userText: request.text, assistantText: text,
+    attachmentIds: request.attachment_ids,
     model: prepared.model, source: GPT_ENGINE, client: `ob2-gpt/${request.persona_id}`, route: '/api/cc-chat-gpt',
     recalledBucketIds: recallData.recalled_ids as string[] || [], timeoutMs: 30_000,
     raw: { version: 1, engine: GPT_ENGINE, model: prepared.model, request_id: request.request_id,
@@ -183,7 +189,7 @@ export async function startGptTurn(request: GptRequest, signal: AbortSignal): Pr
   if (rejected) return rejected
   const abort = new AbortController()
   const turn = createTurnBroadcast({ engine: GPT_ENGINE, requestId: request.request_id, sessionId: request.session_id,
-    userText: request.text, attachmentIds: [], startedAt: Date.now() }, async () => { abort.abort() })
+    userText: request.text, attachmentIds: request.attachment_ids || [], startedAt: Date.now() }, async () => { abort.abort() })
   if (!turn) return errorResponse(gptError(request.request_id, 'conversation_busy', '这个窗口已有进行中的回复'))
   turn.controller.signal.addEventListener('abort', () => abort.abort(), { once: true })
   const job: Job = { request, fingerprint, turn, owner: randomUUID().replaceAll('-', ''), abort,
@@ -226,6 +232,23 @@ export async function startGptTurn(request: GptRequest, signal: AbortSignal): Pr
     // Session/rolling preparation failures must not consume non-repeatable admission.
     // Keep admission immediately before handing off generation; an admitted request
     // still cannot repeat a model call, including after a process restart.
+    const currentImageId = request.attachment_ids?.[0]
+    const imageTurn = currentImageId ? undefined : [...rolling.history].reverse().find(turn => turn.source === GPT_ENGINE
+      && turn.attachments?.some(item => item.kind === 'image' && !item.cleared))
+    const imageId = currentImageId || imageTurn?.attachments?.find(item => item.kind === 'image' && !item.cleared)?.id
+    let image: Parameters<typeof buildGptContext>[0]['image']
+    if (imageId) {
+      if (currentImageId && history.turns.some(turn => turn.attachments?.some(item => item.id === currentImageId))) {
+        throw gptError(request.request_id, 'attachment_already_sent', '该图片已发送过，请重新选图')
+      }
+      const [resolved] = await resolveAttachments([imageId], request.session_id, imageTurn?.attachments)
+        .catch(() => { throw gptError(request.request_id, 'attachment_unavailable',
+          currentImageId ? '无法读取所选图片，请移除后重新选图' : '无法读取历史图片，请清除失效附件或重新发图') })
+      if (resolved?.kind !== 'image' || !resolved.base64 || Buffer.byteLength(resolved.base64, 'base64') > 2 * 1024 * 1024) {
+        throw gptError(request.request_id, 'attachment_invalid', 'GPT 只支持压缩后不超过 2 MB 的 JPEG、PNG 或 WebP 图片')
+      }
+      image = { url: `data:${resolved.mime_type};base64,${resolved.base64}`, roundId: imageTurn?.round_id ?? null }
+    }
     job.abort.signal.throwIfAborted()
     const claim = await controlGptRequest({ action: 'claim', request_id: request.request_id, session_id: request.session_id,
       fingerprint, owner: job.owner })
@@ -236,7 +259,7 @@ export async function startGptTurn(request: GptRequest, signal: AbortSignal): Pr
     send(job, 'init', { engine: GPT_ENGINE, model, session_id: request.session_id, request_id: request.request_id })
     handedOff = true
     void generate(job, { session, persona: persona.persona, history: rolling.history, rollingAppend: rolling.content,
-      exclusions: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])], model })
+      exclusions: [...new Set([...sessionResult.bucketExclusionIds, ...rolling.pinnedBucketIds])], model, image })
       .catch(() => send(job, 'error', { ...gptError(request.request_id, 'persistence_unknown', '无法确认保存结果，请用同一发送标识核对', 'persistence', true), persistence_unknown: true }))
       .finally(async () => { clearTimeout(timer); await finish(job) })
     return turnStream(turn, signal)

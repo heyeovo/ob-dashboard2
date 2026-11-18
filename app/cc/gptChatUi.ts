@@ -14,6 +14,13 @@ export function ensureGptMessages(messages: CcMessage[], request: Pick<GptReques
     if (messages.some(message => message.requestId === request.request_id && message.role === role)) continue
     incoming.push({ id: `gpt-${request.request_id}-${role}`, requestId: request.request_id, role,
       text: role === 'user' ? request.text : '', createdAt: at, engine: 'gpt_subscription',
+      ...(role === 'user' && original?.attachment_ids?.length ? {
+        attachments: original.attachment_ids.map(id => ({
+          id, sessionId: original.session_id, filename: '图片', kind: 'image' as const, mimeType: '',
+          byteSize: 0, sha256: '',
+          previewUrl: `/api/cc-attachments/${encodeURIComponent(id)}?session_id=${encodeURIComponent(original.session_id)}`,
+        })),
+      } : {}),
       ...(role === 'assistant' ? { deliveryState: 'detached' as const, gptRetryRequest: original } : {}) })
   }
   return [...messages, ...incoming]

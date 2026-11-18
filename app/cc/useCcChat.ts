@@ -1963,7 +1963,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
           setError(`${gptConnectionLabel(gptAccount.connection, gptAccount.loading)}。请打开本窗设置，检查授权并保存当前账号可用的模型。`)
           return
         }
-        await gpt.send(rawText, selectedAttachments.length)
+        await gpt.send(rawText, selectedAttachments)
         return
       }
       const text = rawText.trim()
@@ -2247,7 +2247,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   const retryPersistence = useCallback((message: CcMessage) => {
     if (message.engine === 'gpt_subscription') {
-      if (message.gptRetryRequest) void gpt.send(message.gptRetryRequest.text, 0, message.gptRetryRequest)
+      if (message.gptRetryRequest) void gpt.send(message.gptRetryRequest.text, [], message.gptRetryRequest)
       else void gpt.recover(message)
       return
     }

@@ -9,13 +9,17 @@ const request = { session_id: 's', persona_id: 'ombre', request_id: 'r', text: '
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
 describe('GPT public contract', () => {
-  it('accepts text and rejects work/tools/attachments and coerced strict fields', () => {
+  it('accepts text or one attachment ID and rejects unsupported options', () => {
     expect(parseGptRequest(request).request_id).toBe('r')
     for (const patch of [{ mode: 'work' }, { tools: [] }, { attachment_ids: ['a'] }, { recall: 'false' },
       { expected_last_round_id: '0' }, { request_id: 'bad.id' }, { model: '' }]) {
       expect(() => parseGptRequest({ ...request, ...patch })).toThrow()
     }
     expect(parseGptRequest({ ...request, attachment_ids: [] }).text).toBe('你好')
+    const id = 'a'.repeat(32)
+    expect(parseGptRequest({ ...request, text: '', attachment_ids: [id] }).attachment_ids).toEqual([id])
+    expect(() => parseGptRequest({ ...request, attachment_ids: [id, id] })).toThrow()
+    expect(() => parseGptRequest({ ...request, text: '', attachment_ids: [] })).toThrow()
   })
   it('keeps unavailable actual usage null and preserves real zero', () => {
     expect(actualUsage(null)).toBeNull()
