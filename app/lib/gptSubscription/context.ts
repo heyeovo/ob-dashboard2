@@ -32,14 +32,17 @@ function turnUserContent(turn: HavenTurn): string {
 
 export function buildGptContext(input: {
   persona: HavenPersona; session: HavenConversationSession; history: HavenTurn[]
-  rollingAppend: string; recall: string; text: string; now?: Date
+  rollingAppend: string; recall: string; text: string; now?: Date; mcpEnabled?: boolean
   image?: { url: string; roundId: number | null }
 }) {
   const persona = buildPersonaAppend(input.persona, input.session.prompt_module_overrides)
   const window = composeWindowPersonaAppend(persona, input.session, input.session.session_id, input.rollingAppend)
-  const capability = input.image
-    ? '当前线路仅提供文字回复，可读取本次请求附带的一张用户图片，没有文档读取、工具、房间、主动唤醒或工作模式能力。'
-    : '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。'
+  const capability = [
+    input.image ? '可读取本轮附带的一张用户图片。' : '',
+    input.mcpEnabled
+      ? '可以调用本轮提供的 MCP 工具。工具只有返回成功才算执行完成；写入结果未知时不要重试。'
+      : '当前线路仅提供文字回复。',
+  ].filter(Boolean).join(' ')
   const imageRound = input.image?.roundId
   const userContentWithImage = (text: string, roundId: number | null): string | GptImageContent =>
     input.image && imageRound === roundId

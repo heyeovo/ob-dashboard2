@@ -240,7 +240,7 @@ selfhost thinking：中转站若把 `<thinking>` / `<think>` 放进 `text_delta`
 
 ## GPT 文字 runner
 
-GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读取、`recordTurnStrict` compare-and-append 和 `cc/turnBroadcast` 订阅缓冲，不复用 selfhost 的 Anthropic adapter、MCP 或浏览器断线取消语义。共享广播增加可选 engine 标记，旧 CC 值缺省不变；旧引擎的接回与已存请求重放显式拒绝 GPT 来源，通用会话丢弃的 abort 仍能转发到 GPT 生成。具体路由/事件及恢复契约唯一维护在 reference「GPT 订阅聊天（文字）」。
+GPT 使用独立的 `gptSubscription/runner.ts`，复用 Haven 的上下文读取、`recordTurnStrict` compare-and-append 和 `cc/turnBroadcast` 订阅缓冲。MCP 复用 Dashboard 的客户端与权限通道，授权的工具调用与结果通过 Responses 续接当前轮次。共享广播增加可选 engine 标记，旧 CC 值缺省不变；旧引擎的接回与已存请求重放显式拒绝 GPT 来源，通用会话丢弃的 abort 仍能转发到 GPT 生成。具体路由/事件及恢复契约唯一维护在 reference「GPT 订阅聊天（文字）」。
 
 预检先按 request_id 查已保存轮次，校验 GPT 来源、窗口、协作者与规范请求摘要，再读窗口、人设和完整历史，检查 last_round_id 和删除状态。服务端先 CAS 保存本窗口 GPT 选择及日回顾/handoff 首次快照，再加载滚动上下文；两项准备成功并确认未取消后，才向 Haven 原子登记请求并交给生成任务。登记保存请求摘要、状态及无正文的发送前审计记录，正文仍唯一保存于现有 conversation_turns；已登记标识无论超时或重启都不能自动再次调用模型。实际 Gateway 状态表与登记机制以 Haven reference 为准。
 

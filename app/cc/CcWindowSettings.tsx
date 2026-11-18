@@ -326,7 +326,7 @@ export default function CcWindowSettings({
         </div>
 
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
-          {engine === 'gpt_subscription' && activeTab !== 'session' && activeTab !== 'rolling' ? (
+          {engine === 'gpt_subscription' && activeTab !== 'session' && activeTab !== 'rolling' && activeTab !== 'mcp' ? (
             <p className={HINT}>GPT 首版不支持此项 CC 能力。原设置保留，切回 CC 后可查看。</p>
           ) : activeTab === 'mcp' ? (
             <div className="space-y-3">

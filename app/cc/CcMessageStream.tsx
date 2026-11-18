@@ -474,7 +474,7 @@ export default function CcMessageStream({ scope }: { scope: CcChatScope }) {
         )}
         {/* 等着点批准的操作。放在消息流最后 —— 那一轮正停在这里等，
             它就是「现在该看的东西」。刷新页面不会丢（队列在服务端）。 */}
-        {chat.effectiveEngine !== 'gpt_subscription' && chat.pending.map(req => (
+        {chat.pending.map(req => (
           <CcPermCard key={req.id} request={req} onAnswer={chat.answerPermission} />
         ))}
         {chat.effectiveEngine !== 'gpt_subscription' && chat.autoAllowEdits ? (

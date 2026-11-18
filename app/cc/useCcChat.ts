@@ -1544,6 +1544,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       ...(handoffRef.current ? { handoff_snapshot: handoffRef.current.snapshot } : {}) }),
     accepted: () => { handoffRef.current = null }, saved: () => { void refreshSessions() },
     attention: () => { void gptAccount.reload() },
+    refreshPermissions: () => { void refreshPending() },
   })
 
   const stop = useCallback(() => {

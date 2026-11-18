@@ -1,5 +1,5 @@
 import type { HandoffSnapshot } from '../cc/handoffSnapshot'
-import type { CcSseDelta, CcSseStart, CcSseRecall } from '../cc/sseEvents'
+import type { CcSseDelta, CcSseStart, CcSseRecall, CcSseEventMap } from '../cc/sseEvents'
 
 export const GPT_ENGINE = 'gpt_subscription' as const
 export type GptConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reauth_required'
@@ -44,7 +44,7 @@ export type GptDone = {
   interrupted: boolean; outcome: 'completed' | 'cancelled' | 'failed'; elapsed_ms: number
 }
 // CC event names and text/recall shapes; GPT terminal metadata stays explicit.
-export type GptEventMap = {
+export type GptEventMap = Pick<CcSseEventMap, 'tool' | 'tool_result' | 'permission' | 'permission_resolved'> & {
   start: CcSseStart
   init: { engine: typeof GPT_ENGINE; model: string; session_id: string; request_id: string }
   delta: CcSseDelta
