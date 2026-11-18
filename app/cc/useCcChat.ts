@@ -156,6 +156,15 @@ export function requestedCcSessionId(search: string): string {
   return value && value.length <= 200 ? value : ''
 }
 
+function replaceGptHandoffLink(nextId: string | null, previousId: string) {
+  const state = window.history.state
+  const url = new URL(window.location.href)
+  if (!nextId && (state?.gptHandoffSessionId !== previousId || requestedCcSessionId(url.search) !== previousId)) return
+  if (nextId) url.searchParams.set('session_id', nextId)
+  else url.searchParams.delete('session_id')
+  window.history.replaceState({ ...state, gptHandoffSessionId: nextId }, '', url)
+}
+
 export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const [sessionId, setSessionId] = useState('')
   const [sessions, setSessions] = useState<CcSessionListItem[]>([])
@@ -278,6 +287,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const resumeHintLaneIdRef = useRef('')
   // 5.5 换窗 handoff：首条消息带走的数据。发完即清。
   const handoffRef = useRef<{ snapshot: HandoffPayload['snapshot'] } | null>(null)
+  const gptHandoffAttempt = useRef<{ sourceId: string; personaId: string; model: string; snapshot: HandoffPayload['snapshot']; nextId: string } | null>(null)
   const dailyReviewEnabledRef = useRef(false)
   const gptAccount = useGptConnection(effectiveEngine === 'gpt_subscription')
   const gptReady = gptAccount.ready && Boolean(gptAccount.models?.ok
@@ -733,6 +743,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   const switchSession = useCallback(
     async (nextId: string) => {
       if (nextId === sessionId) return
+      replaceGptHandoffLink(null, sessionId)
       // 存草稿
       draftsRef.current.set(sessionId, draft)
       snapshotCurrentSessionRef.current()
@@ -1100,6 +1111,7 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
   }, [sessionId, gapDayLoading, historyDaysBySession, mergeHistoryDays])
 
   const startNewSession = useCallback(() => {
+    replaceGptHandoffLink(null, sessionId)
     draftsRef.current.set(sessionId, draft)
     abortRef.current?.abort()
     abortRef.current = null
@@ -1305,12 +1317,34 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
 
   const startWithHandoff = useCallback(
     async (payload: HandoffPayload) => {
+      const keepGpt = effectiveEngine === 'gpt_subscription'
+      let nextId = newSessionId()
+      if (keepGpt) {
+        if (!personaId || !gptModel) throw new Error('请先在本窗设置中选择 GPT 模型')
+        if (sending || historyLoading || gptModelSaving || engineSaving) throw new Error('请等当前操作结束后再换窗')
+        const previous = gptHandoffAttempt.current
+        if (previous?.sourceId === sessionId && previous.personaId === personaId
+          && previous.model === gptModel && previous.snapshot === payload.snapshot) nextId = previous.nextId
+        gptHandoffAttempt.current = { sourceId: sessionId, personaId, model: gptModel, snapshot: payload.snapshot, nextId }
+        const response = await fetch('/api/cc-session-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: nextId, persona_id: personaId, engine: 'gpt_subscription',
+            model: gptModel, handoff_snapshot: payload.snapshot }),
+        })
+        const result = await response.json().catch(() => null)
+        if (!response.ok || !result?.ok) throw new Error(result?.error || '换窗资料未能确认保存，请重试')
+        gptHandoffAttempt.current = null
+        if (currentSessionRef.current !== sessionId) return false
+        replaceGptHandoffLink(nextId, sessionId)
+      } else {
+        replaceGptHandoffLink(null, sessionId)
+      }
       // 先做 startNewSession 同款重置
       draftsRef.current.set(sessionId, draft)
       abortRef.current?.abort()
       abortRef.current = null
       setSending(false)
-      const nextId = newSessionId()
       currentSessionRef.current = nextId
       setSessionId(nextId)
       setMessages([])
@@ -1321,8 +1355,10 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       setHistoryTurnCount(0)
       setHistoryBeforeId(null)
       setHasEarlierHistory(false)
-      setLocalEnginePreference('cc')
-      setGptModel('')
+      if (!keepGpt) {
+        setLocalEnginePreference('cc')
+        setGptModel('')
+      }
       setPromptModuleOverrides({})
       promptModuleOverridesRef.current = {}
       lastRoundIdRef.current = 0
@@ -1338,16 +1374,17 @@ export function useCcChat(personaId = '', isRemote: boolean | null = false) {
       ccPickRef.current = ccRoutePicksRef.current[defaultPick.kind]
       selfhostPickRef.current = defaultPick
       setPick(defaultPick)
-      setMode(payload.mode)
+      setMode(keepGpt ? 'chat' : payload.mode)
+      if (keepGpt) setIsRolling(false)
       // 日回顾现在与其他 handoff 条目一样逐项选择并进入同一份固定快照，
       // 不再额外初始化「默认最近三天」以免重复注入。
       dailyReviewEnabledRef.current = false
 
       // 存 handoff 数据，首条 send 时带走
-      handoffRef.current = { snapshot: payload.snapshot }
-
+      handoffRef.current = keepGpt ? null : { snapshot: payload.snapshot }
+      return true
     },
-    [sessionId, draft, upstream, webDefaults],
+    [sessionId, draft, upstream, webDefaults, effectiveEngine, personaId, gptModel, sending, historyLoading, gptModelSaving, engineSaving],
   )
 
   /**

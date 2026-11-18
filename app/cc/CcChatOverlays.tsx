@@ -122,10 +122,11 @@ export default function CcChatOverlays({ scope }: { scope: CcChatScope }) {
         <CcHandoffDialog
           fromSessionId={handoffOpen.fromSessionId}
           currentMode={chat.mode}
+          chatOnly={chat.effectiveEngine === 'gpt_subscription'}
           personaId={people.active.id}
-          onConfirm={payload => {
+          onConfirm={async payload => {
+            if (!await chat.startWithHandoff(payload)) return
             setHandoffOpen(null)
-            chat.startWithHandoff(payload)
             setMobileView('chat')
           }}
           onClose={() => setHandoffOpen(null)}
