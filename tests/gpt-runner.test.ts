@@ -6,7 +6,10 @@ import { useGptChat } from '@/app/cc/useGptChat'
 import type { CcMessage } from '@/app/cc/types'
 
 const f = vi.hoisted(() => ({ session: vi.fn(), history: vi.fn(), persona: vi.fn(), lookup: vi.fn(),
-  patch: vi.fn(), persist: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn() }))
+  patch: vi.fn(), persist: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn(),
+  mcpConfig: vi.fn(), mcpRuntime: vi.fn() }))
+vi.mock('@/app/lib/ccMcp', () => ({ loadMcpConfig: f.mcpConfig }))
+vi.mock('@/app/lib/selfhost/mcp', () => ({ createSelfhostMcpRuntime: f.mcpRuntime }))
 vi.mock('@/app/lib/havenTurns', () => ({ getConversationSession: f.session, listAllTurns: f.history,
   getTurnByRequestId: f.lookup, patchConversationSessionState: f.patch, recordTurnStrict: f.persist }))
 vi.mock('@/app/lib/havenPersonas', () => ({ getPersona: f.persona, buildPersonaAppend: () => '人设' }))
@@ -21,7 +24,8 @@ vi.mock('@/app/lib/gptSubscription/transport', async importOriginal => {
 import { startGptTurn, getGptTurn, stopGptTurn, requestFingerprint } from '@/app/lib/gptSubscription/runner'
 import { GET, POST, DELETE } from '@/app/api/cc-chat-gpt/route'
 import { configureServerDrain, resetServerDrainForTests, startDrain } from '@/app/lib/serverDrain'
-import { GptTransportError } from '@/app/lib/gptSubscription/transport'
+import { GptTransportError, type GptModelInput } from '@/app/lib/gptSubscription/transport'
+import { answerPermission, workbenchState } from '@/app/lib/ccChannel'
 import type { GptRequest } from '@/app/lib/gptSubscription/contract'
 
 let sequence = 0
@@ -43,6 +47,7 @@ beforeEach(() => {
   f.persona.mockResolvedValue({ ok: true, persona: { id: 'ombre' } })
   f.lookup.mockResolvedValue({ ok: true, found: false })
   f.control.mockResolvedValue({ ok: true })
+  f.mcpRuntime.mockResolvedValue({ tools: [], warnings: [], close: vi.fn().mockResolvedValue(undefined) })
   f.patch.mockImplementation(async (input: { sessionId: string }) => ({ ok: true, session: { ...session, session_id: input.sessionId } }))
   f.persist.mockResolvedValue({ ok: true, stored: true, turnId: 7, roundId: 1,
     userMessageId: 'u7', assistantMessageId: 'a7', idempotentReplay: false })
@@ -54,6 +59,111 @@ beforeEach(() => {
 afterEach(() => { resetServerDrainForTests(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 describe('GPT runner', () => {
+  function mockTools(permission: 'allow' | 'ask' = 'allow') {
+    const servers = ['alpha', 'beta'].map(name => ({
+      name, label: name, enabled: true, transport: 'http', url: `https://${name}.example.test/mcp`,
+      permission, saveResults: true,
+    }))
+    const execute = vi.fn().mockResolvedValue({ text: 'fixture-37', isError: false })
+    f.mcpConfig.mockResolvedValue({ version: 1, servers })
+    f.mcpRuntime.mockResolvedValue({
+      tools: servers.map(server => ({ name: `mcp__${server.name}__write`, remoteName: 'write',
+        serverName: server.name, description: 'Write fixture', input_schema: { type: 'object' }, saveResults: true })),
+      warnings: [], configuredServer: (name: string) => servers.find(server => server.name === name),
+      callTool: execute, close: vi.fn().mockResolvedValue(undefined),
+    })
+    f.stream.mockImplementationOnce(async (input: GptModelInput) => {
+      const group = input.tools?.find(group => group.description.endsWith('beta'))!
+      return { usage: null, continuation: [
+        { type: 'reasoning', id: 'rs_test', summary: [], encrypted_content: 'fixture' },
+        { type: 'function_call', namespace: group.name, name: group.tools[0].name,
+          call_id: 'call_test', arguments: '{"value":37}' },
+      ] }
+    })
+    return { servers, execute }
+  }
+
+  it('sends an approved result to the same model turn and never repeats the write on replay', async () => {
+    const { execute } = mockTools('ask')
+    f.stream.mockImplementationOnce(async (input, _signal, delta) => {
+      expect(input.step).toBe(1)
+      expect(input.input.at(-3)).toMatchObject({ type: 'reasoning', encrypted_content: 'fixture' })
+      expect(input.input.at(-1)).toEqual({ type: 'function_call_output', call_id: 'call_test', output: 'fixture-37' })
+      delta('confirmed fixture-37')
+      return { usage: null }
+    })
+    const body = request()
+    const response = await POST(http(body))
+    await vi.waitFor(() => expect(workbenchState(body.session_id).pending).toHaveLength(1))
+    expect(execute).not.toHaveBeenCalled()
+    const approval = workbenchState(body.session_id).pending[0]
+    expect(approval.toolName).toBe('mcp__beta__write')
+    expect(answerPermission(body.session_id, approval.id, { behavior: 'allow' })).toBe(true)
+    const events = await response.text()
+    expect(events).toContain('confirmed fixture-37')
+    expect(events).toContain('event: tool_result')
+    expect((await POST(http(body))).ok).toBe(true)
+    expect(execute).toHaveBeenCalledExactlyOnceWith({ name: 'mcp__beta__write', input: { value: 37 } }, expect.any(AbortSignal))
+    expect(f.stream).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['stop', 'deny', 'disable'] as const)('a pending MCP write does not run after %s', async action => {
+    const { execute, servers } = mockTools('ask')
+    const body = request()
+    const response = await POST(http(body))
+    await vi.waitFor(() => expect(workbenchState(body.session_id).pending).toHaveLength(1))
+    const approval = workbenchState(body.session_id).pending[0]
+    if (action === 'stop') stopGptTurn(body.session_id, body.request_id)
+    else if (action === 'deny') answerPermission(body.session_id, approval.id, { behavior: 'deny', message: '拒绝执行' })
+    else {
+      f.mcpConfig.mockResolvedValue({ version: 1, servers: servers.map(server => ({ ...server, enabled: false })) })
+      answerPermission(body.session_id, approval.id, { behavior: 'allow' })
+    }
+    expect(await response.text()).toContain('"status":"denied"')
+    expect(execute).not.toHaveBeenCalled()
+    expect(workbenchState(body.session_id).pending).toHaveLength(0)
+    if (action === 'stop') expect(f.stream).toHaveBeenCalledOnce()
+    else expect(f.stream.mock.calls[1][0].input.at(-1)).toMatchObject({ type: 'function_call_output', call_id: 'call_test' })
+  })
+
+  it('caps tool execution and the UTF-8 result sent to the model', async () => {
+    const { execute } = mockTools()
+    execute.mockResolvedValue({ text: '很长'.repeat(5000), isError: false })
+    f.stream.mockReset()
+      .mockImplementationOnce(async (input: GptModelInput) => {
+        const group = input.tools?.[0]!
+        return { usage: null, continuation: Array.from({ length: 9 }, (_, index) => ({
+          type: 'function_call', namespace: group.name, name: group.tools[0].name,
+          call_id: `test-${index}`, arguments: JSON.stringify({ index }),
+        })) }
+      })
+      .mockImplementationOnce(async input => {
+        const results = input.input.filter((item: { type?: string }) => item.type === 'function_call_output')
+        expect(results).toHaveLength(9)
+        expect(results.slice(0, 8).every((item: { output: string }) => Buffer.byteLength(item.output) <= 8192)).toBe(true)
+        expect(results[8].output).toContain('已达上限')
+        return { usage: null }
+      })
+    expect(await (await POST(http(request()))).text()).toContain('"outcome":"completed"')
+    expect(execute).toHaveBeenCalledTimes(8)
+  })
+
+  it('stops an in-flight MCP call without claiming it was undone or running it again', async () => {
+    const { execute } = mockTools()
+    execute.mockImplementation(async (_call, signal: AbortSignal) => {
+      await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }))
+      return { text: 'cancelled', isError: true }
+    })
+    const body = request()
+    const response = await POST(http(body))
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce())
+    stopGptTurn(body.session_id, body.request_id)
+    expect(await response.text()).toContain('工具执行状态可能需要核对')
+    expect(await (await POST(http(body))).text()).toContain('"outcome":"cancelled"')
+    expect(execute).toHaveBeenCalledOnce()
+    expect(f.stream).toHaveBeenCalledOnce()
+  })
+
   it('saves body-free assembled evidence before generation and refuses generation after audit failure', async () => {
     const body = request()
     const actions: string[] = []
@@ -188,6 +298,7 @@ describe('GPT runner', () => {
     const duplicate = await POST(http(body))
     const conflict = await POST(http({ ...body, request_id: `${body.request_id}-other` }))
     expect(conflict.status).toBe(409)
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
     resolve()
     await Promise.all([first.text(), duplicate.text()])
     expect(f.stream).toHaveBeenCalledTimes(1)
@@ -202,6 +313,7 @@ describe('GPT runner', () => {
     const body = request()
     const browser = new AbortController()
     const first = await startGptTurn(body, browser.signal)
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
     browser.abort(); await first.body!.cancel()
     expect(transportSignal.aborted).toBe(false)
     const attached = await getGptTurn(body.session_id, body.request_id, new AbortController().signal, 2)
@@ -217,6 +329,7 @@ describe('GPT runner', () => {
     })
     const body = request()
     const response = await POST(http(body))
+    await vi.waitFor(() => expect(f.stream).toHaveBeenCalledOnce())
     expect((await DELETE(http({ session_id: body.session_id, request_id: body.request_id }, 'DELETE'))).status).toBe(200)
     const text = await response.text()
     expect(text).toContain('"outcome":"cancelled"')

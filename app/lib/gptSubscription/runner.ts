@@ -1,5 +1,6 @@
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
+import type { CcProcessEvent, CcToolEvent } from '@/app/cc/types'
 import { getPersona } from '../havenPersonas'
 import { recallForPrompt } from '../havenRecall'
 import { estimateTextTokens, splitRecallModules } from '../recallDisplay'
@@ -10,9 +11,11 @@ import { loadRollingWindowAppend } from '../cc/windowPrompt'
 import { createTurnBroadcast, finishTurn, publishTurn, turnStream, type TurnBroadcast } from '../cc/turnBroadcast'
 import { drainRejection, trackDrainWork } from '../serverDrain'
 import { buildGptContext } from './context'
-import { buildGptAudit } from './audit'
-import { controlGptRequest, GptTransportError, streamGpt } from './transport'
-import { GPT_ENGINE, gptError, type GptDone, type GptError, type GptEventMap, type GptRequest } from './contract'
+import { attachSend, detachSend, type CcSend } from '../ccChannel'
+import { buildGptAudit, gptModelBodyHash } from './audit'
+import { GPT_TOOL_STEPS, openGptTools } from './tools'
+import { controlGptRequest, GptTransportError, streamGpt, type GptModelInput } from './transport'
+import { GPT_ENGINE, gptError, type GptDone, type GptError, type GptEventMap, type GptRequest, type GptUsage } from './contract'
 
 export const GPT_TURN_TIMEOUT_MS = 9 * 60_000
 type Job = {
@@ -47,7 +50,12 @@ function replay(job: Job, turn: HavenTurn) {
   send(job, 'start', { session_id: job.request.session_id, request_id: job.request.request_id, at: job.turn.startedAt, idempotent_replay: true })
   send(job, 'init', { engine: GPT_ENGINE, model: turn.model, session_id: turn.session_id, request_id: job.request.request_id })
   if (stored.recall && typeof stored.recall === 'object') send(job, 'recall', stored.recall as GptEventMap['recall'])
-  if (turn.assistant_text) send(job, 'delta', { id: 'text-0', text: turn.assistant_text })
+  if (Array.isArray(stored.process) && stored.process.length) {
+    for (const event of stored.process as CcProcessEvent[]) {
+      if (event.type === 'text') send(job, 'delta', { id: event.id, text: event.text })
+      if (event.type === 'tool') send(job, 'tool', event.tool)
+    }
+  } else if (turn.assistant_text) send(job, 'delta', { id: 'text-0', text: turn.assistant_text })
   const outcome = stored.outcome === 'completed' ? 'completed' : stored.outcome === 'cancelled' ? 'cancelled' : 'failed'
   if (stored.generation_error) send(job, 'error', { ...stored.generation_error as GptError, partial_saved: true })
   const done: GptDone = { request_id: job.request.request_id, turn_id: turn.id, round_id: turn.round_id,
@@ -101,6 +109,16 @@ function generationFailure(job: Job, error: unknown): GptError {
   return gptError(job.request.request_id, 'gpt_generation_failed', 'GPT 回复中断，已有文字会保留，请重试', 'generation', true)
 }
 
+function addUsage(previous: GptUsage | null, current: GptUsage | null): GptUsage | null {
+  if (!previous || !current) return null
+  const sum = (key: keyof GptUsage) => {
+    const left = previous[key], right = current[key]
+    return left === null || right === null ? null : left + right
+  }
+  return { input_tokens: sum('input_tokens'), output_tokens: sum('output_tokens'), total_tokens: sum('total_tokens'),
+    cached_tokens: sum('cached_tokens'), reasoning_tokens: sum('reasoning_tokens') }
+}
+
 async function generate(job: Job, prepared: {
   session: NonNullable<Awaited<ReturnType<typeof getConversationSession>>['session']>
   persona: NonNullable<Awaited<ReturnType<typeof getPersona>>['persona']>
@@ -116,6 +134,33 @@ async function generate(job: Job, prepared: {
   let recallData: Record<string, unknown> = {}
   let context: Record<string, unknown> = {}
   let runtimeContext: string | undefined
+  let toolRuntime: Awaited<ReturnType<typeof openGptTools>> | undefined
+  const toolEvents = new Map<string, CcToolEvent>()
+  const process: CcProcessEvent[] = []
+  let outputBytes = 0
+  const forwardPermission: CcSend = (event, value) => {
+    if (event === 'permission') send(job, event, value as GptEventMap['permission'])
+    if (event === 'permission_resolved') send(job, event, value as GptEventMap['permission_resolved'])
+  }
+  const showTool = (tool: CcToolEvent, saveResult = false) => {
+    toolEvents.set(tool.id, saveResult ? tool : { ...tool, result: undefined })
+    if (tool.status === 'running') {
+      process.push({ type: 'tool', id: `process-${tool.id}`, tool })
+      send(job, 'tool', tool)
+    } else send(job, 'tool_result', { id: tool.id, status: tool.status, result: tool.result,
+      error: tool.error, durationMs: tool.durationMs || 0 })
+  }
+  const showDelta = (delta: string) => {
+    outputBytes += Buffer.byteLength(delta)
+    if (outputBytes > 1024 * 1024) throw new GptTransportError('output_too_large', '回复过长，已停止并保留已有内容')
+    text += delta
+    const last = process.at(-1)
+    if (last?.type === 'text') last.text += delta
+    else process.push({ type: 'text', id: `text-${process.length}`, text: delta })
+    send(job, 'delta', { id: 'text-0', text: delta })
+  }
+  const signal = job.abort.signal
+  attachSend(request.session_id, forwardPermission)
   try {
     const recall = resolveRecallEnabled(request.recall, prepared.session.recall_mode, 'chat')
       ? await recallForPrompt(request.text, { sessionId: request.session_id, excludeIds: prepared.exclusions,
@@ -131,25 +176,52 @@ async function generate(job: Job, prepared: {
     }
     send(job, 'recall', recallData as GptEventMap['recall'])
     recallData.additional_context = recalledText
-    const assembled = buildGptContext({ ...prepared, recall: recalledText, text: request.text })
+    toolRuntime = await openGptTools(request.session_id, prepared.session.mcp_overrides, signal)
+    signal.throwIfAborted()
+    for (const warning of toolRuntime.warnings) {
+      const tool = { id: randomUUID(), name: `MCP · ${warning.server}`, status: 'error' as const, error: warning.error }
+      showTool({ ...tool, status: 'running' })
+      showTool(tool)
+    }
+    const namespaces = toolRuntime.namespaces
+    const assembled = buildGptContext({ ...prepared, recall: recalledText, text: request.text, mcpEnabled: !!namespaces.length })
     runtimeContext = assembled.auditParts.current_time
     context = assembled.context; send(job, 'context', context)
+    let modelInput: GptModelInput = { model: prepared.model, instructions: assembled.instructions, input: assembled.input,
+      ...(namespaces.length ? { tools: namespaces, include: ['reasoning.encrypted_content'] } : {}) }
     const audit = await controlGptRequest({ action: 'prepare', request_id: request.request_id,
-      session_id: request.session_id, owner: job.owner, snapshot: buildGptAudit(prepared.model, assembled) })
+      session_id: request.session_id, owner: job.owner, snapshot: buildGptAudit(prepared.model, assembled, modelInput) })
     if (!audit.ok) throw new GptTransportError(audit.code || 'audit_persistence_failed', '发送前审计记录未保存，本轮尚未发送', true)
     job.abort.signal.throwIfAborted()
     startedModel = true
-    const result = await streamGpt({ request_id: request.request_id, model: prepared.model,
-      instructions: assembled.instructions, input: assembled.input }, job.abort.signal, delta => {
-      text += delta; send(job, 'delta', { id: 'text-0', text: delta })
-    })
-    usage = result.usage; responseId = result.responseId; officialRequestId = result.requestId
+    for (let step = 0; ; step++) {
+      signal.throwIfAborted()
+      const result = await streamGpt({ ...modelInput, request_id: request.request_id, ...(step ? { step } : {}) },
+        signal, showDelta)
+      usage = step ? addUsage(usage, result.usage) : result.usage
+      responseId = result.responseId; officialRequestId = result.requestId
+      if (!result.continuation) break
+      if (step >= GPT_TOOL_STEPS) throw new GptTransportError('tool_limit', '本轮已达到 MCP 工具续接上限')
+      const outputs = await toolRuntime.execute(result.continuation, showTool)
+      modelInput = { ...modelInput, input: [...modelInput.input, ...result.continuation, ...outputs],
+        ...(step + 1 === GPT_TOOL_STEPS ? { tool_choice: 'none' } : {}) }
+      signal.throwIfAborted()
+      const next = await controlGptRequest({ action: 'prepare-tool-step', request_id: request.request_id,
+        session_id: request.session_id, owner: job.owner, step: step + 1, body_hash: gptModelBodyHash(modelInput) })
+      if (!next.ok) throw new GptTransportError(next.code || 'audit_persistence_failed', '工具结果已取得，但 GPT 无法继续本轮')
+    }
     outcome = 'completed'
     send(job, 'usage', { usage })
   } catch (error) {
     job.generationError = generationFailure(job, error)
     outcome = job.abort.signal.aborted ? 'cancelled' : 'failed'
     if (!startedModel) { send(job, 'error', job.generationError); return }
+  } finally {
+    for (const tool of toolEvents.values()) {
+      if (tool.status === 'running') showTool({ ...tool, status: 'denied', error: '本轮中断，工具未执行。' })
+    }
+    detachSend(request.session_id, forwardPermission)
+    await toolRuntime?.close().catch(() => {})
   }
   job.draft = {
     sessionId: request.session_id, requestId: request.request_id, personaId: request.persona_id,
@@ -160,7 +232,9 @@ async function generate(job: Job, prepared: {
       gpt_request_fingerprint: job.fingerprint, rolling_context_revision: prepared.session.context_revision,
       gpt_runtime_context: runtimeContext,
       outcome, stop_reason: outcome, usage, response_id: responseId, official_request_id: officialRequestId,
-      recall: recallData, context, generation_error: job.generationError },
+      recall: recallData, context, generation_error: job.generationError,
+      ...(toolEvents.size ? { tools: [...toolEvents.values()], process: process.map(event => event.type === 'tool'
+        ? { ...event, tool: toolEvents.get(event.tool.id) || event.tool } : event) } : {}) },
   }
   await persist(job)
 }

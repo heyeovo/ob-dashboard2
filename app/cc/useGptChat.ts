@@ -20,6 +20,7 @@ type Options = {
   requestContext: () => Pick<GptRequest, 'include_daily_review' | 'handoff_snapshot'>
   accepted: () => void; saved: () => void
   attention?: () => void
+  refreshPermissions?: () => void
 }
 
 /** Browser subscription only: disconnecting this hook never cancels the server job. */
@@ -51,6 +52,7 @@ export function useGptChat(options: Options) {
       if (!isCurrent()) return
       if (request && response.ok) o.accepted()
       const result = await consumeGptResponse(response, { requestId, update, after,
+        refreshPermissions: () => { if (isCurrent()) o.refreshPermissions?.() },
         received: seq => cursors.current.set(requestId, seq),
         attention: error => { if (isCurrent() && error.action) o.attention?.() },
         saved: round => {

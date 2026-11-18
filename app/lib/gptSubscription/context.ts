@@ -32,11 +32,13 @@ function turnUserContent(turn: HavenTurn): string {
 
 export function buildGptContext(input: {
   persona: HavenPersona; session: HavenConversationSession; history: HavenTurn[]
-  rollingAppend: string; recall: string; text: string; now?: Date
+  rollingAppend: string; recall: string; text: string; now?: Date; mcpEnabled?: boolean
 }) {
   const persona = buildPersonaAppend(input.persona, input.session.prompt_module_overrides)
   const window = composeWindowPersonaAppend(persona, input.session, input.session.session_id, input.rollingAppend)
-  const capability = '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。'
+  const capability = input.mcpEnabled
+    ? '可以调用本轮提供的 MCP 工具。工具只有返回成功才算执行完成；写入结果未知时不要重试。'
+    : '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。'
   const recalledCurrent = recallBlock(input.recall)
   const instructions = [window, capability].filter(Boolean).join('\n\n')
   const currentTime = beijingRuntimeContext(input.now)

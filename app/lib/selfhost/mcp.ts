@@ -2,10 +2,12 @@ import { windowMcpConfig } from '@/app/lib/windowMcp'
 import 'server-only'
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { loadMcpConfig } from '@/app/lib/ccMcp'
 import { createMcpTransport, safeMcpError } from '@/app/lib/ccMcpDiscovery'
 import type { CcMcpConfig, CcMcpServer } from '@/app/lib/ccMcpTypes'
 import { storedMcpResult } from '@/app/lib/cc/ccOptions'
+import { builtInMcpPermissionForTool, builtInMcpServers } from '@/app/lib/cc/builtInMcp'
 import type { AnthropicToolDefinition } from '@/app/lib/selfhost/anthropicMessages'
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 8_000
@@ -17,6 +19,7 @@ export type SelfhostMcpTool = AnthropicToolDefinition & {
   serverName: string
   remoteName: string
   saveResults: boolean
+  builtIn?: boolean
 }
 
 export type SelfhostMcpCall = {
@@ -35,12 +38,14 @@ export type SelfhostMcpRuntime = {
   tools: SelfhostMcpTool[]
   warnings: Array<{ server: string; error: string }>
   callTool(call: SelfhostMcpCall, signal?: AbortSignal): Promise<SelfhostMcpCallResult>
+  configuredServer?(name: string): CcMcpServer | undefined
   close(): Promise<void>
 }
 
 type ConnectedServer = {
   server: CcMcpServer
   client: Client
+  closeServer?: () => Promise<void>
 }
 
 function effectivePermission(server: CcMcpServer, toolName: string) {
@@ -83,7 +88,8 @@ export function selfhostMcpToolTimeout(serverTimeout: number | undefined, remote
   return remoteName === 'hold' ? Math.max(timeout, HOLD_TOOL_TIMEOUT_MS) : timeout
 }
 
-export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: Record<string, boolean> = {}): Promise<SelfhostMcpRuntime> {
+export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: Record<string, boolean> = {},
+  options?: { interactive: true; sessionId: string }): Promise<SelfhostMcpRuntime> {
   const connected = new Map<string, ConnectedServer>()
   const tools: SelfhostMcpTool[] = []
   const warnings: Array<{ server: string; error: string }> = []
@@ -102,34 +108,53 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: 
     }
   }
 
-  for (const server of config.servers) {
-    if (!isSelfhostMcpServer(server)) continue
+  const builtIns = options ? builtInMcpServers(options.sessionId, { ...config.builtIns, ombre_agent_wake: false }, 'chat') : {}
+  const builtInConfigs: CcMcpServer[] = Object.entries(builtIns).flatMap(([name, definition]) => definition.type === 'sdk' ? [{
+    name, label: name, enabled: true, transport: 'stdio', permission: 'allow', saveResults: name === 'send_image',
+  }] : [])
+  for (const server of [...config.servers.filter(server => !Object.hasOwn(builtIns, server.name)), ...builtInConfigs]) {
+    if (signal?.aborted) break
+    if (options ? !server.enabled : !isSelfhostMcpServer(server)) continue
     const timeout = server.timeout || DEFAULT_CONNECT_TIMEOUT_MS
     const client = new Client({ name: 'ob-dashboard2-selfhost', version: '1.0.0' })
+    const definition = builtIns[server.name]
+    const instance = definition?.type === 'sdk' ? definition.instance : undefined
+    const closeServer = instance ? () => instance.close() : undefined
+    const discovered: SelfhostMcpTool[] = []
     try {
-      await client.connect(createMcpTransport(server), { timeout, signal })
-      connected.set(server.name, { server, client })
+      if (instance) {
+        const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair()
+        await instance.connect(serverTransport)
+        await client.connect(clientTransport, { timeout, signal })
+      } else await client.connect(createMcpTransport(server), { timeout, signal })
+      connected.set(server.name, { server, client, closeServer })
       let cursor: string | undefined
       do {
         const result = await client.listTools(cursor ? { cursor } : undefined, { timeout, signal })
         for (const tool of result.tools) {
           if (tool.name === 'room') continue
           const name = publicToolName(server, tool.name)
-          if (!isSelfhostMcpToolAllowed(server, name)) continue
-          tools.push({
+          const permission = instance ? builtInMcpPermissionForTool(name, config.builtIns, config.builtInPermissions)
+            : effectivePermission(server, name)
+          if (options ? !isEnabledInCatalog(server, name) || permission === 'deny'
+            : !isSelfhostMcpToolAllowed(server, name)) continue
+          discovered.push({
             name,
             description: selfhostMcpToolDescription(tool),
             input_schema: structuredRecord(tool.inputSchema) || { type: 'object', properties: {} },
             serverName: server.name,
             remoteName: tool.name,
             saveResults: server.saveResults,
+            ...(instance ? { builtIn: true } : {}),
           })
         }
         cursor = result.nextCursor
       } while (cursor)
+      tools.push(...discovered)
     } catch (error) {
       warnings.push({ server: server.name, error: safeMcpError(error, server) })
       await client.close().catch(() => undefined)
+      await closeServer?.().catch(() => undefined)
       connected.delete(server.name)
     }
   }
@@ -137,6 +162,7 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: 
   return {
     tools,
     warnings,
+    configuredServer: name => connected.get(name)?.server,
     async callTool(call, callSignal) {
       const tool = tools.find(item => item.name === call.name)
       if (!tool) return { text: `工具 ${call.name} 不可用或未获自动允许`, isError: true }
@@ -149,11 +175,13 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: 
           undefined,
           { timeout, signal: callSignal },
         )
-        const text = storedMcpResult(result, MCP_RESULT_LIMIT) || '工具已完成，但没有返回正文'
+        const structuredContent = structuredRecord(result.structuredContent)
+        const text = storedMcpResult(result, MCP_RESULT_LIMIT)
+          || (options && structuredContent ? JSON.stringify(structuredContent) : '工具已完成，但没有返回正文')
         return {
           text,
           isError: result.isError === true,
-          structuredContent: structuredRecord(result.structuredContent),
+          structuredContent,
           persistedResult: tool.saveResults ? text : undefined,
         }
       } catch (error) {
@@ -164,7 +192,10 @@ export async function createSelfhostMcpRuntime(signal?: AbortSignal, overrides: 
       }
     },
     async close() {
-      await Promise.all([...connected.values()].map(item => item.client.close().catch(() => undefined)))
+      await Promise.all([...connected.values()].map(async item => {
+        await item.client.close().catch(() => undefined)
+        await item.closeServer?.().catch(() => undefined)
+      }))
       connected.clear()
     },
   }

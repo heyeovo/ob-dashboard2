@@ -1,4 +1,4 @@
-import type { CcMessage, GptEventMap, GptRequest, GptError } from './types'
+import type { CcMessage, CcToolEvent, GptEventMap, GptRequest, GptError } from './types'
 import { consumeSseStream, type SseHandlers } from './ccSseConsumer'
 import { turnsToMessages, type HavenTurnRow } from './ccHistory'
 import { mergeTurnMessages } from './turnRecovery'
@@ -24,6 +24,7 @@ export async function consumeGptResponse(response: Response, options: {
   requestId: string; update: Update; after: number; received: (sequence: number) => void
   saved: (roundId: number) => void
   attention?: (error: GptError) => void
+  refreshPermissions?: () => void
 }): Promise<'pending' | 'settled'> {
   const { requestId, update } = options
   const patch = (apply: (message: CcMessage) => CcMessage) => update(messages => messages.map(message =>
@@ -53,16 +54,34 @@ export async function consumeGptResponse(response: Response, options: {
   }
   if (!response.ok || !response.body) throw new Error(`连接失败（${response.status}）`)
   if (options.after === 0) patch(message => ({ ...message, text: '', process: [], displaySegments: [],
-    streaming: true, deliveryState: 'generating', deliveryNote: undefined }))
+    tools: [], streaming: true, deliveryState: 'generating', deliveryNote: undefined }))
   const noop = () => {}
   const handlers: SseHandlers = {
     onStart: noop, onContext: value => patch(message => ({ ...message, gptContext: normalizeGptContext(value) })),
     onContextSnapshot: noop, onCompact: noop, onCompactStatus: noop,
-    onThinking: noop, onTool: noop, onToolResult: noop, onPermission: noop, onPermissionResolved: noop, onAfter: noop,
+    onThinking: noop, onPermission: () => options.refreshPermissions?.(),
+    onPermissionResolved: () => options.refreshPermissions?.(), onAfter: noop,
+    onTool: value => {
+      const tool = value as unknown as CcToolEvent
+      patch(message => message.tools?.some(item => item.id === tool.id) ? message : ({
+        ...message, tools: [...(message.tools || []), tool],
+        process: [...(message.process || []), { type: 'tool', id: `process-${tool.id}`, tool }],
+      }))
+    },
+    onToolResult: value => {
+      const { id, status, result, error, durationMs } = value as GptEventMap['tool_result']
+      const finishTool = (tool: CcToolEvent) => tool.id === id ? { ...tool, status, result, error, durationMs } : tool
+      patch(message => ({ ...message, tools: message.tools?.map(finishTool),
+        process: message.process?.map(event => event.type === 'tool' ? { ...event, tool: finishTool(event.tool) } : event) }))
+    },
     onInit: value => { const data = value as GptEventMap['init']; patch(message => ({ ...message, model: data.model })) },
     onDelta: value => { const data = value as GptEventMap['delta']; patch(message => {
       const text = message.text + data.text
-      return { ...message, text, streaming: true, displaySegments: buildStableDisplaySegments(text, false).segments }
+      const process = [...(message.process || [])]
+      const last = process.at(-1)
+      if (last?.type === 'text') process[process.length - 1] = { ...last, text: last.text + data.text }
+      else process.push({ type: 'text', id: `text-${process.length}`, text: data.text })
+      return { ...message, text, process, streaming: true, displaySegments: buildStableDisplaySegments(text, false).segments }
     }) },
     onRecall: value => patch(message => ({ ...message, recall: value as unknown as CcMessage['recall'] })),
     onUsage: value => patch(message => ({ ...message, gptUsage: normalizeGptUsage(value.usage) })),

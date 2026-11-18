@@ -8,7 +8,16 @@ export class GptTransportError extends Error {
     public action?: string, public status?: number, public officialRequestId?: string) { super(message); this.name = 'GptTransportError' }
 }
 export type GptInput = { role: 'user' | 'assistant' | 'developer'; content: string }
-export type GptResult = { usage: GptUsage | null; responseId?: string; requestId?: string }
+export type GptToolItem = Record<string, unknown> & { type: string }
+export type GptToolNamespace = {
+  type: 'namespace'; name: string; description: string
+  tools: Array<{ type: 'function'; name: string; description: string; parameters: Record<string, unknown>; strict: false }>
+}
+export type GptModelInput = {
+  model: string; instructions: string; input: Array<GptInput | GptToolItem>
+  tools?: GptToolNamespace[]; include?: ['reasoning.encrypted_content']; tool_choice?: 'none'
+}
+export type GptResult = { usage: GptUsage | null; responseId?: string; requestId?: string; continuation?: GptToolItem[] }
 
 function failure(value: unknown, status?: number) {
   const b = value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -48,9 +57,8 @@ export function actualUsage(value: unknown): GptUsage | null {
   return Object.values(result).some(value => value !== null) ? result : null
 }
 
-export async function streamGpt(input: {
-  request_id: string; model: string; instructions: string; input: GptInput[]
-}, signal: AbortSignal, onDelta: (text: string) => void): Promise<GptResult> {
+export async function streamGpt(input: GptModelInput & { request_id: string; step?: number },
+  signal: AbortSignal, onDelta: (text: string) => void): Promise<GptResult> {
   const encoded = JSON.stringify(input)
   if (new TextEncoder().encode(encoded).length >= 4 * 1024 * 1024 || input.input.length > 2000) {
     throw new GptTransportError('context_too_large', '上下文过长，请减少带入的日期或记忆')
@@ -67,6 +75,7 @@ export async function streamGpt(input: {
   const decoder = new TextDecoder()
   let buffer = ''
   let outputBytes = 0
+  let continuation: GptToolItem[] | undefined
   try {
     while (true) {
       const { value, done } = await reader.read()
@@ -85,8 +94,15 @@ export async function streamGpt(input: {
           outputBytes += new TextEncoder().encode(data.text).length
           if (outputBytes > 1024 * 1024) throw new GptTransportError('output_too_large', '回复过长，已停止并保留已有内容')
           onDelta(data.text)
+        } else if (event === 'tool_continuation') {
+          const items = data.items
+          if (!input.tools || continuation || !Array.isArray(items) || !items.length || items.length > 32
+            || !items.every(item => item && ['message', 'reasoning', 'function_call'].includes(item.type))) {
+            throw new GptTransportError('invalid_tool_call', 'GPT 返回了不受支持的工具调用')
+          }
+          continuation = items
         } else if (event === 'completed') {
-          return { usage: actualUsage(data.usage),
+          return { usage: actualUsage(data.usage), continuation,
             responseId: typeof data.responseId === 'string' ? data.responseId : undefined,
             requestId: typeof data.requestId === 'string' ? data.requestId : undefined }
         } else if (event === 'error') throw failure(data)
