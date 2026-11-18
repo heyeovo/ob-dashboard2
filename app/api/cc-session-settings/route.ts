@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { applyRuntimeSettings, getSessionStats, peekSession } from '@/app/lib/ccSession'
 import { getConversationSession, patchConversationSessionState } from '@/app/lib/havenTurns'
+import type { HandoffSnapshot } from '@/app/lib/cc/handoffSnapshot'
+import { isDeepStrictEqual } from 'node:util'
 import { ccLaneId } from '@/app/lib/cc/ccOptions'
 
 // 「本窗口设置」里能中途改的那几项（5.2）。
@@ -34,9 +36,27 @@ export async function POST(request: NextRequest) {
     }
     const current = await getConversationSession(sessionId)
     if (!current.ok) return Response.json({ ok: false, error: current.error }, { status: 502 })
+    const snapshot = body.handoff_snapshot as Partial<HandoffSnapshot> | undefined
+    if (snapshot !== undefined) {
+      if (!snapshot || snapshot.version !== 1 || typeof snapshot.content !== 'string'
+        || !Array.isArray(snapshot.items) || !snapshot.stats || typeof snapshot.stats !== 'object'
+        || Array.isArray(snapshot.stats)) {
+        return Response.json({ ok: false, error: '换窗资料无效' }, { status: 400 })
+      }
+      if (current.session) {
+        const saved = current.session
+        if (saved.persona_id === personaId && saved.local_engine_preference === 'gpt_subscription'
+          && saved.gpt_subscription_overrides?.model === model && saved.mode === 'chat'
+          && isDeepStrictEqual(saved.handoff_snapshot, snapshot)) {
+          return Response.json({ ok: true, applied: false, session: saved })
+        }
+        return Response.json({ ok: false, error: '目标窗口已存在，未覆盖设置' }, { status: 409 })
+      }
+    }
     const result = await patchConversationSessionState({
       sessionId, personaId, localEnginePreference: 'gpt_subscription',
       gptSubscriptionOverrides: { model }, expectedStateVersion: current.session?.state_version ?? 0,
+      ...(snapshot === undefined ? {} : { mode: 'chat', dailyReviewEnabled: false, handoffSnapshot: snapshot as HandoffSnapshot }),
     })
     if (!result.ok) return Response.json({ ok: false, error: result.error }, { status: result.httpStatus || 502 })
     return Response.json({ ok: true, applied: false, session: result.session })

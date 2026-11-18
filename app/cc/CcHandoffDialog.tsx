@@ -1,7 +1,7 @@
 'use client'
 
 import BodyPortal from '@/app/components/BodyPortal'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MODE_HINT, MODE_LABEL, type CcMode } from '@/app/lib/ccModes'
 import {
   buildHandoffSnapshot,
@@ -49,7 +49,8 @@ type Props = {
   fromSessionId: string | null
   currentMode: CcMode
   personaId: string
-  onConfirm: (payload: HandoffPayload) => void
+  chatOnly?: boolean
+  onConfirm: (payload: HandoffPayload) => void | Promise<void>
   onClose: () => void
 }
 
@@ -143,7 +144,7 @@ function toggleSet(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id
   })
 }
 
-export default function CcHandoffDialog({ fromSessionId, currentMode, personaId, onConfirm, onClose }: Props) {
+export default function CcHandoffDialog({ fromSessionId, currentMode, personaId, chatOnly = false, onConfirm, onClose }: Props) {
   const [mode, setMode] = useState<CcMode>(currentMode)
   const [pinned, setPinned] = useState<Candidate[]>([])
   const [recent, setRecent] = useState<Candidate[]>([])
@@ -164,6 +165,9 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   const [turnLimit, setTurnLimit] = useState(20)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const savingRef = useRef(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -262,6 +266,20 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
   const snapshot = useMemo(() => buildHandoffSnapshot(sourceItems), [sourceItems])
   const effectiveChatIds = new Set(snapshot.items.filter(item => item.kind === 'chat').map(item => item.id))
   const effectiveTurns = turnVisible.filter(turn => effectiveChatIds.has(String(turn.id)))
+  const confirm = async () => {
+    if (savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onConfirm({ mode: chatOnly ? 'chat' : mode, snapshot, chatTurns: effectiveTurns, fromSessionId })
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : '换窗保存失败，请重试')
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
 
   const toggleOpen = (id: string) => setOpenSections(previous => {
     const next = new Set(previous)
@@ -286,20 +304,20 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
 
   return (
     <BodyPortal><div className="cc-modal-scrim fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button type="button" aria-label="关闭" onClick={onClose} className="absolute inset-0" />
+      <button type="button" aria-label="关闭" onClick={onClose} disabled={saving} className="absolute inset-0" />
       <div className="cc-modal relative flex max-h-[90vh] w-full max-w-lg flex-col" role="dialog" aria-label="新对话">
         <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-3.5">
           <div>
             <div className="text-note font-medium text-[var(--color-text-heading)]">{fromSessionId ? '换窗' : '新对话'}</div>
             <div className="mt-0.5 text-meta text-[var(--color-text-disabled)]">选择并冻结这个窗口要带入的背景</div>
           </div>
-          <button type="button" onClick={onClose} className="text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">取消</button>
+          <button type="button" onClick={onClose} disabled={saving} className="text-meta text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">取消</button>
         </div>
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
           <div className="mb-1.5 text-meta text-[var(--color-text-disabled)]">模式</div>
           <div className="mb-4 flex gap-2.5">
-            {(['chat', 'work'] as const).map(itemMode => (
-              <button key={itemMode} type="button" onClick={() => setMode(itemMode)} className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-2.5 text-left transition-colors ${mode === itemMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'}`}>
+            {(chatOnly ? ['chat'] as const : ['chat', 'work'] as const).map(itemMode => (
+              <button key={itemMode} type="button" onClick={() => setMode(itemMode)} className={`flex-1 rounded-[var(--radius-lg)] border px-3.5 py-2.5 text-left transition-colors ${(chatOnly ? 'chat' : mode) === itemMode ? 'border-[var(--color-primary)] bg-[var(--color-primary-muted)]' : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40'}`}>
                 <span className="block text-xs font-medium text-[var(--color-text-heading)]">{MODE_LABEL[itemMode]}</span>
                 <span className="mt-0.5 block text-2xs leading-relaxed text-[var(--color-text-tertiary)]">{MODE_HINT[itemMode]}</span>
               </button>
@@ -315,7 +333,8 @@ export default function CcHandoffDialog({ fromSessionId, currentMode, personaId,
               统一预算 {snapshot.stats.budget_tokens.toLocaleString()} token{snapshot.stats.over_budget ? `；超出部分会按相同规则裁剪，实际约 ${snapshot.stats.effective_estimated_tokens.toLocaleString()} token，省略 ${snapshot.stats.dropped_item_count} 项` : '；CC 与 selfhost 将使用同一份固定快照'}
             </div>
           </div>
-          <button type="button" onClick={() => onConfirm({ mode, snapshot, chatTurns: effectiveTurns, fromSessionId })} disabled={loading || Boolean(error)} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-xs font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{fromSessionId ? '换窗开始' : '开始新对话'}</button>
+          {saveError ? <p role="alert" className="mb-2 text-meta text-[var(--color-danger)]">{saveError}</p> : null}
+          <button type="button" onClick={() => void confirm()} disabled={loading || Boolean(error) || saving} className="w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] px-4 py-2.5 text-xs font-medium text-[var(--color-on-primary)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{saving ? '正在保存…' : fromSessionId ? '换窗开始' : '开始新对话'}</button>
         </div>
       </div>
     </div></BodyPortal>
