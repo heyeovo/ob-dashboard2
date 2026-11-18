@@ -96,11 +96,10 @@ export default function CcChatComposer({ scope }: { scope: CcChatScope }) {
             远程环境可用自建或 GPT 订阅；当前使用自建引擎。
           </div>
         ) : null}
-        {chat.effectiveEngine === 'gpt_subscription' ? (
+        {chat.effectiveEngine === 'gpt_subscription' && (chat.mode === 'work' || !chat.gptReady) ? (
           <p className="mb-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">
-            GPT 仅文字：不执行工具、房间、工作模式或主动唤醒，也不接收附件。
-            {chat.mode === 'work' ? '当前为工作窗口，请新建闲聊窗口。' : !chat.gptReady
-              ? ` ${gptConnectionLabel(chat.gptAccount.connection, chat.gptAccount.loading)}；请在本窗设置检查连接及模型。` : ''}
+            {chat.mode === 'work' ? '当前为工作窗口，请新建闲聊窗口。'
+              : `${gptConnectionLabel(chat.gptAccount.connection, chat.gptAccount.loading)}；请在本窗设置检查连接及模型。`}
             {!chat.gptReady ? <button type="button" onClick={() => setWinSetOpen(true)}
               className="block min-h-11 text-sm text-[var(--color-primary)]">检查 GPT 连接与模型</button> : null}
           </p>

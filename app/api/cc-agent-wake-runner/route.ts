@@ -1,11 +1,12 @@
 import { timingSafeEqual } from 'node:crypto'
+import { GPT_WAKE_CAUSES } from '@/app/lib/gptSubscription/contract'
 import { runBackgroundWake, type BackgroundWakeCause } from '@/app/lib/cc/backgroundWakeTurn'
 import { isDraining, previousInstanceFinishing } from '@/app/lib/serverDrain'
 
 export const runtime = 'nodejs'
 export const maxDuration = 360
 
-const CAUSES = new Set<BackgroundWakeCause>(['cache_keepalive', 'agent_schedule', 'conversation_silence', 'agent_followup'])
+const CAUSES = new Set<BackgroundWakeCause>(['cache_keepalive', 'agent_schedule', 'conversation_silence', 'agent_followup', ...GPT_WAKE_CAUSES])
 
 function secureMatch(actual: string, expected: string) {
   const a = Buffer.from(actual)

@@ -214,6 +214,10 @@ export type AgentWakeSchedule = {
   keepalive_paused_until_user: boolean
   agent_wake_enabled: boolean
   conversation_silence_enabled: boolean
+  long_silence_enabled: boolean
+  long_silence_first_hours: number
+  long_silence_second_hours: number
+  random_wake_enabled: boolean
   bark_notification_enabled: boolean
   last_user_activity_at: string
   last_model_activity_at: string

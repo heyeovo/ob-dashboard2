@@ -6,9 +6,9 @@ import { useGptChat } from '@/app/cc/useGptChat'
 import type { CcMessage } from '@/app/cc/types'
 
 const f = vi.hoisted(() => ({ session: vi.fn(), history: vi.fn(), persona: vi.fn(), lookup: vi.fn(),
-  patch: vi.fn(), persist: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn() }))
+  patch: vi.fn(), persist: vi.fn(), begin: vi.fn(), recall: vi.fn(), rolling: vi.fn(), stream: vi.fn(), control: vi.fn() }))
 vi.mock('@/app/lib/havenTurns', () => ({ getConversationSession: f.session, listAllTurns: f.history,
-  getTurnByRequestId: f.lookup, patchConversationSessionState: f.patch, recordTurnStrict: f.persist }))
+  getTurnByRequestId: f.lookup, patchConversationSessionState: f.patch, recordTurnStrict: f.persist, beginAgentWakeRun: f.begin }))
 vi.mock('@/app/lib/havenPersonas', () => ({ getPersona: f.persona, buildPersonaAppend: () => '人设' }))
 vi.mock('@/app/lib/havenRecall', () => ({ recallForPrompt: f.recall }))
 vi.mock('@/app/lib/cc/windowPrompt', () => ({ loadRollingWindowAppend: f.rolling,
@@ -18,7 +18,7 @@ vi.mock('@/app/lib/gptSubscription/transport', async importOriginal => {
   return { ...actual, streamGpt: f.stream, controlGptRequest: f.control }
 })
 
-import { startGptTurn, getGptTurn, stopGptTurn, requestFingerprint } from '@/app/lib/gptSubscription/runner'
+import { startGptTurn, getGptTurn, stopGptTurn, requestFingerprint, runGptBackgroundWake, stopGptBackgroundWake } from '@/app/lib/gptSubscription/runner'
 import { GET, POST, DELETE } from '@/app/api/cc-chat-gpt/route'
 import { configureServerDrain, resetServerDrainForTests, startDrain } from '@/app/lib/serverDrain'
 import { GptTransportError } from '@/app/lib/gptSubscription/transport'
@@ -302,5 +302,66 @@ describe('GPT runner', () => {
     expect((await running.json()).retry_after_ms).toBe(5000)
     expect(f.stream).not.toHaveBeenCalled()
     expect(stopGptTurn('unrelated-cc', 'r').ok).toBe(false)
+  })
+})
+
+function backgroundRequest() {
+  const body = request()
+  session.local_engine_preference = 'gpt_subscription'
+  session.mode = 'chat'
+  f.begin.mockResolvedValue({ ok: true, status: 'started' })
+  return { sessionId: body.session_id, wakeId: body.request_id, laneId: 'gpt_subscription',
+    at: '2026-11-19T10:00:00Z', cause: 'random_wake_first' as const, scheduleVersion: 2, leaseOwner: 'worker' }
+}
+
+describe('GPT background wake', () => {
+  it.each(['quiet', 'noop'])('persists %s wake metadata without a user message', async delivery => {
+    const input = backgroundRequest()
+    f.stream.mockImplementation(async (body, _signal, delta) => {
+      expect(body.model).toBe('gpt-stored')
+      expect(body.input.at(-1).role).toBe('developer')
+      delta(delivery === 'quiet' ? '[agent_wake_quiet] hello' : '[agent_wake_noop]')
+      return { usage: null }
+    })
+    await expect(runGptBackgroundWake(input, '<agent_wake/>')).resolves.toMatchObject({ status: 'completed' })
+    expect(f.control).toHaveBeenCalledWith(expect.objectContaining({ action: 'claim', wake: true }))
+    expect(f.persist).toHaveBeenCalledOnce()
+    expect(f.persist).toHaveBeenCalledWith(expect.objectContaining({
+      turnKind: 'agent_wake', userText: '', assistantText: delivery === 'quiet' ? 'hello' : '',
+      agentWakeUpdate: expect.objectContaining({ agent_wake: expect.objectContaining({
+        wake_id: input.wakeId, ...(delivery === 'quiet' ? { delivery: 'quiet' } : {}),
+      }) }),
+    }))
+    if (delivery === 'noop') expect(f.persist.mock.calls[0][0].agentWakeUpdate.agent_wake).not.toHaveProperty('delivery')
+    expect(f.patch).not.toHaveBeenCalled()
+  })
+
+  it.each([['reconnect', 'authentication'], ['usage_settings', 'pro_limit']])(
+    'classifies %s without saving a fake reply', async (action, failureKind) => {
+      f.stream.mockRejectedValue(new GptTransportError('upstream', 'failed', false, action))
+      await expect(runGptBackgroundWake(backgroundRequest(), '<agent_wake/>')).resolves
+        .toMatchObject({ status: 'failed', failureKind })
+      expect(f.persist).not.toHaveBeenCalled()
+    },
+  )
+
+  it('defers when another instance owns the foreground request', async () => {
+    f.control.mockResolvedValueOnce({ ok: false, code: 'conversation_busy' })
+    await expect(runGptBackgroundWake(backgroundRequest(), '<agent_wake/>')).resolves
+      .toMatchObject({ status: 'deferred' })
+    expect(f.stream).not.toHaveBeenCalled()
+  })
+
+  it('stops background generation without saving partial text', async () => {
+    const input = backgroundRequest()
+    f.stream.mockImplementation((_body, signal: AbortSignal, delta) => {
+      delta('partial')
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+    })
+    const pending = runGptBackgroundWake(input, '<agent_wake/>')
+    await vi.waitFor(() => expect(f.stream).toHaveBeenCalledOnce())
+    stopGptBackgroundWake(input.sessionId)
+    await expect(pending).resolves.toMatchObject({ status: 'superseded', reason: 'cancelled' })
+    expect(f.persist).not.toHaveBeenCalled()
   })
 })

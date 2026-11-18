@@ -32,11 +32,13 @@ function turnUserContent(turn: HavenTurn): string {
 
 export function buildGptContext(input: {
   persona: HavenPersona; session: HavenConversationSession; history: HavenTurn[]
-  rollingAppend: string; recall: string; text: string; now?: Date
+  rollingAppend: string; recall: string; text: string; now?: Date; wake?: boolean
 }) {
   const persona = buildPersonaAppend(input.persona, input.session.prompt_module_overrides)
   const window = composeWindowPersonaAppend(persona, input.session, input.session.session_id, input.rollingAppend)
-  const capability = '当前线路仅提供文字回复，没有工具、附件读取、房间、主动唤醒或工作模式能力。'
+  const capability = input.wake
+    ? '这是后台主动唤醒机会，用户没有发出新消息。你可以主动发一条消息；无需打扰时，回复 [agent_wake_noop]；希望消息低调送达时，把 [agent_wake_quiet] 放在正文开头。只能生成文字。'
+    : '当前线路仅提供文字回复，没有工具、附件读取、房间或工作模式能力。'
   const recalledCurrent = recallBlock(input.recall)
   const instructions = [window, capability].filter(Boolean).join('\n\n')
   const currentTime = beijingRuntimeContext(input.now)
@@ -70,7 +72,7 @@ export function buildGptContext(input: {
     history.push({ role: 'developer', content: recalledCurrent })
     sourceRounds.push(null)
   }
-  history.push({ role: 'user', content: current })
+  history.push({ role: input.wake ? 'developer' : 'user', content: current })
   sourceRounds.push(null)
   return { instructions, input: history, sourceRounds,
     auditParts: { persona, window, background: input.rollingAppend, capability, recall: recalledCurrent, current_text: input.text, current_time: currentTime },

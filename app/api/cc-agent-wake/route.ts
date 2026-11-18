@@ -1,3 +1,4 @@
+import { GPT_ENGINE } from '@/app/lib/gptSubscription/contract'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getAgentWakeSchedule,
@@ -31,7 +32,9 @@ export async function PATCH(request: NextRequest) {
     ? { ...(body.changes as Record<string, unknown>) }
     : {}
   if (action === 'cancel_next') changes = { next_agent_wake_at: '', wake_reason: '' }
-  if (action === 'stop_all') {
+  if (action === 'stop_all' && laneId === GPT_ENGINE) {
+    changes = { long_silence_enabled: false, random_wake_enabled: false }
+  } else if (action === 'stop_all') {
     changes = {
       keepalive_enabled: false,
       keepalive_paused_until_user: false,
@@ -54,6 +57,10 @@ export async function PATCH(request: NextRequest) {
     expectedVersion: body?.expected_version == null ? undefined : Number(body.expected_version),
     changes,
   })
+  if (result.ok && action === 'stop_all' && laneId === GPT_ENGINE) {
+    const { stopGptBackgroundWake } = await import('@/app/lib/gptSubscription/runner')
+    stopGptBackgroundWake(sessionId)
+  }
   return result.ok
     ? NextResponse.json({ ok: true, schedule: result.schedule })
     : error(result.error || '保存主动唤醒设置失败', result.httpStatus || 502)

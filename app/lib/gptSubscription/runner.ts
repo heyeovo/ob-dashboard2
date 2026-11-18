@@ -4,8 +4,11 @@ import { getPersona } from '../havenPersonas'
 import { recallForPrompt } from '../havenRecall'
 import { estimateTextTokens, splitRecallModules } from '../recallDisplay'
 import { resolveRecallEnabled } from '../recallMode'
-import { getConversationSession, getTurnByRequestId, listAllTurns, patchConversationSessionState,
+import { beginAgentWakeRun, getConversationSession, getTurnByRequestId, listAllTurns, patchConversationSessionState,
   recordTurnStrict, type HavenTurn, type StrictRecordTurnInput } from '../havenTurns'
+import { type BackgroundWakeInput, type BackgroundWakeResult } from '../cc/backgroundWakeTurn'
+import { AGENT_WAKE_QUIET_MARKER, parseAgentWakeNoop, parseAgentWakeQuiet } from '../cc/agentWakeTool'
+import { buildDisplaySegments } from '../cc/displaySegments'
 import { loadRollingWindowAppend } from '../cc/windowPrompt'
 import { createTurnBroadcast, finishTurn, publishTurn, turnStream, type TurnBroadcast } from '../cc/turnBroadcast'
 import { drainRejection, trackDrainWork } from '../serverDrain'
@@ -18,7 +21,7 @@ export const GPT_TURN_TIMEOUT_MS = 9 * 60_000
 type Job = {
   request: GptRequest; fingerprint: string; turn: TurnBroadcast; owner: string
   abort: AbortController; finishWork: () => void; draft?: StrictRecordTurnInput
-  generationError?: GptError; done?: GptDone; admitted: boolean
+  generationError?: GptError; done?: GptDone; admitted: boolean; wake?: BackgroundWakeInput
 }
 const root = globalThis as typeof globalThis & { __ob2_gpt_jobs?: Map<string, Job> }
 const jobs = root.__ob2_gpt_jobs ||= new Map<string, Job>()
@@ -117,7 +120,7 @@ async function generate(job: Job, prepared: {
   let context: Record<string, unknown> = {}
   let runtimeContext: string | undefined
   try {
-    const recall = resolveRecallEnabled(request.recall, prepared.session.recall_mode, 'chat')
+    const recall = !job.wake && resolveRecallEnabled(request.recall, prepared.session.recall_mode, 'chat')
       ? await recallForPrompt(request.text, { sessionId: request.session_id, excludeIds: prepared.exclusions,
         maxChars: 80_000, signal: job.abort.signal }) : null
     const recalledText = recall?.ok ? recall.additionalContext : ''
@@ -131,7 +134,7 @@ async function generate(job: Job, prepared: {
     }
     send(job, 'recall', recallData as GptEventMap['recall'])
     recallData.additional_context = recalledText
-    const assembled = buildGptContext({ ...prepared, recall: recalledText, text: request.text })
+    const assembled = buildGptContext({ ...prepared, recall: recalledText, text: request.text, wake: Boolean(job.wake) })
     runtimeContext = assembled.auditParts.current_time
     context = assembled.context; send(job, 'context', context)
     const audit = await controlGptRequest({ action: 'prepare', request_id: request.request_id,
@@ -149,17 +152,36 @@ async function generate(job: Job, prepared: {
   } catch (error) {
     job.generationError = generationFailure(job, error)
     outcome = job.abort.signal.aborted ? 'cancelled' : 'failed'
-    if (!startedModel) { send(job, 'error', job.generationError); return }
+    if (!startedModel || job.wake) { send(job, 'error', job.generationError); return }
   }
+  if (job.wake && job.abort.signal.aborted) return
+  const noop = job.wake ? parseAgentWakeNoop(text) : null
+  const quiet = job.wake && !noop ? parseAgentWakeQuiet(text) : null
+  const hasQuietMarker = Boolean(job.wake && text.trimStart().startsWith(AGENT_WAKE_QUIET_MARKER))
+  const visibleText = noop ? '' : hasQuietMarker ? quiet?.text || '' : text
   job.draft = {
     sessionId: request.session_id, requestId: request.request_id, personaId: request.persona_id,
-    expectedLastRoundId: request.expected_last_round_id, userText: request.text, assistantText: text,
+    expectedLastRoundId: request.expected_last_round_id, userText: job.wake ? '' : request.text, assistantText: visibleText,
     model: prepared.model, source: GPT_ENGINE, client: `ob2-gpt/${request.persona_id}`, route: '/api/cc-chat-gpt',
+    ...(job.wake ? {
+      turnKind: 'agent_wake' as const,
+      laneId: GPT_ENGINE,
+      agentWakeUpdate: {
+        model_activity_at: new Date().toISOString(),
+        wake_cause: job.wake.cause,
+        agent_wake: {
+          wake_id: request.request_id, cause: job.wake.cause, at: job.wake.at,
+          status: noop?.status || '', ...(!noop ? { delivery: quiet ? 'quiet' : 'loud' } : {}),
+        },
+      },
+      signal: job.abort.signal,
+    } : {}),
     recalledBucketIds: recallData.recalled_ids as string[] || [], timeoutMs: 30_000,
     raw: { version: 1, engine: GPT_ENGINE, model: prepared.model, request_id: request.request_id,
       gpt_request_fingerprint: job.fingerprint, rolling_context_revision: prepared.session.context_revision,
       gpt_runtime_context: runtimeContext,
       outcome, stop_reason: outcome, usage, response_id: responseId, official_request_id: officialRequestId,
+      ...(job.wake ? { display_segments: buildDisplaySegments(visibleText) } : {}),
       recall: recallData, context, generation_error: job.generationError },
   }
   await persist(job)
@@ -228,7 +250,7 @@ export async function startGptTurn(request: GptRequest, signal: AbortSignal): Pr
     // still cannot repeat a model call, including after a process restart.
     job.abort.signal.throwIfAborted()
     const claim = await controlGptRequest({ action: 'claim', request_id: request.request_id, session_id: request.session_id,
-      fingerprint, owner: job.owner })
+      fingerprint, owner: job.owner, user_activity: true })
     if (!claim.ok) throw gptError(request.request_id, claim.code || 'request_admission_failed',
       claim.code === 'request_already_admitted' ? '该请求已执行或正在另一实例收尾，请读取历史；不要重复发送' : '这个窗口正在处理另一条消息，请稍后重试')
     job.admitted = true
@@ -300,8 +322,97 @@ export function stopGptTurn(sessionId: string, requestId: string) {
   return { ok: true, cancel_requested: !job.turn.done, request_id: requestId }
 }
 
+export function stopGptBackgroundWake(sessionId: string) {
+  const job = jobs.get(sessionId)
+  if (job?.wake && !job.turn.done) job.abort.abort()
+}
+
 export function gptActiveTurn(sessionId: string) {
   const job = jobs.get(sessionId)
-  return job && !job.turn.done ? { request_id: job.request.request_id, user_text: job.request.text,
+  return job && !job.wake && !job.turn.done ? { request_id: job.request.request_id, user_text: job.request.text,
     engine: GPT_ENGINE, started_at: job.turn.startedAt } : null
+}
+
+export async function runGptBackgroundWake(input: BackgroundWakeInput, text: string): Promise<BackgroundWakeResult> {
+  const { sessionId, wakeId, leaseOwner } = input
+  if (!wakeId || !leaseOwner || input.laneId !== GPT_ENGINE) {
+    return { status: 'superseded', reason: 'claimed_lane_is_not_active' }
+  }
+  const previous = jobs.get(sessionId)
+  if (previous && (!previous.turn.done || (previous.draft && !previous.done))) {
+    return { status: 'deferred', reason: 'session_blocked' }
+  }
+  const replay = await getTurnByRequestId(wakeId)
+  if (!replay.ok) return { status: 'failed', error: replay.error }
+  if (replay.found && replay.turn) {
+    return replay.turn.session_id === sessionId && replay.turn.turn_kind === 'agent_wake'
+      && replay.turn.source === GPT_ENGINE
+      ? { status: 'completed', turnId: replay.turn.id, laneId: GPT_ENGINE, replayed: true }
+      : { status: 'superseded', reason: 'wake_id_reused_for_another_turn' }
+  }
+  const abort = new AbortController()
+  const turn = createTurnBroadcast({ engine: GPT_ENGINE, requestId: wakeId, sessionId,
+    userText: '', attachmentIds: [], startedAt: Date.now() }, async () => { abort.abort() })
+  if (!turn) return { status: 'deferred', reason: 'turn_running' }
+  let job: Job | undefined
+  const timer = setTimeout(() => abort.abort(), 330_000)
+  timer.unref?.()
+  const release = trackDrainWork({ sessionId, requestId: wakeId, stop: () => abort.abort() })
+  try {
+    const [sessionResult, history] = await Promise.all([
+      getConversationSession(sessionId, { includeBucketExclusions: true, includeContextDays: true, signal: abort.signal }),
+      listAllTurns(sessionId, { includeRaw: true, signal: abort.signal }),
+    ])
+    if (!sessionResult.ok || !history.ok) return { status: 'failed', error: '读取 GPT 窗口失败' }
+    const session = sessionResult.session
+    if (!session || session.deleted_at || session.local_engine_preference !== GPT_ENGINE || session.mode !== 'chat') {
+      return { status: 'superseded', reason: 'claimed_lane_is_not_active' }
+    }
+    const model = session.gpt_subscription_overrides?.model
+    if (!model) return { status: 'deferred', reason: 'session_blocked' }
+    const request: GptRequest = { session_id: sessionId, request_id: wakeId, persona_id: session.persona_id,
+      expected_last_round_id: history.turns.at(-1)?.round_id || 0, text, model }
+    const wakeJob: Job = { request, fingerprint: requestFingerprint(request), turn, owner: randomUUID().replaceAll('-', ''),
+      abort, finishWork: release, admitted: false, wake: input }
+    job = wakeJob
+    jobs.set(sessionId, job)
+    const persona = await getPersona(session.persona_id, { signal: abort.signal })
+    if (!persona.ok || !persona.persona) return { status: 'failed', error: '读取 GPT 窗口的协作者失败' }
+    const rolling = session.rolling_context?.strategy === 'daily_rolling'
+      ? await loadRollingWindowAppend(sessionId, session, sessionResult.contextDays, { includeRooms: false })
+      : { content: '', history: history.turns, pinnedBucketIds: [] }
+    abort.signal.throwIfAborted()
+    const begun = await beginAgentWakeRun({ sessionId, laneId: GPT_ENGINE, wakeId, leaseOwner,
+      scheduleVersion: input.scheduleVersion || 0, signal: abort.signal })
+    if (!begun.ok) return { status: 'failed', error: begun.error }
+    if (begun.status === 'limit_reached') return { status: 'deferred', reason: 'session_blocked' }
+    if (begun.status === 'duplicate') return { status: 'in_progress', reason: 'duplicate_callback' }
+    if (begun.status !== 'started') return { status: 'superseded', reason: 'schedule_superseded' }
+    const claim = await controlGptRequest({ action: 'claim', request_id: wakeId, session_id: sessionId,
+      fingerprint: job.fingerprint, owner: job.owner, wake: true, expected_state_version: session.state_version })
+    if (claim.code === 'conversation_busy') return { status: 'deferred', reason: 'turn_running' }
+    if (!claim.ok) return { status: 'superseded', reason: claim.code || 'schedule_superseded' }
+    job.admitted = true
+    await generate(job, { session, persona: persona.persona, history: rolling.history,
+      rollingAppend: rolling.content, exclusions: [], model })
+    if (job.done) return { status: 'completed', turnId: job.done.turn_id, laneId: GPT_ENGINE }
+    const error = job.generationError
+    if (abort.signal.aborted) return { status: 'superseded', reason: 'cancelled' }
+    if (error?.action === 'reconnect' || error?.action === 'enable_sharing') {
+      return { status: 'failed', error: error.message, failureKind: 'authentication' }
+    }
+    if (error?.action === 'usage_settings') {
+      return { status: 'failed', error: error.message, failureKind: 'pro_limit' }
+    }
+    return { status: 'failed', error: error?.message || 'GPT 主动唤醒未保存到 Haven' }
+  } finally {
+    if (job) {
+      await finish(job)
+      if (jobs.get(sessionId) === job) jobs.delete(sessionId)
+    } else {
+      finishTurn(turn)
+      release()
+    }
+    clearTimeout(timer)
+  }
 }
