@@ -7,7 +7,10 @@ export class GptTransportError extends Error {
   constructor(public code: string, message: string, public retryable = false,
     public action?: string, public status?: number, public officialRequestId?: string) { super(message); this.name = 'GptTransportError' }
 }
-export type GptInput = { role: 'user' | 'assistant' | 'developer'; content: string }
+export type GptImageContent = [{ type: 'input_text'; text: string },
+  { type: 'input_image'; image_url: string; detail: 'auto' }]
+export type GptInput = { role: 'assistant' | 'developer'; content: string }
+  | { role: 'user'; content: string | GptImageContent }
 export type GptResult = { usage: GptUsage | null; responseId?: string; requestId?: string }
 
 function failure(value: unknown, status?: number) {

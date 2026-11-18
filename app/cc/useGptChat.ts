@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction, type RefObject } from 'react'
-import type { CcMessage, GptRequest } from './types'
+import type { CcAttachment, CcMessage, GptRequest } from './types'
 import { consumeGptResponse, ensureGptMessages } from './gptChatUi'
 import { newTurnRequestId } from './engineRouting'
 import { mergeTurnMessages } from './turnRecovery'
@@ -49,10 +49,31 @@ export function useGptChat(options: Options) {
         ...(request ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) } : {}),
       })
       if (!isCurrent()) return
+      if (request && response.status === 409) {
+        const payload = await response.clone().json().catch(() => null)
+        if (!isCurrent()) return
+        if (['attachment_unavailable', 'attachment_invalid', 'attachment_already_sent'].includes(payload?.error?.code)) {
+          const storage = retryStorage()
+          if (storage) clearGptRetryDraft(storage, o.sessionId, requestId)
+          update(messages => messages.filter(message => message.requestId !== requestId))
+          o.setDraft(request.text)
+          o.setError(payload.error.message)
+          return
+        }
+      }
       if (request && response.ok) o.accepted()
       const result = await consumeGptResponse(response, { requestId, update, after,
         received: seq => cursors.current.set(requestId, seq),
-        attention: error => { if (isCurrent() && error.action) o.attention?.() },
+        attention: error => {
+          if (!isCurrent()) return
+          if (error.code === 'attachment_context_limit') {
+            const storage = retryStorage()
+            if (storage) clearGptRetryDraft(storage, o.sessionId, requestId)
+            update(messages => messages.filter(message => message.requestId !== requestId))
+            if (request) o.setDraft(request.text)
+            o.setError(error.message)
+          } else if (error.action) o.attention?.()
+        },
         saved: round => {
           const storage = retryStorage()
           if (storage) clearGptRetryDraft(storage, o.sessionId, requestId)
@@ -91,10 +112,9 @@ export function useGptChat(options: Options) {
     }
   }, [])
 
-  const send = useCallback(async (text: string, attachments: number, original?: GptRequest) => {
+  const send = useCallback(async (text: string, attachments: CcAttachment[], original?: GptRequest) => {
     const o = current.current
     if (!o.enabled || !o.ready || !o.sessionId || !o.personaId || busy.current || o.abortRef.current) return
-    if (attachments) { o.setError('GPT 首版不支持附件。请先移除草稿附件，再发送文字。'); return }
     if (!original && o.mode === 'work') { o.setError('GPT 不支持工作模式。请使用闲聊窗口，或新建窗口。'); return }
     if (!original && !o.model.trim()) { o.setError('请先在本窗口设置中保存 GPT 模型。'); return }
     const storage = retryStorage()
@@ -107,12 +127,15 @@ export function useGptChat(options: Options) {
     }
     const request: GptRequest = original || { session_id: o.sessionId, persona_id: o.personaId,
       request_id: newTurnRequestId(), text: text.trim(), expected_last_round_id: o.lastRoundIdRef.current,
-      model: o.model, mode: 'chat', ...o.requestContext() }
-    if (request.session_id !== o.sessionId || !request.text.trim()) return
+      model: o.model, mode: 'chat', ...o.requestContext(),
+      ...(attachments.length ? { attachment_ids: attachments.map(item => item.id) } : {}) }
+    if (request.session_id !== o.sessionId || (!request.text.trim() && !request.attachment_ids?.length)) return
     if (storage) saveGptRetryDraft(storage, request)
     o.setMessages(messages => ensureGptMessages(messages, request, Date.now(), request).map(message =>
       message.requestId === request.request_id && message.role === 'assistant'
-        ? { ...message, gptRetryRequest: request } : message))
+        ? { ...message, gptRetryRequest: request }
+        : message.requestId === request.request_id && message.role === 'user' && attachments.length
+          ? { ...message, attachments } : message))
     o.setDraft(''); o.setError('')
     await connect(request.request_id, request)
   }, [connect])

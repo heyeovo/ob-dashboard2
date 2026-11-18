@@ -25,6 +25,7 @@ export type GptUsage = {
 }
 export type GptRequest = {
   session_id: string; request_id: string; persona_id: string; text: string
+  attachment_ids?: string[]
   expected_last_round_id: number; model?: string; mode?: 'chat'; recall?: boolean
   include_daily_review?: boolean; handoff_snapshot?: HandoffSnapshot
 }
@@ -64,10 +65,12 @@ export function parseGptRequest(value: unknown): GptRequest {
     if (typeof b[key] !== 'string' || !b[key].trim() || b[key].length > 200) throw new Error(`${key} 无效`)
   }
   if (typeof b.request_id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(b.request_id)) throw new Error('request_id 无效')
-  if (typeof b.text !== 'string' || !b.text.trim() || new TextEncoder().encode(b.text).length > 500_000) throw new Error('文字为空或过长')
+  if (b.attachment_ids !== undefined && (!Array.isArray(b.attachment_ids) || b.attachment_ids.length > 1
+    || b.attachment_ids.some(id => typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id)))) throw new Error('GPT 每轮只接受 1 个有效图片附件')
+  if (typeof b.text !== 'string' || (!b.text.trim() && !(b.attachment_ids as string[] | undefined)?.length)
+    || new TextEncoder().encode(b.text).length > 500_000) throw new Error('请填写文字或添加图片；文字不能过长')
   if (!Number.isInteger(b.expected_last_round_id) || Number(b.expected_last_round_id) < 0) throw new Error('expected_last_round_id 无效')
   if (b.mode !== undefined && b.mode !== 'chat') throw new Error('GPT 首版不支持工作模式')
-  if (b.attachment_ids !== undefined && (!Array.isArray(b.attachment_ids) || b.attachment_ids.length)) throw new Error('GPT 首版不支持附件，请先移除附件')
   if (b.model !== undefined && (typeof b.model !== 'string' || !b.model.trim() || b.model.length > 200)) throw new Error('model 无效')
   for (const key of ['recall', 'include_daily_review']) {
     if (b[key] !== undefined && typeof b[key] !== 'boolean') throw new Error(`${key} 必须为布尔值`)
